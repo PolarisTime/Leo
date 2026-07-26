@@ -1,6 +1,7 @@
 package com.leo.erp.logistics.bill.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -16,7 +17,7 @@ import java.util.Set;
 @Setter
 @Entity
 @Table(name = "lg_freight_bill")
-public class FreightBill extends AbstractAuditableEntity {
+public class FreightBill extends AbstractAuditableEntity implements StatusAwareEntity {
 
     @Id
     private Long id;

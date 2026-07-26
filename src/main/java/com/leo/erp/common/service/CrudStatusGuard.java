@@ -2,28 +2,63 @@ package com.leo.erp.common.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import com.leo.erp.common.support.StatusConstants;
 
 import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 
-public class CrudStatusGuard {
+public class CrudStatusGuard<E> {
 
-    public Optional<String> resolveStatus(Object entity) {
+    private final Function<E, Optional<String>> statusReader;
+    private final BiConsumer<E, String> statusWriter;
+
+    public CrudStatusGuard() {
+        this(CrudStatusGuard::resolveStatusReflectively, CrudStatusGuard::writeStatusReflectively);
+    }
+
+    private CrudStatusGuard(Function<E, Optional<String>> statusReader,
+                            BiConsumer<E, String> statusWriter) {
+        this.statusReader = statusReader;
+        this.statusWriter = statusWriter;
+    }
+
+    public static <E> CrudStatusGuard<E> reflective() {
+        return new CrudStatusGuard<>();
+    }
+
+    public static <E extends StatusAwareEntity> CrudStatusGuard<E> forStatusAwareEntities() {
+        return new CrudStatusGuard<>(
+                entity -> normalizeStatus(entity.getStatus()),
+                StatusAwareEntity::setStatus
+        );
+    }
+
+    public Optional<String> resolveStatus(E entity) {
+        return statusReader.apply(entity);
+    }
+
+    private static Optional<String> resolveStatusReflectively(Object entity) {
         try {
             Method getter = entity.getClass().getMethod("getStatus");
             Object value = getter.invoke(entity);
-            if (value == null) {
-                return Optional.empty();
-            }
-            String status = String.valueOf(value).trim();
-            return status.isBlank() ? Optional.empty() : Optional.of(status);
+            return normalizeStatus(value);
         } catch (NoSuchMethodException ignored) {
             return Optional.empty();
         } catch (ReflectiveOperationException ex) {
             throw new IllegalStateException("读取单据状态失败", ex);
         }
+    }
+
+    private static Optional<String> normalizeStatus(Object value) {
+        if (value == null) {
+            return Optional.empty();
+        }
+        String status = String.valueOf(value).trim();
+        return status.isBlank() ? Optional.empty() : Optional.of(status);
     }
 
     public String normalizeRequiredStatus(String status) {
@@ -33,7 +68,7 @@ public class CrudStatusGuard {
         return status.trim();
     }
 
-    public void assertEditAllowed(Object entity, boolean allowProtectedStatusUpdate) {
+    public void assertEditAllowed(E entity, boolean allowProtectedStatusUpdate) {
         resolveStatus(entity).ifPresent(status -> {
             if (StatusConstants.PROTECTED_DOCUMENT_STATUS.contains(status) && !allowProtectedStatusUpdate) {
                 throw new BusinessException(
@@ -44,7 +79,7 @@ public class CrudStatusGuard {
         });
     }
 
-    public void assertDeleteAllowed(Object entity) {
+    public void assertDeleteAllowed(E entity) {
         resolveStatus(entity).ifPresent(status -> {
             if (StatusConstants.PROTECTED_DOCUMENT_STATUS.contains(status)) {
                 throw new BusinessException(
@@ -55,7 +90,7 @@ public class CrudStatusGuard {
         });
     }
 
-    public void assertRequestStatusTransitionAllowed(Object entity,
+    public void assertRequestStatusTransitionAllowed(E entity,
                                                     Optional<String> currentStatus,
                                                     Set<String> allowedTransitions) {
         if (allowedTransitions.isEmpty()) {
@@ -68,7 +103,7 @@ public class CrudStatusGuard {
         validateStatusTransition(allowedTransitions, currentStatus.get(), nextStatus.get());
     }
 
-    public void assertRequestDidNotWriteFinalStatus(Object entity) {
+    public void assertRequestDidNotWriteFinalStatus(E entity) {
         resolveStatus(entity).ifPresent(status -> {
             if (StatusConstants.PROTECTED_DOCUMENT_STATUS.contains(status) && !StatusConstants.AUDITED.equals(status)) {
                 throw new BusinessException(
@@ -92,7 +127,11 @@ public class CrudStatusGuard {
         }
     }
 
-    public void writeStatus(Object entity, String status) {
+    public void writeStatus(E entity, String status) {
+        statusWriter.accept(entity, status);
+    }
+
+    private static void writeStatusReflectively(Object entity, String status) {
         try {
             Method setter = entity.getClass().getMethod("setStatus", String.class);
             setter.invoke(entity, status);

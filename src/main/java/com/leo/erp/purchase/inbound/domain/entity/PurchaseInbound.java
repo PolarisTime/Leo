@@ -1,6 +1,7 @@
 package com.leo.erp.purchase.inbound.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -21,7 +22,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "po_purchase_inbound")
-public class PurchaseInbound extends AbstractAuditableEntity {
+public class PurchaseInbound extends AbstractAuditableEntity implements StatusAwareEntity {
 
     @Id
     private Long id;

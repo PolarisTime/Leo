@@ -4,29 +4,26 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.master.customer.repository.CustomerRepository;
-import com.leo.erp.sales.order.domain.entity.SalesOrder;
-import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
-import com.leo.erp.sales.order.repository.SalesOrderRepository;
-import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
-import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
-import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
+import com.leo.erp.sales.api.SalesOrderStatementSourceQuery;
+import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.AuditedOutboundActualSnapshot;
+import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.CandidateCriteria;
+import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.CandidateSnapshot;
+import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.ItemSnapshot;
+import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.OrderSnapshot;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatementItem;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementItemRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
-import com.leo.erp.statement.service.StatementCandidateSupport;
 import com.leo.erp.statement.service.StatementSourceCoverageValidator;
 import org.springframework.data.domain.Page;
-import org.springframework.data.jpa.domain.Specification;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -40,72 +37,54 @@ import java.util.function.LongSupplier;
 @Service
 public class CustomerStatementSourceService {
 
-    private static final String[] SALES_ORDER_CANDIDATE_SEARCH_FIELDS = {
-            "orderNo",
-            "purchaseInboundNo",
-            "purchaseOrderNo",
-            "customerName",
-            "projectName",
-            "salesName"
-    };
-
     private final CustomerStatementRepository repository;
-    private final SalesOrderRepository salesOrderRepository;
-    private final SalesOrderItemQueryService salesOrderItemQueryService;
+    private final SalesOrderStatementSourceQuery sourceQuery;
     private final CustomerRepository customerRepository;
-    private final SalesOutboundRepository salesOutboundRepository;
 
     public CustomerStatementSourceService(CustomerStatementRepository repository,
-                                          SalesOrderRepository salesOrderRepository,
-                                          SalesOrderItemQueryService salesOrderItemQueryService,
+                                          SalesOrderStatementSourceQuery sourceQuery,
                                           CustomerRepository customerRepository) {
-        this(repository, salesOrderRepository, salesOrderItemQueryService, customerRepository, null);
-    }
-
-    @Autowired
-    public CustomerStatementSourceService(CustomerStatementRepository repository,
-                                          SalesOrderRepository salesOrderRepository,
-                                          SalesOrderItemQueryService salesOrderItemQueryService,
-                                          CustomerRepository customerRepository,
-                                          SalesOutboundRepository salesOutboundRepository) {
         this.repository = repository;
-        this.salesOrderRepository = salesOrderRepository;
-        this.salesOrderItemQueryService = salesOrderItemQueryService;
+        this.sourceQuery = sourceQuery;
         this.customerRepository = customerRepository;
-        this.salesOutboundRepository = salesOutboundRepository;
     }
 
     Page<CustomerStatementCandidateResponse> candidatePage(PageQuery query, PageFilter filter) {
-        Set<Long> occupiedOrderIds = toIdSet(
-                repository.findOccupiedSourceSalesOrderIdsExcludingCurrentStatement(filter.currentRecordId())
+        List<Long> occupiedSourceItemIds = repository
+                .findOccupiedSourceSalesOrderItemIdsExcludingCurrentStatement(filter.currentRecordId());
+        SalesOrderStatementSourceQuery.CandidatePage page = sourceQuery.findCandidates(new CandidateCriteria(
+                query.page(),
+                query.size(),
+                query.sortBy(),
+                query.direction(),
+                filter.keyword(),
+                filter.customerId(),
+                filter.projectId(),
+                filter.name(),
+                filter.projectName(),
+                filter.settlementCompanyId(),
+                filter.startDate(),
+                filter.endDate(),
+                occupiedSourceItemIds
+        ));
+        return new PageImpl<>(
+                page.content().stream().map(this::toCandidateResponse).toList(),
+                query.toPageable("id"),
+                page.totalElements()
         );
-        Specification<SalesOrder> spec = Specs.<SalesOrder>notDeleted()
-                .and(Specs.keywordLike(filter.keyword(), SALES_ORDER_CANDIDATE_SEARCH_FIELDS))
-                .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
-                .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
-                .and(Specs.equalIfPresent("customerName", filter.name()))
-                .and(Specs.equalIfPresent("projectName", filter.projectName()))
-                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.equalIfPresent("status", StatusConstants.SALES_COMPLETED))
-                .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()))
-                .and(StatementCandidateSupport.excludeFieldValues("id", occupiedOrderIds));
-        return salesOrderRepository.findAll(spec, query.toPageable("id"))
-                .map(this::toCandidateResponse);
     }
 
     SourceApplyResult applyItems(CustomerStatement entity,
                                  CustomerStatementRequest request,
                                  LongSupplier nextIdSupplier) {
         BigDecimal salesAmount = BigDecimal.ZERO;
-        Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(request.items());
+        Map<Long, SourceSalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(request.items());
         validateSourceSalesOrders(request, sourceSalesOrderItemMap, entity.getId());
-        Map<Long, AuditedOutboundActual> outboundActualMap = loadAuditedOutboundActualMap(
-                sourceSalesOrderItemMap.keySet()
-        );
-        SettlementCompanySnapshot settlementCompany = resolveStatementSettlementCompany(sourceSalesOrderItemMap.values().stream()
-                .map(SalesOrderItem::getSalesOrder)
+        List<OrderSnapshot> sourceOrders = sourceSalesOrderItemMap.values().stream()
+                .map(SourceSalesOrderItem::order)
                 .distinct()
-                .toList());
+                .toList();
+        SettlementCompanySnapshot settlementCompany = resolveStatementSettlementCompany(sourceOrders);
         PartyIdentity partyIdentity = resolvePartyIdentity(sourceSalesOrderItemMap.values());
         entity.setCustomerId(partyIdentity.customerId());
         entity.setProjectId(partyIdentity.projectId());
@@ -126,42 +105,38 @@ public class CustomerStatementSourceService {
         );
         for (int i = 0; i < request.items().size(); i++) {
             CustomerStatementItemRequest source = request.items().get(i);
-            SalesOrderItem sourceSalesOrderItem = resolveSourceSalesOrderItem(source, sourceSalesOrderItemMap, i + 1);
-            AuditedOutboundActual outboundActual = resolveAuditedOutboundActual(
-                    sourceSalesOrderItem,
-                    outboundActualMap,
+            SourceSalesOrderItem sourceSalesOrderItem = resolveSourceSalesOrderItem(
+                    source,
+                    sourceSalesOrderItemMap,
                     i + 1
             );
+            OrderSnapshot sourceOrder = sourceSalesOrderItem.order();
+            ItemSnapshot sourceItem = sourceSalesOrderItem.item();
+            AuditedOutboundActualSnapshot outboundActual = resolveAuditedOutboundActual(sourceItem, i + 1);
             CustomerStatementItem item = items.get(i);
             item.setCustomerStatement(entity);
             item.setLineNo(i + 1);
-            item.setSourceNo(sourceSalesOrderItem.getSalesOrder().getOrderNo());
-            item.setSourceSalesOrderItemId(sourceSalesOrderItem.getId());
-            item.setCustomerId(sourceSalesOrderItem.getSalesOrder().getCustomerId());
-            item.setProjectId(sourceSalesOrderItem.getSalesOrder().getProjectId());
-            item.setMaterialId(sourceSalesOrderItem.getMaterialId());
-            item.setWarehouseId(sourceSalesOrderItem.getWarehouseId());
-            item.setMaterialCode(sourceSalesOrderItem.getMaterialCode());
-            item.setBrand(sourceSalesOrderItem.getBrand());
-            item.setCategory(sourceSalesOrderItem.getCategory());
-            item.setMaterial(sourceSalesOrderItem.getMaterial());
-            item.setSpec(sourceSalesOrderItem.getSpec());
-            item.setLength(sourceSalesOrderItem.getLength());
-            item.setUnit(sourceSalesOrderItem.getUnit());
-            item.setBatchNo(sourceSalesOrderItem.getBatchNo());
-            item.setQuantity(outboundActual == null
-                    ? sourceSalesOrderItem.getQuantity()
-                    : Math.toIntExact(outboundActual.quantity()));
-            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(sourceSalesOrderItem.getQuantityUnit()));
-            item.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(sourceSalesOrderItem.getPieceWeightTon()));
-            item.setPiecesPerBundle(sourceSalesOrderItem.getPiecesPerBundle());
-            item.setWeightTon(outboundActual == null
-                    ? TradeItemCalculator.scaleWeightTon(sourceSalesOrderItem.getWeightTon())
-                    : outboundActual.weightTon());
-            item.setUnitPrice(TradeItemCalculator.scaleAmount(sourceSalesOrderItem.getUnitPrice()));
-            BigDecimal amount = outboundActual == null
-                    ? TradeItemCalculator.scaleAmount(sourceSalesOrderItem.getAmount())
-                    : outboundActual.amount();
+            item.setSourceNo(sourceOrder.orderNo());
+            item.setSourceSalesOrderItemId(sourceItem.id());
+            item.setCustomerId(sourceOrder.customerId());
+            item.setProjectId(sourceOrder.projectId());
+            item.setMaterialId(sourceItem.materialId());
+            item.setWarehouseId(sourceItem.warehouseId());
+            item.setMaterialCode(sourceItem.materialCode());
+            item.setBrand(sourceItem.brand());
+            item.setCategory(sourceItem.category());
+            item.setMaterial(sourceItem.material());
+            item.setSpec(sourceItem.spec());
+            item.setLength(sourceItem.length());
+            item.setUnit(sourceItem.unit());
+            item.setBatchNo(sourceItem.batchNo());
+            item.setQuantity(Math.toIntExact(outboundActual.quantity()));
+            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(sourceItem.quantityUnit()));
+            item.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(sourceItem.pieceWeightTon()));
+            item.setPiecesPerBundle(sourceItem.piecesPerBundle());
+            item.setWeightTon(outboundActual.weightTon());
+            item.setUnitPrice(TradeItemCalculator.scaleAmount(sourceItem.unitPrice()));
+            BigDecimal amount = outboundActual.amount();
             item.setAmount(amount);
             salesAmount = salesAmount.add(amount);
         }
@@ -169,7 +144,7 @@ public class CustomerStatementSourceService {
         return new SourceApplyResult(salesAmount, settlementCompany.id(), settlementCompany.name());
     }
 
-    private Map<Long, SalesOrderItem> loadSourceSalesOrderItemMap(List<CustomerStatementItemRequest> items) {
+    private Map<Long, SourceSalesOrderItem> loadSourceSalesOrderItemMap(List<CustomerStatementItemRequest> items) {
         Set<Long> uniqueSourceItemIds = new LinkedHashSet<>();
         for (CustomerStatementItemRequest item : items) {
             Long sourceItemId = item.sourceSalesOrderItemId();
@@ -181,36 +156,16 @@ public class CustomerStatementSourceService {
         if (sourceSalesOrderItemIds.isEmpty()) {
             return Map.of();
         }
-        return salesOrderItemQueryService.findActiveByIdIn(sourceSalesOrderItemIds).stream()
-                .collect(java.util.stream.Collectors.toMap(SalesOrderItem::getId, item -> item));
+        return sourceQuery.findBySourceItemIds(sourceSalesOrderItemIds).stream()
+                .flatMap(order -> order.items().stream()
+                        .filter(item -> uniqueSourceItemIds.contains(item.id()))
+                        .map(item -> new SourceSalesOrderItem(order, item)))
+                .collect(java.util.stream.Collectors.toMap(source -> source.item().id(), source -> source));
     }
 
-    private Map<Long, AuditedOutboundActual> loadAuditedOutboundActualMap(Set<Long> sourceSalesOrderItemIds) {
-        if (salesOutboundRepository == null || sourceSalesOrderItemIds.isEmpty()) {
-            return Map.of();
-        }
-        List<Long> sortedSourceItemIds = sourceSalesOrderItemIds.stream().sorted().toList();
-        Map<Long, AuditedOutboundActual> result = new java.util.HashMap<>();
-        salesOutboundRepository.findAllWithItemsByStatusAndSourceSalesOrderItemIds(
-                        StatusConstants.AUDITED,
-                        sortedSourceItemIds
-                ).stream()
-                .flatMap(outbound -> outbound.getItems().stream())
-                .filter(item -> item.getSourceSalesOrderItemId() != null)
-                .filter(item -> sourceSalesOrderItemIds.contains(item.getSourceSalesOrderItemId()))
-                .forEach(item -> result.merge(
-                        item.getSourceSalesOrderItemId(),
-                        AuditedOutboundActual.from(item),
-                        AuditedOutboundActual::merge
-                ));
-        return Map.copyOf(result);
-    }
-
-    private AuditedOutboundActual resolveAuditedOutboundActual(SalesOrderItem sourceItem,
-                                                               Map<Long, AuditedOutboundActual> actualMap,
-                                                               int lineNo) {
-        AuditedOutboundActual actual = actualMap.get(sourceItem.getId());
-        if (actual == null && salesOutboundRepository != null) {
+    private AuditedOutboundActualSnapshot resolveAuditedOutboundActual(ItemSnapshot sourceItem, int lineNo) {
+        AuditedOutboundActualSnapshot actual = sourceItem.auditedOutboundActual();
+        if (actual == null) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
                     "第" + lineNo + "行来源销售订单明细没有已审核销售出库，不能生成客户对账单"
@@ -220,34 +175,34 @@ public class CustomerStatementSourceService {
     }
 
     private void validateSourceSalesOrders(CustomerStatementRequest request,
-                                           Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
+                                           Map<Long, SourceSalesOrderItem> sourceSalesOrderItemMap,
                                            Long currentStatementId) {
-        Map<Long, SalesOrder> requestedOrders = new java.util.LinkedHashMap<>();
-        for (SalesOrderItem item : sourceSalesOrderItemMap.values()) {
-            SalesOrder order = item.getSalesOrder();
-            requestedOrders.put(order.getId(), order);
+        Map<Long, OrderSnapshot> requestedOrders = new java.util.LinkedHashMap<>();
+        for (SourceSalesOrderItem item : sourceSalesOrderItemMap.values()) {
+            OrderSnapshot order = item.order();
+            requestedOrders.put(order.id(), order);
             BusinessDocumentValidator.requireSameText(
                     request.customerName(),
-                    order.getCustomerName(),
+                    order.customerName(),
                     "来源销售订单存在不同客户，不能合并生成客户对账单"
             );
             BusinessDocumentValidator.requireSameText(
                     request.projectName(),
-                    order.getProjectName(),
+                    order.projectName(),
                     "来源销售订单存在不同项目，不能合并生成客户对账单"
             );
             BusinessDocumentValidator.requireStatusIn(
-                    order.getStatus(),
+                    order.status(),
                     Set.of(StatusConstants.SALES_COMPLETED),
-                    "来源销售订单" + order.getOrderNo() + "未完成销售，不能生成客户对账单"
+                    "来源销售订单" + order.orderNo() + "未完成销售，不能生成客户对账单"
             );
             if (request.settlementCompanyId() != null
-                    && order.getSettlementCompanyId() != null
-                    && !request.settlementCompanyId().equals(order.getSettlementCompanyId())) {
+                    && order.settlementCompanyId() != null
+                    && !request.settlementCompanyId().equals(order.settlementCompanyId())) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单存在不同客户结算主体，不能合并生成客户对账单");
             }
-            requireSameIdentity(request.customerId(), order.getCustomerId(), "客户ID与来源销售订单不一致");
-            requireSameIdentity(request.projectId(), order.getProjectId(), "项目ID与来源销售订单不一致");
+            requireSameIdentity(request.customerId(), order.customerId(), "客户ID与来源销售订单不一致");
+            requireSameIdentity(request.projectId(), order.projectId(), "项目ID与来源销售订单不一致");
         }
         if (requestedOrders.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "客户对账单来源销售订单不能为空");
@@ -256,65 +211,75 @@ public class CustomerStatementSourceService {
         assertSourceOrdersNotOccupied(requestedOrders, currentStatementId);
     }
 
-    private void assertCompleteSourceItemCoverage(Collection<SalesOrderItem> requestedItems) {
+    private void assertCompleteSourceItemCoverage(Collection<SourceSalesOrderItem> requestedItems) {
         requestedItems.stream()
-                .map(SalesOrderItem::getSalesOrder)
+                .map(SourceSalesOrderItem::order)
                 .filter(java.util.Objects::nonNull)
                 .distinct()
                 .forEach(order -> StatementSourceCoverageValidator.requireAllEffectiveItems(
-                        "来源销售订单" + order.getOrderNo(),
-                        order.getItems().stream().map(SalesOrderItem::getId).toList(),
+                        "来源销售订单" + order.orderNo(),
+                        order.items().stream().map(ItemSnapshot::id).toList(),
                         requestedItems.stream()
-                                .filter(item -> sameSalesOrder(item.getSalesOrder(), order))
-                                .map(SalesOrderItem::getId)
+                                .filter(item -> sameSalesOrder(item.order(), order))
+                                .map(item -> item.item().id())
                                 .toList()
                 ));
     }
 
-    private boolean sameSalesOrder(SalesOrder left, SalesOrder right) {
+    private boolean sameSalesOrder(OrderSnapshot left, OrderSnapshot right) {
         if (left == right) {
             return true;
         }
         return left != null
                 && right != null
-                && left.getId() != null
-                && left.getId().equals(right.getId());
+                && left.id() != null
+                && left.id().equals(right.id());
     }
 
-    private void assertSourceOrdersNotOccupied(Map<Long, SalesOrder> requestedOrders,
+    private void assertSourceOrdersNotOccupied(Map<Long, OrderSnapshot> requestedOrders,
                                                Long currentStatementId) {
-        Set<Long> occupiedOrderIds = toIdSet(
-                repository.findMatchingOccupiedSourceSalesOrderIdsExcludingCurrentStatement(
-                        requestedOrders.keySet(),
+        List<Long> requestedItemIds = requestedOrders.values().stream()
+                .flatMap(order -> order.items().stream())
+                .map(ItemSnapshot::id)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .sorted()
+                .toList();
+        Set<Long> occupiedItemIds = requestedItemIds.isEmpty()
+                ? Set.of()
+                : toIdSet(repository.findMatchingOccupiedSourceSalesOrderItemIdsExcludingCurrentStatement(
+                        requestedItemIds,
                         currentStatementId
-                )
-        );
-        for (SalesOrder order : requestedOrders.values()) {
-            if (occupiedOrderIds.contains(order.getId())) {
+                ));
+        for (OrderSnapshot order : requestedOrders.values()) {
+            boolean occupied = order.items().stream()
+                    .map(ItemSnapshot::id)
+                    .anyMatch(occupiedItemIds::contains);
+            if (occupied) {
                 throw new BusinessException(
                         ErrorCode.BUSINESS_ERROR,
-                        "来源销售订单" + order.getOrderNo() + "已生成客户对账单"
+                        "来源销售订单" + order.orderNo() + "已生成客户对账单"
                 );
             }
         }
     }
 
-    private SalesOrderItem resolveSourceSalesOrderItem(CustomerStatementItemRequest source,
-                                                       Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
-                                                       int lineNo) {
+    private SourceSalesOrderItem resolveSourceSalesOrderItem(CustomerStatementItemRequest source,
+                                                             Map<Long, SourceSalesOrderItem> sourceSalesOrderItemMap,
+                                                             int lineNo) {
         Long sourceSalesOrderItemId = source.sourceSalesOrderItemId();
         if (sourceSalesOrderItemId != null) {
-            SalesOrderItem sourceSalesOrderItem = sourceSalesOrderItemMap.get(sourceSalesOrderItemId);
+            SourceSalesOrderItem sourceSalesOrderItem = sourceSalesOrderItemMap.get(sourceSalesOrderItemId);
             if (sourceSalesOrderItem == null) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不存在");
             }
-            requireSameIdentity(source.customerId(), sourceSalesOrderItem.getSalesOrder().getCustomerId(),
+            requireSameIdentity(source.customerId(), sourceSalesOrderItem.order().customerId(),
                     "第" + lineNo + "行客户ID与来源销售订单不一致");
-            requireSameIdentity(source.projectId(), sourceSalesOrderItem.getSalesOrder().getProjectId(),
+            requireSameIdentity(source.projectId(), sourceSalesOrderItem.order().projectId(),
                     "第" + lineNo + "行项目ID与来源销售订单不一致");
-            requireSameIdentity(source.materialId(), sourceSalesOrderItem.getMaterialId(),
+            requireSameIdentity(source.materialId(), sourceSalesOrderItem.item().materialId(),
                     "第" + lineNo + "行商品ID与来源销售订单不一致");
-            requireSameIdentity(source.warehouseId(), sourceSalesOrderItem.getWarehouseId(),
+            requireSameIdentity(source.warehouseId(), sourceSalesOrderItem.item().warehouseId(),
                     "第" + lineNo + "行仓库ID与来源销售订单不一致");
             return sourceSalesOrderItem;
         }
@@ -324,10 +289,10 @@ public class CustomerStatementSourceService {
     private String resolveCustomerCode(String requestCustomerCode,
                                        String customerName,
                                        String projectName,
-                                       Map<Long, SalesOrderItem> sourceSalesOrderItemMap) {
+                                       Map<Long, SourceSalesOrderItem> sourceSalesOrderItemMap) {
         String resolvedCode = trimToNull(requestCustomerCode);
-        for (SalesOrderItem item : sourceSalesOrderItemMap.values()) {
-            resolvedCode = mergeCustomerCode(resolvedCode, trimToNull(item.getSalesOrder().getCustomerCode()));
+        for (SourceSalesOrderItem item : sourceSalesOrderItemMap.values()) {
+            resolvedCode = mergeCustomerCode(resolvedCode, trimToNull(item.order().customerCode()));
         }
         if (resolvedCode != null || customerRepository == null) {
             return resolvedCode;
@@ -345,11 +310,11 @@ public class CustomerStatementSourceService {
                 .orElse(null);
     }
 
-    private PartyIdentity resolvePartyIdentity(Collection<SalesOrderItem> sourceItems) {
+    private PartyIdentity resolvePartyIdentity(Collection<SourceSalesOrderItem> sourceItems) {
         List<PartyIdentity> identities = sourceItems.stream()
-                .map(SalesOrderItem::getSalesOrder)
+                .map(SourceSalesOrderItem::order)
                 .filter(java.util.Objects::nonNull)
-                .map(order -> new PartyIdentity(order.getCustomerId(), order.getProjectId()))
+                .map(order -> new PartyIdentity(order.customerId(), order.projectId()))
                 .distinct()
                 .toList();
         if (identities.size() != 1) {
@@ -383,9 +348,12 @@ public class CustomerStatementSourceService {
         return ids == null ? Set.of() : new LinkedHashSet<>(ids);
     }
 
-    private SettlementCompanySnapshot resolveStatementSettlementCompany(List<SalesOrder> orders) {
+    private SettlementCompanySnapshot resolveStatementSettlementCompany(List<OrderSnapshot> orders) {
         List<SettlementCompanySnapshot> snapshots = orders.stream()
-                .map(order -> new SettlementCompanySnapshot(order.getSettlementCompanyId(), trimToNull(order.getSettlementCompanyName())))
+                .map(order -> new SettlementCompanySnapshot(
+                        order.settlementCompanyId(),
+                        trimToNull(order.settlementCompanyName())
+                ))
                 .filter(snapshot -> snapshot.id() != null || snapshot.name() != null)
                 .distinct()
                 .toList();
@@ -398,21 +366,21 @@ public class CustomerStatementSourceService {
         return snapshots.get(0);
     }
 
-    private CustomerStatementCandidateResponse toCandidateResponse(SalesOrder order) {
+    private CustomerStatementCandidateResponse toCandidateResponse(CandidateSnapshot order) {
         return new CustomerStatementCandidateResponse(
-                order.getId(),
-                order.getOrderNo(),
-                order.getCustomerName(),
-                order.getProjectName(),
-                order.getSettlementCompanyId(),
-                order.getSettlementCompanyName(),
-                order.getDeliveryDate(),
-                order.getSalesName(),
-                order.getTotalWeight(),
-                order.getTotalAmount(),
-                order.getStatus(),
-                order.getCustomerId(),
-                order.getProjectId()
+                order.id(),
+                order.orderNo(),
+                order.customerName(),
+                order.projectName(),
+                order.settlementCompanyId(),
+                order.settlementCompanyName(),
+                order.deliveryDate(),
+                order.salesName(),
+                order.totalWeight(),
+                order.totalAmount(),
+                order.status(),
+                order.customerId(),
+                order.projectId()
         );
     }
 
@@ -429,22 +397,6 @@ public class CustomerStatementSourceService {
     private record PartyIdentity(Long customerId, Long projectId) {
     }
 
-    private record AuditedOutboundActual(long quantity, BigDecimal weightTon, BigDecimal amount) {
-
-        private static AuditedOutboundActual from(SalesOutboundItem item) {
-            return new AuditedOutboundActual(
-                    item.getQuantity() == null ? 0L : item.getQuantity().longValue(),
-                    TradeItemCalculator.scaleWeightTon(item.getWeightTon()),
-                    TradeItemCalculator.scaleAmount(item.getAmount())
-            );
-        }
-
-        private AuditedOutboundActual merge(AuditedOutboundActual other) {
-            return new AuditedOutboundActual(
-                    Math.addExact(quantity, other.quantity),
-                    TradeItemCalculator.scaleWeightTon(weightTon.add(other.weightTon)),
-                    TradeItemCalculator.scaleAmount(amount.add(other.amount))
-            );
-        }
+    private record SourceSalesOrderItem(OrderSnapshot order, ItemSnapshot item) {
     }
 }

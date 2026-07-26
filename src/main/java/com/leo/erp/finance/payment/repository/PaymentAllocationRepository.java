@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 
 public interface PaymentAllocationRepository extends JpaRepository<PaymentAllocation, Long> {
 
@@ -49,4 +50,19 @@ public interface PaymentAllocationRepository extends JpaRepository<PaymentAlloca
     long countSettledAllocationsByStatementIdAndBusinessTypeAndStatus(@Param("statementId") Long statementId,
                                                                        @Param("businessType") String businessType,
                                                                        @Param("status") String status);
+
+    @Query("""
+            select count(allocation.id)
+            from PaymentAllocation allocation
+            join allocation.payment payment
+            where payment.deletedFlag = false
+              and payment.businessType = :businessType
+              and payment.status = :status
+              and allocation.sourceStatementId in :statementIds
+            """)
+    long countSettledAllocationsByStatementIdsAndBusinessTypeAndStatus(
+            @Param("statementIds") Collection<Long> statementIds,
+            @Param("businessType") String businessType,
+            @Param("status") String status
+    );
 }

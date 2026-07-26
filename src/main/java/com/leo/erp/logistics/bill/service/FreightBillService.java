@@ -6,7 +6,7 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -27,7 +27,6 @@ import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,7 +36,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 @Service
-public class FreightBillService extends AbstractCrudService<FreightBill, FreightBillRequest, FreightBillResponse> {
+public class FreightBillService extends AbstractStatusCrudService<FreightBill, FreightBillRequest, FreightBillResponse> {
 
     private static final Logger log = LoggerFactory.getLogger(FreightBillService.class);
     private static final String[] SEARCH_FIELDS = {"billNo", "carrierCode", "carrierName"};
@@ -50,7 +49,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     private final SourceAllocationLockService sourceAllocationLockService;
     private final FreightBillDownstreamMutationGuard downstreamMutationGuard;
     private final VehicleRepository vehicleRepository;
-    private BusinessOperationEventPublisher businessOperationEventPublisher;
+    private final BusinessOperationEventPublisher businessOperationEventPublisher;
 
     public FreightBillService(FreightBillRepository repository,
                               SnowflakeIdGenerator idGenerator,
@@ -60,7 +59,8 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                               CompanySettingService companySettingService,
                               SourceAllocationLockService sourceAllocationLockService,
                               FreightBillDownstreamMutationGuard downstreamMutationGuard,
-                              VehicleRepository vehicleRepository) {
+                              VehicleRepository vehicleRepository,
+                              BusinessOperationEventPublisher businessOperationEventPublisher) {
         super(idGenerator);
         this.repository = repository;
         this.mapper = mapper;
@@ -70,11 +70,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.downstreamMutationGuard = downstreamMutationGuard;
         this.vehicleRepository = vehicleRepository;
-    }
-
-    @Autowired(required = false)
-    void setBusinessOperationEventPublisher(BusinessOperationEventPublisher publisher) {
-        this.businessOperationEventPublisher = publisher;
+        this.businessOperationEventPublisher = businessOperationEventPublisher;
     }
 
     public Page<FreightBillResponse> page(PageQuery query, PageFilter filter) {
@@ -364,9 +360,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     }
 
     private void publishEvent(FreightBill bill, String eventType, String actionType, String remark) {
-        if (businessOperationEventPublisher == null) {
-            return;
-        }
         businessOperationEventPublisher.publish(
                 eventType,
                 "freight-bill",

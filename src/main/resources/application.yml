@@ -101,9 +101,11 @@ spring:
     locations: classpath:db/migration
 
   modulith:
+    # 渐进式纳管：只有显式声明的顶层包参与模块边界验证
+    detection-strategy: explicitly-annotated
     events:
-      # 事件消费成功后保留完成时间，便于审计可靠投递状态
-      completion-mode: update
+      # 成功结果由业务审计表保留；投递注册完成后删除，避免发布表无界增长
+      completion-mode: delete
       # 应用重启时自动重放未完成事件，消费者必须按 eventId 幂等
       republish-outstanding-events-on-restart: true
 

@@ -3,8 +3,7 @@ package com.leo.erp.finance.payment.service;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.domain.entity.PaymentAllocation;
 import com.leo.erp.finance.payment.web.dto.PaymentAllocationResponse;
-import com.leo.erp.statement.freight.domain.entity.FreightStatement;
-import com.leo.erp.statement.freight.service.FreightStatementQueryService;
+import com.leo.erp.statement.api.FreightStatementApi;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -13,10 +12,10 @@ import java.util.List;
 @Service
 public class PaymentAllocationResponseAssembler {
 
-    private final FreightStatementQueryService freightStatementQueryService;
+    private final FreightStatementApi freightStatementApi;
 
-    public PaymentAllocationResponseAssembler(FreightStatementQueryService freightStatementQueryService) {
-        this.freightStatementQueryService = freightStatementQueryService;
+    public PaymentAllocationResponseAssembler(FreightStatementApi freightStatementApi) {
+        this.freightStatementApi = freightStatementApi;
     }
 
     List<PaymentAllocationResponse> toResponses(Payment entity) {
@@ -44,20 +43,20 @@ public class PaymentAllocationResponseAssembler {
         Long statementId = item.getSourceFreightStatementId() == null
                 ? item.getSourceStatementId()
                 : item.getSourceFreightStatementId();
-        FreightStatement statement = findFreightStatement(statementId);
+        FreightStatementApi.Snapshot statement = findFreightStatement(statementId);
         return new PaymentAllocationResponse(
                 item.getId(),
                 item.getLineNo(),
                 statementId,
                 null,
                 statementId,
-                statement == null ? null : statement.getStatementNo(),
-                statement == null ? BigDecimal.ZERO : statement.getUnpaidAmount(),
+                statement == null ? null : statement.statementNo(),
+                statement == null ? BigDecimal.ZERO : statement.unpaidAmount(),
                 item.getAllocatedAmount()
         );
     }
 
-    private FreightStatement findFreightStatement(Long statementId) {
-        return statementId == null ? null : freightStatementQueryService.findActiveById(statementId).orElse(null);
+    private FreightStatementApi.Snapshot findFreightStatement(Long statementId) {
+        return statementId == null ? null : freightStatementApi.findActiveById(statementId).orElse(null);
     }
 }

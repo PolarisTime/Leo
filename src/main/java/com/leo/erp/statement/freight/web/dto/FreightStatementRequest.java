@@ -1,6 +1,5 @@
 package com.leo.erp.statement.freight.web.dto;
 
-import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
@@ -24,7 +23,7 @@ public record FreightStatementRequest(
         String status,
         @Size(max = 500) String attachment,
         @Size(max = 255) String remark,
-        @Valid @NotEmpty List<FreightBillItemRequest> items,
+        @Valid @NotEmpty List<FreightStatementItemRequest> items,
         Long carrierId
 ) {
 }

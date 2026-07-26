@@ -38,7 +38,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     private final ReceiptAllocationResponseAssembler allocationResponseAssembler;
     private final ReceiptSettlementSyncService settlementSyncService;
     private final SourceAllocationLockService sourceAllocationLockService;
-    private SupplierPrepaymentBalanceService supplierPrepaymentBalanceService;
+    private final SupplierPrepaymentBalanceService supplierPrepaymentBalanceService;
 
     @Autowired
     public ReceiptService(ReceiptRepository receiptRepository,
@@ -48,7 +48,8 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
                           ReceiptAllocationService receiptAllocationService,
                           ReceiptAllocationResponseAssembler allocationResponseAssembler,
                           ReceiptSettlementSyncService settlementSyncService,
-                          SourceAllocationLockService sourceAllocationLockService) {
+                          SourceAllocationLockService sourceAllocationLockService,
+                          SupplierPrepaymentBalanceService supplierPrepaymentBalanceService) {
         super(snowflakeIdGenerator);
         this.receiptRepository = receiptRepository;
         this.receiptMapper = receiptMapper;
@@ -57,10 +58,6 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         this.allocationResponseAssembler = allocationResponseAssembler;
         this.settlementSyncService = settlementSyncService;
         this.sourceAllocationLockService = sourceAllocationLockService;
-    }
-
-    @Autowired(required = false)
-    void setSupplierPrepaymentBalanceService(SupplierPrepaymentBalanceService supplierPrepaymentBalanceService) {
         this.supplierPrepaymentBalanceService = supplierPrepaymentBalanceService;
     }
 
@@ -256,7 +253,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
             if (entity.getCounterpartyId() == null || entity.getSettlementCompanyId() == null) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商收款缺少供应商或结算主体身份");
             }
-            requireSupplierPrepaymentBalanceService().validateSupplierReceipt(entity, nextStatus);
+            supplierPrepaymentBalanceService.validateSupplierReceipt(entity, nextStatus);
             return;
         }
         lockAllocationStatements(entity, null);
@@ -368,13 +365,6 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         if (receiptRepository.existsByReceiptNoAndDeletedFlagFalse(receiptNo)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "收款单号已存在");
         }
-    }
-
-    private SupplierPrepaymentBalanceService requireSupplierPrepaymentBalanceService() {
-        if (supplierPrepaymentBalanceService == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商预付款余额服务不可用");
-        }
-        return supplierPrepaymentBalanceService;
     }
 
     private void lockReceiptRoot(Long id) {

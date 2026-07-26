@@ -2,20 +2,16 @@ package com.leo.erp.statement.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.finance.payment.repository.PaymentAllocationRepository;
-import com.leo.erp.finance.receipt.repository.ReceiptAllocationRepository;
+import com.leo.erp.statement.api.StatementSettlementAllocationPort;
 import org.springframework.stereotype.Service;
 
 @Service
 public class StatementSettlementMutationGuard {
 
-    private final PaymentAllocationRepository paymentAllocationRepository;
-    private final ReceiptAllocationRepository receiptAllocationRepository;
+    private final StatementSettlementAllocationPort settlementAllocationPort;
 
-    public StatementSettlementMutationGuard(PaymentAllocationRepository paymentAllocationRepository,
-                                            ReceiptAllocationRepository receiptAllocationRepository) {
-        this.paymentAllocationRepository = paymentAllocationRepository;
-        this.receiptAllocationRepository = receiptAllocationRepository;
+    public StatementSettlementMutationGuard(StatementSettlementAllocationPort settlementAllocationPort) {
+        this.settlementAllocationPort = settlementAllocationPort;
     }
 
     public void assertNoSettledAllocations(StatementType statementType, Long statementId, String action) {
@@ -23,13 +19,12 @@ public class StatementSettlementMutationGuard {
             return;
         }
         long allocationCount = switch (statementType) {
-            case SUPPLIER, FREIGHT -> paymentAllocationRepository
-                    .countSettledAllocationsByStatementIdAndBusinessTypeAndStatus(
-                            statementId,
-                            statementType.businessType(),
-                            StatementSettlementSyncService.PAYMENT_STATUS_SETTLED
-                    );
-            case CUSTOMER -> receiptAllocationRepository.countSettledAllocationsByStatementIdAndStatus(
+            case SUPPLIER, FREIGHT -> settlementAllocationPort.countPaymentAllocations(
+                    statementId,
+                    statementType.businessType(),
+                    StatementSettlementSyncService.PAYMENT_STATUS_SETTLED
+            );
+            case CUSTOMER -> settlementAllocationPort.countReceiptAllocations(
                     statementId,
                     StatementSettlementSyncService.RECEIPT_STATUS_SETTLED
             );

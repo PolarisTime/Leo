@@ -13,9 +13,9 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.sales.order.domain.entity.SalesOrder;
-import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
-import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.sales.api.SalesOrderLogisticsSourceQuery;
+import com.leo.erp.sales.api.SalesOrderSourceItemSnapshot;
+import com.leo.erp.sales.api.SalesOrderSourceSnapshot;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -37,14 +37,14 @@ public class FreightBillApplyService {
             StatusConstants.SALES_COMPLETED
     );
 
-    private final SalesOrderRepository salesOrderRepository;
+    private final SalesOrderLogisticsSourceQuery salesOrderSourceQuery;
     private final FreightBillSourceOrderRepository sourceOrderRepository;
     private final SourceAllocationLockService sourceAllocationLockService;
 
-    public FreightBillApplyService(SalesOrderRepository salesOrderRepository,
+    public FreightBillApplyService(SalesOrderLogisticsSourceQuery salesOrderSourceQuery,
                                    FreightBillSourceOrderRepository sourceOrderRepository,
                                    SourceAllocationLockService sourceAllocationLockService) {
-        this.salesOrderRepository = salesOrderRepository;
+        this.salesOrderSourceQuery = salesOrderSourceQuery;
         this.sourceOrderRepository = sourceOrderRepository;
         this.sourceAllocationLockService = sourceAllocationLockService;
     }
@@ -64,8 +64,11 @@ public class FreightBillApplyService {
         for (int index = 0; index < request.items().size(); index++) {
             FreightBillItem item = items.get(index);
             FreightBillItemRequest source = request.items().get(index);
-            SalesOrderItem sourceItem = sourceSnapshot.itemById().get(source.sourceSalesOrderItemId());
-            applyItem(entity, item, sourceItem, index + 1);
+            SalesOrderSourceItemSnapshot sourceItem = sourceSnapshot.itemById()
+                    .get(source.sourceSalesOrderItemId());
+            SalesOrderSourceSnapshot sourceOrder = sourceSnapshot.orderByItemId()
+                    .get(source.sourceSalesOrderItemId());
+            applyItem(entity, item, sourceItem, sourceOrder, index + 1);
             totalWeight = totalWeight.add(item.getWeightTon());
         }
         entity.getItems().sort(java.util.Comparator.comparing(FreightBillItem::getLineNo));
@@ -77,35 +80,35 @@ public class FreightBillApplyService {
 
     private void applyItem(FreightBill entity,
                            FreightBillItem item,
-                           SalesOrderItem source,
+                           SalesOrderSourceItemSnapshot source,
+                           SalesOrderSourceSnapshot sourceOrder,
                            int lineNo) {
-        SalesOrder sourceOrder = source.getSalesOrder();
         item.setFreightBill(entity);
         item.setLineNo(lineNo);
-        item.setSourceNo(sourceOrder.getOrderNo());
-        item.setSourceSalesOrderItemId(source.getId());
-        item.setSettlementCompanyId(source.getSettlementCompanyId());
-        item.setSettlementCompanyName(source.getSettlementCompanyName());
-        item.setCustomerId(sourceOrder.getCustomerId());
-        item.setCustomerName(sourceOrder.getCustomerName());
-        item.setProjectId(sourceOrder.getProjectId());
-        item.setProjectName(sourceOrder.getProjectName());
-        item.setMaterialId(source.getMaterialId());
-        item.setMaterialCode(source.getMaterialCode());
-        item.setMaterialName(source.getBrand());
-        item.setBrand(source.getBrand());
-        item.setCategory(source.getCategory());
-        item.setMaterial(source.getMaterial());
-        item.setSpec(source.getSpec());
-        item.setLength(source.getLength());
-        item.setQuantity(source.getQuantity());
-        item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.getQuantityUnit()));
-        item.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(source.getPieceWeightTon()));
-        item.setPiecesPerBundle(source.getPiecesPerBundle());
-        item.setBatchNo(source.getBatchNo());
-        item.setWeightTon(requirePositiveWeight(source));
-        item.setWarehouseId(source.getWarehouseId());
-        item.setWarehouseName(source.getWarehouseName());
+        item.setSourceNo(sourceOrder.orderNo());
+        item.setSourceSalesOrderItemId(source.id());
+        item.setSettlementCompanyId(source.settlementCompanyId());
+        item.setSettlementCompanyName(source.settlementCompanyName());
+        item.setCustomerId(sourceOrder.customerId());
+        item.setCustomerName(sourceOrder.customerName());
+        item.setProjectId(sourceOrder.projectId());
+        item.setProjectName(sourceOrder.projectName());
+        item.setMaterialId(source.materialId());
+        item.setMaterialCode(source.materialCode());
+        item.setMaterialName(source.brand());
+        item.setBrand(source.brand());
+        item.setCategory(source.category());
+        item.setMaterial(source.material());
+        item.setSpec(source.spec());
+        item.setLength(source.length());
+        item.setQuantity(source.quantity());
+        item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
+        item.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(source.pieceWeightTon()));
+        item.setPiecesPerBundle(source.piecesPerBundle());
+        item.setBatchNo(source.batchNo());
+        item.setWeightTon(requirePositiveWeight(source, sourceOrder.orderNo()));
+        item.setWarehouseId(source.warehouseId());
+        item.setWarehouseName(source.warehouseName());
     }
 
     private SourceSnapshot resolveSources(FreightBill entity, List<FreightBillItemRequest> requestedItems) {
@@ -116,16 +119,16 @@ public class FreightBillApplyService {
         if (requestedItemIds.size() != requestedItems.size()) {
             throw business("物流单必须整单导入销售订单明细，来源明细ID不能为空或重复");
         }
-        List<SalesOrder> orders = salesOrderRepository.findAllWithItemsBySourceItemIds(requestedItemIds);
+        List<SalesOrderSourceSnapshot> orders = salesOrderSourceQuery.findBySourceItemIds(requestedItemIds);
         LinkedHashSet<Long> sourceOrderIds = orders.stream()
-                .map(SalesOrder::getId)
+                .map(SalesOrderSourceSnapshot::id)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         sourceAllocationLockService.lockDocumentSources(List.of(), sourceOrderIds, List.of(), List.of());
-        orders = salesOrderRepository.findAllWithItemsBySourceItemIds(requestedItemIds);
+        orders = salesOrderSourceQuery.findBySourceItemIds(requestedItemIds);
         validateOrders(orders);
         LinkedHashSet<Long> completeItemIds = orders.stream()
-                .flatMap(order -> order.getItems().stream())
-                .map(SalesOrderItem::getId)
+                .flatMap(order -> order.items().stream())
+                .map(SalesOrderSourceItemSnapshot::id)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (!completeItemIds.equals(requestedItemIds)) {
             throw business("物流单必须包含所选销售订单的全部明细");
@@ -135,19 +138,24 @@ public class FreightBillApplyService {
         if (!occupied.isEmpty()) {
             throw business("销售订单已关联其他物流单，不能重复导入");
         }
-        Map<Long, SalesOrderItem> itemById = orders.stream()
-                .flatMap(order -> order.getItems().stream())
-                .collect(Collectors.toMap(SalesOrderItem::getId, item -> item, (left, right) -> left, LinkedHashMap::new));
-        return new SourceSnapshot(orders, itemById);
+        Map<Long, SalesOrderSourceItemSnapshot> itemById = new LinkedHashMap<>();
+        Map<Long, SalesOrderSourceSnapshot> orderByItemId = new LinkedHashMap<>();
+        for (SalesOrderSourceSnapshot order : orders) {
+            for (SalesOrderSourceItemSnapshot item : order.items()) {
+                itemById.putIfAbsent(item.id(), item);
+                orderByItemId.putIfAbsent(item.id(), order);
+            }
+        }
+        return new SourceSnapshot(orders, itemById, orderByItemId);
     }
 
-    private void validateOrders(List<SalesOrder> orders) {
+    private void validateOrders(List<SalesOrderSourceSnapshot> orders) {
         if (orders.isEmpty()) {
             throw business("物流单至少需要导入一张销售订单");
         }
-        for (SalesOrder order : orders) {
-            if (!ALLOWED_SOURCE_STATUS.contains(order.getStatus())) {
-                throw business("销售订单" + order.getOrderNo() + "当前状态不能生成物流单");
+        for (SalesOrderSourceSnapshot order : orders) {
+            if (!ALLOWED_SOURCE_STATUS.contains(order.status())) {
+                throw business("销售订单" + order.orderNo() + "当前状态不能生成物流单");
             }
         }
     }
@@ -162,28 +170,30 @@ public class FreightBillApplyService {
         }
     }
 
-    private void syncSourceOrders(FreightBill entity, List<SalesOrder> orders, LongSupplier nextId) {
+    private void syncSourceOrders(FreightBill entity,
+                                  List<SalesOrderSourceSnapshot> orders,
+                                  LongSupplier nextId) {
         Set<Long> existingIds = entity.getSourceOrders().stream()
                 .map(FreightBillSourceOrder::getSourceSalesOrderId)
                 .collect(Collectors.toSet());
-        for (SalesOrder order : orders) {
-            if (existingIds.contains(order.getId())) {
+        for (SalesOrderSourceSnapshot order : orders) {
+            if (existingIds.contains(order.id())) {
                 continue;
             }
             FreightBillSourceOrder relation = new FreightBillSourceOrder();
             relation.setId(nextId.getAsLong());
             relation.setFreightBill(entity);
-            relation.setSourceSalesOrderId(order.getId());
-            relation.setSourceSalesOrderNo(order.getOrderNo());
+            relation.setSourceSalesOrderId(order.id());
+            relation.setSourceSalesOrderNo(order.orderNo());
             relation.setActiveFlag(true);
             entity.getSourceOrders().add(relation);
         }
     }
 
-    private BigDecimal requirePositiveWeight(SalesOrderItem source) {
-        BigDecimal weight = TradeItemCalculator.scaleWeightTon(source.getWeightTon());
+    private BigDecimal requirePositiveWeight(SalesOrderSourceItemSnapshot source, String orderNo) {
+        BigDecimal weight = TradeItemCalculator.scaleWeightTon(source.weightTon());
         if (weight.signum() <= 0) {
-            throw business("销售订单" + source.getSalesOrder().getOrderNo() + "存在重量小于等于0的明细");
+            throw business("销售订单" + orderNo + "存在重量小于等于0的明细");
         }
         return weight;
     }
@@ -192,6 +202,10 @@ public class FreightBillApplyService {
         return new BusinessException(ErrorCode.BUSINESS_ERROR, message);
     }
 
-    private record SourceSnapshot(List<SalesOrder> orders, Map<Long, SalesOrderItem> itemById) {
+    private record SourceSnapshot(
+            List<SalesOrderSourceSnapshot> orders,
+            Map<Long, SalesOrderSourceItemSnapshot> itemById,
+            Map<Long, SalesOrderSourceSnapshot> orderByItemId
+    ) {
     }
 }

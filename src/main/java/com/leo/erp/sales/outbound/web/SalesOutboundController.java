@@ -59,6 +59,7 @@ public class SalesOutboundController {
             @RequestParam(required = false) Long projectId,
             @RequestParam(required = false) String projectName,
             @RequestParam(required = false) Long settlementCompanyId,
+            @RequestParam(required = false) String productKeyword,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
@@ -67,7 +68,8 @@ public class SalesOutboundController {
                 service.page(
                         query,
                         PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, startDate, endDate)
-                                .withIdentity(customerId, projectId, null, null, null)
+                                .withIdentity(customerId, projectId, null, null, null),
+                        productKeyword
                 )
         ));
     }

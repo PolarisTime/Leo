@@ -1,0 +1,573 @@
+{
+  "schemaVersion": 1,
+  "restrictedImports": [
+    {
+      "sourceModule": "finance",
+      "targetModule": "common",
+      "kind": "web.dto",
+      "source": "com/leo/erp/finance/cashledger/service/CashLedgerService.java",
+      "target": "com.leo.erp.common.web.dto.FileDownloadResponse"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "common",
+      "kind": "web.dto",
+      "source": "com/leo/erp/finance/cashledger/web/CashLedgerController.java",
+      "target": "com.leo.erp.common.web.dto.FileDownloadResponse"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "common",
+      "kind": "web.dto",
+      "source": "com/leo/erp/finance/ledgeradjustment/web/LedgerAdjustmentController.java",
+      "target": "com.leo.erp.common.web.dto.StatusUpdateRequest"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "common",
+      "kind": "web.dto",
+      "source": "com/leo/erp/finance/payment/web/PaymentController.java",
+      "target": "com.leo.erp.common.web.dto.StatusUpdateRequest"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "common",
+      "kind": "web.dto",
+      "source": "com/leo/erp/finance/receipt/web/ReceiptController.java",
+      "target": "com.leo.erp.common.web.dto.StatusUpdateRequest"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "master",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/finance/payment/service/PaymentApplyService.java",
+      "target": "com.leo.erp.master.carrier.domain.entity.Carrier"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "master",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/finance/payment/service/PaymentApplyService.java",
+      "target": "com.leo.erp.master.supplier.domain.entity.Supplier"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "master",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/finance/receipt/service/ReceiptPartyIdentityResolver.java",
+      "target": "com.leo.erp.master.customer.domain.entity.Customer"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "master",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/finance/receipt/service/ReceiptPartyIdentityResolver.java",
+      "target": "com.leo.erp.master.project.domain.entity.Project"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "master",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/finance/receipt/service/ReceiptPartyIdentityResolver.java",
+      "target": "com.leo.erp.master.supplier.domain.entity.Supplier"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/finance/ledgeradjustment/service/LedgerAdjustmentService.java",
+      "target": "com.leo.erp.master.carrier.repository.CarrierRepository"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/finance/ledgeradjustment/service/LedgerAdjustmentService.java",
+      "target": "com.leo.erp.master.customer.repository.CustomerRepository"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/finance/ledgeradjustment/service/LedgerAdjustmentService.java",
+      "target": "com.leo.erp.master.project.repository.ProjectRepository"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/finance/ledgeradjustment/service/LedgerAdjustmentService.java",
+      "target": "com.leo.erp.master.supplier.repository.SupplierRepository"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/finance/payment/service/PaymentApplyService.java",
+      "target": "com.leo.erp.master.carrier.repository.CarrierRepository"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/finance/payment/service/PaymentApplyService.java",
+      "target": "com.leo.erp.master.supplier.repository.SupplierRepository"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/finance/receipt/service/ReceiptPartyIdentityResolver.java",
+      "target": "com.leo.erp.master.customer.repository.CustomerRepository"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/finance/receipt/service/ReceiptPartyIdentityResolver.java",
+      "target": "com.leo.erp.master.project.repository.ProjectRepository"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/finance/receipt/service/ReceiptPartyIdentityResolver.java",
+      "target": "com.leo.erp.master.supplier.repository.SupplierRepository"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "system",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/finance/ledgeradjustment/service/LedgerAdjustmentService.java",
+      "target": "com.leo.erp.system.company.domain.entity.CompanySetting"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "system",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/finance/payment/service/PaymentApplyService.java",
+      "target": "com.leo.erp.system.company.domain.entity.CompanySetting"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "system",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/finance/receipt/service/ReceiptPartyIdentityResolver.java",
+      "target": "com.leo.erp.system.company.domain.entity.CompanySetting"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "system",
+      "kind": "repository",
+      "source": "com/leo/erp/finance/payment/service/PaymentApplyService.java",
+      "target": "com.leo.erp.system.company.repository.CompanySettingRepository"
+    },
+    {
+      "sourceModule": "finance",
+      "targetModule": "system",
+      "kind": "repository",
+      "source": "com/leo/erp/finance/receipt/service/ReceiptPartyIdentityResolver.java",
+      "target": "com.leo.erp.system.company.repository.CompanySettingRepository"
+    },
+    {
+      "sourceModule": "logistics",
+      "targetModule": "common",
+      "kind": "web.dto",
+      "source": "com/leo/erp/logistics/bill/web/FreightBillController.java",
+      "target": "com.leo.erp.common.web.dto.StatusUpdateRequest"
+    },
+    {
+      "sourceModule": "logistics",
+      "targetModule": "master",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/logistics/bill/service/FreightBillCarrierResolver.java",
+      "target": "com.leo.erp.master.carrier.domain.entity.Carrier"
+    },
+    {
+      "sourceModule": "logistics",
+      "targetModule": "master",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/logistics/bill/service/FreightBillService.java",
+      "target": "com.leo.erp.master.carrier.domain.entity.Vehicle"
+    },
+    {
+      "sourceModule": "logistics",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/logistics/bill/service/FreightBillCarrierResolver.java",
+      "target": "com.leo.erp.master.carrier.repository.CarrierRepository"
+    },
+    {
+      "sourceModule": "logistics",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/logistics/bill/service/FreightBillService.java",
+      "target": "com.leo.erp.master.carrier.repository.CarrierRepository"
+    },
+    {
+      "sourceModule": "logistics",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/logistics/bill/service/FreightBillService.java",
+      "target": "com.leo.erp.master.carrier.repository.VehicleRepository"
+    },
+    {
+      "sourceModule": "logistics",
+      "targetModule": "system",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/logistics/bill/service/FreightBillService.java",
+      "target": "com.leo.erp.system.company.domain.entity.CompanySetting"
+    },
+    {
+      "sourceModule": "master",
+      "targetModule": "system",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/master/carrier/service/CarrierService.java",
+      "target": "com.leo.erp.system.company.domain.entity.CompanySetting"
+    },
+    {
+      "sourceModule": "master",
+      "targetModule": "system",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/master/customer/service/CustomerService.java",
+      "target": "com.leo.erp.system.company.domain.entity.CompanySetting"
+    },
+    {
+      "sourceModule": "purchase",
+      "targetModule": "allocation",
+      "kind": "repository",
+      "source": "com/leo/erp/purchase/inbound/service/PurchaseInboundResponseAssembler.java",
+      "target": "com.leo.erp.allocation.repository.ItemAllocationNativeRepository"
+    },
+    {
+      "sourceModule": "purchase",
+      "targetModule": "allocation",
+      "kind": "repository",
+      "source": "com/leo/erp/purchase/order/service/PurchaseOrderAvailabilityService.java",
+      "target": "com.leo.erp.allocation.repository.ItemAllocationNativeRepository"
+    },
+    {
+      "sourceModule": "purchase",
+      "targetModule": "common",
+      "kind": "web.dto",
+      "source": "com/leo/erp/purchase/inbound/web/PurchaseInboundController.java",
+      "target": "com.leo.erp.common.web.dto.StatusUpdateRequest"
+    },
+    {
+      "sourceModule": "purchase",
+      "targetModule": "common",
+      "kind": "web.dto",
+      "source": "com/leo/erp/purchase/order/web/PurchaseOrderController.java",
+      "target": "com.leo.erp.common.web.dto.StatusUpdateRequest"
+    },
+    {
+      "sourceModule": "purchase",
+      "targetModule": "master",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/purchase/order/service/PurchaseOrderSupplierResolver.java",
+      "target": "com.leo.erp.master.supplier.domain.entity.Supplier"
+    },
+    {
+      "sourceModule": "purchase",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/purchase/inbound/service/PurchaseInboundWeightSettlementService.java",
+      "target": "com.leo.erp.master.material.repository.MaterialCategoryRepository"
+    },
+    {
+      "sourceModule": "purchase",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/purchase/order/service/PurchaseOrderSupplierResolver.java",
+      "target": "com.leo.erp.master.supplier.repository.SupplierRepository"
+    },
+    {
+      "sourceModule": "purchase",
+      "targetModule": "system",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/purchase/order/service/PurchaseOrderService.java",
+      "target": "com.leo.erp.system.company.domain.entity.CompanySetting"
+    },
+    {
+      "sourceModule": "sales",
+      "targetModule": "common",
+      "kind": "web.dto",
+      "source": "com/leo/erp/sales/order/service/SalesOrderPrintExportService.java",
+      "target": "com.leo.erp.common.web.dto.FileDownloadResponse"
+    },
+    {
+      "sourceModule": "sales",
+      "targetModule": "common",
+      "kind": "web.dto",
+      "source": "com/leo/erp/sales/order/web/SalesOrderController.java",
+      "target": "com.leo.erp.common.web.dto.FileDownloadResponse"
+    },
+    {
+      "sourceModule": "sales",
+      "targetModule": "common",
+      "kind": "web.dto",
+      "source": "com/leo/erp/sales/order/web/SalesOrderController.java",
+      "target": "com.leo.erp.common.web.dto.StatusUpdateRequest"
+    },
+    {
+      "sourceModule": "sales",
+      "targetModule": "common",
+      "kind": "web.dto",
+      "source": "com/leo/erp/sales/outbound/web/SalesOutboundController.java",
+      "target": "com.leo.erp.common.web.dto.StatusUpdateRequest"
+    },
+    {
+      "sourceModule": "sales",
+      "targetModule": "master",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/sales/order/service/SalesOrderApplyService.java",
+      "target": "com.leo.erp.master.customer.domain.entity.Customer"
+    },
+    {
+      "sourceModule": "sales",
+      "targetModule": "master",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/sales/order/service/SalesOrderApplyService.java",
+      "target": "com.leo.erp.master.project.domain.entity.Project"
+    },
+    {
+      "sourceModule": "sales",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/sales/order/service/SalesOrderApplyService.java",
+      "target": "com.leo.erp.master.customer.repository.CustomerRepository"
+    },
+    {
+      "sourceModule": "sales",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/sales/order/service/SalesOrderApplyService.java",
+      "target": "com.leo.erp.master.project.repository.ProjectRepository"
+    },
+    {
+      "sourceModule": "sales",
+      "targetModule": "system",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/sales/order/service/SalesOrderApplyService.java",
+      "target": "com.leo.erp.system.company.domain.entity.CompanySetting"
+    },
+    {
+      "sourceModule": "security",
+      "targetModule": "auth",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/security/jwt/AuthenticatedUserCacheService.java",
+      "target": "com.leo.erp.auth.domain.entity.UserAccount"
+    },
+    {
+      "sourceModule": "security",
+      "targetModule": "auth",
+      "kind": "repository",
+      "source": "com/leo/erp/security/jwt/AuthenticatedUserCacheService.java",
+      "target": "com.leo.erp.auth.repository.UserAccountRepository"
+    },
+    {
+      "sourceModule": "statement",
+      "targetModule": "common",
+      "kind": "web.dto",
+      "source": "com/leo/erp/statement/customer/web/CustomerStatementController.java",
+      "target": "com.leo.erp.common.web.dto.StatusUpdateRequest"
+    },
+    {
+      "sourceModule": "statement",
+      "targetModule": "common",
+      "kind": "web.dto",
+      "source": "com/leo/erp/statement/freight/web/FreightStatementController.java",
+      "target": "com.leo.erp.common.web.dto.StatusUpdateRequest"
+    },
+    {
+      "sourceModule": "statement",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/statement/customer/service/CustomerStatementSourceService.java",
+      "target": "com.leo.erp.master.customer.repository.CustomerRepository"
+    },
+    {
+      "sourceModule": "statement",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/statement/freight/service/FreightStatementCarrierResolver.java",
+      "target": "com.leo.erp.master.carrier.repository.CarrierRepository"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "auth",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/system/dashboard/service/DashboardSummaryService.java",
+      "target": "com.leo.erp.auth.domain.entity.UserAccount"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "auth",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/system/operationlog/event/BusinessOperationEventPublisher.java",
+      "target": "com.leo.erp.auth.domain.entity.UserAccount"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "auth",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/system/operationlog/service/OperationLogService.java",
+      "target": "com.leo.erp.auth.domain.entity.UserAccount"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "auth",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/system/setup/service/InitialSetupService.java",
+      "target": "com.leo.erp.auth.domain.entity.UserAccount"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "auth",
+      "kind": "repository",
+      "source": "com/leo/erp/system/dashboard/service/DashboardSummaryService.java",
+      "target": "com.leo.erp.auth.repository.RefreshTokenSessionRepository"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "auth",
+      "kind": "repository",
+      "source": "com/leo/erp/system/dashboard/service/DashboardSummaryService.java",
+      "target": "com.leo.erp.auth.repository.UserAccountRepository"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "auth",
+      "kind": "repository",
+      "source": "com/leo/erp/system/operationlog/event/BusinessOperationEventPublisher.java",
+      "target": "com.leo.erp.auth.repository.UserAccountRepository"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "auth",
+      "kind": "repository",
+      "source": "com/leo/erp/system/operationlog/service/OperationLogService.java",
+      "target": "com.leo.erp.auth.repository.UserAccountRepository"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "auth",
+      "kind": "repository",
+      "source": "com/leo/erp/system/setup/service/InitialSetupService.java",
+      "target": "com.leo.erp.auth.repository.UserAccountRepository"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "master",
+      "kind": "domain.entity",
+      "source": "com/leo/erp/system/printtemplate/service/PrintExportFilenameService.java",
+      "target": "com.leo.erp.master.project.domain.entity.Project"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/system/dashboard/service/DashboardSummaryService.java",
+      "target": "com.leo.erp.master.customer.repository.CustomerRepository"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/system/dashboard/service/DashboardSummaryService.java",
+      "target": "com.leo.erp.master.material.repository.MaterialRepository"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/system/dashboard/service/DashboardSummaryService.java",
+      "target": "com.leo.erp.master.supplier.repository.SupplierRepository"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "master",
+      "kind": "repository",
+      "source": "com/leo/erp/system/printtemplate/service/PrintExportFilenameService.java",
+      "target": "com.leo.erp.master.project.repository.ProjectRepository"
+    }
+  ],
+  "cyclicEdges": [
+    {
+      "sourceModule": "attachment",
+      "targetModule": "common"
+    },
+    {
+      "sourceModule": "attachment",
+      "targetModule": "security"
+    },
+    {
+      "sourceModule": "attachment",
+      "targetModule": "system"
+    },
+    {
+      "sourceModule": "auth",
+      "targetModule": "common"
+    },
+    {
+      "sourceModule": "auth",
+      "targetModule": "security"
+    },
+    {
+      "sourceModule": "auth",
+      "targetModule": "system"
+    },
+    {
+      "sourceModule": "common",
+      "targetModule": "security"
+    },
+    {
+      "sourceModule": "common",
+      "targetModule": "system"
+    },
+    {
+      "sourceModule": "master",
+      "targetModule": "attachment"
+    },
+    {
+      "sourceModule": "master",
+      "targetModule": "common"
+    },
+    {
+      "sourceModule": "master",
+      "targetModule": "system"
+    },
+    {
+      "sourceModule": "security",
+      "targetModule": "auth"
+    },
+    {
+      "sourceModule": "security",
+      "targetModule": "common"
+    },
+    {
+      "sourceModule": "security",
+      "targetModule": "system"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "attachment"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "auth"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "common"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "master"
+    },
+    {
+      "sourceModule": "system",
+      "targetModule": "security"
+    }
+  ]
+}

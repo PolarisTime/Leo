@@ -5,12 +5,12 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.finance.payment.service.PaymentPurchasePrepaymentService;
+import com.leo.erp.purchase.api.PurchaseOrderPrepaymentReferenceGuard;
 import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.repository.PurchaseOrderInboundCandidateQueryRepository;
@@ -35,7 +35,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
-public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, PurchaseOrderRequest, PurchaseOrderResponse> {
+public class PurchaseOrderService extends AbstractStatusCrudService<
+        PurchaseOrder, PurchaseOrderRequest, PurchaseOrderResponse> {
 
     private static final Set<String> PREPAYMENT_SOURCE_STATUSES = Set.of(
             StatusConstants.AUDITED,
@@ -48,7 +49,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final PurchaseOrderSupplierResolver supplierResolver;
     private final PurchaseOrderApplyService purchaseOrderApplyService;
     private final CompanySettingService companySettingService;
-    private final PaymentPurchasePrepaymentService purchasePrepaymentService;
+    private final PurchaseOrderPrepaymentReferenceGuard purchasePrepaymentReferenceGuard;
     private final PurchaseOrderDownstreamMutationGuard downstreamMutationGuard;
     private final PurchaseOrderAuditPublisher purchaseOrderAuditPublisher;
     private final PurchaseOrderInboundCandidateQueryRepository inboundCandidateQueryRepository;
@@ -61,7 +62,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseOrderSupplierResolver supplierResolver,
                                 PurchaseOrderApplyService purchaseOrderApplyService,
                                 CompanySettingService companySettingService,
-                                PaymentPurchasePrepaymentService purchasePrepaymentService,
+                                PurchaseOrderPrepaymentReferenceGuard purchasePrepaymentReferenceGuard,
                                 PurchaseOrderDownstreamMutationGuard downstreamMutationGuard,
                                 PurchaseOrderAuditPublisher purchaseOrderAuditPublisher,
                                 PurchaseOrderInboundCandidateQueryRepository inboundCandidateQueryRepository) {
@@ -72,7 +73,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.supplierResolver = supplierResolver;
         this.purchaseOrderApplyService = purchaseOrderApplyService;
         this.companySettingService = companySettingService;
-        this.purchasePrepaymentService = purchasePrepaymentService;
+        this.purchasePrepaymentReferenceGuard = purchasePrepaymentReferenceGuard;
         this.downstreamMutationGuard = downstreamMutationGuard;
         this.purchaseOrderAuditPublisher = purchaseOrderAuditPublisher;
         this.inboundCandidateQueryRepository = inboundCandidateQueryRepository;
@@ -302,10 +303,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     }
 
     private void publishStatusEvent(PurchaseOrder purchaseOrder, String currentStatus, String nextStatus) {
-        if (purchaseOrderAuditPublisher == null) {
-            return;
-        }
-
         String eventType;
         String actionType;
         if (StatusConstants.DRAFT.equals(currentStatus) && StatusConstants.AUDITED.equals(nextStatus)) {
@@ -444,9 +441,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     }
 
     private void publishMutationEvent(PurchaseOrder entity, String eventType, String actionType) {
-        if (purchaseOrderAuditPublisher == null) {
-            return;
-        }
         purchaseOrderAuditPublisher.publish(
                 entity,
                 eventType,
@@ -476,8 +470,18 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     }
 
     private void assertNoActivePurchasePrepayment(PurchaseOrder purchaseOrder, String action) {
-        if (purchasePrepaymentService != null) {
-            purchasePrepaymentService.assertNoActivePrepayment(purchaseOrder.getId(), action);
+        if (purchasePrepaymentReferenceGuard != null) {
+            List<Long> sourceItemIds = purchaseOrder.getItems().stream()
+                    .map(item -> item.getId())
+                    .filter(java.util.Objects::nonNull)
+                    .distinct()
+                    .sorted()
+                    .toList();
+            purchasePrepaymentReferenceGuard.assertNoActivePrepayment(
+                    purchaseOrder.getId(),
+                    sourceItemIds,
+                    action
+            );
         }
     }
 

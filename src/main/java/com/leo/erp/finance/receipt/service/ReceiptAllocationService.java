@@ -11,7 +11,7 @@ import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import com.leo.erp.finance.receipt.domain.entity.ReceiptAllocation;
 import com.leo.erp.finance.receipt.web.dto.ReceiptAllocationRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
-import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
+import com.leo.erp.statement.api.CustomerStatementApi;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -58,7 +58,7 @@ public class ReceiptAllocationService {
         for (int i = 0; i < allocationRequests.size(); i++) {
             ReceiptAllocationRequest source = allocationRequests.get(i);
             BigDecimal allocatedAmount = normalizeAllocatedAmount(source.allocatedAmount(), i + 1);
-            CustomerStatement statement = statementAllocationValidator.validate(
+            CustomerStatementApi.Snapshot statement = statementAllocationValidator.validate(
                     request,
                     nextStatus,
                     entity.getId(),
@@ -67,16 +67,16 @@ public class ReceiptAllocationService {
                     requestAllocatedAmountMap,
                     i + 1
             );
-            resolvedCustomerId = mergeIdentity(resolvedCustomerId, statement.getCustomerId(), "客户");
-            resolvedProjectId = mergeIdentity(resolvedProjectId, statement.getProjectId(), "项目");
-            resolvedCustomerCode = mergeCustomerCode(resolvedCustomerCode, statement.getCustomerCode());
+            resolvedCustomerId = mergeIdentity(resolvedCustomerId, statement.customerId(), "客户");
+            resolvedProjectId = mergeIdentity(resolvedProjectId, statement.projectId(), "项目");
+            resolvedCustomerCode = mergeCustomerCode(resolvedCustomerCode, statement.customerCode());
             settlementCompany = mergeSettlementCompany(settlementCompany, statement, i + 1);
 
             ReceiptAllocation item = items.get(i);
             item.setReceipt(entity);
             item.setLineNo(i + 1);
-            item.setSourceStatementId(statement.getId());
-            item.setSourceCustomerStatementId(statement.getId());
+            item.setSourceStatementId(statement.id());
+            item.setSourceCustomerStatementId(statement.id());
             item.setAllocatedAmount(allocatedAmount);
             totalAllocatedAmount = totalAllocatedAmount.add(allocatedAmount);
         }
@@ -84,7 +84,12 @@ public class ReceiptAllocationService {
         if (totalAllocatedAmount.compareTo(TradeItemCalculator.safeBigDecimal(entity.getAmount())) > 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "核销金额合计不能超过收款金额");
         }
-        assertSettlementAllocationsComplete(nextStatus, allocationRequests.isEmpty(), totalAllocatedAmount, entity.getAmount());
+        assertSettlementAllocationsComplete(
+                nextStatus,
+                allocationRequests.isEmpty(),
+                totalAllocatedAmount,
+                entity.getAmount()
+        );
         entity.getItems().clear();
         entity.getItems().addAll(items);
         entity.getItems().sort(java.util.Comparator.comparing(ReceiptAllocation::getLineNo));
@@ -120,7 +125,7 @@ public class ReceiptAllocationService {
         SettlementCompanySnapshot settlementCompany = SettlementCompanySnapshot.EMPTY;
         for (int i = 0; i < entity.getItems().size(); i++) {
             ReceiptAllocation item = entity.getItems().get(i);
-            CustomerStatement statement = statementAllocationValidator.validate(
+            CustomerStatementApi.Snapshot statement = statementAllocationValidator.validate(
                     request,
                     nextStatus,
                     entity.getId(),
@@ -129,10 +134,10 @@ public class ReceiptAllocationService {
                     requestAllocatedAmountMap,
                     i + 1
             );
-            item.setSourceCustomerStatementId(statement.getId());
-            resolvedCustomerId = mergeIdentity(resolvedCustomerId, statement.getCustomerId(), "客户");
-            resolvedProjectId = mergeIdentity(resolvedProjectId, statement.getProjectId(), "项目");
-            resolvedCustomerCode = mergeCustomerCode(resolvedCustomerCode, statement.getCustomerCode());
+            item.setSourceCustomerStatementId(statement.id());
+            resolvedCustomerId = mergeIdentity(resolvedCustomerId, statement.customerId(), "客户");
+            resolvedProjectId = mergeIdentity(resolvedProjectId, statement.projectId(), "项目");
+            resolvedCustomerCode = mergeCustomerCode(resolvedCustomerCode, statement.customerCode());
             settlementCompany = mergeSettlementCompany(settlementCompany, statement, i + 1);
         }
         entity.setCustomerCode(mergeCustomerCode(entity.getCustomerCode(), resolvedCustomerCode));
@@ -237,11 +242,11 @@ public class ReceiptAllocationService {
     }
 
     private SettlementCompanySnapshot mergeSettlementCompany(SettlementCompanySnapshot current,
-                                                             CustomerStatement statement,
+                                                             CustomerStatementApi.Snapshot statement,
                                                              int lineNo) {
         SettlementCompanySnapshot next = new SettlementCompanySnapshot(
-                statement.getSettlementCompanyId(),
-                BusinessDocumentValidator.trimToNull(statement.getSettlementCompanyName())
+                statement.settlementCompanyId(),
+                BusinessDocumentValidator.trimToNull(statement.settlementCompanyName())
         );
         if (next.isEmpty()) {
             return current;

@@ -1,7 +1,5 @@
 package com.leo.erp.statement.freight.web.dto;
 
-import com.leo.erp.logistics.bill.web.dto.FreightBillItemResponse;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -24,7 +22,7 @@ public record FreightStatementResponse(
         String attachment,
         List<FreightStatementAttachmentResponse> attachments,
         String remark,
-        List<FreightBillItemResponse> items,
+        List<FreightStatementItemResponse> items,
         Long carrierId
 ) {
 }

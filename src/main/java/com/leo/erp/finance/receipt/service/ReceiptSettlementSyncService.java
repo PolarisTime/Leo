@@ -2,7 +2,7 @@ package com.leo.erp.finance.receipt.service;
 
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import com.leo.erp.finance.receipt.domain.entity.ReceiptAllocation;
-import org.springframework.context.ApplicationEventPublisher;
+import com.leo.erp.statement.api.StatementSettlementSyncCommand;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashSet;
@@ -12,10 +12,10 @@ import java.util.Set;
 @Service
 public class ReceiptSettlementSyncService {
 
-    private final ApplicationEventPublisher eventPublisher;
+    private final StatementSettlementSyncCommand statementSettlementSyncCommand;
 
-    public ReceiptSettlementSyncService(ApplicationEventPublisher eventPublisher) {
-        this.eventPublisher = eventPublisher;
+    public ReceiptSettlementSyncService(StatementSettlementSyncCommand statementSettlementSyncCommand) {
+        this.statementSettlementSyncCommand = statementSettlementSyncCommand;
     }
 
     void captureOriginalAllocationStatementIds(Receipt entity) {
@@ -30,7 +30,7 @@ public class ReceiptSettlementSyncService {
         Set<Long> statementIds = new LinkedHashSet<>(entity.getOriginalAllocationStatementIds());
         statementIds.addAll(collectStatementIds(entity.getItems()));
         for (Long statementId : statementIds) {
-            eventPublisher.publishEvent(new ReceiptSettledEvent(statementId));
+            statementSettlementSyncCommand.syncCustomerStatement(statementId);
         }
     }
 

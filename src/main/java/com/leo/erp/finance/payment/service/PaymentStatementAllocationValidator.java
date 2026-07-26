@@ -7,8 +7,7 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.payment.repository.PaymentAllocationRepository;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
-import com.leo.erp.statement.freight.domain.entity.FreightStatement;
-import com.leo.erp.statement.freight.service.FreightStatementQueryService;
+import com.leo.erp.statement.api.FreightStatementApi;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -18,12 +17,12 @@ import java.util.Map;
 public class PaymentStatementAllocationValidator {
 
     private final PaymentAllocationRepository paymentAllocationRepository;
-    private final FreightStatementQueryService freightStatementQueryService;
+    private final FreightStatementApi freightStatementApi;
 
     public PaymentStatementAllocationValidator(PaymentAllocationRepository paymentAllocationRepository,
-                                               FreightStatementQueryService freightStatementQueryService) {
+                                               FreightStatementApi freightStatementApi) {
         this.paymentAllocationRepository = paymentAllocationRepository;
-        this.freightStatementQueryService = freightStatementQueryService;
+        this.freightStatementApi = freightStatementApi;
     }
 
     ValidatedStatement validate(PaymentRequest request,
@@ -47,61 +46,61 @@ public class PaymentStatementAllocationValidator {
         );
     }
 
-    private FreightStatement requireAccessibleFreightStatement(Long statementId) {
-        FreightStatement statement = freightStatementQueryService.requireActiveById(statementId);
-        return statement;
+    private FreightStatementApi.Snapshot requireAccessibleFreightStatement(Long statementId) {
+        return freightStatementApi.requireActiveById(statementId);
     }
 
     private ValidatedStatement validateFreightStatement(PaymentRequest request,
                                                         String normalizedStatus,
                                                         Long currentPaymentId,
-                                                        FreightStatement statement,
+                                                        FreightStatementApi.Snapshot statement,
                                                         BigDecimal allocatedAmount,
                                                         Map<Long, BigDecimal> requestAllocatedAmountMap,
                                                         int lineNo) {
         BusinessDocumentValidator.requireSameText(
                 request.counterpartyName(),
-                statement.getCarrierName(),
+                statement.carrierName(),
                 "第" + lineNo + "行对账单物流商与付款单往来单位不一致"
         );
         BusinessDocumentValidator.requireSameOptionalCode(
                 request.counterpartyCode(),
-                statement.getCarrierCode(),
+                statement.carrierCode(),
                 "第" + lineNo + "行对账单物流商编码与付款单往来单位编码不一致"
         );
-        Long carrierId = requireCounterpartyId(statement.getCarrierId(), lineNo, "物流商");
+        Long carrierId = requireCounterpartyId(statement.carrierId(), lineNo, "物流商");
         requireRequestedCounterpartyId(request.counterpartyId(), carrierId, lineNo, "物流商");
         ValidatedStatement validatedStatement = validatedStatement(
                 PaymentAllocationService.FREIGHT_PAYMENT_TYPE,
                 carrierId,
-                statement.getCarrierCode(),
-                statement.getSettlementCompanyId(),
-                statement.getSettlementCompanyName(),
+                statement.carrierCode(),
+                statement.settlementCompanyId(),
+                statement.settlementCompanyName(),
                 lineNo
         );
-        if (requestAllocatedAmountMap.containsKey(statement.getId())) {
+        if (requestAllocatedAmountMap.containsKey(statement.id())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能重复核销同一物流对账单");
         }
         if (PaymentAllocationService.PAYMENT_STATUS_SETTLED.equals(normalizedStatus)) {
             BusinessDocumentValidator.requireStatusIn(
-                    statement.getStatus(),
+                    statement.status(),
                     StatusConstants.SETTLEABLE_FREIGHT_STATEMENT_STATUS,
                     "第" + lineNo + "行物流对账单未审核，不能付款"
             );
             BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(
-                    paymentAllocationRepository.sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatusExcludingPaymentId(
-                            statement.getId(),
+                    paymentAllocationRepository
+                            .sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatusExcludingPaymentId(
+                            statement.id(),
                             PaymentAllocationService.FREIGHT_PAYMENT_TYPE,
                             PaymentAllocationService.PAYMENT_STATUS_SETTLED,
                             currentPaymentId
                     )
             );
             BigDecimal nextSettledAmount = settledAmount.add(allocatedAmount);
-            if (nextSettledAmount.compareTo(statement.getTotalFreight()) > 0) {
+            if (nextSettledAmount.compareTo(statement.totalFreight()) > 0) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行关联物流对账单累计付款金额不能超过总运费");
             }
         }
-        requestAllocatedAmountMap.put(statement.getId(), allocatedAmount);
+        requestAllocatedAmountMap.put(statement.id(), allocatedAmount);
         return validatedStatement;
     }
 

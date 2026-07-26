@@ -3,8 +3,7 @@ package com.leo.erp.finance.receipt.service;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import com.leo.erp.finance.receipt.domain.entity.ReceiptAllocation;
 import com.leo.erp.finance.receipt.web.dto.ReceiptAllocationResponse;
-import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
-import com.leo.erp.statement.customer.service.CustomerStatementQueryService;
+import com.leo.erp.statement.api.CustomerStatementApi;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -13,10 +12,10 @@ import java.util.List;
 @Service
 public class ReceiptAllocationResponseAssembler {
 
-    private final CustomerStatementQueryService customerStatementQueryService;
+    private final CustomerStatementApi customerStatementApi;
 
-    public ReceiptAllocationResponseAssembler(CustomerStatementQueryService customerStatementQueryService) {
-        this.customerStatementQueryService = customerStatementQueryService;
+    public ReceiptAllocationResponseAssembler(CustomerStatementApi customerStatementApi) {
+        this.customerStatementApi = customerStatementApi;
     }
 
     List<ReceiptAllocationResponse> toResponses(Receipt entity) {
@@ -26,19 +25,19 @@ public class ReceiptAllocationResponseAssembler {
     }
 
     private ReceiptAllocationResponse toResponse(ReceiptAllocation item) {
-        CustomerStatement statement = findCustomerStatement(item.getSourceStatementId());
+        CustomerStatementApi.Snapshot statement = findCustomerStatement(item.getSourceStatementId());
         return new ReceiptAllocationResponse(
                 item.getId(),
                 item.getLineNo(),
                 item.getSourceStatementId(),
-                statement == null ? null : statement.getStatementNo(),
-                statement == null ? null : statement.getProjectName(),
-                statement == null ? BigDecimal.ZERO : statement.getClosingAmount(),
+                statement == null ? null : statement.statementNo(),
+                statement == null ? null : statement.projectName(),
+                statement == null ? BigDecimal.ZERO : statement.closingAmount(),
                 item.getAllocatedAmount()
         );
     }
 
-    private CustomerStatement findCustomerStatement(Long statementId) {
-        return statementId == null ? null : customerStatementQueryService.findActiveById(statementId).orElse(null);
+    private CustomerStatementApi.Snapshot findCustomerStatement(Long statementId) {
+        return statementId == null ? null : customerStatementApi.findActiveById(statementId).orElse(null);
     }
 }

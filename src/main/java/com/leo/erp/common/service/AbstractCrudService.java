@@ -20,13 +20,21 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
 
     private final SnowflakeIdGenerator idGenerator;
-    private final CrudStatusGuard statusGuard = new CrudStatusGuard();
+    private final CrudStatusGuard<E> statusGuard;
 
     protected AbstractCrudService(SnowflakeIdGenerator idGenerator) {
+        this(idGenerator, CrudStatusGuard.reflective());
+    }
+
+    protected AbstractCrudService(SnowflakeIdGenerator idGenerator, CrudStatusGuard<E> statusGuard) {
         if (idGenerator == null) {
             throw new IllegalArgumentException("SnowflakeIdGenerator must not be null");
         }
+        if (statusGuard == null) {
+            throw new IllegalArgumentException("CrudStatusGuard must not be null");
+        }
         this.idGenerator = idGenerator;
+        this.statusGuard = statusGuard;
     }
 
     private Logger logger() {

@@ -2,7 +2,7 @@ package com.leo.erp.finance.payment.service;
 
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.domain.entity.PaymentAllocation;
-import org.springframework.context.ApplicationEventPublisher;
+import com.leo.erp.statement.api.StatementSettlementSyncCommand;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashSet;
@@ -12,10 +12,10 @@ import java.util.Set;
 @Service
 public class PaymentSettlementSyncService {
 
-    private final ApplicationEventPublisher eventPublisher;
+    private final StatementSettlementSyncCommand statementSettlementSyncCommand;
 
-    public PaymentSettlementSyncService(ApplicationEventPublisher eventPublisher) {
-        this.eventPublisher = eventPublisher;
+    public PaymentSettlementSyncService(StatementSettlementSyncCommand statementSettlementSyncCommand) {
+        this.statementSettlementSyncCommand = statementSettlementSyncCommand;
     }
 
     void captureOriginalAllocationState(Payment entity) {
@@ -45,7 +45,7 @@ public class PaymentSettlementSyncService {
                     || !PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(link.businessType())) {
                 continue;
             }
-            eventPublisher.publishEvent(new PaymentSettledEvent(link.statementId(), link.businessType()));
+            statementSettlementSyncCommand.syncFreightStatement(link.statementId());
         }
     }
 

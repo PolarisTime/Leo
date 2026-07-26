@@ -44,6 +44,11 @@ public interface FreightStatementRepository extends JpaRepository<FreightStateme
     @EntityGraph(attributePaths = "items")
     Optional<FreightStatement> findByIdAndDeletedFlagFalse(Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select statement from FreightStatement statement "
+            + "where statement.id = :id and statement.deletedFlag = false")
+    Optional<FreightStatement> findByIdAndDeletedFlagFalseForSettlementUpdate(@Param("id") Long id);
+
     @Query("""
             select distinct fs
             from FreightStatement fs
@@ -82,21 +87,15 @@ public interface FreightStatementRepository extends JpaRepository<FreightStateme
             @Param("currentStatementId") Long currentStatementId
     );
 
-    @EntityGraph(attributePaths = "items")
     @Query("""
-            select distinct fs
+            select distinct fs.id
             from FreightStatement fs
+            join fs.items item
             where fs.deletedFlag = false
-              and exists (
-                    select 1
-                    from FreightStatementItem item
-                    where item.freightStatement = fs
-                      and item.sourceFreightBillId in :sourceFreightBillIds
-              )
-              and (:currentStatementId is null or fs.id <> :currentStatementId)
+              and item.sourceFreightBillId = :sourceFreightBillId
             """)
-    List<FreightStatement> findAllBySourceFreightBillIdsExcludingCurrentStatement(
-            @Param("sourceFreightBillIds") Collection<Long> sourceFreightBillIds,
-            @Param("currentStatementId") Long currentStatementId
+    List<Long> findActiveStatementIdsBySourceFreightBillId(
+            @Param("sourceFreightBillId") Long sourceFreightBillId
     );
+
 }

@@ -3,42 +3,32 @@ package com.leo.erp.finance.payment.service;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.domain.entity.PaymentPurposes;
 import com.leo.erp.finance.payment.repository.PaymentRepository;
-import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
-import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
-import com.leo.erp.purchase.order.repository.PurchaseOrderItemRepository;
-import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
+import com.leo.erp.purchase.api.PurchaseOrderPrepaymentReferenceGuard;
+import com.leo.erp.purchase.api.PurchaseOrderPrepaymentSnapshot;
+import com.leo.erp.purchase.api.PurchaseOrderPrepaymentSourceQuery;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 import java.util.TreeSet;
 
 @Service
-public class PaymentPurchasePrepaymentService {
+public class PaymentPurchasePrepaymentService implements PurchaseOrderPrepaymentReferenceGuard {
 
-    private static final Set<String> ALLOWED_SOURCE_STATUSES = Set.of(
-            StatusConstants.AUDITED,
-            StatusConstants.PURCHASE_COMPLETED
-    );
-
-    private final PurchaseOrderRepository purchaseOrderRepository;
-    private final PurchaseOrderItemRepository purchaseOrderItemRepository;
+    private final PurchaseOrderPrepaymentSourceQuery purchaseOrderPrepaymentSourceQuery;
     private final PaymentRepository paymentRepository;
     private final SourceAllocationLockService sourceAllocationLockService;
 
-    public PaymentPurchasePrepaymentService(PurchaseOrderRepository purchaseOrderRepository,
-                                            PurchaseOrderItemRepository purchaseOrderItemRepository,
+    public PaymentPurchasePrepaymentService(PurchaseOrderPrepaymentSourceQuery purchaseOrderPrepaymentSourceQuery,
                                             PaymentRepository paymentRepository,
                                             SourceAllocationLockService sourceAllocationLockService) {
-        this.purchaseOrderRepository = purchaseOrderRepository;
-        this.purchaseOrderItemRepository = purchaseOrderItemRepository;
+        this.purchaseOrderPrepaymentSourceQuery = purchaseOrderPrepaymentSourceQuery;
         this.paymentRepository = paymentRepository;
         this.sourceAllocationLockService = sourceAllocationLockService;
     }
@@ -48,85 +38,26 @@ public class PaymentPurchasePrepaymentService {
                              BigDecimal paymentAmount,
                              String nextStatus) {
         validateNoStatementAllocations(payment);
-        PurchaseOrder sourceOrder = lockAndRequireSourceOrder(payment, sourcePurchaseOrderId);
-        SourceSnapshot snapshot = sourceSnapshot(sourceOrder);
+        PurchaseOrderPrepaymentSnapshot snapshot = purchaseOrderPrepaymentSourceQuery.lockAndRequire(
+                sourcePurchaseOrderId,
+                affectedPurchaseOrderIds(payment, sourcePurchaseOrderId)
+        );
         if (StatusConstants.AUDITED.equals(nextStatus)) {
-            assertPaidCapacity(payment, sourceOrder.getId(), snapshot.originalAmount(), paymentAmount);
+            assertPaidCapacity(payment, snapshot.purchaseOrderId(), snapshot.originalAmount(), paymentAmount);
         }
-        applySnapshot(payment, sourceOrder, snapshot);
+        applySnapshot(payment, snapshot);
     }
 
-    private PurchaseOrder lockAndRequireSourceOrder(Payment payment, Long targetOrderId) {
-        if (targetOrderId == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "来源采购订单不能为空");
-        }
+    private Collection<Long> affectedPurchaseOrderIds(Payment payment, Long targetOrderId) {
         TreeSet<Long> affectedOrderIds = new TreeSet<>();
         if (PaymentPurposes.isPurchasePrepayment(payment.getPaymentPurpose())
                 && payment.getSourcePurchaseOrderId() != null) {
             affectedOrderIds.add(payment.getSourcePurchaseOrderId());
         }
-        affectedOrderIds.add(targetOrderId);
-        TreeSet<Long> sourceItemIds = new TreeSet<>();
-        for (Long orderId : affectedOrderIds) {
-            sourceItemIds.addAll(purchaseOrderItemRepository.findActiveIdsByPurchaseOrderId(orderId));
+        if (targetOrderId != null) {
+            affectedOrderIds.add(targetOrderId);
         }
-        sourceAllocationLockService.lockTradeItemSources(
-                List.copyOf(sourceItemIds),
-                List.of(),
-                List.of()
-        );
-        PurchaseOrder sourceOrder = purchaseOrderRepository.findByIdAndDeletedFlagFalse(targetOrderId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "来源采购订单不存在"));
-        if (!ALLOWED_SOURCE_STATUSES.contains(sourceOrder.getStatus())) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "采购预付款来源采购订单状态必须为已审核或完成采购"
-            );
-        }
-        return sourceOrder;
-    }
-
-    private SourceSnapshot sourceSnapshot(PurchaseOrder sourceOrder) {
-        String orderNo = requireText(sourceOrder.getOrderNo(), "来源采购订单号不能为空");
-        Long supplierId = sourceOrder.getSupplierId();
-        if (supplierId == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购订单供应商ID不能为空");
-        }
-        String supplierCode = requireText(sourceOrder.getSupplierCode(), "来源采购订单供应商编码不能为空");
-        String supplierName = requireText(sourceOrder.getSupplierName(), "来源采购订单供应商名称不能为空");
-        Long settlementCompanyId = sourceOrder.getSettlementCompanyId();
-        if (settlementCompanyId == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购订单结算主体不能为空");
-        }
-        String settlementCompanyName = requireText(
-                sourceOrder.getSettlementCompanyName(),
-                "来源采购订单结算主体名称不能为空"
-        );
-        BigDecimal originalAmount = originalAmount(sourceOrder);
-        return new SourceSnapshot(
-                orderNo,
-                supplierId,
-                supplierCode,
-                supplierName,
-                settlementCompanyId,
-                settlementCompanyName,
-                originalAmount
-        );
-    }
-
-    private BigDecimal originalAmount(PurchaseOrder sourceOrder) {
-        if (sourceOrder.getItems() == null) {
-            return TradeItemCalculator.scaleAmount(BigDecimal.ZERO);
-        }
-        BigDecimal total = BigDecimal.ZERO;
-        for (PurchaseOrderItem item : sourceOrder.getItems()) {
-            BigDecimal theoreticalWeight = TradeItemCalculator.calculateWeightTon(
-                    item.getQuantity(),
-                    item.getPieceWeightTon()
-            );
-            total = total.add(TradeItemCalculator.calculateAmount(theoreticalWeight, item.getUnitPrice()));
-        }
-        return TradeItemCalculator.scaleAmount(total);
+        return List.copyOf(affectedOrderIds);
     }
 
     private void assertPaidCapacity(Payment payment,
@@ -147,14 +78,12 @@ public class PaymentPurchasePrepaymentService {
         }
     }
 
-    private void applySnapshot(Payment payment,
-                               PurchaseOrder sourceOrder,
-                               SourceSnapshot snapshot) {
+    private void applySnapshot(Payment payment, PurchaseOrderPrepaymentSnapshot snapshot) {
         if (payment.getCounterpartyId() != null
                 && !payment.getCounterpartyId().equals(snapshot.supplierId())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "付款单往来方ID与来源采购订单供应商ID不一致");
         }
-        payment.setSourcePurchaseOrderId(sourceOrder.getId());
+        payment.setSourcePurchaseOrderId(snapshot.purchaseOrderId());
         payment.setPurchaseOrderNo(snapshot.purchaseOrderNo());
         payment.setSupplierCode(snapshot.supplierCode());
         payment.setSupplierName(snapshot.supplierName());
@@ -173,11 +102,14 @@ public class PaymentPurchasePrepaymentService {
         }
     }
 
-    public void assertNoActivePrepayment(Long sourcePurchaseOrderId, String operationName) {
+    @Override
+    public void assertNoActivePrepayment(Long sourcePurchaseOrderId,
+                                         Collection<Long> sourcePurchaseOrderItemIds,
+                                         String operationName) {
         if (sourcePurchaseOrderId == null) {
             return;
         }
-        lockSourcePurchaseOrderItems(sourcePurchaseOrderId);
+        lockSourcePurchaseOrderItems(sourcePurchaseOrderItemIds);
         if (paymentRepository.existsByPaymentPurposeAndSourcePurchaseOrderIdAndDeletedFlagFalse(
                 PaymentPurposes.PURCHASE_PREPAYMENT,
                 sourcePurchaseOrderId
@@ -189,33 +121,17 @@ public class PaymentPurchasePrepaymentService {
         }
     }
 
-    private void lockSourcePurchaseOrderItems(Long sourcePurchaseOrderId) {
-        TreeSet<Long> sourceItemIds = new TreeSet<>(
-                purchaseOrderItemRepository.findActiveIdsByPurchaseOrderId(sourcePurchaseOrderId)
-        );
+    private void lockSourcePurchaseOrderItems(Collection<Long> sourcePurchaseOrderItemIds) {
+        TreeSet<Long> sourceItemIds = new TreeSet<>();
+        if (sourcePurchaseOrderItemIds != null) {
+            sourcePurchaseOrderItemIds.stream()
+                    .filter(java.util.Objects::nonNull)
+                    .forEach(sourceItemIds::add);
+        }
         sourceAllocationLockService.lockTradeItemSources(
                 List.copyOf(sourceItemIds),
                 List.of(),
                 List.of()
         );
-    }
-
-    private String requireText(String value, String message) {
-        String normalized = BusinessDocumentValidator.trimToNull(value);
-        if (normalized == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, message);
-        }
-        return normalized;
-    }
-
-    private record SourceSnapshot(
-            String purchaseOrderNo,
-            Long supplierId,
-            String supplierCode,
-            String supplierName,
-            Long settlementCompanyId,
-            String settlementCompanyName,
-            BigDecimal originalAmount
-    ) {
     }
 }

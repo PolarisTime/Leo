@@ -6,7 +6,7 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -31,7 +31,10 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
-public class SalesOutboundService extends AbstractCrudService<SalesOutbound, SalesOutboundRequest, SalesOutboundResponse> {
+public class SalesOutboundService extends AbstractStatusCrudService<
+        SalesOutbound, SalesOutboundRequest, SalesOutboundResponse> {
+
+    private static final String[] PRODUCT_SEARCH_FIELDS = {"materialCode", "brand", "material", "spec"};
 
     private final SalesOutboundRepository repository;
     private final SalesOutboundApplyService salesOutboundApplyService;
@@ -42,7 +45,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     private final SalesOutboundDownstreamMutationGuard downstreamMutationGuard;
     private SalesOutboundCoverageValidator coverageValidator;
     private SalesOrderRepository salesOrderRepository;
-    private BusinessOperationEventPublisher businessOperationEventPublisher;
+    private final BusinessOperationEventPublisher businessOperationEventPublisher;
 
     @Autowired
     public SalesOutboundService(SalesOutboundRepository repository,
@@ -52,7 +55,8 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                                 SalesOutboundSaveService saveService,
                                 SalesOutboundPurchaseInboundGuard purchaseInboundGuard,
                                 SourceAllocationLockService sourceAllocationLockService,
-                                SalesOutboundDownstreamMutationGuard downstreamMutationGuard) {
+                                SalesOutboundDownstreamMutationGuard downstreamMutationGuard,
+                                BusinessOperationEventPublisher businessOperationEventPublisher) {
         super(idGenerator);
         this.repository = repository;
         this.salesOutboundApplyService = salesOutboundApplyService;
@@ -61,6 +65,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         this.purchaseInboundGuard = purchaseInboundGuard;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.downstreamMutationGuard = downstreamMutationGuard;
+        this.businessOperationEventPublisher = businessOperationEventPublisher;
     }
 
     @Autowired
@@ -73,14 +78,10 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         this.salesOrderRepository = salesOrderRepository;
     }
 
-    @Autowired(required = false)
-    void setBusinessOperationEventPublisher(BusinessOperationEventPublisher publisher) {
-        this.businessOperationEventPublisher = publisher;
-    }
-
     @Transactional(readOnly = true)
-    public Page<SalesOutboundResponse> page(PageQuery query, PageFilter filter) {
+    public Page<SalesOutboundResponse> page(PageQuery query, PageFilter filter, String productKeyword) {
         Specification<SalesOutbound> spec = Specs.<SalesOutbound>keywordLike(filter.keyword(), "outboundNo", "salesOrderNo", "customerName", "projectName")
+                .and(Specs.collectionKeywordLike(productKeyword, "items", PRODUCT_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalIfPresent("projectName", filter.projectName()))
                 .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
@@ -420,9 +421,6 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     }
 
     private void publishSalesOrderRollbackEvent(com.leo.erp.sales.order.domain.entity.SalesOrder order) {
-        if (businessOperationEventPublisher == null) {
-            return;
-        }
         businessOperationEventPublisher.publish(
                 "SALES_ORDER_REOPENED_AFTER_OUTBOUND_DELETED",
                 "sales-order",
@@ -469,9 +467,6 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     }
 
     private void publishEvent(SalesOutbound outbound, String eventType, String actionType, String remark) {
-        if (businessOperationEventPublisher == null) {
-            return;
-        }
         businessOperationEventPublisher.publish(
                 eventType,
                 "sales-outbound",

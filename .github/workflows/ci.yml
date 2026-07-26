@@ -33,6 +33,11 @@ jobs:
           cache: maven
           cache-dependency-path: pom.xml
 
+      - name: Architecture gates
+        run: |
+          bash scripts/check-java-module-boundaries.sh
+          bash scripts/verify-modulith-architecture.sh
+
       - name: Static analysis
         run: mvn -B -ntp -DskipTests checkstyle:check spotbugs:check
 

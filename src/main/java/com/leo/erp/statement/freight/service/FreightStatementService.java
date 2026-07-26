@@ -13,9 +13,12 @@ import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
 import com.leo.erp.statement.freight.repository.FreightStatementRepository;
+import com.leo.erp.statement.freight.repository.FreightStatementSummaryAggregate;
+import com.leo.erp.statement.freight.repository.FreightStatementSummaryQueryRepository;
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
+import com.leo.erp.statement.freight.web.dto.FreightStatementSummaryResponse;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
 import com.leo.erp.statement.service.StatementSettlementMutationGuard;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
@@ -35,6 +38,7 @@ import java.util.TreeSet;
 public class FreightStatementService extends AbstractCrudService<FreightStatement, FreightStatementCommand, FreightStatementView> {
 
     private final FreightStatementRepository repository;
+    private final FreightStatementSummaryQueryRepository summaryQueryRepository;
     private final StatementSettlementSyncService statementSettlementSyncService;
     private final FreightStatementWebMapper freightStatementWebMapper;
     private final FreightStatementSourceService freightStatementSourceService;
@@ -43,10 +47,11 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     private final FreightStatementApplyService freightStatementApplyService;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final StatementSettlementMutationGuard settlementMutationGuard;
-    private BusinessOperationEventPublisher businessOperationEventPublisher;
+    private final BusinessOperationEventPublisher businessOperationEventPublisher;
 
     @Autowired
     public FreightStatementService(FreightStatementRepository repository,
+                                   FreightStatementSummaryQueryRepository summaryQueryRepository,
                                    SnowflakeIdGenerator idGenerator,
                                    StatementSettlementSyncService statementSettlementSyncService,
                                    FreightStatementWebMapper freightStatementWebMapper,
@@ -55,9 +60,11 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                                    FreightStatementPageAssembler pageAssembler,
                                    FreightStatementApplyService freightStatementApplyService,
                                    SourceAllocationLockService sourceAllocationLockService,
-                                   StatementSettlementMutationGuard settlementMutationGuard) {
+                                   StatementSettlementMutationGuard settlementMutationGuard,
+                                   BusinessOperationEventPublisher businessOperationEventPublisher) {
         super(idGenerator);
         this.repository = repository;
+        this.summaryQueryRepository = summaryQueryRepository;
         this.statementSettlementSyncService = statementSettlementSyncService;
         this.freightStatementWebMapper = freightStatementWebMapper;
         this.freightStatementSourceService = freightStatementSourceService;
@@ -66,11 +73,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         this.freightStatementApplyService = freightStatementApplyService;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.settlementMutationGuard = settlementMutationGuard;
-    }
-
-    @Autowired(required = false)
-    void setBusinessOperationEventPublisher(BusinessOperationEventPublisher publisher) {
-        this.businessOperationEventPublisher = publisher;
+        this.businessOperationEventPublisher = businessOperationEventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -80,17 +83,35 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
 
     @Transactional(readOnly = true)
     public Page<FreightStatementView> page(PageQuery query, PageFilter filter, String carrierCode) {
-        Specification<FreightStatement> spec = applyDeletedVisibilityPolicy(
-                Specs.<FreightStatement>keywordLike(filter.keyword(), "statementNo", "carrierCode", "carrierName")
-                .and(Specs.equalValueIfPresent("carrierId", filter.carrierId()))
-                .and(Specs.equalIfPresent("carrierCode", carrierCode))
-                .and(Specs.equalIfPresent("carrierName", filter.name()))
-                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.documentStatus(filter.status()))
-                .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()))
-        );
+        Specification<FreightStatement> spec = buildPageSpecification(filter, carrierCode);
         Page<FreightStatement> entityPage = repository.findAll(spec, query.toPageable("id"));
         return pageAssembler.toViewPage(entityPage);
+    }
+
+    @Transactional(readOnly = true)
+    public FreightStatementSummaryResponse summary(PageFilter filter, String carrierCode) {
+        FreightStatementSummaryAggregate aggregate = summaryQueryRepository.summarize(
+                buildPageSpecification(filter, carrierCode)
+        );
+        return new FreightStatementSummaryResponse(
+                aggregate.documentCount(),
+                aggregate.totalWeight(),
+                aggregate.totalFreight(),
+                aggregate.paidAmount(),
+                aggregate.unpaidAmount()
+        );
+    }
+
+    private Specification<FreightStatement> buildPageSpecification(PageFilter filter, String carrierCode) {
+        return applyDeletedVisibilityPolicy(
+                Specs.<FreightStatement>keywordLike(filter.keyword(), "statementNo", "carrierCode", "carrierName")
+                        .and(Specs.equalValueIfPresent("carrierId", filter.carrierId()))
+                        .and(Specs.equalIfPresent("carrierCode", carrierCode))
+                        .and(Specs.equalIfPresent("carrierName", filter.name()))
+                        .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
+                        .and(Specs.documentStatus(filter.status()))
+                        .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()))
+        );
     }
 
     @Transactional(readOnly = true)
@@ -417,9 +438,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     }
 
     private void publishEvent(FreightStatement statement, String eventType, String actionType, String remark) {
-        if (businessOperationEventPublisher == null) {
-            return;
-        }
         businessOperationEventPublisher.publish(
                 eventType,
                 "freight-statement",

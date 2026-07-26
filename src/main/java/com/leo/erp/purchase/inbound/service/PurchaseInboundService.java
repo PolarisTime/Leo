@@ -6,7 +6,7 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
@@ -30,7 +30,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 @Service
-public class PurchaseInboundService extends AbstractCrudService<
+public class PurchaseInboundService extends AbstractStatusCrudService<
         PurchaseInbound, PurchaseInboundRequest, PurchaseInboundResponse> {
 
     private final PurchaseInboundRepository repository;
@@ -42,7 +42,7 @@ public class PurchaseInboundService extends AbstractCrudService<
     private final SourceAllocationLockService sourceAllocationLockService;
     private final PurchaseInboundSourceStatusGuard purchaseInboundSourceStatusGuard;
     private final PurchaseInboundWeightWriteBackService weightWriteBackService;
-    private BusinessOperationEventPublisher businessOperationEventPublisher;
+    private final BusinessOperationEventPublisher businessOperationEventPublisher;
 
     @Autowired
     public PurchaseInboundService(PurchaseInboundRepository repository,
@@ -54,7 +54,8 @@ public class PurchaseInboundService extends AbstractCrudService<
                                   PurchaseInboundResponseAssembler responseAssembler,
                                   SourceAllocationLockService sourceAllocationLockService,
                                   PurchaseInboundWeightWriteBackService weightWriteBackService,
-                                  PurchaseInboundSourceStatusGuard purchaseInboundSourceStatusGuard) {
+                                  PurchaseInboundSourceStatusGuard purchaseInboundSourceStatusGuard,
+                                  BusinessOperationEventPublisher businessOperationEventPublisher) {
         super(idGenerator);
         this.repository = repository;
         this.purchaseInboundMapper = purchaseInboundMapper;
@@ -65,11 +66,7 @@ public class PurchaseInboundService extends AbstractCrudService<
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.weightWriteBackService = weightWriteBackService;
         this.purchaseInboundSourceStatusGuard = purchaseInboundSourceStatusGuard;
-    }
-
-    @Autowired(required = false)
-    void setBusinessOperationEventPublisher(BusinessOperationEventPublisher publisher) {
-        this.businessOperationEventPublisher = publisher;
+        this.businessOperationEventPublisher = businessOperationEventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -393,9 +390,6 @@ public class PurchaseInboundService extends AbstractCrudService<
     }
 
     private void publishEvent(PurchaseInbound inbound, String eventType, String actionType, String remark) {
-        if (businessOperationEventPublisher == null) {
-            return;
-        }
         businessOperationEventPublisher.publish(
                 eventType,
                 "purchase-inbound",

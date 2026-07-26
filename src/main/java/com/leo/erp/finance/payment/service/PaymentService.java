@@ -37,7 +37,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     private final PaymentSettlementSyncService settlementSyncService;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final PaymentPurchasePrepaymentService purchasePrepaymentService;
-    private SupplierLedgerLockService supplierLedgerLockService;
+    private final SupplierLedgerLockService supplierLedgerLockService;
 
     @Autowired
     public PaymentService(PaymentRepository paymentRepository,
@@ -48,7 +48,8 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                           PaymentAllocationResponseAssembler allocationResponseAssembler,
                           PaymentSettlementSyncService settlementSyncService,
                           SourceAllocationLockService sourceAllocationLockService,
-                          PaymentPurchasePrepaymentService purchasePrepaymentService) {
+                          PaymentPurchasePrepaymentService purchasePrepaymentService,
+                          SupplierLedgerLockService supplierLedgerLockService) {
         super(snowflakeIdGenerator);
         this.paymentRepository = paymentRepository;
         this.paymentMapper = paymentMapper;
@@ -58,10 +59,6 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         this.settlementSyncService = settlementSyncService;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.purchasePrepaymentService = purchasePrepaymentService;
-    }
-
-    @Autowired(required = false)
-    void setSupplierLedgerLockService(SupplierLedgerLockService supplierLedgerLockService) {
         this.supplierLedgerLockService = supplierLedgerLockService;
     }
 
@@ -393,18 +390,11 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         paymentRepository.findByIdAndDeletedFlagFalseForUpdate(id);
     }
 
-    private SupplierLedgerLockService requireSupplierLedgerLockService() {
-        if (supplierLedgerLockService == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商账簿锁服务不可用");
-        }
-        return supplierLedgerLockService;
-    }
-
     private void lockSupplierLedgerMutation(Payment entity) {
         if (entity.getCounterpartyId() == null || entity.getSettlementCompanyId() == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商付款缺少供应商或结算主体身份");
         }
-        requireSupplierLedgerLockService().lock(
+        supplierLedgerLockService.lock(
                 entity.getSettlementCompanyId(),
                 entity.getCounterpartyId()
         );

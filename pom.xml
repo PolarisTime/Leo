@@ -283,6 +283,8 @@
                     <consoleOutput>true</consoleOutput>
                     <includeTestSourceDirectory>false</includeTestSourceDirectory>
                     <failsOnError>true</failsOnError>
+                    <failOnViolation>true</failOnViolation>
+                    <violationSeverity>error</violationSeverity>
                     <linkXRef>false</linkXRef>
                 </configuration>
                 <executions>
@@ -348,4 +350,16 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>architecture-verification</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.springframework.modulith</groupId>
+                    <artifactId>spring-modulith-core</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
 </project>

@@ -3,11 +3,11 @@ package com.leo.erp.purchase.order.service;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.purchase.api.PurchaseOrderReferenceGuard;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemRequest;
-import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -20,16 +20,16 @@ import java.util.Objects;
 public class PurchaseOrderDownstreamMutationGuard {
 
     private final PurchaseInboundItemRepository purchaseInboundItemRepository;
-    private final SalesOrderItemRepository salesOrderItemRepository;
+    private final PurchaseOrderReferenceGuard purchaseOrderReferenceGuard;
     private final SourceAllocationLockService sourceAllocationLockService;
 
     public PurchaseOrderDownstreamMutationGuard(
             PurchaseInboundItemRepository purchaseInboundItemRepository,
-            SalesOrderItemRepository salesOrderItemRepository,
+            PurchaseOrderReferenceGuard purchaseOrderReferenceGuard,
             SourceAllocationLockService sourceAllocationLockService
     ) {
         this.purchaseInboundItemRepository = purchaseInboundItemRepository;
-        this.salesOrderItemRepository = salesOrderItemRepository;
+        this.purchaseOrderReferenceGuard = purchaseOrderReferenceGuard;
         this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
@@ -45,7 +45,7 @@ public class PurchaseOrderDownstreamMutationGuard {
                     "采购订单已存在采购入库单，不能" + action + "，请先删除相关采购入库单"
             );
         }
-        if (!salesOrderItemRepository.findActiveBySourcePurchaseOrderItemIds(itemIds).isEmpty()) {
+        if (purchaseOrderReferenceGuard.hasActivePurchaseOrderItemReferences(itemIds)) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
                     "采购订单已被销售订单引用，不能" + action + "，请先删除相关销售订单"

@@ -5,7 +5,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.excel.dto.ImportResult;
 import com.leo.erp.common.web.BindPageQuery;
-import com.leo.erp.common.web.dto.FileDownloadResponse;
+import com.leo.erp.master.material.service.MaterialDocumentService;
 import com.leo.erp.master.material.service.MaterialService;
 import com.leo.erp.master.material.web.dto.MaterialImportResultResponse;
 import com.leo.erp.master.material.web.dto.MaterialRequest;
@@ -35,10 +35,23 @@ import java.nio.charset.StandardCharsets;
 @RequestMapping("/materials")
 public class MaterialController {
 
-    private final MaterialService materialService;
+    private static final int MAX_SEARCH_LIMIT = 500;
+    private static final MediaType CSV_MEDIA_TYPE = new MediaType("text", "csv", StandardCharsets.UTF_8);
+    private static final MediaType XLSX_MEDIA_TYPE = new MediaType(
+            "application",
+            "vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
 
-    public MaterialController(MaterialService materialService) {
+    private final MaterialService materialService;
+    private final MaterialDocumentService materialDocumentService;
+    private final MaterialImportFileAdapter materialImportFileAdapter;
+
+    public MaterialController(MaterialService materialService,
+                              MaterialDocumentService materialDocumentService,
+                              MaterialImportFileAdapter materialImportFileAdapter) {
         this.materialService = materialService;
+        this.materialDocumentService = materialDocumentService;
+        this.materialImportFileAdapter = materialImportFileAdapter;
     }
 
     @GetMapping("/search")
@@ -46,7 +59,9 @@ public class MaterialController {
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "100") int limit
     ) {
-        return ApiResponse.success(materialService.search(keyword != null ? keyword : "", Math.min(limit, 500)));
+        return ApiResponse.success(
+                materialService.search(keyword != null ? keyword : "", Math.min(limit, MAX_SEARCH_LIMIT))
+        );
     }
 
     @GetMapping
@@ -71,12 +86,20 @@ public class MaterialController {
 
     @GetMapping("/template")
     public ResponseEntity<byte[]> downloadTemplate() {
-        return toDownloadResponse(materialService.excelTemplate());
+        return toDownloadResponse(
+                "商品资料导入模板.xlsx",
+                XLSX_MEDIA_TYPE,
+                materialDocumentService.spreadsheetTemplate()
+        );
     }
 
     @GetMapping("/template/csv")
     public ResponseEntity<byte[]> downloadCsvTemplate() {
-        return toDownloadResponse(materialService.downloadTemplateFile());
+        return toDownloadResponse(
+                "商品资料导入模板.csv",
+                CSV_MEDIA_TYPE,
+                materialDocumentService.csvTemplate()
+        );
     }
 
     @GetMapping("/grades")
@@ -86,22 +109,32 @@ public class MaterialController {
 
     @PostMapping("/export")
     public ResponseEntity<byte[]> export(@RequestParam(required = false) String keyword) {
-        return toDownloadResponse(materialService.exportExcel(keyword));
+        return toDownloadResponse(
+                "material.xlsx",
+                XLSX_MEDIA_TYPE,
+                materialDocumentService.exportSpreadsheet(keyword)
+        );
     }
 
     @PostMapping("/export/csv")
     public ResponseEntity<byte[]> exportCsv(@RequestParam(required = false) String keyword) {
-        return toDownloadResponse(materialService.exportFile(keyword));
+        return toDownloadResponse(
+                "materials.csv",
+                CSV_MEDIA_TYPE,
+                materialDocumentService.exportCsv(keyword)
+        );
     }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<ImportResult> importMaterials(@RequestParam("file") MultipartFile file) throws IOException {
-        return ApiResponse.success("导入成功", materialService.importExcel(file));
+        return ApiResponse.success("导入成功", materialImportFileAdapter.importSpreadsheet(file));
     }
 
     @PostMapping(value = "/import/csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<MaterialImportResultResponse> importCsvMaterials(@RequestParam("file") MultipartFile file) throws IOException {
-        return ApiResponse.success("导入成功", materialService.importCsv(file));
+    public ApiResponse<MaterialImportResultResponse> importCsvMaterials(
+            @RequestParam("file") MultipartFile file
+    ) throws IOException {
+        return ApiResponse.success("导入成功", materialImportFileAdapter.importCsv(file));
     }
 
     @PutMapping("/{id}")
@@ -115,14 +148,14 @@ public class MaterialController {
         return ApiResponse.success("删除成功");
     }
 
-    private ResponseEntity<byte[]> toDownloadResponse(FileDownloadResponse file) {
+    private ResponseEntity<byte[]> toDownloadResponse(String filename, MediaType contentType, byte[] content) {
         return ResponseEntity.ok()
-                .contentType(file.contentType())
-                .contentLength(file.content().length)
+                .contentType(contentType)
+                .contentLength(content.length)
                 .header(
                         HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment().filename(file.filename(), StandardCharsets.UTF_8).build().toString()
+                        ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString()
                 )
-                .body(file.content());
+                .body(content);
     }
 }

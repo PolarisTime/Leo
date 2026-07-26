@@ -2,6 +2,7 @@ package com.leo.erp.finance.common.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.purchase.api.PurchaseSupplierLedgerLock;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -9,7 +10,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class SupplierLedgerLockService {
+public class SupplierLedgerLockService implements PurchaseSupplierLedgerLock {
 
     private static final String ENSURE_LOCK_ROW_SQL = """
             INSERT INTO fm_supplier_ledger_lock (settlement_company_id, supplier_id)
@@ -23,6 +24,7 @@ public class SupplierLedgerLockService {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void lock(Long settlementCompanyId, Long supplierId) {
         if (settlementCompanyId == null || supplierId == null) {

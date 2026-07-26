@@ -1,9 +1,12 @@
 package com.leo.erp.common.persistence;
 
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.LocalDate;
+import java.util.Locale;
 
 public final class Specs {
 
@@ -25,6 +28,53 @@ public final class Specs {
             }
             return cb.or(predicates);
         };
+    }
+
+    public static <T> Specification<T> collectionKeywordLike(
+            String keyword,
+            String collectionField,
+            String... fields
+    ) {
+        return (root, query, criteriaBuilder) -> {
+            if (keyword == null || keyword.isBlank()) {
+                return criteriaBuilder.conjunction();
+            }
+            var subquery = query.subquery(Integer.class);
+            var correlatedRoot = subquery.correlate(root);
+            var collectionItem = correlatedRoot.join(collectionField);
+            var predicates = new Predicate[fields.length];
+            for (int index = 0; index < fields.length; index++) {
+                predicates[index] = containsIgnoreCase(
+                        criteriaBuilder,
+                        collectionItem.get(fields[index]),
+                        keyword
+                );
+            }
+            subquery.select(criteriaBuilder.literal(1)).where(criteriaBuilder.or(predicates));
+            return criteriaBuilder.exists(subquery);
+        };
+    }
+
+    public static Predicate containsIgnoreCase(CriteriaBuilder criteriaBuilder,
+                                               Expression<String> expression,
+                                               String keyword) {
+        String pattern = containsLikePatternIgnoreCase(keyword);
+        if (pattern == null) {
+            return criteriaBuilder.conjunction();
+        }
+        return criteriaBuilder.like(criteriaBuilder.lower(expression), pattern, '\\');
+    }
+
+    public static String containsLikePatternIgnoreCase(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return null;
+        }
+        String escapedKeyword = keyword.trim()
+                .toLowerCase(Locale.ROOT)
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
+        return "%" + escapedKeyword + "%";
     }
 
     public static <T> Specification<T> equalIfPresent(String field, String value) {

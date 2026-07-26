@@ -6,7 +6,7 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
@@ -33,7 +33,9 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 @Service
-public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrderRequest, SalesOrderResponse> {
+public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, SalesOrderRequest, SalesOrderResponse> {
+
+    private static final String[] PRODUCT_SEARCH_FIELDS = {"materialCode", "brand", "material", "spec"};
 
     private final SalesOrderRepository repository;
     private final SalesOrderResponseAssembler responseAssembler;
@@ -45,7 +47,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     private final SalesOrderDeliveryVerificationGuard deliveryVerificationGuard;
     private final SalesOrderDownstreamMutationGuard downstreamMutationGuard;
     private final SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository;
-    private BusinessOperationEventPublisher businessOperationEventPublisher;
+    private final BusinessOperationEventPublisher businessOperationEventPublisher;
 
     @Autowired
     public SalesOrderService(SalesOrderRepository repository,
@@ -58,7 +60,8 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                              SourceAllocationLockService sourceAllocationLockService,
                              SalesOrderDeliveryVerificationGuard deliveryVerificationGuard,
                              SalesOrderDownstreamMutationGuard downstreamMutationGuard,
-                             SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository) {
+                             SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository,
+                             BusinessOperationEventPublisher businessOperationEventPublisher) {
         super(idGenerator);
         this.repository = repository;
         this.responseAssembler = responseAssembler;
@@ -70,16 +73,13 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         this.deliveryVerificationGuard = deliveryVerificationGuard;
         this.downstreamMutationGuard = downstreamMutationGuard;
         this.outboundCandidateQueryRepository = outboundCandidateQueryRepository;
-    }
-
-    @Autowired(required = false)
-    void setBusinessOperationEventPublisher(BusinessOperationEventPublisher publisher) {
-        this.businessOperationEventPublisher = publisher;
+        this.businessOperationEventPublisher = businessOperationEventPublisher;
     }
 
     @Transactional(readOnly = true)
-    public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter) {
+    public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter, String productKeyword) {
         Specification<SalesOrder> spec = Specs.<SalesOrder>keywordLike(filter.keyword(), "orderNo", "purchaseOrderNo", "customerName", "projectName")
+                .and(Specs.collectionKeywordLike(productKeyword, "items", PRODUCT_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalIfPresent("projectName", filter.projectName()))
                 .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
@@ -486,9 +486,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     }
 
     private void publishEvent(SalesOrder order, String eventType, String actionType, String remark) {
-        if (businessOperationEventPublisher == null) {
-            return;
-        }
         businessOperationEventPublisher.publish(
                 eventType,
                 "sales-order",

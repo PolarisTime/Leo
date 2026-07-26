@@ -3,12 +3,12 @@ package com.leo.erp.sales.order.service;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.sales.api.SalesOrderDownstreamReference;
+import com.leo.erp.sales.api.SalesOrderReferenceGuard;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
-import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceOrder;
-import com.leo.erp.logistics.bill.repository.FreightBillSourceOrderRepository;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -22,16 +22,16 @@ public class SalesOrderDownstreamMutationGuard {
 
     private final SalesOutboundRepository salesOutboundRepository;
     private final SourceAllocationLockService sourceAllocationLockService;
-    private final FreightBillSourceOrderRepository freightSourceRepository;
+    private final SalesOrderReferenceGuard salesOrderReferenceGuard;
 
     public SalesOrderDownstreamMutationGuard(
             SalesOutboundRepository salesOutboundRepository,
             SourceAllocationLockService sourceAllocationLockService,
-            FreightBillSourceOrderRepository freightSourceRepository
+            SalesOrderReferenceGuard salesOrderReferenceGuard
     ) {
         this.salesOutboundRepository = salesOutboundRepository;
         this.sourceAllocationLockService = sourceAllocationLockService;
-        this.freightSourceRepository = freightSourceRepository;
+        this.salesOrderReferenceGuard = salesOrderReferenceGuard;
     }
 
     public void assertMutable(SalesOrder order, String action) {
@@ -61,14 +61,15 @@ public class SalesOrderDownstreamMutationGuard {
                 List.of(),
                 List.of()
         );
-        List<FreightBillSourceOrder> relations = freightSourceRepository.findActiveBySourceOrderId(order.getId());
-        if (relations.isEmpty()) {
+        SalesOrderDownstreamReference reference = salesOrderReferenceGuard
+                .findActiveReference(order.getId())
+                .orElse(null);
+        if (reference == null) {
             return;
         }
-        String billNo = relations.get(0).getFreightBill().getBillNo();
         throw new BusinessException(
                 ErrorCode.BUSINESS_ERROR,
-                "销售订单已关联物流单" + billNo + "，请先删除物流单后再" + action
+                "销售订单已关联物流单" + reference.documentNo() + "，请先删除物流单后再" + action
         );
     }
 

@@ -2,8 +2,8 @@ package com.leo.erp.statement.service;
 
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
-import com.leo.erp.finance.payment.repository.PaymentAllocationRepository;
-import com.leo.erp.finance.receipt.repository.ReceiptAllocationRepository;
+import com.leo.erp.statement.api.StatementSettlementAllocationPort;
+import com.leo.erp.statement.api.StatementSettlementSyncCommand;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 
 @Service
-public class StatementSettlementSyncService {
+public class StatementSettlementSyncService implements StatementSettlementSyncCommand {
 
     public static final String PAYMENT_STATUS_SETTLED = StatusConstants.AUDITED;
     public static final String RECEIPT_STATUS_SETTLED = StatusConstants.AUDITED;
@@ -22,17 +22,34 @@ public class StatementSettlementSyncService {
 
     private final CustomerStatementRepository customerStatementRepository;
     private final FreightStatementRepository freightStatementRepository;
-    private final PaymentAllocationRepository paymentAllocationRepository;
-    private final ReceiptAllocationRepository receiptAllocationRepository;
+    private final StatementSettlementAllocationPort settlementAllocationPort;
 
     public StatementSettlementSyncService(CustomerStatementRepository customerStatementRepository,
                                           FreightStatementRepository freightStatementRepository,
-                                          PaymentAllocationRepository paymentAllocationRepository,
-                                          ReceiptAllocationRepository receiptAllocationRepository) {
+                                          StatementSettlementAllocationPort settlementAllocationPort) {
         this.customerStatementRepository = customerStatementRepository;
         this.freightStatementRepository = freightStatementRepository;
-        this.paymentAllocationRepository = paymentAllocationRepository;
-        this.receiptAllocationRepository = receiptAllocationRepository;
+        this.settlementAllocationPort = settlementAllocationPort;
+    }
+
+    @Override
+    @Transactional
+    public void syncCustomerStatement(Long statementId) {
+        if (statementId == null) {
+            return;
+        }
+        customerStatementRepository.findByIdAndDeletedFlagFalseForSettlementUpdate(statementId)
+                .ifPresent(this::syncCustomerStatement);
+    }
+
+    @Override
+    @Transactional
+    public void syncFreightStatement(Long statementId) {
+        if (statementId == null) {
+            return;
+        }
+        freightStatementRepository.findByIdAndDeletedFlagFalseForSettlementUpdate(statementId)
+                .ifPresent(this::syncFreightStatement);
     }
 
     @Transactional
@@ -45,7 +62,7 @@ public class StatementSettlementSyncService {
 
     @Transactional
     public FreightStatement syncFreightStatement(FreightStatement statement) {
-        BigDecimal paidAmount = paymentAllocationRepository.sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatus(
+        BigDecimal paidAmount = settlementAllocationPort.sumPaymentAmount(
                 statement.getId(),
                 FREIGHT_PAYMENT_TYPE,
                 PAYMENT_STATUS_SETTLED
@@ -60,7 +77,7 @@ public class StatementSettlementSyncService {
             return TradeItemCalculator.scaleAmount(BigDecimal.ZERO);
         }
         return TradeItemCalculator.scaleAmount(TradeItemCalculator.safeBigDecimal(
-                receiptAllocationRepository.sumAllocatedAmountBySourceStatementIdAndReceiptStatus(
+                settlementAllocationPort.sumReceiptAmount(
                         statementId,
                         RECEIPT_STATUS_SETTLED
                 )

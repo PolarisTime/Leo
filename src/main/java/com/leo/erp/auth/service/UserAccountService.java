@@ -8,7 +8,7 @@ import com.leo.erp.auth.web.dto.PasswordChangeRequest;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.jwt.AuthenticatedUserCacheService;
-import com.leo.erp.system.dashboard.service.DashboardSummaryService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,19 +21,19 @@ public class UserAccountService {
     private final PasswordEncoder passwordEncoder;
     private final SessionManagementService sessionManagementService;
     private final AuthenticatedUserCacheService authenticatedUserCacheService;
-    private final DashboardSummaryService dashboardSummaryService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public UserAccountService(
             UserAccountRepository repository,
             PasswordEncoder passwordEncoder,
             SessionManagementService sessionManagementService,
             AuthenticatedUserCacheService authenticatedUserCacheService,
-            DashboardSummaryService dashboardSummaryService) {
+            ApplicationEventPublisher eventPublisher) {
         this.repository = repository;
         this.passwordEncoder = passwordEncoder;
         this.sessionManagementService = sessionManagementService;
         this.authenticatedUserCacheService = authenticatedUserCacheService;
-        this.dashboardSummaryService = dashboardSummaryService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -111,6 +111,6 @@ public class UserAccountService {
 
     private void evictCaches(Long userId) {
         authenticatedUserCacheService.evict(userId);
-        dashboardSummaryService.evictCache(userId);
+        eventPublisher.publishEvent(new UserAccountChangedEvent(userId));
     }
 }

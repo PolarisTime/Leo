@@ -6,11 +6,11 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
-import com.leo.erp.logistics.bill.service.FreightBillService;
 import com.leo.erp.logistics.bill.service.FreightBillSalesOrderCandidateService;
-import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
+import com.leo.erp.logistics.bill.service.FreightBillService;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
+import com.leo.erp.logistics.bill.web.dto.FreightBillSalesOrderCandidateResponse;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -35,14 +35,18 @@ public class FreightBillController {
 
     private final FreightBillService service;
     private final FreightBillSalesOrderCandidateService candidateService;
+    private final FreightBillSalesOrderCandidateResponseAssembler candidateResponseAssembler;
+
     public FreightBillController(FreightBillService service,
-                                 FreightBillSalesOrderCandidateService candidateService) {
+                                 FreightBillSalesOrderCandidateService candidateService,
+                                 FreightBillSalesOrderCandidateResponseAssembler candidateResponseAssembler) {
         this.service = service;
         this.candidateService = candidateService;
+        this.candidateResponseAssembler = candidateResponseAssembler;
     }
 
     @GetMapping("/sales-order-candidates")
-    public ApiResponse<PageResponse<SalesOrderResponse>> salesOrderCandidates(
+    public ApiResponse<PageResponse<FreightBillSalesOrderCandidateResponse>> salesOrderCandidates(
             @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Long customerId,
@@ -54,19 +58,21 @@ public class FreightBillController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(required = false) Long currentRecordId
     ) {
-        return ApiResponse.success(PageResponse.from(candidateService.page(
-                query,
-                PageFilter.of(
-                                keyword,
-                                customerName,
-                                projectName,
-                                settlementCompanyId,
-                                null,
-                                startDate,
-                                endDate
-                        )
-                        .withIdentity(customerId, projectId, null, null, currentRecordId)
-        )));
+        return ApiResponse.success(candidateResponseAssembler.toPageResponse(
+                candidateService.page(
+                        query,
+                        PageFilter.of(
+                                        keyword,
+                                        customerName,
+                                        projectName,
+                                        settlementCompanyId,
+                                        null,
+                                        startDate,
+                                        endDate
+                                )
+                                .withIdentity(customerId, projectId, null, null, currentRecordId)
+                )
+        ));
     }
 
     @GetMapping("/search")

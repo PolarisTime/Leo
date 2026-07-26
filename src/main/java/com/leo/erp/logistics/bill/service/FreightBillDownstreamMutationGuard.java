@@ -2,11 +2,9 @@ package com.leo.erp.logistics.bill.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.finance.payment.repository.PaymentAllocationRepository;
+import com.leo.erp.logistics.api.FreightBillPaymentReferenceQuery;
+import com.leo.erp.logistics.api.FreightBillStatementReferenceQuery;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
-import com.leo.erp.statement.freight.domain.entity.FreightStatement;
-import com.leo.erp.statement.freight.repository.FreightStatementRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -14,15 +12,13 @@ import java.util.List;
 @Service
 public class FreightBillDownstreamMutationGuard {
 
-    private static final String FREIGHT_PAYMENT_TYPE = "物流商";
+    private final FreightBillStatementReferenceQuery statementReferenceQuery;
+    private final FreightBillPaymentReferenceQuery paymentReferenceQuery;
 
-    private final FreightStatementRepository freightStatementRepository;
-    private final PaymentAllocationRepository paymentAllocationRepository;
-
-    public FreightBillDownstreamMutationGuard(FreightStatementRepository freightStatementRepository,
-                                              PaymentAllocationRepository paymentAllocationRepository) {
-        this.freightStatementRepository = freightStatementRepository;
-        this.paymentAllocationRepository = paymentAllocationRepository;
+    public FreightBillDownstreamMutationGuard(FreightBillStatementReferenceQuery statementReferenceQuery,
+                                              FreightBillPaymentReferenceQuery paymentReferenceQuery) {
+        this.statementReferenceQuery = statementReferenceQuery;
+        this.paymentReferenceQuery = paymentReferenceQuery;
     }
 
     public void assertReverseAuditAllowed(FreightBill bill) {
@@ -38,26 +34,14 @@ public class FreightBillDownstreamMutationGuard {
         if (billId == null) {
             return;
         }
-        List<FreightStatement> statements =
-                freightStatementRepository.findAllBySourceFreightBillIdsExcludingCurrentStatement(
-                        List.of(billId),
-                        null
-                );
-        for (FreightStatement statement : statements) {
-            long paidAllocationCount = paymentAllocationRepository
-                    .countSettledAllocationsByStatementIdAndBusinessTypeAndStatus(
-                            statement.getId(),
-                            FREIGHT_PAYMENT_TYPE,
-                            StatusConstants.AUDITED
-                    );
-            if (paidAllocationCount > 0) {
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_ERROR,
-                        "物流单关联的物流对账单已付款，不能" + action
-                );
-            }
+        List<Long> statementIds = statementReferenceQuery.findActiveStatementIds(billId);
+        if (paymentReferenceQuery.hasSettledPaymentReferences(statementIds)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "物流单关联的物流对账单已付款，不能" + action
+            );
         }
-        if (!statements.isEmpty()) {
+        if (!statementIds.isEmpty()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "物流单已生成物流对账单，不能" + action);
         }
     }

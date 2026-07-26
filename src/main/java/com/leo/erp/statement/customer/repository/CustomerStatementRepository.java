@@ -44,37 +44,20 @@ public interface CustomerStatementRepository extends JpaRepository<CustomerState
     @EntityGraph(attributePaths = "items")
     Optional<CustomerStatement> findByIdAndDeletedFlagFalse(Long id);
 
-    @Query("""
-            select distinct sourceItem.salesOrder.id
-            from SalesOrderItem sourceItem
-            where sourceItem.id in (
-                select item.sourceSalesOrderItemId
-                from CustomerStatement cs
-                join cs.items item
-                where cs.deletedFlag = false
-                  and item.sourceSalesOrderItemId is not null
-                  and (:currentStatementId is null or cs.id <> :currentStatementId)
-            )
-            """)
-    List<Long> findOccupiedSourceSalesOrderIdsExcludingCurrentStatement(
-            @Param("currentStatementId") Long currentStatementId
-    );
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select statement from CustomerStatement statement "
+            + "where statement.id = :id and statement.deletedFlag = false")
+    Optional<CustomerStatement> findByIdAndDeletedFlagFalseForSettlementUpdate(@Param("id") Long id);
 
     @Query("""
-            select distinct sourceItem.salesOrder.id
-            from SalesOrderItem sourceItem
-            where sourceItem.salesOrder.id in :sourceSalesOrderIds
-              and sourceItem.id in (
-                  select item.sourceSalesOrderItemId
-                  from CustomerStatement cs
-                  join cs.items item
-                  where cs.deletedFlag = false
-                    and item.sourceSalesOrderItemId is not null
-                    and (:currentStatementId is null or cs.id <> :currentStatementId)
-              )
+            select distinct item.sourceSalesOrderItemId
+            from CustomerStatement statement
+            join statement.items item
+            where statement.deletedFlag = false
+              and item.sourceSalesOrderItemId is not null
+              and (:currentStatementId is null or statement.id <> :currentStatementId)
             """)
-    List<Long> findMatchingOccupiedSourceSalesOrderIdsExcludingCurrentStatement(
-            @Param("sourceSalesOrderIds") Collection<Long> sourceSalesOrderIds,
+    List<Long> findOccupiedSourceSalesOrderItemIdsExcludingCurrentStatement(
             @Param("currentStatementId") Long currentStatementId
     );
 
@@ -84,8 +67,21 @@ public interface CustomerStatementRepository extends JpaRepository<CustomerState
             join statement.items item
             where statement.deletedFlag = false
               and item.sourceSalesOrderItemId in :sourceSalesOrderItemIds
+              and (:currentStatementId is null or statement.id <> :currentStatementId)
             """)
-    List<Long> findSourceSalesOrderItemIds(
+    List<Long> findMatchingOccupiedSourceSalesOrderItemIdsExcludingCurrentStatement(
+            @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds,
+            @Param("currentStatementId") Long currentStatementId
+    );
+
+    @Query("""
+            select distinct statement.id
+            from CustomerStatement statement
+            join statement.items item
+            where statement.deletedFlag = false
+              and item.sourceSalesOrderItemId in :sourceSalesOrderItemIds
+            """)
+    List<Long> findActiveStatementIdsBySourceSalesOrderItemIds(
             @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds
     );
 }

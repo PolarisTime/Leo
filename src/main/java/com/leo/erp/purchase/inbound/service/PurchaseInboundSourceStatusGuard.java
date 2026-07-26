@@ -3,12 +3,12 @@ package com.leo.erp.purchase.inbound.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.purchase.api.PurchaseOrderReferenceGuard;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
-import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import org.springframework.stereotype.Service;
 
@@ -20,18 +20,18 @@ public class PurchaseInboundSourceStatusGuard {
 
     private final PurchaseOrderItemQueryService purchaseOrderItemQueryService;
     private final PurchaseInboundItemRepository purchaseInboundItemRepository;
-    private final SalesOrderItemRepository salesOrderItemRepository;
+    private final PurchaseOrderReferenceGuard purchaseOrderReferenceGuard;
     private final SourceAllocationLockService sourceAllocationLockService;
 
     public PurchaseInboundSourceStatusGuard(
             PurchaseOrderItemQueryService purchaseOrderItemQueryService,
             PurchaseInboundItemRepository purchaseInboundItemRepository,
-            SalesOrderItemRepository salesOrderItemRepository,
+            PurchaseOrderReferenceGuard purchaseOrderReferenceGuard,
             SourceAllocationLockService sourceAllocationLockService
     ) {
         this.purchaseOrderItemQueryService = purchaseOrderItemQueryService;
         this.purchaseInboundItemRepository = purchaseInboundItemRepository;
-        this.salesOrderItemRepository = salesOrderItemRepository;
+        this.purchaseOrderReferenceGuard = purchaseOrderReferenceGuard;
         this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
@@ -92,9 +92,9 @@ public class PurchaseInboundSourceStatusGuard {
                 .toList();
         sourceAllocationLockService.lockTradeItemSources(sourceItemIds, inboundItemIds, List.of());
         boolean referencedByPurchaseOrder = !sourceItemIds.isEmpty()
-                && !salesOrderItemRepository.findActiveBySourcePurchaseOrderItemIds(sourceItemIds).isEmpty();
+                && purchaseOrderReferenceGuard.hasActivePurchaseOrderItemReferences(sourceItemIds);
         boolean referencedByInbound = !inboundItemIds.isEmpty()
-                && !salesOrderItemRepository.findActiveBySourceInboundItemIds(inboundItemIds).isEmpty();
+                && purchaseOrderReferenceGuard.hasActiveInboundItemReferences(inboundItemIds);
         if (referencedByPurchaseOrder || referencedByInbound) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,

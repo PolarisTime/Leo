@@ -10,6 +10,7 @@ import com.leo.erp.statement.freight.service.FreightStatementService;
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
+import com.leo.erp.statement.freight.web.dto.FreightStatementSummaryResponse;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -66,12 +67,28 @@ public class FreightStatementController {
         return ApiResponse.success(PageResponse.from(
                 freightStatementService.responsePage(
                         query,
-                        new PageFilter(keyword, status, periodStart, periodEnd,
-                                carrierName, null, null, null, null, null, null, null, null, null,
-                                settlementCompanyId)
-                                .withIdentity(null, null, null, carrierId, null),
+                        pageFilter(keyword, carrierId, carrierName, settlementCompanyId, status,
+                                periodStart, periodEnd),
                         carrierCode
                 )
+        ));
+    }
+
+    @Operation(summary = "汇总物流对账单")
+    @GetMapping("/summary")
+    public ApiResponse<FreightStatementSummaryResponse> summary(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long carrierId,
+            @RequestParam(required = false) String carrierCode,
+            @RequestParam(required = false) String carrierName,
+            @RequestParam(required = false) Long settlementCompanyId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd
+    ) {
+        return ApiResponse.success(freightStatementService.summary(
+                pageFilter(keyword, carrierId, carrierName, settlementCompanyId, status, periodStart, periodEnd),
+                carrierCode
         ));
     }
 
@@ -153,6 +170,19 @@ public class FreightStatementController {
     public ApiResponse<Void> delete(@PathVariable Long id) {
         freightStatementService.delete(id);
         return ApiResponse.success("删除成功");
+    }
+
+    private PageFilter pageFilter(String keyword,
+                                  Long carrierId,
+                                  String carrierName,
+                                  Long settlementCompanyId,
+                                  String status,
+                                  LocalDate periodStart,
+                                  LocalDate periodEnd) {
+        return new PageFilter(keyword, status, periodStart, periodEnd,
+                carrierName, null, null, null, null, null, null, null, null, null,
+                settlementCompanyId)
+                .withIdentity(null, null, null, carrierId, null);
     }
 
 }

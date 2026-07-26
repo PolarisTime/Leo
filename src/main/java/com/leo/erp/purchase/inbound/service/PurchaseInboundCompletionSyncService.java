@@ -3,14 +3,15 @@ package com.leo.erp.purchase.inbound.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.finance.common.service.SupplierLedgerLockService;
+import com.leo.erp.purchase.api.PurchaseOrderSalesAllocation;
+import com.leo.erp.purchase.api.PurchaseOrderSalesAllocationQuery;
+import com.leo.erp.purchase.api.PurchaseSupplierLedgerLock;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
-import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -23,21 +24,21 @@ public class PurchaseInboundCompletionSyncService {
     private final PurchaseInboundRepository repository;
     private final PurchaseInboundSourceValidator sourceValidator;
     private final PurchaseInboundAllocationService allocationService;
-    private final SupplierLedgerLockService supplierLedgerLockService;
-    private final SalesOrderItemRepository salesOrderItemRepository;
+    private final PurchaseSupplierLedgerLock supplierLedgerLock;
+    private final PurchaseOrderSalesAllocationQuery purchaseOrderSalesAllocationQuery;
     private final PurchaseOrderAuditPublisher purchaseOrderAuditPublisher;
 
     public PurchaseInboundCompletionSyncService(PurchaseInboundRepository repository,
                                                 PurchaseInboundSourceValidator sourceValidator,
                                                 PurchaseInboundAllocationService allocationService,
-                                                SupplierLedgerLockService supplierLedgerLockService,
-                                                SalesOrderItemRepository salesOrderItemRepository,
+                                                PurchaseSupplierLedgerLock supplierLedgerLock,
+                                                PurchaseOrderSalesAllocationQuery purchaseOrderSalesAllocationQuery,
                                                 PurchaseOrderAuditPublisher purchaseOrderAuditPublisher) {
         this.repository = repository;
         this.sourceValidator = sourceValidator;
         this.allocationService = allocationService;
-        this.supplierLedgerLockService = supplierLedgerLockService;
-        this.salesOrderItemRepository = salesOrderItemRepository;
+        this.supplierLedgerLock = supplierLedgerLock;
+        this.purchaseOrderSalesAllocationQuery = purchaseOrderSalesAllocationQuery;
         this.purchaseOrderAuditPublisher = purchaseOrderAuditPublisher;
     }
 
@@ -167,20 +168,17 @@ public class PurchaseInboundCompletionSyncService {
             List<Long> sourceItemIds,
             Map<Long, Integer> receivedQtyByItemId
     ) {
-        for (SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary summary
-                : salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(
-                sourceItemIds,
-                null
-        )) {
+        for (PurchaseOrderSalesAllocation summary
+                : purchaseOrderSalesAllocationQuery.summarizeByPurchaseOrderItemIds(sourceItemIds)) {
             long inboundQuantity = receivedQtyByItemId.getOrDefault(
-                    summary.getSourcePurchaseOrderItemId(),
+                    summary.sourcePurchaseOrderItemId(),
                     0
             );
-            long directSalesQuantity = summary.getTotalQuantity() == null ? 0L : summary.getTotalQuantity();
+            long directSalesQuantity = summary.totalQuantity() == null ? 0L : summary.totalQuantity();
             if (directSalesQuantity > inboundQuantity) {
                 throw new BusinessException(
                         ErrorCode.BUSINESS_ERROR,
-                        "来源采购明细 " + summary.getSourcePurchaseOrderItemId()
+                        "来源采购明细 " + summary.sourcePurchaseOrderItemId()
                                 + " 的历史直连销售数量超过最终入库量：已入库 " + inboundQuantity
                                 + " 件，已占用 " + directSalesQuantity + " 件，请先处理历史销售订单"
                 );
@@ -195,7 +193,7 @@ public class PurchaseInboundCompletionSyncService {
                     "采购订单缺少供应商或结算主体身份，不能完成采购"
             );
         }
-        supplierLedgerLockService.lock(
+        supplierLedgerLock.lock(
                 purchaseOrder.getSettlementCompanyId(),
                 purchaseOrder.getSupplierId()
         );

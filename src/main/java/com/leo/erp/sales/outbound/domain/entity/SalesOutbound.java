@@ -1,6 +1,7 @@
 package com.leo.erp.sales.outbound.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,7 +15,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "so_sales_outbound")
-public class SalesOutbound extends AbstractAuditableEntity {
+public class SalesOutbound extends AbstractAuditableEntity implements StatusAwareEntity {
 
     @Id
     private Long id;

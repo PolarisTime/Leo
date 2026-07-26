@@ -9,9 +9,8 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.sales.order.domain.entity.SalesOrder;
-import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
-import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
+import com.leo.erp.sales.api.SalesOrderLogisticsSourceQuery;
+import com.leo.erp.sales.api.SalesOrderSourceSnapshot;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatementItem;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
@@ -39,7 +38,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     private final CustomerStatementResponseAssembler responseAssembler;
     private final CustomerStatementSourceService customerStatementSourceService;
     private final CustomerStatementApplyService applyService;
-    private final SalesOrderItemQueryService salesOrderItemQueryService;
+    private final SalesOrderLogisticsSourceQuery salesOrderSourceQuery;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final StatementSettlementMutationGuard settlementMutationGuard;
 
@@ -49,7 +48,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                                     CustomerStatementResponseAssembler responseAssembler,
                                     CustomerStatementSourceService customerStatementSourceService,
                                     CustomerStatementApplyService applyService,
-                                    SalesOrderItemQueryService salesOrderItemQueryService,
+                                    SalesOrderLogisticsSourceQuery salesOrderSourceQuery,
                                     SourceAllocationLockService sourceAllocationLockService,
                                     StatementSettlementMutationGuard settlementMutationGuard) {
         super(idGenerator);
@@ -57,7 +56,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         this.responseAssembler = responseAssembler;
         this.customerStatementSourceService = customerStatementSourceService;
         this.applyService = applyService;
-        this.salesOrderItemQueryService = salesOrderItemQueryService;
+        this.salesOrderSourceQuery = salesOrderSourceQuery;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.settlementMutationGuard = settlementMutationGuard;
     }
@@ -306,10 +305,8 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
 
         TreeSet<Long> sourceOrderIds = new TreeSet<>();
         if (!sourceItemIds.isEmpty()) {
-            salesOrderItemQueryService.findActiveByIdIn(List.copyOf(sourceItemIds)).stream()
-                    .map(SalesOrderItem::getSalesOrder)
-                    .filter(Objects::nonNull)
-                    .map(SalesOrder::getId)
+            salesOrderSourceQuery.findBySourceItemIds(List.copyOf(sourceItemIds)).stream()
+                    .map(SalesOrderSourceSnapshot::id)
                     .filter(Objects::nonNull)
                     .forEach(sourceOrderIds::add);
         }

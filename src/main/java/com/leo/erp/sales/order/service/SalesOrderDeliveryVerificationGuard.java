@@ -3,11 +3,10 @@ package com.leo.erp.sales.order.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
-import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.finance.receipt.repository.ReceiptAllocationRepository;
+import com.leo.erp.sales.api.SalesOrderReceiptReferenceQuery;
+import com.leo.erp.sales.api.SalesOrderStatementReferenceQuery;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
-import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -16,15 +15,15 @@ import java.util.Objects;
 @Service
 public class SalesOrderDeliveryVerificationGuard {
 
-    private final CustomerStatementRepository customerStatementRepository;
-    private final ReceiptAllocationRepository receiptAllocationRepository;
+    private final SalesOrderStatementReferenceQuery statementReferenceQuery;
+    private final SalesOrderReceiptReferenceQuery receiptReferenceQuery;
     private final SourceAllocationLockService sourceAllocationLockService;
 
-    public SalesOrderDeliveryVerificationGuard(CustomerStatementRepository customerStatementRepository,
-                                               ReceiptAllocationRepository receiptAllocationRepository,
+    public SalesOrderDeliveryVerificationGuard(SalesOrderStatementReferenceQuery statementReferenceQuery,
+                                               SalesOrderReceiptReferenceQuery receiptReferenceQuery,
                                                SourceAllocationLockService sourceAllocationLockService) {
-        this.customerStatementRepository = customerStatementRepository;
-        this.receiptAllocationRepository = receiptAllocationRepository;
+        this.statementReferenceQuery = statementReferenceQuery;
+        this.receiptReferenceQuery = receiptReferenceQuery;
         this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
@@ -48,16 +47,13 @@ public class SalesOrderDeliveryVerificationGuard {
             return;
         }
         sourceAllocationLockService.lockTradeItemSources(List.of(), List.of(), stableItemIds);
-        if (!customerStatementRepository.findSourceSalesOrderItemIds(stableItemIds).isEmpty()) {
+        if (statementReferenceQuery.hasActiveCustomerStatementReferences(stableItemIds)) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
                     "销售订单已存在客户对账单，不能" + action + "，请先删除相关客户对账单"
             );
         }
-        if (!receiptAllocationRepository.findReceivedSourceSalesOrderItemIds(
-                stableItemIds,
-                StatusConstants.AUDITED
-        ).isEmpty()) {
+        if (receiptReferenceQuery.hasAuditedReceiptReferences(stableItemIds)) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
                     "销售订单已发生收款，不能" + action + "，请先删除相关收款单"
