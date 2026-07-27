@@ -18,6 +18,8 @@ import com.leo.erp.master.customer.mapper.CustomerMapper;
 import com.leo.erp.master.customer.web.dto.CustomerOptionResponse;
 import com.leo.erp.master.customer.web.dto.CustomerRequest;
 import com.leo.erp.master.customer.web.dto.CustomerResponse;
+import com.leo.erp.master.project.domain.entity.Project;
+import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.data.domain.Page;
@@ -32,6 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class CustomerService extends AbstractCrudService<Customer, CustomerRequest, CustomerResponse> implements RedisCacheHealthCheck {
@@ -47,6 +51,7 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     private final MasterDataReferenceGuard referenceGuard;
     private final CompanySettingService companySettingService;
     private final MasterDataCodeIssuanceService codeIssuanceService;
+    private final ProjectRepository projectRepository;
     private CacheManager cacheManager;
 
     @Autowired
@@ -56,7 +61,8 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
                            RedisJsonCacheSupport redisJsonCacheSupport,
                            MasterDataReferenceGuard referenceGuard,
                            CompanySettingService companySettingService,
-                           MasterDataCodeIssuanceService codeIssuanceService) {
+                           MasterDataCodeIssuanceService codeIssuanceService,
+                           ProjectRepository projectRepository) {
         super(snowflakeIdGenerator);
         this.customerRepository = customerRepository;
         this.customerMapper = customerMapper;
@@ -64,6 +70,7 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         this.referenceGuard = referenceGuard;
         this.companySettingService = companySettingService;
         this.codeIssuanceService = codeIssuanceService;
+        this.projectRepository = projectRepository;
     }
 
     @Override
@@ -105,12 +112,10 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         return customerRepository.findByDeletedFlagFalseAndStatusOrderByCustomerCodeAsc(StatusConstants.NORMAL).stream()
                 .map(c -> new CustomerOptionResponse(
                         c.getId(),
-                        optionLabel(c),
+                        c.getCustomerName(),
                         c.getCustomerName(),
                         c.getCustomerCode(),
                         c.getCustomerName(),
-                        c.getProjectName(),
-                        c.getProjectNameAbbr(),
                         c.getDefaultSettlementCompanyId(),
                         c.getDefaultSettlementCompanyName()
                 ))
@@ -148,20 +153,14 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         this.cacheManager = cacheManager;
     }
 
-    private String optionLabel(Customer customer) {
-        String projectName = customer.getProjectName() == null ? "" : customer.getProjectName().trim();
-        if (projectName.isEmpty() || projectName.equals(customer.getCustomerName())) {
-            return customer.getCustomerName();
-        }
-        return customer.getCustomerName() + " / " + projectName;
-    }
-
     @Transactional(readOnly = true)
     public Page<CustomerResponse> page(PageQuery query, String keyword, String status) {
         Specification<Customer> spec = Specs.<Customer>notDeleted()
-                .and(Specs.keywordLike(keyword, "customerCode", "customerName", "projectName", "contactName"))
+                .and(customerKeyword(keyword))
                 .and(Specs.equalIfPresent("status", StatusConstants.normalizeOptionalActiveStatus(status, "客户状态")));
-        return page(query, spec, customerRepository);
+        Page<Customer> customers = pageEntities(query, spec, customerRepository);
+        List<Project> projects = findProjects(customers.getContent());
+        return customers.map(customer -> withProjectNames(customer, projects));
     }
 
     @Override
@@ -209,9 +208,14 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         entity.setContactPhone(request.contactPhone());
         entity.setCity(request.city());
         entity.setSettlementMode(request.settlementMode());
-        entity.setProjectName(request.projectName());
-        entity.setProjectNameAbbr(request.projectNameAbbr());
-        entity.setProjectAddress(request.projectAddress());
+        String requestedProjectName = trimToNull(request.projectName());
+        if (requestedProjectName != null) {
+            entity.setProjectName(requestedProjectName);
+            entity.setProjectNameAbbr(request.projectNameAbbr());
+            entity.setProjectAddress(request.projectAddress());
+        } else if (trimToNull(entity.getProjectName()) == null) {
+            entity.setProjectName(request.customerName());
+        }
         SettlementCompanySnapshot settlementCompany = resolveSettlementCompany(request.defaultSettlementCompanyId());
         entity.setDefaultSettlementCompanyId(settlementCompany.id());
         entity.setDefaultSettlementCompanyName(settlementCompany.name());
@@ -233,7 +237,107 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
 
     @Override
     protected CustomerResponse toResponse(Customer entity) {
-        return customerMapper.toResponse(entity);
+        return withProjectNames(
+                entity,
+                projectRepository.findAllByCustomerIdentity(entity.getId(), entity.getCustomerCode())
+        );
+    }
+
+    private Specification<Customer> customerKeyword(String keyword) {
+        return (root, query, criteriaBuilder) -> {
+            if (keyword == null || keyword.isBlank()) {
+                return criteriaBuilder.conjunction();
+            }
+            var customerMatch = criteriaBuilder.or(
+                    Specs.containsIgnoreCase(criteriaBuilder, root.<String>get("customerCode"), keyword),
+                    Specs.containsIgnoreCase(criteriaBuilder, root.<String>get("customerName"), keyword),
+                    Specs.containsIgnoreCase(criteriaBuilder, root.<String>get("contactName"), keyword)
+            );
+            var projectQuery = query.subquery(Integer.class);
+            var correlatedCustomer = projectQuery.correlate(root);
+            var project = projectQuery.from(Project.class);
+            var projectIdentity = criteriaBuilder.or(
+                    criteriaBuilder.equal(project.get("customerId"), correlatedCustomer.get("id")),
+                    criteriaBuilder.and(
+                            criteriaBuilder.isNull(project.get("customerId")),
+                            criteriaBuilder.equal(
+                                    project.get("customerCode"),
+                                    correlatedCustomer.get("customerCode")
+                            )
+                    )
+            );
+            var projectMatch = criteriaBuilder.or(
+                    Specs.containsIgnoreCase(criteriaBuilder, project.<String>get("projectCode"), keyword),
+                    Specs.containsIgnoreCase(criteriaBuilder, project.<String>get("projectName"), keyword),
+                    Specs.containsIgnoreCase(criteriaBuilder, project.<String>get("projectNameAbbr"), keyword)
+            );
+            projectQuery.select(criteriaBuilder.literal(1)).where(
+                    criteriaBuilder.isFalse(project.get("deletedFlag")),
+                    projectIdentity,
+                    projectMatch
+            );
+            return criteriaBuilder.or(customerMatch, criteriaBuilder.exists(projectQuery));
+        };
+    }
+
+    private List<Project> findProjects(List<Customer> customers) {
+        if (customers.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> customerIds = customers.stream()
+                .map(Customer::getId)
+                .collect(Collectors.toSet());
+        Set<String> customerCodes = customers.stream()
+                .map(Customer::getCustomerCode)
+                .map(this::trimToNull)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        return projectRepository.findAllByCustomerIdentities(customerIds, customerCodes);
+    }
+
+    private CustomerResponse withProjectNames(Customer customer, List<Project> projects) {
+        String projectNames = projects.stream()
+                .filter(project -> belongsToCustomer(project, customer))
+                .map(Project::getProjectName)
+                .map(this::trimToNull)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .collect(Collectors.joining("；"));
+        CustomerResponse response = customerMapper.toResponse(customer);
+        return new CustomerResponse(
+                response.id(),
+                response.customerCode(),
+                response.customerName(),
+                response.contactName(),
+                response.contactPhone(),
+                response.city(),
+                response.settlementMode(),
+                response.projectName(),
+                response.projectNameAbbr(),
+                response.projectAddress(),
+                response.defaultSettlementCompanyId(),
+                response.defaultSettlementCompanyName(),
+                response.status(),
+                response.remark(),
+                projectNames
+        );
+    }
+
+    private boolean belongsToCustomer(Project project, Customer customer) {
+        if (project.getCustomerId() != null) {
+            return project.getCustomerId().equals(customer.getId());
+        }
+        return java.util.Objects.equals(
+                trimToNull(project.getCustomerCode()),
+                trimToNull(customer.getCustomerCode())
+        );
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private List<ReferenceCheck> customerReferences(Customer entity) {

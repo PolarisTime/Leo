@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface ProjectRepository extends JpaRepository<Project, Long>, JpaSpecificationExecutor<Project> {
 
@@ -32,6 +33,32 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, JpaSpec
     List<Project> findActiveOptionsByCustomerIdentity(@Param("customerId") Long customerId,
                                                        @Param("customerCode") String customerCode,
                                                        @Param("status") String status);
+
+    @Query("""
+            select project
+            from Project project
+            where project.deletedFlag = false
+              and (
+                    project.customerId = :customerId
+                    or (project.customerId is null and project.customerCode = :customerCode)
+              )
+            order by project.projectCode asc
+            """)
+    List<Project> findAllByCustomerIdentity(@Param("customerId") Long customerId,
+                                            @Param("customerCode") String customerCode);
+
+    @Query("""
+            select project
+            from Project project
+            where project.deletedFlag = false
+              and (
+                    project.customerId in :customerIds
+                    or (project.customerId is null and project.customerCode in :customerCodes)
+              )
+            order by project.projectCode asc
+            """)
+    List<Project> findAllByCustomerIdentities(@Param("customerIds") Set<Long> customerIds,
+                                              @Param("customerCodes") Set<String> customerCodes);
 
     Optional<Project> findByIdAndDeletedFlagFalse(Long id);
 

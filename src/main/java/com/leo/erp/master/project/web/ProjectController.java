@@ -42,9 +42,10 @@ public class ProjectController {
     public ApiResponse<PageResponse<ProjectResponse>> page(
             @BindPageQuery(sortFieldKey = "project") PageQuery query,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) String status
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long customerId
     ) {
-        return ApiResponse.success(PageResponse.from(projectService.page(query, keyword, status)));
+        return ApiResponse.success(PageResponse.from(projectService.page(query, keyword, status, customerId)));
     }
 
     @GetMapping("/{id}")

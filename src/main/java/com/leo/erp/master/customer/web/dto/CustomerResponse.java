@@ -14,7 +14,8 @@ public record CustomerResponse(
         Long defaultSettlementCompanyId,
         String defaultSettlementCompanyName,
         String status,
-        String remark
+        String remark,
+        String projectNames
 ) {
     public CustomerResponse(Long id,
                             String customerCode,
@@ -42,7 +43,9 @@ public record CustomerResponse(
                 null,
                 null,
                 status,
-                remark
+                remark,
+                ""
         );
     }
+
 }

@@ -12,7 +12,6 @@ public record CustomerRequest(
         String contactPhone,
         String city,
         String settlementMode,
-        @NotBlank(message = "项目名称不能为空")
         String projectName,
         String projectNameAbbr,
         String projectAddress,

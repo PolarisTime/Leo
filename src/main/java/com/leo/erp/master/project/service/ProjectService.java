@@ -57,12 +57,13 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
     }
 
     @Transactional(readOnly = true)
-    public Page<ProjectResponse> page(PageQuery query, String keyword, String status) {
+    public Page<ProjectResponse> page(PageQuery query, String keyword, String status, Long customerId) {
         Specification<Project> spec = Specs.<Project>notDeleted()
                 .and(Specs.keywordLike(keyword,
                         "projectCode", "projectName", "projectNameAbbr",
                         "customerCode", "projectManager"))
-                .and(Specs.equalIfPresent("status", status));
+                .and(Specs.equalIfPresent("status", status))
+                .and(customerIdentity(customerId));
         return page(query, spec, projectRepository);
     }
 
@@ -201,6 +202,22 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
                 customerCode,
                 request.status(),
                 request.remark()
+        );
+    }
+
+    private Specification<Project> customerIdentity(Long customerId) {
+        if (customerId == null) {
+            return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
+        }
+        Customer customer = customerRepository.findByIdAndDeletedFlagFalse(customerId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
+        String customerCode = trimToNull(customer.getCustomerCode());
+        return (root, query, criteriaBuilder) -> criteriaBuilder.or(
+                criteriaBuilder.equal(root.get("customerId"), customer.getId()),
+                criteriaBuilder.and(
+                        criteriaBuilder.isNull(root.get("customerId")),
+                        criteriaBuilder.equal(root.get("customerCode"), customerCode)
+                )
         );
     }
 

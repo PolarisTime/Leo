@@ -254,16 +254,16 @@
       },
       {
         "type": "dataLookup",
-        "sourceField": "projectName",
+        "sourceFields": ["customerName", "projectName"],
         "targetField": "projectAddress",
-        "sql": "SELECT project_address FROM md_project WHERE project_name = ? AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1",
+        "sql": "SELECT project.project_address FROM md_project project JOIN md_customer customer ON project.customer_id = customer.id OR (project.customer_id IS NULL AND project.customer_code = customer.customer_code) WHERE customer.customer_name = ? AND regexp_replace(project.project_name, '^[[:space:]]+|[[:space:]]+$', '', 'g') = regexp_replace(?, '^[[:space:]]+|[[:space:]]+$', '', 'g') AND customer.deleted_flag = FALSE AND project.deleted_flag = FALSE AND project.project_address IS NOT NULL ORDER BY project.project_code, project.id LIMIT 1",
         "stopWhenPresent": true
       },
       {
         "type": "dataLookup",
-        "sourceFields": ["customerName", "projectName"],
+        "sourceField": "projectName",
         "targetField": "projectAddress",
-        "sql": "SELECT project_address FROM md_customer WHERE customer_name = ? AND regexp_replace(project_name, '^[[:space:]]+|[[:space:]]+$', '', 'g') = regexp_replace(?, '^[[:space:]]+|[[:space:]]+$', '', 'g') AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1",
+        "sql": "SELECT project_address FROM md_project WHERE project_name = ? AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY project_code, id LIMIT 1",
         "stopWhenPresent": true
       },
       {
@@ -287,16 +287,16 @@
       },
       {
         "type": "dataLookup",
-        "sourceField": "projectName",
+        "sourceFields": ["customerName", "projectName"],
         "targetField": "projectAddress",
-        "sql": "SELECT project_address FROM md_project WHERE project_name = ? AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1",
+        "sql": "SELECT project.project_address FROM md_project project JOIN md_customer customer ON project.customer_id = customer.id OR (project.customer_id IS NULL AND project.customer_code = customer.customer_code) WHERE customer.customer_name = ? AND regexp_replace(project.project_name, '^[[:space:]]+|[[:space:]]+$', '', 'g') = regexp_replace(?, '^[[:space:]]+|[[:space:]]+$', '', 'g') AND customer.deleted_flag = FALSE AND project.deleted_flag = FALSE AND project.project_address IS NOT NULL ORDER BY project.project_code, project.id LIMIT 1",
         "stopWhenPresent": true
       },
       {
         "type": "dataLookup",
-        "sourceFields": ["customerName", "projectName"],
+        "sourceField": "projectName",
         "targetField": "projectAddress",
-        "sql": "SELECT project_address FROM md_customer WHERE customer_name = ? AND regexp_replace(project_name, '^[[:space:]]+|[[:space:]]+$', '', 'g') = regexp_replace(?, '^[[:space:]]+|[[:space:]]+$', '', 'g') AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1",
+        "sql": "SELECT project_address FROM md_project WHERE project_name = ? AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY project_code, id LIMIT 1",
         "stopWhenPresent": true
       },
       {
