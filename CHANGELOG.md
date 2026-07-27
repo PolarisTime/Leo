@@ -1,3 +1,10 @@
+## [8.3.2](https://github.com/PolarisTime/Leo/compare/v8.3.1...v8.3.2) (2026-07-27)
+
+
+### Bug Fixes
+
+* **purchase:** 恢复采购入库全量审核校验 ([8ef57ba](https://github.com/PolarisTime/Leo/commit/8ef57baaf08cb87a567932c34f6b4b46a897d94a))
+
 ## [8.3.1](https://github.com/PolarisTime/Leo/compare/v8.3.0...v8.3.1) (2026-07-26)
 
 
