@@ -41,7 +41,7 @@
       {"key": "materialCode", "label": "商品编码", "width": 70, "headerFontSize": 9, "fontSize": 9},
       {"key": "brand", "label": "品牌", "width": 38, "headerFontSize": 9, "fontSize": 9},
       {"key": "category", "label": "品名", "width": 40, "headerFontSize": 9, "fontSize": 9},
-      {"key": "material", "label": "材质", "width": 54, "headerFontSize": 9, "fontSize": 9, "normalize": "compactAscii", "font": "latinIfAscii"},
+      {"key": "material", "label": "材质", "width": 54, "headerFontSize": 9, "fontSize": 9, "normalize": "compactAscii"},
       {"key": "spec", "label": "规格", "width": 42, "headerFontSize": 9, "fontSize": 9},
       {"key": "length", "label": "长度", "width": 32, "headerFontSize": 9, "fontSize": 9},
       {"key": "quantity", "label": "件数", "width": 38, "headerFontSize": 9, "fontSize": 9},

@@ -39,7 +39,7 @@ public class PrintPdfFormRenderer {
     byte[] render(PrintPdfFormPayload payload) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (PdfDocument pdf = new PdfDocument(new PdfWriter(out))) {
-            PdfFont font = fontFactory.createChineseFont();
+            PdfFont font = fontFactory.createDefaultFont();
             drawContent(pdf, font, payload.root(), payload.data(), payload.items());
         } catch (IOException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "生成 PDF 表单失败");
@@ -60,7 +60,6 @@ public class PrintPdfFormRenderer {
             return;
         }
 
-        PdfFont latinFont = fontFactory.createLatinFont(font);
         Map<String, String> variables = valueResolver.summaryVariables(data, items);
 
         PrintPdfDrawingSupport.PageMetrics pageMetrics = drawing.pageMetrics(root.path("page"));
@@ -84,7 +83,6 @@ public class PrintPdfFormRenderer {
                     tableRenderer.drawItemRow(
                             canvas,
                             font,
-                            latinFont,
                             tableConfig,
                             columns,
                             tableTop + headerHeight + row * rowHeight,

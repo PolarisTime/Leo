@@ -64,7 +64,6 @@ public class PrintPdfTableRenderer {
     void drawItemRow(
             PdfCanvas canvas,
             PdfFont font,
-            PdfFont latinFont,
             JsonNode tableConfig,
             List<JsonNode> columns,
             float top,
@@ -79,7 +78,6 @@ public class PrintPdfTableRenderer {
         for (JsonNode column : columns) {
             float width = drawing.number(column, "width", 60f);
             String value = valueResolver.itemValue(item, column);
-            PdfFont cellFont = "latinIfAscii".equals(text(column, "font", "")) && drawing.isAsciiText(value) ? latinFont : font;
             drawing.drawRect(
                     canvas,
                     left,
@@ -93,7 +91,7 @@ public class PrintPdfTableRenderer {
             );
             drawing.drawCanvasText(
                     canvas,
-                    cellFont,
+                    font,
                     value,
                     left + 2,
                     top + 7,

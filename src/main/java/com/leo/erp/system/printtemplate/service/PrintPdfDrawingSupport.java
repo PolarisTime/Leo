@@ -377,18 +377,6 @@ public class PrintPdfDrawingSupport {
         return width;
     }
 
-    boolean isAsciiText(String value) {
-        if (value == null || value.isBlank()) {
-            return false;
-        }
-        for (int i = 0; i < value.length(); i++) {
-            if (value.charAt(i) > 127) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     List<JsonNode> childObjects(JsonNode node) {
         List<JsonNode> result = new ArrayList<>();
         if (node.isArray()) {
