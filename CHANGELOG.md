@@ -1,3 +1,10 @@
+## [8.3.4](https://github.com/PolarisTime/Leo/compare/v8.3.3...v8.3.4) (2026-07-29)
+
+
+### Bug Fixes
+
+* **print:** 统一使用苹方字体生成PDF ([74ee082](https://github.com/PolarisTime/Leo/commit/74ee082debaf93734227baf3de2d5c19fec440f4))
+
 ## [8.3.3](https://github.com/PolarisTime/Leo/compare/v8.3.2...v8.3.3) (2026-07-27)
 
 
