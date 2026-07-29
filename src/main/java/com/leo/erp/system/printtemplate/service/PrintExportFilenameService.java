@@ -4,6 +4,7 @@ import com.leo.erp.master.api.ProjectQuery;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -21,6 +22,8 @@ public class PrintExportFilenameService {
     private static final int MONTH_INDEX = 1;
     private static final int DAY_INDEX = 2;
     private static final int CONTROL_CHARACTER_LIMIT = 32;
+    private static final DateTimeFormatter PDF_FILENAME_DATE_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy年MM月dd日", Locale.ROOT);
 
     private final ProjectQuery projectQuery;
     private final PrintRuntimeProperties runtimeProperties;
@@ -55,7 +58,7 @@ public class PrintExportFilenameService {
         }
         return build(
                 businessNo,
-                businessDate,
+                formatPdfDate(businessDate),
                 projectShortName,
                 firstPresent(printData, List.of("settlementCompanyName")),
                 extension
@@ -89,7 +92,7 @@ public class PrintExportFilenameService {
         String filename = String.join(
                 ".",
                 safeComponent(businessNo, BUSINESS_NO_MAX_LENGTH),
-                safeComponent(normalizeDate(businessDate), DATE_MAX_LENGTH),
+                safeComponent(businessDate, DATE_MAX_LENGTH),
                 safeComponent(projectShortName, PROJECT_MAX_LENGTH),
                 safeComponent(settlementCompanyName, COMPANY_MAX_LENGTH)
         );
@@ -123,7 +126,7 @@ public class PrintExportFilenameService {
         return "";
     }
 
-    private String normalizeDate(String rawDate) {
+    private String formatPdfDate(String rawDate) {
         String value = normalize(rawDate);
         if (value.isBlank()) {
             return value;
@@ -138,7 +141,7 @@ public class PrintExportFilenameService {
                     Integer.parseInt(parts[YEAR_INDEX]),
                     Integer.parseInt(parts[MONTH_INDEX]),
                     Integer.parseInt(parts[DAY_INDEX])
-            ).toString();
+            ).format(PDF_FILENAME_DATE_FORMATTER);
         } catch (RuntimeException ignored) {
             return datePart;
         }
