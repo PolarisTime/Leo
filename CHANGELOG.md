@@ -1,3 +1,10 @@
+# [8.4.0](https://github.com/PolarisTime/Leo/compare/v8.3.5...v8.4.0) (2026-07-30)
+
+
+### Features
+
+* **purchase:** 新增采购订单提货清单预览接口 ([230cebc](https://github.com/PolarisTime/Leo/commit/230cebc1756de97d94a3b456af763d69fbf5b70f))
+
 ## [8.3.5](https://github.com/PolarisTime/Leo/compare/v8.3.4...v8.3.5) (2026-07-30)
 
 
