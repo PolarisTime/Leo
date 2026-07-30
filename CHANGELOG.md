@@ -1,3 +1,10 @@
+## [8.3.5](https://github.com/PolarisTime/Leo/compare/v8.3.4...v8.3.5) (2026-07-30)
+
+
+### Bug Fixes
+
+* **print:** 统一 PDF 文件名日期格式 ([781267d](https://github.com/PolarisTime/Leo/commit/781267d1930eeea6ee96a1214185de3dc70d80fd))
+
 ## [8.3.4](https://github.com/PolarisTime/Leo/compare/v8.3.3...v8.3.4) (2026-07-29)
 
 
