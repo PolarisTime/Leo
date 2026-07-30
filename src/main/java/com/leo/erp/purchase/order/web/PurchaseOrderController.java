@@ -8,8 +8,10 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.purchase.order.service.PurchaseOrderService;
+import com.leo.erp.purchase.order.service.PurchaseOrderPickupListService;
 import com.leo.erp.purchase.order.service.PurchaseOrderWarehouseRecommendationService;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
+import com.leo.erp.purchase.order.web.dto.PurchaseOrderPickupListResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderWarehouseRecommendationResponse;
@@ -40,13 +42,16 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class PurchaseOrderController {
 
     private final PurchaseOrderService purchaseOrderService;
+    private final PurchaseOrderPickupListService pickupListService;
     private final PurchaseOrderWarehouseRecommendationService warehouseRecommendationService;
 
     public PurchaseOrderController(
             PurchaseOrderService purchaseOrderService,
+            PurchaseOrderPickupListService pickupListService,
             PurchaseOrderWarehouseRecommendationService warehouseRecommendationService
     ) {
         this.purchaseOrderService = purchaseOrderService;
+        this.pickupListService = pickupListService;
         this.warehouseRecommendationService = warehouseRecommendationService;
     }
 
@@ -139,6 +144,14 @@ public class PurchaseOrderController {
         return ApiResponse.success(warehouseRecommendationService.recommend(supplierId, materialIds).stream()
                 .map(PurchaseOrderWarehouseRecommendationResponse::from)
                 .toList());
+    }
+
+    @Operation(summary = "预览采购订单提货清单")
+    @GetMapping("/pickup-list-preview")
+    public ApiResponse<PurchaseOrderPickupListResponse> pickupListPreview(
+            @RequestParam @Size(min = 1, max = 50) List<@Positive Long> orderIds
+    ) {
+        return ApiResponse.success(pickupListService.preview(orderIds));
     }
 
     @Operation(summary = "查询采购订单详情")
