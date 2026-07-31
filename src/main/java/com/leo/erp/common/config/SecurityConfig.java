@@ -2,11 +2,14 @@ package com.leo.erp.common.config;
 
 import com.leo.erp.security.jwt.JwtAuthenticationFilter;
 import com.leo.erp.system.setup.web.InitialSetupTokenFilter;
+import com.leo.erp.common.api.ApiErrorResponseWriter;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.idempotent.HttpIdempotencyFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -44,7 +47,8 @@ public class SecurityConfig {
                                                    WebSecurityProperties webSecurityProperties,
                                                    JwtAuthenticationFilter jwtAuthenticationFilter,
                                                    InitialSetupTokenFilter initialSetupTokenFilter,
-                                                   HttpIdempotencyFilter httpIdempotencyFilter) throws Exception {
+                                                   HttpIdempotencyFilter httpIdempotencyFilter,
+                                                   ApiErrorResponseWriter errorResponseWriter) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
@@ -64,13 +68,28 @@ public class SecurityConfig {
                         })
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint((request, response, exception) -> errorResponseWriter.write(
+                                request,
+                                response,
+                                HttpStatus.UNAUTHORIZED,
+                                ErrorCode.UNAUTHORIZED,
+                                "未登录或登录已失效"
+                        ))
+                        .accessDeniedHandler((request, response, exception) -> errorResponseWriter.write(
+                                request,
+                                response,
+                                HttpStatus.FORBIDDEN,
+                                ErrorCode.FORBIDDEN,
+                                "拒绝访问"
+                        )))
                 .authorizeHttpRequests(authorize -> {
                     authorize.requestMatchers(publicAccessRequestMatcher).permitAll();
-                    authorize.requestMatchers("/auth/**", "/health", "/version", "/error").permitAll();
+                    authorize.requestMatchers("/error").permitAll();
                     if (surfaceAccessProperties.getHealth().isPublicAccessEnabled()) {
-                        authorize.requestMatchers("/system/health").permitAll();
+                        authorize.requestMatchers("/v2.0/system/health").permitAll();
                     } else {
-                        authorize.requestMatchers("/system/health").authenticated();
+                        authorize.requestMatchers("/v2.0/system/health").authenticated();
                     }
                     if (surfaceAccessProperties.getDocs().isPublicAccessEnabled()) {
                         authorize.requestMatchers(OPEN_API_PATHS).permitAll();

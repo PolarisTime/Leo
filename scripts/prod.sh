@@ -138,7 +138,7 @@ start_backend() {
   echo "[prod] 启动后端 ..."
   setsid bash "$SCRIPT_DIR/backend/start-prod.sh" > "$BACKEND_LOG" 2>&1 < /dev/null &
   echo "$!" > "$BACKEND_PID_FILE"
-  if ! wait_for_http "后端(prod)" "http://127.0.0.1:$BACKEND_PORT/api/health" "$BACKEND_LOG" 180; then
+  if ! wait_for_http "后端(prod)" "http://127.0.0.1:$BACKEND_PORT/api/v2.0/health" "$BACKEND_LOG" 180; then
     stop_process "后端(prod)" "$BACKEND_PORT" "$BACKEND_PID_FILE"
     return 1
   fi

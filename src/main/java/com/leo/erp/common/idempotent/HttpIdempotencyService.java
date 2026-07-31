@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -177,10 +178,16 @@ public class HttpIdempotencyService {
     public record CachedResponse(
             int status,
             String contentType,
-            String bodyBase64
+            String bodyBase64,
+            Map<String, String> headers
     ) {
         public CachedResponse {
             bodyBase64 = bodyBase64 == null ? "" : bodyBase64;
+            headers = headers == null ? Map.of() : Map.copyOf(headers);
+        }
+
+        public CachedResponse(int status, String contentType, String bodyBase64) {
+            this(status, contentType, bodyBase64, Map.of());
         }
 
         public byte[] body() {

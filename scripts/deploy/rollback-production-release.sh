@@ -5,7 +5,7 @@ set -euo pipefail
 TARGET_RELEASE="previous"
 RELEASE_ROOT="/opt/leo"
 BACKEND_SERVICE="leo-backend"
-HEALTHCHECK_URL="http://127.0.0.1:57217/api/health"
+HEALTHCHECK_URL="http://127.0.0.1:57217/api/v2.0/health"
 START_COMMAND=""
 STOP_COMMAND=""
 SHARED_DIR=""
@@ -17,7 +17,7 @@ usage() {
     [--target-release previous|<release-id>] \
     [--release-root /opt/leo] \
     [--backend-service leo-backend] \
-    [--healthcheck-url http://127.0.0.1:57217/api/health] \
+    [--healthcheck-url http://127.0.0.1:57217/api/v2.0/health] \
     [--start-command <command>] \
     [--stop-command <command>] \
     [--shared-dir /opt/leo/shared]

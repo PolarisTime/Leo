@@ -69,7 +69,7 @@ Swagger UI：
 
 健康检查：
 
-- `http://localhost:11211/api/health`
+- `http://localhost:11211/api/v2.0/health`
 
 唯一账号初始化页面由前端提供：
 
@@ -131,7 +131,7 @@ GitHub Actions 当前会依次执行：
 - 使用 Checkstyle 与 SpotBugs 完成静态分析。
 - 启动 PostgreSQL 与 Redis 服务，并执行 `flyway:migrate`、`flyway:validate` 校验迁移链路。
 - 使用 `-DskipTests` 构建后端 JAR。
-- 构建后端镜像，启动容器并通过 `/api/health` 完成冒烟检查。
+- 构建后端镜像，启动容器并通过 `/api/v2.0/health` 完成冒烟检查。
 
 CI 不运行活动测试套件，详细命令以 `.github/workflows/ci.yml` 为准。
 

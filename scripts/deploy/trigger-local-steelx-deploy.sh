@@ -279,7 +279,7 @@ bash "$SCRIPT_DIR/install-production-release.sh" \
   --release-root "$STEELX_ROOT/backend" \
   --shared-dir "$STEELX_ROOT/shared" \
   --backend-service "steelx-local" \
-  --healthcheck-url "http://127.0.0.1:$BACKEND_PORT/api/health" \
+  --healthcheck-url "http://127.0.0.1:$BACKEND_PORT/api/v2.0/health" \
   --keep-releases 5 \
   --start-command "$start_command" \
   --stop-command "$stop_command"

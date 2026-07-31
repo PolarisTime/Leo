@@ -73,7 +73,7 @@ SSH 可选 Secrets：
 - `PROD_SHARED_DIR`：后端共享配置与 hook 目录，默认 `/instance/steelx/shared`
 - `PROD_FRONTEND_ROOT`：前端发布根目录，默认 `/instance/steelx/frontend`
 - `PROD_BACKEND_SERVICE`：systemd 服务名，默认 `steelx-local`
-- `PROD_HEALTHCHECK_URL`：健康检查地址，默认 `http://127.0.0.1:57217/api/health`
+- `PROD_HEALTHCHECK_URL`：健康检查地址，默认 `http://127.0.0.1:57217/api/v2.0/health`
 - `PROD_KEEP_RELEASES`：保留 release 数量，默认 `5`
 - `PROD_START_COMMAND`：非 systemd 部署的后端启动命令，默认 `STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh start`
 - `PROD_STOP_COMMAND`：非 systemd 部署的后端停止命令，默认 `STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh stop`
@@ -85,7 +85,7 @@ PROD_RELEASE_ROOT=/instance/steelx/backend
 PROD_SHARED_DIR=/instance/steelx/shared
 PROD_FRONTEND_ROOT=/instance/steelx/frontend
 PROD_BACKEND_SERVICE=steelx-local
-PROD_HEALTHCHECK_URL=http://127.0.0.1:57217/api/health
+PROD_HEALTHCHECK_URL=http://127.0.0.1:57217/api/v2.0/health
 PROD_START_COMMAND=STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh start
 PROD_STOP_COMMAND=STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh stop
 ```
@@ -148,7 +148,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-两份 Nginx 模板都允许公网读取 `GET /api/setup/status`，以便前端判断是否需要首次初始化；`POST`、`PUT`、`PATCH`、`DELETE` 等写请求默认只允许从 `127.0.0.1` 或 `::1` 发起。因而公网前端可以展示初始化状态，但不能直接提交初始化数据。需要从远程管理终端完成网页初始化时，只在 `location ^~ /api/setup` 的 `deny all` 前临时增加精确的管理源 IP/CIDR `allow`，先执行 `nginx -t` 再 reload，初始化完成后立即移除。该 location 故意不带末尾 `/`，并使用不带 URI 的 `proxy_pass`，以同时覆盖并原样转发 `/api/setup`、其子路径以及 `/api/setup;...` 路径参数，避免请求落入通用 `/api/` 代理。`X-Setup-Token` 仍必须同时校验，不能用扩大 Nginx 来源范围代替应用凭证。
+首次初始化状态由 V2 `GET /api/v2.0/runtime-config` 返回；初始化提交使用 `POST /api/v2.0/setup/account`。两份 Nginx 模板对 `/api/v2.0/setup` 单独设置来源限制，写请求默认只允许从 `127.0.0.1` 或 `::1` 发起。需要从远程管理终端完成网页初始化时，只在 `location ^~ /api/v2.0/setup` 的 `deny all` 前临时增加精确的管理源 IP/CIDR `allow`，先执行 `nginx -t` 再 reload，初始化完成后立即移除。该 location 故意不带末尾 `/`，并使用不带 URI 的 `proxy_pass`，以同时覆盖并原样转发 `/api/v2.0/setup`、其子路径以及 `/api/v2.0/setup;...` 路径参数，避免请求落入通用 `/api/` 代理。`X-Setup-Token` 仍必须同时校验，不能用扩大 Nginx 来源范围代替应用凭证。
 
 `LEO_SETUP_BOOTSTRAP_TOKEN` 必须是 32 字节随机值的 Base64URL 编码，并按生产密码管理，不得写入 Git、命令行参数或部署日志。初始化完成前保持该值稳定；完成后可从运行环境移除。
 

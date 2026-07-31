@@ -1,7 +1,6 @@
 package com.leo.erp.security.jwt;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.ApiErrorResponseWriter;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.support.SecurityPrincipal;
 import io.jsonwebtoken.Claims;
@@ -10,7 +9,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -29,18 +28,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final AuthenticatedUserCacheService authenticatedUserCacheService;
     private final AccessTokenBlacklistService blacklistService;
     private final SessionActivityService sessionActivityService;
-    private final ObjectMapper objectMapper;
+    private final ApiErrorResponseWriter errorResponseWriter;
 
     public JwtAuthenticationFilter(JwtTokenService jwtTokenService,
                                    AuthenticatedUserCacheService authenticatedUserCacheService,
                                    AccessTokenBlacklistService blacklistService,
                                    SessionActivityService sessionActivityService,
-                                   ObjectMapper objectMapper) {
+                                   ApiErrorResponseWriter errorResponseWriter) {
         this.jwtTokenService = jwtTokenService;
         this.authenticatedUserCacheService = authenticatedUserCacheService;
         this.blacklistService = blacklistService;
         this.sessionActivityService = sessionActivityService;
-        this.objectMapper = objectMapper;
+        this.errorResponseWriter = errorResponseWriter;
     }
 
     @Override
@@ -131,12 +130,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private void sendUnauthorized(HttpServletRequest request,
                                   HttpServletResponse response,
                                   String message) throws IOException {
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding("UTF-8");
-        objectMapper.writeValue(
-                response.getOutputStream(),
-                ApiResponse.failure(ErrorCode.UNAUTHORIZED, message)
+        errorResponseWriter.write(
+                request,
+                response,
+                HttpStatus.UNAUTHORIZED,
+                ErrorCode.UNAUTHORIZED,
+                message
         );
     }
 

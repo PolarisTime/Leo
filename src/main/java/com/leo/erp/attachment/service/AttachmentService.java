@@ -454,7 +454,7 @@ public class AttachmentService {
     private AttachmentPresentation toPresentation(AttachmentFile entity, String moduleKey) {
         String previewType = detectPreviewType(entity);
         boolean previewSupported = !"none".equals(previewType);
-        String baseUrl = "/api/attachments/" + entity.getId();
+        String baseUrl = "/api/v2.0/attachments/" + entity.getId();
         String accessKey = urlEncode(entity.getAccessKey());
         String moduleQuery = toModuleQuery(moduleKey);
         String storageType = resolveStorageType(entity.getStoragePath());

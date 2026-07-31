@@ -1,6 +1,6 @@
 package com.leo.erp.common.web;
 
-import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.ApiVersion;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.info.BuildProperties;
@@ -27,16 +27,21 @@ public class VersionController {
         this.appName = appName;
     }
 
-    @GetMapping("/version")
-    public ApiResponse<VersionResponse> version() {
+    @PublicAccess
+    @GetMapping(ApiVersion.V2_PREFIX + "/version")
+    public VersionResponse version() {
+        return currentVersion();
+    }
+
+    private VersionResponse currentVersion() {
         BuildProperties build = buildProperties.getIfAvailable();
         GitProperties git = gitProperties.getIfAvailable();
-        return ApiResponse.success(new VersionResponse(
+        return new VersionResponse(
                 appName,
                 valueOrUnknown(build == null ? null : build.getVersion()),
                 valueOrUnknown(git == null ? null : git.getShortCommitId()),
                 build == null || build.getTime() == null ? null : build.getTime().toString()
-        ));
+        );
     }
 
     private static String valueOrUnknown(String value) {

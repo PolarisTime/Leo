@@ -7,7 +7,6 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
@@ -32,17 +31,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 public class PurchaseOrderService extends AbstractStatusCrudService<
         PurchaseOrder, PurchaseOrderRequest, PurchaseOrderResponse> {
-
-    private static final Set<String> PREPAYMENT_SOURCE_STATUSES = Set.of(
-            StatusConstants.AUDITED,
-            StatusConstants.PURCHASE_COMPLETED
-    );
 
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderAvailabilityService availabilityService;
@@ -143,19 +136,6 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         );
     }
 
-    @Transactional(readOnly = true)
-    public Page<PurchaseOrderImportCandidateResponse> prepaymentCandidates(PageQuery query, PageFilter filter) {
-        Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
-                .and(Specs.keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS))
-                .and(Specs.equalIfPresent("supplierName", filter.name()))
-                .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
-                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(prepaymentSourceStatus(filter.status()))
-                .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
-        return pageEntities(query, spec, purchaseOrderRepository)
-                .map(order -> toImportCandidateResponse(order, null));
-    }
-
     @Override
     protected PurchaseOrderResponse toDetailResponse(PurchaseOrder order) {
         return responseAssembler.toDetailResponse(order);
@@ -177,19 +157,6 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                 order.getStatus(),
                 importableQuantity
         );
-    }
-
-    private Specification<PurchaseOrder> prepaymentSourceStatus(String status) {
-        return (root, query, criteriaBuilder) -> {
-            String requestedStatus = BusinessDocumentValidator.trimToNull(status);
-            if (requestedStatus == null) {
-                return root.get("status").in(PREPAYMENT_SOURCE_STATUSES);
-            }
-            if (!PREPAYMENT_SOURCE_STATUSES.contains(requestedStatus)) {
-                return criteriaBuilder.disjunction();
-            }
-            return criteriaBuilder.equal(root.get("status"), requestedStatus);
-        };
     }
 
     @Override

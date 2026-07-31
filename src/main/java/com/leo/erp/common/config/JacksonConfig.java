@@ -42,29 +42,28 @@ public class JacksonConfig {
                 .serializerByType(Long.class, ToStringSerializer.instance)
                 .serializerByType(Long.TYPE, ToStringSerializer.instance)
                 .serializerByType(BigDecimal.class, new ScaledBigDecimalSerializer())
-                .serializerByType(LocalDateTime.class, new EpochMillisLocalDateTimeSerializer())
+                .serializerByType(LocalDateTime.class, new IsoLocalDateTimeSerializer())
                 .deserializerByType(LocalDateTime.class, new FlexibleLocalDateTimeDeserializer())
-                .serializerByType(LocalDate.class, new EpochMillisLocalDateSerializer())
+                .serializerByType(LocalDate.class, new IsoLocalDateSerializer())
                 .deserializerByType(LocalDate.class, new FlexibleLocalDateDeserializer());
     }
 
-    /** Serialize LocalDate → epoch milliseconds at start of day (Asia/Shanghai). */
-    class EpochMillisLocalDateSerializer extends JsonSerializer<LocalDate> {
+    /** API 日期统一输出 ISO-8601。 */
+    class IsoLocalDateSerializer extends JsonSerializer<LocalDate> {
         @Override
         public void serialize(LocalDate value, JsonGenerator gen,
                               SerializerProvider provider) throws IOException {
-            long epoch = value.atStartOfDay(zone).toInstant().toEpochMilli();
-            gen.writeNumber(epoch);
+            gen.writeString(value.format(DateTimeFormatter.ISO_LOCAL_DATE));
         }
     }
 
-    /** Serialize LocalDateTime → epoch milliseconds (Asia/Shanghai). */
-    class EpochMillisLocalDateTimeSerializer extends JsonSerializer<LocalDateTime> {
+    /** API 日期时间统一输出带时区偏移的 ISO-8601。 */
+    class IsoLocalDateTimeSerializer extends JsonSerializer<LocalDateTime> {
         @Override
         public void serialize(LocalDateTime value, JsonGenerator gen,
                               SerializerProvider provider) throws IOException {
-            long epoch = value.atZone(zone).toInstant().toEpochMilli();
-            gen.writeNumber(epoch);
+            gen.writeString(value.atZone(zone).toOffsetDateTime()
+                    .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
         }
     }
 
@@ -79,6 +78,18 @@ public class JacksonConfig {
                 return Instant.ofEpochMilli(epoch).atZone(zone).toLocalDateTime();
             }
             String text = p.getText().trim();
+            try {
+                return java.time.OffsetDateTime.parse(text, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                        .atZoneSameInstant(zone)
+                        .toLocalDateTime();
+            } catch (DateTimeParseException ignored) {
+                // Continue with local and legacy representations.
+            }
+            try {
+                return LocalDateTime.parse(text, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            } catch (DateTimeParseException ignored) {
+                // Continue with the legacy representation.
+            }
             try {
                 return LocalDateTime.parse(text, FMT);
             } catch (DateTimeParseException e) {
@@ -115,4 +126,5 @@ public class JacksonConfig {
             }
         }
     }
+
 }

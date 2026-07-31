@@ -32,22 +32,6 @@ class PrintRecordDataProvider {
         return new PrintRecordData(formatter.toCamelStringMap(row), loadItems(source, recordId));
     }
 
-    List<String> listBrands(String moduleKey, List<Long> recordIds) {
-        PrintRecordSource source = source(moduleKey);
-        if (recordIds == null || recordIds.isEmpty()) {
-            return List.of();
-        }
-        String placeholders = String.join(",", Collections.nCopies(recordIds.size(), "?"));
-        List<String> brands = jdbc.queryForList(
-                "SELECT DISTINCT brand FROM " + source.itemTableName()
-                        + " WHERE " + source.itemFkColumn() + " IN (" + placeholders + ")"
-                        + " AND brand IS NOT NULL AND btrim(brand) <> '' ORDER BY brand ASC",
-                String.class,
-                recordIds.toArray()
-        );
-        return brands.stream().map(String::trim).filter(brand -> !brand.isBlank()).toList();
-    }
-
     List<PrintRecordItem> listPrintItems(String moduleKey, List<Long> recordIds) {
         PrintRecordSource source = source(moduleKey);
         if (recordIds == null || recordIds.isEmpty()) {

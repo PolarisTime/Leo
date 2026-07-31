@@ -1,7 +1,6 @@
 package com.leo.erp.common.idempotent;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.ApiErrorResponseWriter;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.support.SecurityPrincipal;
 import jakarta.servlet.FilterChain;
@@ -25,6 +24,8 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 
 @Component
@@ -35,14 +36,20 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
     static final Duration DEFAULT_TTL = Duration.ofHours(24);
 
     private static final Set<String> WRITE_METHODS = Set.of("POST", "PUT", "PATCH", "DELETE");
-    private static final int UNPROCESSABLE_ENTITY = HttpStatus.UNPROCESSABLE_ENTITY.value();
-
+    private static final Set<String> REPLAYABLE_RESPONSE_HEADERS = Set.of(
+            HttpHeaders.CONTENT_TYPE,
+            HttpHeaders.CONTENT_DISPOSITION,
+            HttpHeaders.LOCATION,
+            HttpHeaders.ETAG,
+            HttpHeaders.CACHE_CONTROL
+    );
     private final HttpIdempotencyService idempotencyService;
-    private final ObjectMapper objectMapper;
+    private final ApiErrorResponseWriter errorResponseWriter;
 
-    public HttpIdempotencyFilter(HttpIdempotencyService idempotencyService, ObjectMapper objectMapper) {
+    public HttpIdempotencyFilter(HttpIdempotencyService idempotencyService,
+                                 ApiErrorResponseWriter errorResponseWriter) {
         this.idempotencyService = idempotencyService;
-        this.objectMapper = objectMapper;
+        this.errorResponseWriter = errorResponseWriter;
     }
 
     @Override
@@ -71,9 +78,9 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
         } else if (status == HttpIdempotencyService.Status.DUPLICATE_PENDING) {
             writeFailure(request, response, "请勿重复提交，请等待当前请求处理完成");
         } else if (status == HttpIdempotencyService.Status.DUPLICATE_COMPLETED) {
-            replayCompletedResponse(response, decision.response());
+            replayCompletedResponse(request, response, decision.response());
         } else if (status == HttpIdempotencyService.Status.UNAVAILABLE) {
-            writeUnavailable(response);
+            writeUnavailable(request, response);
         } else {
             writeFailure(request, response, "幂等键已用于不同请求，请重新生成幂等键后再提交");
         }
@@ -128,44 +135,54 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
     private void writeFailure(HttpServletRequest request,
                               HttpServletResponse response,
                               String message) throws IOException {
-        response.setStatus(UNPROCESSABLE_ENTITY);
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        ApiResponse<Void> body = ApiResponse.failure(
+        errorResponseWriter.write(
+                request,
+                response,
+                HttpStatus.UNPROCESSABLE_ENTITY,
                 ErrorCode.BUSINESS_ERROR,
                 message
         );
-        objectMapper.writeValue(response.getOutputStream(), body);
     }
 
-    private void writeUnavailable(HttpServletResponse response) throws IOException {
-        response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        objectMapper.writeValue(
-                response.getOutputStream(),
-                ApiResponse.failure(ErrorCode.INTERNAL_ERROR, "幂等服务暂不可用，请稍后重试")
+    private void writeUnavailable(HttpServletRequest request,
+                                  HttpServletResponse response) throws IOException {
+        errorResponseWriter.write(
+                request,
+                response,
+                HttpStatus.SERVICE_UNAVAILABLE,
+                ErrorCode.INTERNAL_ERROR,
+                "幂等服务暂不可用，请稍后重试"
         );
     }
 
     private HttpIdempotencyService.CachedResponse cachedResponse(ContentCachingResponseWrapper response) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        REPLAYABLE_RESPONSE_HEADERS.forEach(headerName -> {
+            String value = response.getHeader(headerName);
+            if (value != null && !value.isBlank()) {
+                headers.put(headerName, value);
+            }
+        });
         return new HttpIdempotencyService.CachedResponse(
                 response.getStatus(),
                 response.getHeader(HttpHeaders.CONTENT_TYPE),
-                Base64.getEncoder().encodeToString(response.getContentAsByteArray())
+                Base64.getEncoder().encodeToString(response.getContentAsByteArray()),
+                headers
         );
     }
 
-    private void replayCompletedResponse(HttpServletResponse response,
+    private void replayCompletedResponse(HttpServletRequest request,
+                                         HttpServletResponse response,
                                          HttpIdempotencyService.CachedResponse cachedResponse) throws IOException {
         if (cachedResponse == null) {
-            writeUnavailable(response);
+            writeUnavailable(request, response);
             return;
         }
         response.setStatus(cachedResponse.status());
         if (cachedResponse.contentType() != null) {
             response.setHeader(HttpHeaders.CONTENT_TYPE, cachedResponse.contentType());
         }
+        cachedResponse.headers().forEach(response::setHeader);
         response.getOutputStream().write(cachedResponse.body());
     }
 

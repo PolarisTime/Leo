@@ -130,17 +130,6 @@ public class PrintScriptService {
         return value == null ? "" : value.trim();
     }
 
-    public List<String> listBrands(String moduleKey, List<Long> recordIds) {
-        dataProvider.requireSupported(moduleKey);
-        if (recordIds == null || recordIds.isEmpty()) {
-            return List.of();
-        }
-        for (Long recordId : recordIds) {
-            recordAccessService.assertRecordExists(moduleKey, recordId);
-        }
-        return dataProvider.listBrands(moduleKey, recordIds);
-    }
-
     public List<PrintRecordItem> listPrintItems(String moduleKey, List<Long> recordIds) {
         dataProvider.requireSupported(moduleKey);
         if (recordIds == null || recordIds.isEmpty()) {

@@ -35,7 +35,7 @@ public class HealthPageRenderer {
                 <body><div class="wrap">
                     <section class="hero"><h1>Leo 后端健康检查</h1><p>基础服务可用性与运行时状态。</p></section>
                     <article class="card"><h2>应用</h2><p><span class="status">UP</span></p>
-                    <dl><dt>服务名</dt><dd>leo</dd><dt>检查时间</dt><dd>%s</dd><dt>运行时长</dt><dd>%s</dd><dt>Java 版本</dt><dd>%s</dd><dt>访问路径</dt><dd>/api/system/health</dd></dl>
+                    <dl><dt>服务名</dt><dd>leo</dd><dt>检查时间</dt><dd>%s</dd><dt>运行时长</dt><dd>%s</dd><dt>Java 版本</dt><dd>%s</dd><dt>访问路径</dt><dd>/api/v2.0/system/health</dd></dl>
                     </article>
                 </div></body></html>
                 """.formatted(escape(checkedAt), escape(jvm.uptime()), escape(jvm.javaVersion()));

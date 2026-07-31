@@ -1,6 +1,6 @@
 package com.leo.erp.common.web;
 
-import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.web.dto.HealthResponse;
 import com.leo.erp.common.web.service.HealthService;
 import org.springframework.http.HttpStatus;
@@ -19,10 +19,14 @@ public class HealthController {
         this.healthService = healthService;
     }
 
-    @GetMapping("/health")
-    public ResponseEntity<ApiResponse<HealthResponse>> health() {
+    @PublicAccess
+    @GetMapping(ApiVersion.V2_PREFIX + "/health")
+    public ResponseEntity<HealthResponse> health() {
         HealthResponse health = healthService.health();
-        HttpStatus status = healthService.isUp(health) ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
-        return ResponseEntity.status(status).body(ApiResponse.success(health));
+        return ResponseEntity.status(statusOf(health)).body(health);
+    }
+
+    private HttpStatus statusOf(HealthResponse health) {
+        return healthService.isUp(health) ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
     }
 }

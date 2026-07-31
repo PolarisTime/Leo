@@ -277,7 +277,7 @@ leo:
       # Refresh Token Cookie 名称
       refresh-token-name: ${LEO_AUTH_REFRESH_COOKIE_NAME:leo_refresh_token}
       # Refresh Token Cookie 路径
-      refresh-token-path: ${LEO_AUTH_REFRESH_COOKIE_PATH:/api/auth}
+      refresh-token-path: ${LEO_AUTH_REFRESH_COOKIE_PATH:/api/v2.0/auth}
       # 是否只通过 HTTPS 发送 Cookie
       secure: ${LEO_AUTH_REFRESH_COOKIE_SECURE:true}
       # SameSite 策略

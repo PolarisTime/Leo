@@ -145,7 +145,7 @@ jobs:
             -e LEO_MACHINE_ID="$LEO_MACHINE_ID" \
             leo-backend:ci
           trap 'docker ps -a --filter name=leo-backend-smoke; docker logs leo-backend-smoke --tail 300 || true; docker rm -f leo-backend-smoke || true' EXIT
-          timeout 240 bash -c 'until curl --max-time 5 -fsS http://127.0.0.1:11211/api/health; do sleep 3; done'
+          timeout 240 bash -c 'until curl --max-time 5 -fsS http://127.0.0.1:11211/api/v2.0/health; do sleep 3; done'
 
       - name: Upload backend artifact
         uses: actions/upload-artifact@v4
