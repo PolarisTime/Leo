@@ -4,6 +4,7 @@ import com.leo.erp.common.web.PublicAccess;
 import com.leo.erp.system.setup.service.InitialSetupCoordinator;
 import com.leo.erp.system.setup.web.dto.InitialSetupAccountSubmitRequest;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -24,7 +25,10 @@ public class V2InitialSetupController {
     }
 
     @PostMapping("/account")
-    public String configureAccount(@Valid @RequestBody InitialSetupAccountSubmitRequest request) {
-        return initialSetupCoordinator.configureAccount(request);
+    public ResponseEntity<Void> configureAccount(
+            @Valid @RequestBody InitialSetupAccountSubmitRequest request
+    ) {
+        initialSetupCoordinator.configureAccount(request);
+        return ResponseEntity.noContent().build();
     }
 }
