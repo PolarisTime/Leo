@@ -1,3 +1,10 @@
+# [9.1.0](https://github.com/PolarisTime/Leo/compare/v9.0.1...v9.1.0) (2026-08-01)
+
+
+### Features
+
+* **print:** 合并A4打印同款明细 ([78bfb99](https://github.com/PolarisTime/Leo/commit/78bfb9905e11c431215dd0292fdddc3fbcbae4aa))
+
 ## [9.0.1](https://github.com/PolarisTime/Leo/compare/v9.0.0...v9.0.1) (2026-08-01)
 
 
