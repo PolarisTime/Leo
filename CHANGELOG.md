@@ -1,3 +1,10 @@
+## [9.0.1](https://github.com/PolarisTime/Leo/compare/v9.0.0...v9.0.1) (2026-08-01)
+
+
+### Bug Fixes
+
+* **api:** 修复标量响应导致的编码解析失败 ([b664a1a](https://github.com/PolarisTime/Leo/commit/b664a1a6845f38e5b97dd08309402aa3e945275d))
+
 # [9.0.0](https://github.com/PolarisTime/Leo/compare/v8.4.0...v9.0.0) (2026-08-01)
 
 
