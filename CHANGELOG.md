@@ -1,3 +1,10 @@
+# [9.2.0](https://github.com/PolarisTime/Leo/compare/v9.1.0...v9.2.0) (2026-08-01)
+
+
+### Features
+
+* **print:** 支持切换销售订单明细合并模式 ([2d5e124](https://github.com/PolarisTime/Leo/commit/2d5e124d32bf87224224fe73838bd5eaf7dbec02))
+
 # [9.1.0](https://github.com/PolarisTime/Leo/compare/v9.0.1...v9.1.0) (2026-08-01)
 
 
