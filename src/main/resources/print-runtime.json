@@ -346,7 +346,7 @@
   },
   "xlsxExports": {
     "sales-order": {
-      "templateResource": "print-forms/sales-order-print-v1.xlsx",
+      "templateResource": "print-forms/sales-order-print-v1.1.xlsx",
       "sheetName": "销售订单",
       "rowsPerPage": 7,
       "header": [
