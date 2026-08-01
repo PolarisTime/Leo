@@ -7,6 +7,7 @@ import java.util.Objects;
 public record PrintRenderOptions(
         boolean hideUnitPrice,
         boolean hideRemark,
+        boolean mergeEquivalentItems,
         String brandOverride,
         Map<String, String> brandOverrides,
         Map<String, String> brandOverridesByItemId,
@@ -29,7 +30,7 @@ public record PrintRenderOptions(
     }
 
     public static PrintRenderOptions defaults() {
-        return new PrintRenderOptions(false, false, "", Map.of(), Map.of(), List.of(), null);
+        return new PrintRenderOptions(false, false, true, "", Map.of(), Map.of(), List.of(), null);
     }
 
     public static PrintRenderOptions from(Object rawOptions) {
@@ -43,6 +44,7 @@ public record PrintRenderOptions(
         return new PrintRenderOptions(
                 Boolean.TRUE.equals(options.get("hideUnitPrice")),
                 Boolean.TRUE.equals(options.get("hideRemark")),
+                !Boolean.FALSE.equals(options.get("mergeEquivalentItems")),
                 itemOptions.brandOverride(),
                 itemOptions.brandOverrides(),
                 itemOptions.brandOverridesByItemId(),

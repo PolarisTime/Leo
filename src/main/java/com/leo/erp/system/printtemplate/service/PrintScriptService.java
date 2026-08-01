@@ -19,7 +19,6 @@ import java.util.Set;
 public class PrintScriptService {
 
     private static final String SALES_ORDER_MODULE = "sales-order";
-    private static final String SALES_ORDER_A4_TEMPLATE_CODE = "SALES_ORDER_YINGJIE_A4_REMARK_PDF";
 
     private final PrintTemplateRepository templateRepository;
     private final PrintRecordDataProvider dataProvider;
@@ -73,7 +72,7 @@ public class PrintScriptService {
         items = applyItemSelection(items, options);
         items = applyItemOrder(items, options);
         applyPrintOptions(data, items, options);
-        if (shouldMergeEquivalentItems(template, moduleKey)) {
+        if (shouldMergeEquivalentItems(moduleKey, options)) {
             items = PrintRecordItemMerger.mergeEquivalentItems(items);
         }
         items = layoutPreparer.prepare(moduleKey, template.getTemplateName(), template.getTemplateHtml(), data, items);
@@ -93,9 +92,12 @@ public class PrintScriptService {
         return result;
     }
 
-    private boolean shouldMergeEquivalentItems(PrintTemplate template, String moduleKey) {
+    private boolean shouldMergeEquivalentItems(
+            String moduleKey,
+            PrintRenderOptions options
+    ) {
         return SALES_ORDER_MODULE.equals(moduleKey)
-                && SALES_ORDER_A4_TEMPLATE_CODE.equals(template.getTemplateCode());
+                && (options == null || options.mergeEquivalentItems());
     }
 
     private List<Map<String, String>> appendLengthToSpec(List<Map<String, String>> items) {
