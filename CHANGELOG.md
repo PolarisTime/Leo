@@ -1,3 +1,18 @@
+# [9.0.0](https://github.com/PolarisTime/Leo/compare/v8.4.0...v9.0.0) (2026-08-01)
+
+
+* feat(api)!: 移除 V1 并统一 V2 契约 ([2834765](https://github.com/PolarisTime/Leo/commit/2834765840ae9d520a223adf896c2e064d4712c1))
+
+
+### Bug Fixes
+
+* **ci:** 更新 ArchUnit V2 冻结基线 ([3ca023d](https://github.com/PolarisTime/Leo/commit/3ca023d356b7444935f8cfc7406946412011020c))
+
+
+### BREAKING CHANGES
+
+* 移除所有未版本化 V1 API，客户端必须改用 /api/v2.0。
+
 # [8.4.0](https://github.com/PolarisTime/Leo/compare/v8.3.5...v8.4.0) (2026-07-30)
 
 
