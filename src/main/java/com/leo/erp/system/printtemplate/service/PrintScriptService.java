@@ -18,6 +18,9 @@ import java.util.Set;
 @Service
 public class PrintScriptService {
 
+    private static final String SALES_ORDER_MODULE = "sales-order";
+    private static final String SALES_ORDER_A4_TEMPLATE_CODE = "SALES_ORDER_YINGJIE_A4_REMARK_PDF";
+
     private final PrintTemplateRepository templateRepository;
     private final PrintRecordDataProvider dataProvider;
     private final PrintRecordEnricher recordEnricher;
@@ -69,11 +72,14 @@ public class PrintScriptService {
         assertTemplateMatchesSettlementCompany(template, data);
         items = applyItemSelection(items, options);
         items = applyItemOrder(items, options);
+        applyPrintOptions(data, items, options);
+        if (shouldMergeEquivalentItems(template, moduleKey)) {
+            items = PrintRecordItemMerger.mergeEquivalentItems(items);
+        }
         items = layoutPreparer.prepare(moduleKey, template.getTemplateName(), template.getTemplateHtml(), data, items);
         if ("COORD".equals(template.getTemplateType())) {
             items = appendLengthToSpec(items);
         }
-        applyPrintOptions(data, items, options);
 
         Map<String, Object> result = new HashMap<>();
         result.put("templateName", template.getTemplateName());
@@ -85,6 +91,11 @@ public class PrintScriptService {
         result.put("data", data);
         result.put("items", items);
         return result;
+    }
+
+    private boolean shouldMergeEquivalentItems(PrintTemplate template, String moduleKey) {
+        return SALES_ORDER_MODULE.equals(moduleKey)
+                && SALES_ORDER_A4_TEMPLATE_CODE.equals(template.getTemplateCode());
     }
 
     private List<Map<String, String>> appendLengthToSpec(List<Map<String, String>> items) {
