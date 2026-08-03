@@ -1,3 +1,10 @@
+## [9.2.1](https://github.com/PolarisTime/Leo/compare/v9.2.0...v9.2.1) (2026-08-03)
+
+
+### Bug Fixes
+
+* **purchase-inbound:** 允许明细使用不同仓库 ([5d6d3c0](https://github.com/PolarisTime/Leo/commit/5d6d3c0dff9d33104997170247f0437cf5fb4817))
+
 # [9.2.0](https://github.com/PolarisTime/Leo/compare/v9.1.0...v9.2.0) (2026-08-01)
 
 
