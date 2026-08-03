@@ -57,6 +57,7 @@ public class PurchaseInboundApplyService {
         String firstLineWarehouseName = null;
         Long firstLineWarehouseId = null;
         LinkedHashSet<Long> warehouseIds = new LinkedHashSet<>();
+        LinkedHashSet<String> warehouseNames = new LinkedHashSet<>();
         List<PurchaseInboundItem> managedItems = inbound.getItems();
         List<PurchaseInboundItem> items = ManagedEntityItemSupport.syncById(
                 new ArrayList<>(managedItems),
@@ -113,6 +114,10 @@ public class PurchaseInboundApplyService {
             if (item.getWarehouseId() != null) {
                 warehouseIds.add(item.getWarehouseId());
             }
+            String lineWarehouseName = trimToNull(result.firstLineWarehouseName());
+            if (lineWarehouseName != null) {
+                warehouseNames.add(lineWarehouseName);
+            }
 
             totalWeight = totalWeight.add(result.weightTon());
             totalAmount = totalAmount.add(result.amount());
@@ -125,14 +130,9 @@ public class PurchaseInboundApplyService {
                 ? request.purchaseOrderNo()
                 : String.join(", ", sourcePurchaseOrderNos));
         applyHeaderSupplier(inbound, request, sourcePurchaseOrderItemMap);
-        if (warehouseIds.size() > 1) {
-            throw new com.leo.erp.common.error.BusinessException(
-                    com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
-                    "采购入库单明细存在不同仓库，不能合并保存"
-            );
-        }
-        inbound.setWarehouseId(request.warehouseId() == null ? firstLineWarehouseId : request.warehouseId());
-        inbound.setWarehouseName(resolveHeaderWarehouseName(request.warehouseName(), firstLineWarehouseName));
+        inbound.setWarehouseId(resolveHeaderWarehouseId(request.warehouseId(), firstLineWarehouseId, warehouseIds));
+        inbound.setWarehouseName(resolveHeaderWarehouseName(
+                request.warehouseName(), firstLineWarehouseName, warehouseNames, warehouseIds));
         inbound.setSettlementMode(resolveHeaderSettlementMode(request.settlementMode(), items));
         applyHeaderSettlementCompany(inbound, items);
         inbound.setTotalWeight(TradeItemCalculator.scaleWeightTon(totalWeight));
@@ -204,7 +204,28 @@ public class PurchaseInboundApplyService {
                 .toList();
     }
 
-    private String resolveHeaderWarehouseName(String requestWarehouseName, String firstLineWarehouseName) {
+    private Long resolveHeaderWarehouseId(Long requestWarehouseId,
+                                          Long firstLineWarehouseId,
+                                          LinkedHashSet<Long> warehouseIds) {
+        if (warehouseIds.size() > 1) {
+            return null;
+        }
+        if (warehouseIds.size() == 1) {
+            return warehouseIds.iterator().next();
+        }
+        return requestWarehouseId == null ? firstLineWarehouseId : requestWarehouseId;
+    }
+
+    private String resolveHeaderWarehouseName(String requestWarehouseName,
+                                              String firstLineWarehouseName,
+                                              LinkedHashSet<String> warehouseNames,
+                                              LinkedHashSet<Long> warehouseIds) {
+        if (warehouseIds.size() > 1 || warehouseNames.size() > 1) {
+            return "多仓库";
+        }
+        if (warehouseNames.size() == 1) {
+            return warehouseNames.iterator().next();
+        }
         String normalized = trimToNull(requestWarehouseName);
         return normalized == null ? firstLineWarehouseName : normalized;
     }
