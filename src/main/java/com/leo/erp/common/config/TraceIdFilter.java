@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 @Component
@@ -26,21 +27,31 @@ public class TraceIdFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        // 主路径：优先回显 Micrometer/OTel 写入 MDC 的 trace id，保证响应头与日志、链路系统一致
-        String existingTraceId = normalizeTraceId(MDC.get(MDC_KEY));
-        if (existingTraceId != null) {
-            response.setHeader(TRACE_ID_HEADER, existingTraceId);
-            filterChain.doFilter(request, response);
-            return;
+        // 优先使用 Micrometer/OTel 写入 MDC 的真实 trace id；未采样请求使用 correlation id 兜底。
+        String originalMdcTraceId = MDC.get(MDC_KEY);
+        String traceId = normalizeTraceId(originalMdcTraceId);
+        boolean temporaryMdcTraceId = false;
+        if (traceId == null) {
+            traceId = normalizeTraceId(request.getHeader(TRACE_ID_HEADER));
+            if (traceId == null) {
+                traceId = UUID.randomUUID().toString().replace("-", "");
+            }
+            MDC.put(MDC_KEY, traceId);
+            temporaryMdcTraceId = true;
         }
 
-        // legacy 兜底：仅当 MDC 无 trace id（如未采样/filter 早于 span 创建）时，回显调用方自带的
-        // X-Trace-Id，作为兼容用的 correlation id，不视为主 trace 来源，也不写入 MDC / 创建 span
-        String traceId = normalizeTraceId(request.getHeader(TRACE_ID_HEADER));
-        if (traceId != null) {
-            response.setHeader(TRACE_ID_HEADER, traceId);
+        response.setHeader(TRACE_ID_HEADER, traceId);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            if (temporaryMdcTraceId) {
+                if (originalMdcTraceId == null) {
+                    MDC.remove(MDC_KEY);
+                } else {
+                    MDC.put(MDC_KEY, originalMdcTraceId);
+                }
+            }
         }
-        filterChain.doFilter(request, response);
     }
 
     private static String normalizeTraceId(String traceId) {
