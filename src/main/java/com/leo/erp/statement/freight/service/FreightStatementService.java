@@ -311,8 +311,9 @@ public class FreightStatementService extends AbstractStatusCrudService<
 
     @Override
     protected void apply(FreightStatement entity, FreightStatementCommand command) {
+        boolean creating = entity.getStatus() == null;
         lockSourceFreightBills(entity, command);
-        if (entity.getId() != null) {
+        if (!creating) {
             settlementMutationGuard.assertFinancialLinkageMutationAllowed(
                     StatementSettlementMutationGuard.StatementType.FREIGHT,
                     entity.getId(),
