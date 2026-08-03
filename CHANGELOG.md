@@ -1,3 +1,10 @@
+## [9.2.2](https://github.com/PolarisTime/Leo/compare/v9.2.1...v9.2.2) (2026-08-03)
+
+
+### Bug Fixes
+
+* **purchase-inbound:** 放宽多仓库入库表头约束 ([7082be4](https://github.com/PolarisTime/Leo/commit/7082be4cf17857abf85f67f80207e8fed1db80ce))
+
 ## [9.2.1](https://github.com/PolarisTime/Leo/compare/v9.2.0...v9.2.1) (2026-08-03)
 
 
