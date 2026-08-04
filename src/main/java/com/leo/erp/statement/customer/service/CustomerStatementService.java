@@ -266,8 +266,9 @@ public class CustomerStatementService extends AbstractStatusCrudService<
 
     @Override
     protected void apply(CustomerStatement entity, CustomerStatementRequest request) {
+        boolean creating = entity.getStatus() == null;
         lockSourceSalesOrders(entity, request);
-        if (entity.getId() != null) {
+        if (!creating) {
             settlementMutationGuard.assertFinancialLinkageMutationAllowed(
                     StatementSettlementMutationGuard.StatementType.CUSTOMER,
                     entity.getId(),
