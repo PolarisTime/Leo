@@ -1,3 +1,18 @@
+# [9.3.0](https://github.com/PolarisTime/Leo/compare/v9.2.2...v9.3.0) (2026-08-04)
+
+
+### Bug Fixes
+
+* **freight-statement:** 修复新建对账单结算校验 ([657fd88](https://github.com/PolarisTime/Leo/commit/657fd880bb7763b3fb154a053749f9421981fb38))
+* **observability:** 补全未采样请求的追踪标识 ([825a6fb](https://github.com/PolarisTime/Leo/commit/825a6fbeb93286c1db6d4d9278ade18a77c4a18c))
+* **print:** 打印字段补充 SQL 增加只读断言 ([8777b5d](https://github.com/PolarisTime/Leo/commit/8777b5d27de0cc1c2995b0a4876afdc46bc28019))
+* **statement:** 修复新建客户对账单误执行结算校验 ([93da71f](https://github.com/PolarisTime/Leo/commit/93da71fc45092b291763ba3381757cdff3f15abf))
+
+
+### Features
+
+* **print:** 生产库手动打印模板迁移为文件托管 ([7bf4b0a](https://github.com/PolarisTime/Leo/commit/7bf4b0a402515c0fa6be80024bcf244a8e4337eb))
+
 ## [9.2.2](https://github.com/PolarisTime/Leo/compare/v9.2.1...v9.2.2) (2026-08-03)
 
 
