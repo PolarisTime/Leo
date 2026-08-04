@@ -1,6 +1,8 @@
 package com.leo.erp.system.printtemplate.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -11,6 +13,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Component
@@ -21,6 +24,7 @@ class PrintRecordEnricher {
     private static final String RESULT_LIST = "list";
     private static final String SETTLEMENT_COMPANY_ID = "settlementCompanyId";
     private static final String SETTLEMENT_COMPANY_NAME = "settlementCompanyName";
+    private static final Pattern READ_ONLY_SQL = Pattern.compile("(?is)^\\s*(?:select|with)\\b.*");
 
     private final JdbcTemplate jdbc;
     private final PrintRecordFieldFormatter formatter;
@@ -82,6 +86,7 @@ class PrintRecordEnricher {
         }
 
         String sql = runtimeProperties.text(rule, "sql", "");
+        assertReadOnlySql(sql);
         if (RESULT_LIST.equals(runtimeProperties.text(rule, "result", ""))) {
             List<String> values = jdbc.queryForList(sql, String.class, arguments);
             if (!values.isEmpty()) {
@@ -151,6 +156,7 @@ class PrintRecordEnricher {
         }
 
         String sql = placeholders(runtimeProperties.text(rule, "sql", ""), sourceValues.size());
+        assertReadOnlySql(sql);
         List<Map<String, Object>> rows = jdbc.queryForList(sql, sourceValues.toArray());
         Map<String, Map<String, Object>> rowsByKey = rowsByKey(rows, runtimeProperties.text(rule, "lookupKeyColumn", ""));
         Map<String, JsonNode> targetFields = runtimeProperties.childFields(rule.path("targetFields"));
@@ -174,6 +180,12 @@ class PrintRecordEnricher {
             }
         }
         return values;
+    }
+
+    private void assertReadOnlySql(String sql) {
+        if (sql == null || !READ_ONLY_SQL.matcher(sql).matches() || sql.contains(";")) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "打印字段补充 SQL 必须是只读查询");
+        }
     }
 
     private String placeholders(String sql, int size) {
