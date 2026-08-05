@@ -1,3 +1,16 @@
+# [9.9.0](https://github.com/PolarisTime/Leo/compare/v9.8.0...v9.9.0) (2026-08-05)
+
+
+### Bug Fixes
+
+* **print:** 打印模板文件同步的状态写入收敛到 ApplyService ([10e41f5](https://github.com/PolarisTime/Leo/commit/10e41f5a403a5e73a1b036779d245f9c88dbfae4))
+* **sales-outbound:** 兼容精简保存 payload，材料类字段按来源明细重载 ([0f9d91c](https://github.com/PolarisTime/Leo/commit/0f9d91c2d3bab45ef61fed527226bd2afbd89b83))
+
+
+### Features
+
+* **print:** 打印模板文件跟随部署自动同步 ([d99e0ff](https://github.com/PolarisTime/Leo/commit/d99e0ff7acceeda4020742f639aafd6b43b4da46))
+
 # [9.8.0](https://github.com/PolarisTime/Leo/compare/v9.7.2...v9.8.0) (2026-08-05)
 
 
