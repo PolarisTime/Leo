@@ -14,6 +14,10 @@ import java.util.Map;
 @Service
 public class PrintPdfTableRenderer {
 
+    private static final String GROUP_HEADER_SOURCE = "source";
+    private static final String GROUP_HEADER_PROJECT = "project";
+    private static final String GROUP_HEADER_KEY = "isGroupHeader";
+
     private final PrintPdfFormValueResolver valueResolver;
     private final PrintPdfDrawingSupport drawing;
 
@@ -70,6 +74,11 @@ public class PrintPdfTableRenderer {
             Map<String, String> item,
             PrintPdfDrawingSupport.PageMetrics pageMetrics
     ) {
+        if (GROUP_HEADER_SOURCE.equals(item.get(GROUP_HEADER_KEY))
+                || GROUP_HEADER_PROJECT.equals(item.get(GROUP_HEADER_KEY))) {
+            drawGroupHeaderRow(canvas, font, tableConfig, top, item, pageMetrics);
+            return;
+        }
         float left = drawing.number(tableConfig, "left", 28f);
         float rowHeight = drawing.number(tableConfig, "rowHeight", 26f);
         Color borderColor = drawing.color(tableConfig, "borderColor", ColorConstants.BLACK);
@@ -104,6 +113,67 @@ public class PrintPdfTableRenderer {
             );
             left += width;
         }
+    }
+
+    void drawGroupHeaderRow(
+            PdfCanvas canvas,
+            PdfFont font,
+            JsonNode tableConfig,
+            float top,
+            Map<String, String> groupHeader,
+            PrintPdfDrawingSupport.PageMetrics pageMetrics
+    ) {
+        float left = drawing.number(tableConfig, "left", 28f);
+        float width = drawing.tableWidth(tableConfig);
+        float lineWidth = drawing.number(tableConfig, "lineWidth", 1f);
+        Color borderColor = drawing.color(tableConfig, "borderColor", ColorConstants.BLACK);
+        JsonNode headerConfig = tableConfig.path("groupHeader");
+        float rowHeight = drawing.number(headerConfig, "height", 18f);
+        Color fillColor = drawing.color(
+                headerConfig,
+                "fillColor",
+                drawing.color(tableConfig, "headerFillColor", ColorConstants.WHITE)
+        );
+        Color textColor = drawing.color(
+                headerConfig,
+                "textColor",
+                drawing.color(tableConfig, "textColor", ColorConstants.BLACK)
+        );
+        float fontSize = drawing.number(headerConfig, "fontSize", 8.5f);
+
+        drawing.drawRect(canvas, left, top, width, rowHeight, fillColor, borderColor, lineWidth, pageMetrics);
+        drawing.drawCanvasText(
+                canvas,
+                font,
+                groupHeaderLabel(groupHeader),
+                left + 4,
+                top + 4,
+                width - 8,
+                rowHeight - 4,
+                fontSize,
+                TextAlignment.LEFT,
+                textColor,
+                pageMetrics
+        );
+    }
+
+    private String groupHeaderLabel(Map<String, String> groupHeader) {
+        if (GROUP_HEADER_SOURCE.equals(groupHeader.get(GROUP_HEADER_KEY))) {
+            return "来源物流单：" + groupValue(groupHeader, "sourceNo", "-")
+                    + "  合计：数量 " + groupValue(groupHeader, "totalQuantity", "0")
+                    + "，重量 " + groupValue(groupHeader, "totalWeightTon", "0") + " 吨"
+                    + "，运费单价 " + groupValue(groupHeader, "unitPrice", "0.00") + " 元/吨"
+                    + "，运费总价 " + groupValue(groupHeader, "totalFreight", "0.00") + " 元";
+        }
+        return "客户：" + groupValue(groupHeader, "customerName", "-")
+                + "  项目：" + groupValue(groupHeader, "projectName", "-")
+                + "  小计：数量 " + groupValue(groupHeader, "totalQuantity", "0")
+                + "，重量 " + groupValue(groupHeader, "totalWeightTon", "0") + " 吨";
+    }
+
+    private String groupValue(Map<String, String> groupHeader, String key, String fallback) {
+        String value = groupHeader == null ? null : groupHeader.get(key);
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     void drawNoContentRow(PdfCanvas canvas, PdfFont font, JsonNode tableConfig, float top, PrintPdfDrawingSupport.PageMetrics pageMetrics) {

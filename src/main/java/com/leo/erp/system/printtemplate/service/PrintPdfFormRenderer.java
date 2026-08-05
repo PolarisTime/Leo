@@ -18,6 +18,10 @@ import java.util.Map;
 @Service
 public class PrintPdfFormRenderer {
 
+    private static final String GROUP_HEADER_SOURCE = "source";
+    private static final String GROUP_HEADER_PROJECT = "project";
+    private static final String GROUP_HEADER_KEY = "isGroupHeader";
+
     private final PrintPdfFormValueResolver valueResolver;
     private final PrintPdfFontFactory fontFactory;
     private final PrintPdfDrawingSupport drawing;
@@ -68,41 +72,55 @@ public class PrintPdfFormRenderer {
         float headerHeight = drawing.number(tableConfig, "headerHeight", 28f);
         int maxRowsPerPage = Math.max(1, drawing.integer(tableConfig, "maxRowsPerPage", 16));
         List<JsonNode> columns = drawing.childObjects(tableConfig.path("columns"));
+        boolean renderTable = tableConfig.isObject();
 
         int itemIndex = 0;
         do {
             PdfCanvas canvas = new PdfCanvas(pdf.addNewPage(new PageSize(pageMetrics.width(), pageMetrics.height())));
             pageContentRenderer.drawStatic(canvas, font, root.path("static"), variables, pageMetrics);
             pageContentRenderer.drawFields(canvas, fieldsConfig, data, font, pageMetrics);
+            float rowTop = tableTop + (renderTable ? headerHeight : 0);
             int rowsOnPage = 0;
-            if (tableConfig.isObject()) {
-                rowsOnPage = Math.min(items.size() - itemIndex, maxRowsPerPage);
-                boolean lastPage = itemIndex + rowsOnPage >= items.size();
+            if (renderTable) {
                 tableRenderer.drawHeader(canvas, font, tableConfig, columns, pageMetrics);
-                for (int row = 0; row < rowsOnPage; row++) {
-                    tableRenderer.drawItemRow(
-                            canvas,
-                            font,
-                            tableConfig,
-                            columns,
-                            tableTop + headerHeight + row * rowHeight,
-                            items.get(itemIndex + row),
-                            pageMetrics
-                    );
+            }
+            boolean lastPage = true;
+            while (renderTable && itemIndex < items.size()) {
+                Map<String, String> item = items.get(itemIndex);
+                boolean groupHeader = isGroupHeader(item);
+                if (rowsOnPage >= maxRowsPerPage) {
+                    lastPage = false;
+                    break;
                 }
-                float nextTop = tableTop + headerHeight + rowsOnPage * rowHeight;
-                if (items.isEmpty()) {
-                    tableRenderer.drawNoContentRow(canvas, font, tableConfig, nextTop, pageMetrics);
-                    nextTop += rowHeight;
+                tableRenderer.drawItemRow(canvas, font, tableConfig, columns, rowTop, item, pageMetrics);
+                rowTop += groupHeader ? groupHeaderHeight(tableConfig) : rowHeight;
+                if (!groupHeader) {
+                    rowsOnPage++;
                 }
-                if (lastPage) {
-                    nextTop = tableRenderer.drawSummary(canvas, font, root.path("summary"), tableConfig, variables, nextTop, pageMetrics);
-                    tableRenderer.drawClauses(canvas, font, root.path("clauses"), tableConfig, nextTop, pageMetrics);
-                }
+                itemIndex++;
+            }
+            if (renderTable && items.isEmpty()) {
+                tableRenderer.drawNoContentRow(canvas, font, tableConfig, rowTop, pageMetrics);
+                rowTop += rowHeight;
+            }
+            if (renderTable && lastPage) {
+                rowTop = tableRenderer.drawSummary(canvas, font, root.path("summary"), tableConfig, variables, rowTop, pageMetrics);
+                tableRenderer.drawClauses(canvas, font, root.path("clauses"), tableConfig, rowTop, pageMetrics);
             }
             canvas.release();
-            itemIndex += rowsOnPage;
-        } while (tableConfig.isObject() && itemIndex < items.size());
+            if (lastPage) {
+                break;
+            }
+        } while (true);
+    }
+
+    private boolean isGroupHeader(Map<String, String> item) {
+        return GROUP_HEADER_SOURCE.equals(item.get(GROUP_HEADER_KEY))
+                || GROUP_HEADER_PROJECT.equals(item.get(GROUP_HEADER_KEY));
+    }
+
+    private float groupHeaderHeight(JsonNode tableConfig) {
+        return drawing.number(tableConfig.path("groupHeader"), "height", 18f);
     }
 
 }

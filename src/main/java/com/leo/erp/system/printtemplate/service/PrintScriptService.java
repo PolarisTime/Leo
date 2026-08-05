@@ -7,6 +7,8 @@ import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -19,6 +21,10 @@ import java.util.Set;
 public class PrintScriptService {
 
     private static final String SALES_ORDER_MODULE = "sales-order";
+    private static final String FREIGHT_STATEMENT_MODULE = "freight-statement";
+    private static final String PDF_FORM_TEMPLATE_TYPE = "PDF_FORM";
+    private static final String GROUP_HEADER_SOURCE = "source";
+    private static final String GROUP_HEADER_PROJECT = "project";
 
     private final PrintTemplateRepository templateRepository;
     private final PrintRecordDataProvider dataProvider;
@@ -76,6 +82,10 @@ public class PrintScriptService {
             items = PrintRecordItemMerger.mergeEquivalentItems(items);
         }
         items = layoutPreparer.prepare(moduleKey, template.getTemplateName(), template.getTemplateHtml(), data, items);
+        if (FREIGHT_STATEMENT_MODULE.equals(moduleKey)
+                && PDF_FORM_TEMPLATE_TYPE.equals(template.getTemplateType())) {
+            items = groupItemsForPdf(items);
+        }
         if ("COORD".equals(template.getTemplateType())) {
             items = appendLengthToSpec(items);
         }
@@ -98,6 +108,113 @@ public class PrintScriptService {
     ) {
         return SALES_ORDER_MODULE.equals(moduleKey)
                 && (options == null || options.mergeEquivalentItems());
+    }
+
+    private List<Map<String, String>> groupItemsForPdf(List<Map<String, String>> items) {
+        Map<String, List<Map<String, String>>> sourceGroups = new LinkedHashMap<>();
+        for (Map<String, String> item : items) {
+            String sourceId = normalizeText(item.get("sourceFreightBillId"));
+            String sourceNo = normalizeText(item.get("sourceNo"));
+            String key = !sourceId.isBlank()
+                    ? "source-id:" + sourceId
+                    : !sourceNo.isBlank() ? "source-no:" + sourceNo : "unassigned";
+            sourceGroups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(item);
+        }
+
+        List<Map<String, String>> rows = new ArrayList<>();
+        int lineIndex = 0;
+        for (List<Map<String, String>> groupItems : sourceGroups.values()) {
+            rows.add(sourceGroupHeader(groupItems));
+            Map<String, List<Map<String, String>>> projectGroups = new LinkedHashMap<>();
+            for (Map<String, String> item : groupItems) {
+                String projectName = normalizeText(item.get("projectName"));
+                String key = !projectName.isBlank() ? "project:" + projectName : "unassigned";
+                projectGroups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(item);
+            }
+            for (List<Map<String, String>> projectItems : projectGroups.values()) {
+                rows.add(projectGroupHeader(projectItems));
+                for (Map<String, String> item : projectItems) {
+                    item.put("index", String.valueOf(++lineIndex));
+                    rows.add(item);
+                }
+            }
+        }
+        return rows;
+    }
+
+    private Map<String, String> sourceGroupHeader(List<Map<String, String>> groupItems) {
+        BigDecimal totalWeight = sumDecimal(groupItems, "weightTon");
+        BigDecimal totalFreight = firstPositiveDecimal(groupItems, "amount");
+        BigDecimal unitPrice = totalWeight.signum() > 0
+                ? totalFreight.divide(totalWeight, 2, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+        Map<String, String> header = new LinkedHashMap<>();
+        header.put("isGroupHeader", GROUP_HEADER_SOURCE);
+        header.put("sourceNo", distinctText(groupItems, "sourceNo"));
+        header.put("totalQuantity", String.valueOf(sumInteger(groupItems, "quantity")));
+        header.put("totalWeightTon", plainNumber(totalWeight));
+        header.put("totalFreight", plainAmount(totalFreight));
+        header.put("unitPrice", plainAmount(unitPrice));
+        return header;
+    }
+
+    private Map<String, String> projectGroupHeader(List<Map<String, String>> projectItems) {
+        Map<String, String> header = new LinkedHashMap<>();
+        header.put("isGroupHeader", GROUP_HEADER_PROJECT);
+        header.put("customerName", distinctText(projectItems, "customerName"));
+        header.put("projectName", distinctText(projectItems, "projectName"));
+        header.put("totalQuantity", String.valueOf(sumInteger(projectItems, "quantity")));
+        header.put("totalWeightTon", plainNumber(sumDecimal(projectItems, "weightTon")));
+        return header;
+    }
+
+    private String distinctText(List<Map<String, String>> items, String key) {
+        return items.stream()
+                .map(item -> normalizeText(item.get(key)))
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .collect(java.util.stream.Collectors.joining("、"));
+    }
+
+    private BigDecimal sumDecimal(List<Map<String, String>> items, String key) {
+        return items.stream()
+                .map(item -> decimalOf(item.get(key)))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private int sumInteger(List<Map<String, String>> items, String key) {
+        return items.stream()
+                .mapToInt(item -> decimalOf(item.get(key)).intValue())
+                .sum();
+    }
+
+    private BigDecimal firstPositiveDecimal(List<Map<String, String>> items, String key) {
+        for (Map<String, String> item : items) {
+            BigDecimal value = decimalOf(item.get(key));
+            if (value.signum() > 0) {
+                return value;
+            }
+        }
+        return BigDecimal.ZERO;
+    }
+
+    private BigDecimal decimalOf(String value) {
+        if (value == null || value.isBlank()) {
+            return BigDecimal.ZERO;
+        }
+        try {
+            return new BigDecimal(value.trim());
+        } catch (NumberFormatException ignored) {
+            return BigDecimal.ZERO;
+        }
+    }
+
+    private String plainAmount(BigDecimal value) {
+        return value == null ? "0.00" : value.setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private String plainNumber(BigDecimal value) {
+        return value == null ? "0" : value.stripTrailingZeros().toPlainString();
     }
 
     private List<Map<String, String>> appendLengthToSpec(List<Map<String, String>> items) {
