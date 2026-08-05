@@ -1,3 +1,10 @@
+# [9.5.0](https://github.com/PolarisTime/Leo/compare/v9.4.0...v9.5.0) (2026-08-05)
+
+
+### Features
+
+* **print:** 登记生产物流对账单 PDF 打印模板 ([8d55ae7](https://github.com/PolarisTime/Leo/commit/8d55ae777e72603953718d1f04f8ab6a06e482df))
+
 # [9.4.0](https://github.com/PolarisTime/Leo/compare/v9.3.0...v9.4.0) (2026-08-05)
 
 
