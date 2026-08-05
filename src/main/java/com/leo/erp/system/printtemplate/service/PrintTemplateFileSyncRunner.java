@@ -30,25 +30,26 @@ public class PrintTemplateFileSyncRunner implements ApplicationRunner {
     private static final String SOURCE_REF_PREFIX = "print-forms/";
     private static final String COORD_SOURCE_REF_SUFFIX = ".lodop.txt";
     private static final String PDF_FORM_SOURCE_REF_SUFFIX = ".layout.json";
-    private static final String STATUS_ACTIVE = "ACTIVE";
-    private static final String STATUS_DISABLED = "DISABLED";
 
     private final PrintTemplateRepository repository;
     private final PrintPdfFormTemplateValidator pdfFormTemplateValidator;
     private final PrintTemplateManifest manifest;
     private final CompanySettingRepository companySettingRepository;
     private final SnowflakeIdGenerator idGenerator;
+    private final PrintTemplateApplyService templateApplyService;
 
     public PrintTemplateFileSyncRunner(PrintTemplateRepository repository,
                                        PrintPdfFormTemplateValidator pdfFormTemplateValidator,
                                        PrintTemplateManifest manifest,
                                        CompanySettingRepository companySettingRepository,
-                                       SnowflakeIdGenerator idGenerator) {
+                                       SnowflakeIdGenerator idGenerator,
+                                       PrintTemplateApplyService templateApplyService) {
         this.repository = repository;
         this.pdfFormTemplateValidator = pdfFormTemplateValidator;
         this.manifest = manifest;
         this.companySettingRepository = companySettingRepository;
         this.idGenerator = idGenerator;
+        this.templateApplyService = templateApplyService;
     }
 
     @Override
@@ -117,7 +118,7 @@ public class PrintTemplateFileSyncRunner implements ApplicationRunner {
                 ? TEMPLATE_TYPE_PDF_FORM
                 : TEMPLATE_ENGINE_LODOP);
         template.setVersionNo(1);
-        template.setStatus(STATUS_ACTIVE);
+        templateApplyService.activate(template);
         template.setSyncMode(SYNC_MODE_FILE);
         template.setSourceRef(normalizeSourceRef(template, item.getSourceRef()));
         resolveSettlementCompany(item, template);
@@ -151,10 +152,10 @@ public class PrintTemplateFileSyncRunner implements ApplicationRunner {
 
     /** 源文件从仓库移除时停用对应模板（不物理删除）。 */
     private boolean disableTemplate(PrintTemplate template) {
-        if (STATUS_DISABLED.equals(template.getStatus())) {
+        if (templateApplyService.isDisabled(template)) {
             return false;
         }
-        template.setStatus(STATUS_DISABLED);
+        templateApplyService.disable(template);
         repository.save(template);
         log.info("Disabled print template whose file was removed: code={}, sourceRef={}",
                 template.getTemplateCode(), template.getSourceRef());
