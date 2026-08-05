@@ -1,3 +1,10 @@
+## [9.7.2](https://github.com/PolarisTime/Leo/compare/v9.7.1...v9.7.2) (2026-08-05)
+
+
+### Bug Fixes
+
+* **print:** 物流对账单打印模板优化 ([2581337](https://github.com/PolarisTime/Leo/commit/25813372fc2a1da47c8e5f5deeaaf3c00346ff52))
+
 ## [9.7.1](https://github.com/PolarisTime/Leo/compare/v9.7.0...v9.7.1) (2026-08-05)
 
 
