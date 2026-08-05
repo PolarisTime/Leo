@@ -1,6 +1,8 @@
 package com.leo.erp.system.printtemplate.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.system.company.repository.CompanySettingRepository;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
 import org.junit.jupiter.api.Test;
@@ -11,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -550,9 +553,15 @@ class PrintTemplateFileSyncRunnerTest {
     }
 
     private PrintTemplateFileSyncRunner runner(PrintTemplateRepository repository) {
+        PrintTemplateManifest manifest = mock(PrintTemplateManifest.class);
+        when(manifest.getTemplates()).thenReturn(Collections.emptyList());
+        when(manifest.getSourceRefs()).thenReturn(Collections.emptySet());
         return new PrintTemplateFileSyncRunner(
                 repository,
-                new PrintPdfFormTemplateValidator(new ObjectMapper())
+                new PrintPdfFormTemplateValidator(new ObjectMapper()),
+                manifest,
+                mock(CompanySettingRepository.class),
+                mock(SnowflakeIdGenerator.class)
         );
     }
 }

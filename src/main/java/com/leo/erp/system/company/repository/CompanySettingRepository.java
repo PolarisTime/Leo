@@ -49,4 +49,6 @@ public interface CompanySettingRepository extends JpaRepository<CompanySetting, 
     boolean existsByDeletedFlagFalse();
 
     boolean existsByCompanyNameAndDeletedFlagFalse(String companyName);
+
+    Optional<CompanySetting> findFirstByCompanyNameAndDeletedFlagFalse(String companyName);
 }
