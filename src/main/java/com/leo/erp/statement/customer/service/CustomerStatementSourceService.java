@@ -31,8 +31,10 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.LongSupplier;
+import java.util.stream.Collectors;
 
 @Service
 public class CustomerStatementSourceService {
@@ -349,21 +351,29 @@ public class CustomerStatementSourceService {
     }
 
     private SettlementCompanySnapshot resolveStatementSettlementCompany(List<OrderSnapshot> orders) {
-        List<SettlementCompanySnapshot> snapshots = orders.stream()
-                .map(order -> new SettlementCompanySnapshot(
-                        order.settlementCompanyId(),
-                        trimToNull(order.settlementCompanyName())
-                ))
-                .filter(snapshot -> snapshot.id() != null || snapshot.name() != null)
+        // 结算主体一致性按 id 判断：同一 id 下 name 快照可能存在历史写法差异，
+        // 不应因 name 不一致而误判为不同结算主体（反规范化快照漂移）。
+        Set<Long> companyIds = orders.stream()
+                .map(OrderSnapshot::settlementCompanyId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<String> companyNames = orders.stream()
+                .map(OrderSnapshot::settlementCompanyName)
+                .map(this::trimToNull)
+                .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-        if (snapshots.isEmpty()) {
-            return new SettlementCompanySnapshot(null, null);
-        }
-        if (snapshots.size() > 1) {
+        if (companyIds.size() > 1) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单存在不同客户结算主体，不能合并生成客户对账单");
         }
-        return snapshots.get(0);
+        if (companyIds.size() == 1) {
+            String name = companyNames.isEmpty() ? null : companyNames.get(0);
+            return new SettlementCompanySnapshot(companyIds.iterator().next(), name);
+        }
+        if (companyNames.size() > 1) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单存在不同客户结算主体，不能合并生成客户对账单");
+        }
+        return new SettlementCompanySnapshot(null, companyNames.isEmpty() ? null : companyNames.get(0));
     }
 
     private CustomerStatementCandidateResponse toCandidateResponse(CandidateSnapshot order) {

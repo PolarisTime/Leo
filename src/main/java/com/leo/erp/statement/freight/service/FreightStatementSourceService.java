@@ -280,22 +280,33 @@ public class FreightStatementSourceService {
     }
 
     private SettlementCompanySnapshot resolveStatementSettlementCompany(List<BillSnapshot> sourceBills) {
-        List<SettlementCompanySnapshot> snapshots = sourceBills.stream()
-                .map(bill -> new SettlementCompanySnapshot(
-                        bill.settlementCompanyId(),
-                        trimToNull(bill.settlementCompanyName())
-                ))
-                .filter(snapshot -> snapshot.id() != null || snapshot.name() != null)
+        // 结算主体一致性按 id 判断：同一 id 下 name 快照可能存在历史写法差异（如"颖捷建材"与"嘉兴颖捷建材有限公司"），
+        // 不应因 name 不一致而误判为不同结算主体。
+        Set<Long> companyIds = sourceBills.stream()
+                .map(BillSnapshot::settlementCompanyId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<String> companyNames = sourceBills.stream()
+                .map(BillSnapshot::settlementCompanyName)
+                .map(this::trimToNull)
+                .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-        if (snapshots.isEmpty()) {
+        if (companyIds.size() > 1) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单存在不同物流结算主体，不能合并生成物流对账单");
+        }
+        if (companyIds.size() == 1) {
+            String name = companyNames.isEmpty() ? null : companyNames.get(0);
+            return new SettlementCompanySnapshot(companyIds.iterator().next(), name);
+        }
+        if (companyNames.size() > 1) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单存在不同物流结算主体，不能合并生成物流对账单");
+        }
+        if (companyNames.isEmpty()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR,
                     "来源物流单物流结算主体缺失，不能生成物流对账单");
         }
-        if (snapshots.size() > 1) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单存在不同物流结算主体，不能合并生成物流对账单");
-        }
-        return snapshots.get(0);
+        return new SettlementCompanySnapshot(null, companyNames.get(0));
     }
 
     private CarrierSnapshot resolveStatementCarrier(List<BillSnapshot> sourceBills,

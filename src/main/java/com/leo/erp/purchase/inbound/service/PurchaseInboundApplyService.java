@@ -19,7 +19,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.LongSupplier;
+import java.util.stream.Collectors;
 
 @Service
 public class PurchaseInboundApplyService {
@@ -165,7 +167,8 @@ public class PurchaseInboundApplyService {
                         supplierNames.add(supplierName);
                     }
                 });
-        if (supplierIds.size() > 1 || supplierCodes.size() > 1 || supplierNames.size() > 1) {
+        // 供应商一致性按 id/code 判断：名称快照可能因主数据改名而漂移，不应参与判异。
+        if (supplierIds.size() > 1 || supplierCodes.size() > 1) {
             throw new com.leo.erp.common.error.BusinessException(
                     com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
                     "来源采购订单存在不同供应商，不能合并生成采购入库单"
@@ -220,7 +223,8 @@ public class PurchaseInboundApplyService {
                                               String firstLineWarehouseName,
                                               LinkedHashSet<String> warehouseNames,
                                               LinkedHashSet<Long> warehouseIds) {
-        if (warehouseIds.size() > 1 || warehouseNames.size() > 1) {
+        // 多仓库按仓库 id 判断：名称快照漂移不应误判为多仓库。
+        if (warehouseIds.size() > 1) {
             return "多仓库";
         }
         if (warehouseNames.size() == 1) {
@@ -245,25 +249,27 @@ public class PurchaseInboundApplyService {
     }
 
     private void applyHeaderSettlementCompany(PurchaseInbound inbound, List<PurchaseInboundItem> items) {
-        List<SettlementCompanySnapshot> snapshots = items.stream()
-                .map(item -> new SettlementCompanySnapshot(item.getSettlementCompanyId(), trimToNull(item.getSettlementCompanyName())))
+        // 结算主体一致性按 id 判断：同一 id 下 name 快照可能存在历史写法差异，不应误判为不同主体。
+        Set<Long> companyIds = items.stream()
+                .map(PurchaseInboundItem::getSettlementCompanyId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<String> companyNames = items.stream()
+                .map(PurchaseInboundItem::getSettlementCompanyName)
+                .map(this::trimToNull)
+                .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-        if (snapshots.size() > 1) {
+        if (companyIds.size() > 1) {
             throw new com.leo.erp.common.error.BusinessException(
                     com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
                     "来源采购订单存在不同结算主体，不能合并生成采购入库单"
             );
         }
-        if (snapshots.isEmpty()
-                || snapshots.getFirst().id() == null && snapshots.getFirst().name() == null) {
-            inbound.setSettlementCompanyId(null);
-            inbound.setSettlementCompanyName(null);
-            return;
-        }
-        SettlementCompanySnapshot snapshot = snapshots.getFirst();
-        inbound.setSettlementCompanyId(snapshot.id());
-        inbound.setSettlementCompanyName(snapshot.name());
+        Long companyId = companyIds.isEmpty() ? null : companyIds.iterator().next();
+        String companyName = companyNames.isEmpty() ? null : companyNames.get(0);
+        inbound.setSettlementCompanyId(companyId);
+        inbound.setSettlementCompanyName(companyName);
     }
 
     private String trimToNull(String value) {
