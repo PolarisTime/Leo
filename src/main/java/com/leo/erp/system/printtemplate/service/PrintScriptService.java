@@ -162,6 +162,7 @@ public class PrintScriptService {
         Map<String, String> header = new LinkedHashMap<>();
         header.put("isGroupHeader", GROUP_HEADER_SOURCE);
         header.put("sourceNo", distinctText(groupItems, "sourceNo"));
+        header.put("billTime", distinctText(groupItems, "billTime"));
         header.put("totalQuantity", String.valueOf(sumInteger(groupItems, "quantity")));
         header.put("totalWeightTon", plainNumber(totalWeight));
         header.put("totalFreight", plainAmount(totalFreight));

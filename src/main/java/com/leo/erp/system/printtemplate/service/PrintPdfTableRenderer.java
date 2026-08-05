@@ -200,7 +200,9 @@ public class PrintPdfTableRenderer {
 
     private String groupHeaderLabel(Map<String, String> groupHeader) {
         if (GROUP_HEADER_SOURCE.equals(groupHeader.get(GROUP_HEADER_KEY))) {
+            String billTime = groupValue(groupHeader, "billTime", "");
             return "来源物流单：" + groupValue(groupHeader, "sourceNo", "-")
+                    + (billTime.isBlank() ? "" : "（" + billTime + "）")
                     + "  合计：数量 " + groupValue(groupHeader, "totalQuantity", "0")
                     + "，重量 " + groupValue(groupHeader, "totalWeightTon", "0") + " 吨"
                     + "，运费单价 " + groupValue(groupHeader, "unitPrice", "0.00") + " 元/吨"
