@@ -42,9 +42,6 @@ concurrency:
   group: production-deploy
   cancel-in-progress: false
 
-env:
-  FLYWAY_TARGET: ${{ inputs.flyway_target || vars.PROD_FLYWAY_TARGET }}
-
 jobs:
   backend:
     name: Build Backend
@@ -100,11 +97,12 @@ jobs:
           cache: maven
           cache-dependency-path: pom.xml
 
-      - name: Validate production Flyway target
+      - name: Resolve production Flyway target
         run: |
           set -euo pipefail
-          : "${FLYWAY_TARGET:?Missing production Flyway target}"
-          bash scripts/deploy/verify-flyway-target.sh . "$FLYWAY_TARGET"
+          flyway_target="$(bash scripts/deploy/verify-flyway-target.sh .)"
+          echo "FLYWAY_TARGET=$flyway_target" >> "$GITHUB_ENV"
+          echo "Resolved production Flyway target: $flyway_target"
 
       - name: Verify Flyway migrations
         run: |
@@ -147,6 +145,7 @@ jobs:
     outputs:
       dependency_bundle_id: ${{ steps.release.outputs.dependency_bundle_id }}
       dependency_archive_name: ${{ steps.release.outputs.dependency_archive_name }}
+      flyway_target: ${{ steps.flyway.outputs.flyway_target }}
     defaults:
       run:
         shell: bash
@@ -167,6 +166,15 @@ jobs:
         with:
           name: leo-backend-jar
           path: release-input/backend
+
+      - name: Resolve production Flyway target
+        id: flyway
+        run: |
+          set -euo pipefail
+          flyway_target="$(bash scripts/deploy/verify-flyway-target.sh .)"
+          echo "flyway_target=$flyway_target" >> "$GITHUB_OUTPUT"
+          echo "FLYWAY_TARGET=$flyway_target" >> "$GITHUB_ENV"
+          echo "Resolved production Flyway target: $flyway_target"
 
       - name: Create production release archive
         id: release
@@ -272,6 +280,7 @@ jobs:
       run:
         shell: bash
     env:
+      FLYWAY_TARGET: ${{ needs.package.outputs.flyway_target }}
       DEPENDENCY_BUNDLE_ID: ${{ needs.package.outputs.dependency_bundle_id }}
       DEPENDENCY_ARCHIVE_NAME: ${{ needs.package.outputs.dependency_archive_name }}
       PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/instance/steelx/backend' }}
@@ -325,7 +334,7 @@ jobs:
           tar -xzf production-release/leo-production-release.tar.gz -C production-release/extracted
           chmod 0755 production-release/extracted/deploy/install-production-release.sh
 
-      - name: Verify local production Flyway target
+      - name: Sync production Flyway target
         run: |
           set -euo pipefail
           : "${FLYWAY_TARGET:?Missing production Flyway target}"
@@ -333,31 +342,17 @@ jobs:
             echo "Production Flyway target must be a positive integer version: $FLYWAY_TARGET" >&2
             exit 1
           fi
-          expected_flyway_target="$FLYWAY_TARGET"
-          if [[ ! -d "$PROD_SHARED_DIR" ]]; then
-            echo "Local production shared directory is not initialized: $PROD_SHARED_DIR" >&2
+          if [[ ! -f "$PROD_SHARED_DIR/steelx.env" ]]; then
+            echo "Missing production env file: $PROD_SHARED_DIR/steelx.env" >&2
             echo "Run scripts/deploy/trigger-local-steelx-deploy.sh once on the host before enabling automated deployment." >&2
             exit 1
           fi
-          if [[ ! -f "$PROD_SHARED_DIR/steelx.env" ]]; then
-            echo "Missing production env file: $PROD_SHARED_DIR/steelx.env" >&2
-            exit 1
+          if grep -q "^SPRING_FLYWAY_TARGET=" "$PROD_SHARED_DIR/steelx.env"; then
+            sed -i "s/^SPRING_FLYWAY_TARGET=.*/SPRING_FLYWAY_TARGET=$FLYWAY_TARGET/" "$PROD_SHARED_DIR/steelx.env"
+          else
+            echo "SPRING_FLYWAY_TARGET=$FLYWAY_TARGET" >> "$PROD_SHARED_DIR/steelx.env"
           fi
-          runtime_flyway_target="$(awk '
-            $0 ~ /^SPRING_FLYWAY_TARGET=/ {
-              count++
-              value = substr($0, length("SPRING_FLYWAY_TARGET=") + 1)
-            }
-            END {
-              if (count != 1) exit 1
-              print value
-            }
-          ' "$PROD_SHARED_DIR/steelx.env" 2>/dev/null || true)"
-          if [[ "$runtime_flyway_target" != "$expected_flyway_target" ]]; then
-            echo "Production SPRING_FLYWAY_TARGET must equal requested target $expected_flyway_target; found ${runtime_flyway_target:-<empty>}" >&2
-            exit 1
-          fi
-          echo "Verified production Flyway target: $expected_flyway_target"
+          echo "Synced production SPRING_FLYWAY_TARGET to $FLYWAY_TARGET"
 
       - name: Install release on local production
         run: |
@@ -395,6 +390,7 @@ jobs:
       run:
         shell: bash
     env:
+      FLYWAY_TARGET: ${{ needs.package.outputs.flyway_target }}
       DEPENDENCY_BUNDLE_ID: ${{ needs.package.outputs.dependency_bundle_id }}
       DEPENDENCY_ARCHIVE_NAME: ${{ needs.package.outputs.dependency_archive_name }}
       PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
@@ -445,7 +441,7 @@ jobs:
           fi
           chmod 644 "$HOME/.ssh/known_hosts"
 
-      - name: Verify SSH production Flyway target
+      - name: Sync SSH production Flyway target
         run: |
           set -euo pipefail
           : "${FLYWAY_TARGET:?Missing production Flyway target}"
@@ -461,27 +457,18 @@ jobs:
             "$remote_command" <<'REMOTE'
           set -euo pipefail
           shared_dir="$1"
-          expected_flyway_target="$2"
+          flyway_target="$2"
           env_file="$shared_dir/steelx.env"
           if [[ ! -f "$env_file" ]]; then
             echo "Missing production env file: $env_file" >&2
             exit 1
           fi
-          runtime_flyway_target="$(awk '
-            $0 ~ /^SPRING_FLYWAY_TARGET=/ {
-              count++
-              value = substr($0, length("SPRING_FLYWAY_TARGET=") + 1)
-            }
-            END {
-              if (count != 1) exit 1
-              print value
-            }
-          ' "$env_file" 2>/dev/null || true)"
-          if [[ "$runtime_flyway_target" != "$expected_flyway_target" ]]; then
-            echo "Production SPRING_FLYWAY_TARGET must equal requested target $expected_flyway_target; found ${runtime_flyway_target:-<empty>}" >&2
-            exit 1
+          if grep -q "^SPRING_FLYWAY_TARGET=" "$env_file"; then
+            sed -i "s/^SPRING_FLYWAY_TARGET=.*/SPRING_FLYWAY_TARGET=$flyway_target/" "$env_file"
+          else
+            echo "SPRING_FLYWAY_TARGET=$flyway_target" >> "$env_file"
           fi
-          echo "Verified production Flyway target: $expected_flyway_target"
+          echo "Synced production SPRING_FLYWAY_TARGET to $flyway_target"
           REMOTE
 
       - name: Check SSH dependency bundle
