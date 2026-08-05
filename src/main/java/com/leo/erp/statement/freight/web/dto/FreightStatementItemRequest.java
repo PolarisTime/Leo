@@ -1,15 +1,19 @@
 package com.leo.erp.statement.freight.web.dto;
 
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 
+/**
+ * 物流对账单明细请求。
+ * <p>
+ * 明细必须来自已审核的物流单（整单导入），保存时后端按 sourceFreightBillId /
+ * sourceFreightBillItemId 从物流单明细加载完整字段；其余字段（客户/项目/材料/重量等）
+ * 仅为旧客户端兼容保留，不参与保存（后端以库值为准）。
+ */
 public record FreightStatementItemRequest(
         Long id,
-        @NotBlank String sourceNo,
+        String sourceNo,
         Long settlementCompanyId,
         String settlementCompanyName,
         Long customerId,
@@ -17,23 +21,23 @@ public record FreightStatementItemRequest(
         Long projectId,
         String projectName,
         Long materialId,
-        @NotBlank String materialCode,
+        String materialCode,
         String materialName,
-        @NotBlank String brand,
-        @NotBlank String category,
-        @NotBlank String material,
-        @NotBlank String spec,
+        String brand,
+        String category,
+        String material,
+        String spec,
         String length,
-        @NotNull @Min(1) Integer quantity,
+        Integer quantity,
         String quantityUnit,
-        @NotNull @DecimalMin("0.000") BigDecimal pieceWeightTon,
-        @NotNull @Min(0) Integer piecesPerBundle,
+        BigDecimal pieceWeightTon,
+        Integer piecesPerBundle,
         String batchNo,
         BigDecimal weightTon,
         Long warehouseId,
         String warehouseName,
-        Long sourceFreightBillId,
-        Long sourceFreightBillItemId,
+        @NotNull Long sourceFreightBillId,
+        @NotNull Long sourceFreightBillItemId,
         Long sourceSalesOrderItemId
 ) {
 }
