@@ -1,3 +1,15 @@
+# [9.6.0](https://github.com/PolarisTime/Leo/compare/v9.5.0...v9.6.0) (2026-08-05)
+
+
+### Bug Fixes
+
+* **statement:** 对账/入库来源主体一致性按 ID 判断 ([dc2f0d2](https://github.com/PolarisTime/Leo/commit/dc2f0d260a1d09a77243277fb3f4daec76a44c16))
+
+
+### Features
+
+* **company:** 结算主体改名级联同步引用表快照 ([a63830a](https://github.com/PolarisTime/Leo/commit/a63830ad27b229d6c760e74c04e3fed117fdc28a))
+
 # [9.5.0](https://github.com/PolarisTime/Leo/compare/v9.4.0...v9.5.0) (2026-08-05)
 
 
