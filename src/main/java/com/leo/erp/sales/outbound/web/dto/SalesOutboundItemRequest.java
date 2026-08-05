@@ -2,26 +2,32 @@ package com.leo.erp.sales.outbound.web.dto;
 
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 
+/**
+ * 销售出库明细请求。
+ * <p>
+ * 明细必须整单从销售订单导入（sourceSalesOrderItemId 必填），后端从销售订单明细重载
+ * 材料类字段（品牌/材质/规格/单位等），仅数量/单价/件重等覆盖字段读请求值；其余字段
+ * 仅为旧客户端兼容保留。
+ */
 public record SalesOutboundItemRequest(
         Long id,
         String sourceNo,
         @NotNull(message = "来源销售订单明细不能为空")
         Long sourceSalesOrderItemId,
         Long materialId,
-        @NotBlank String materialCode,
-        @NotBlank String brand,
-        @NotBlank String category,
-        @NotBlank String material,
-        @NotBlank String spec,
+        String materialCode,
+        String brand,
+        String category,
+        String material,
+        String spec,
         String length,
-        @NotBlank String unit,
+        String unit,
         Long warehouseId,
-        @NotBlank String warehouseName,
+        String warehouseName,
         String batchNo,
         @NotNull @Min(0) Integer quantity,
         String quantityUnit,
