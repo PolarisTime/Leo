@@ -1,30 +1,34 @@
 package com.leo.erp.statement.customer.web.dto;
 
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 
+/**
+ * 客户对账单明细请求。
+ * <p>
+ * 明细必须来自已审核的销售订单出库（整单导入），保存时后端按 sourceSalesOrderItemId
+ * 从销售订单明细加载完整字段；其余字段（客户/项目/材料/数量/金额等）仅为旧客户端兼容
+ * 保留，不参与保存（后端以库值为准）。
+ */
 public record CustomerStatementItemRequest(
         Long id,
-        @NotBlank String sourceNo,
-        Long sourceSalesOrderItemId,
-        @NotBlank String materialCode,
-        @NotBlank String brand,
-        @NotBlank String category,
-        @NotBlank String material,
-        @NotBlank String spec,
+        String sourceNo,
+        @NotNull Long sourceSalesOrderItemId,
+        String materialCode,
+        String brand,
+        String category,
+        String material,
+        String spec,
         String length,
-        @NotBlank String unit,
+        String unit,
         String batchNo,
-        @NotNull @Min(0) Integer quantity,
+        Integer quantity,
         String quantityUnit,
-        @NotNull @DecimalMin("0.000") BigDecimal pieceWeightTon,
-        @NotNull @Min(0) Integer piecesPerBundle,
+        BigDecimal pieceWeightTon,
+        Integer piecesPerBundle,
         BigDecimal weightTon,
-        @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
+        BigDecimal unitPrice,
         BigDecimal amount,
         Long customerId,
         Long projectId,
