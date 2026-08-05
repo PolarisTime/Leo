@@ -1,3 +1,10 @@
+# [9.8.0](https://github.com/PolarisTime/Leo/compare/v9.7.2...v9.8.0) (2026-08-05)
+
+
+### Features
+
+* **print:** 物流对账单来源物流单分组头显示单据日期 ([8083474](https://github.com/PolarisTime/Leo/commit/808347456a378d090939433fc185170252550f8a))
+
 ## [9.7.2](https://github.com/PolarisTime/Leo/compare/v9.7.1...v9.7.2) (2026-08-05)
 
 
