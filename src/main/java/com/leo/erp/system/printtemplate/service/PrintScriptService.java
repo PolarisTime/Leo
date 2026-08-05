@@ -253,7 +253,8 @@ public class PrintScriptService {
         if (!templateCompanyName.isBlank()) {
             return templateCompanyName.equals(recordCompanyName);
         }
-        return recordCompanyId.isBlank() && recordCompanyName.isBlank();
+        // 模板未绑定结算主体时为通用模板，适用于任何主体的单据（兜底）。
+        return true;
     }
 
     private String normalizeText(String value) {
