@@ -44,6 +44,7 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final MasterDataReferenceGuard referenceGuard;
     private final MasterDataCodeIssuanceService codeIssuanceService;
+    private final com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService;
     private CacheManager cacheManager;
 
     @Autowired
@@ -52,13 +53,15 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
                            SupplierMapper supplierMapper,
                            RedisJsonCacheSupport redisJsonCacheSupport,
                            MasterDataReferenceGuard referenceGuard,
-                           MasterDataCodeIssuanceService codeIssuanceService) {
+                           MasterDataCodeIssuanceService codeIssuanceService,
+                           com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
         super(snowflakeIdGenerator);
         this.supplierRepository = supplierRepository;
         this.supplierMapper = supplierMapper;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.referenceGuard = referenceGuard;
         this.codeIssuanceService = codeIssuanceService;
+        this.referenceSnapshotSyncService = referenceSnapshotSyncService;
     }
 
     @Override
@@ -72,7 +75,12 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + SUPPLIER_CACHE_KEY + "'")
     public SupplierResponse update(Long id, SupplierRequest request) {
-        return super.update(id, request);
+        String currentName = requireEntity(id).getSupplierName();
+        SupplierResponse response = super.update(id, request);
+        if (!currentName.equals(request.supplierName())) {
+            referenceSnapshotSyncService.syncSupplierName(id, request.supplierName());
+        }
+        return response;
     }
 
     @Override

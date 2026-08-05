@@ -51,6 +51,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     private final CompanySettingService companySettingService;
     private final CarrierVehicleSynchronizer vehicleSynchronizer;
     private final MasterDataCodeIssuanceService codeIssuanceService;
+    private final com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService;
     private CacheManager cacheManager;
 
     @Autowired
@@ -60,7 +61,8 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
                           CarrierMapper carrierMapper,
                           MasterDataReferenceGuard referenceGuard,
                           CompanySettingService companySettingService,
-                          MasterDataCodeIssuanceService codeIssuanceService) {
+                          MasterDataCodeIssuanceService codeIssuanceService,
+                          com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
         super(snowflakeIdGenerator);
         this.carrierRepository = carrierRepository;
         this.vehicleRepository = vehicleRepository;
@@ -69,6 +71,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         this.companySettingService = companySettingService;
         this.vehicleSynchronizer = new CarrierVehicleSynchronizer(this::nextId, referenceGuard);
         this.codeIssuanceService = codeIssuanceService;
+        this.referenceSnapshotSyncService = referenceSnapshotSyncService;
     }
 
     @Override
@@ -82,7 +85,12 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'")
     public CarrierResponse update(Long id, CarrierRequest request) {
-        return super.update(id, request);
+        String currentName = requireEntity(id).getCarrierName();
+        CarrierResponse response = super.update(id, request);
+        if (!currentName.equals(request.carrierName())) {
+            referenceSnapshotSyncService.syncCarrierName(id, request.carrierName());
+        }
+        return response;
     }
 
     @Override

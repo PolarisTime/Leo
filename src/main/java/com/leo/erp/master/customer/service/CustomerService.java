@@ -9,6 +9,7 @@ import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
+import com.leo.erp.master.service.ReferenceSnapshotSyncService;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
@@ -53,6 +54,7 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     private final MasterDataCodeIssuanceService codeIssuanceService;
     private final ProjectRepository projectRepository;
     private CacheManager cacheManager;
+    private final ReferenceSnapshotSyncService referenceSnapshotSyncService;
 
     @Autowired
     public CustomerService(CustomerRepository customerRepository,
@@ -62,7 +64,8 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
                            MasterDataReferenceGuard referenceGuard,
                            CompanySettingService companySettingService,
                            MasterDataCodeIssuanceService codeIssuanceService,
-                           ProjectRepository projectRepository) {
+                           ProjectRepository projectRepository,
+                           ReferenceSnapshotSyncService referenceSnapshotSyncService) {
         super(snowflakeIdGenerator);
         this.customerRepository = customerRepository;
         this.customerMapper = customerMapper;
@@ -71,6 +74,7 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         this.companySettingService = companySettingService;
         this.codeIssuanceService = codeIssuanceService;
         this.projectRepository = projectRepository;
+        this.referenceSnapshotSyncService = referenceSnapshotSyncService;
     }
 
     @Override
@@ -84,7 +88,12 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CUSTOMER_CACHE_KEY + "'")
     public CustomerResponse update(Long id, CustomerRequest request) {
-        return super.update(id, request);
+        String currentName = requireEntity(id).getCustomerName();
+        CustomerResponse response = super.update(id, request);
+        if (!currentName.equals(request.customerName())) {
+            referenceSnapshotSyncService.syncCustomerName(id, request.customerName());
+        }
+        return response;
     }
 
     @Override

@@ -34,6 +34,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     private final MaterialReferenceGuard materialReferenceGuard;
     private final MasterDataCodeIssuanceService codeIssuanceService;
     private final MaterialIdentityService identityService;
+    private final com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService;
 
     public MaterialService(MaterialRepository materialRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
@@ -41,7 +42,8 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                            TradeItemMaterialSupport tradeItemMaterialSupport,
                            MaterialReferenceGuard materialReferenceGuard,
                            MasterDataCodeIssuanceService codeIssuanceService,
-                           MaterialIdentityService identityService) {
+                           MaterialIdentityService identityService,
+                           com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
         super(snowflakeIdGenerator);
         this.materialRepository = materialRepository;
         this.materialMapper = materialMapper;
@@ -49,6 +51,18 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         this.materialReferenceGuard = materialReferenceGuard;
         this.codeIssuanceService = codeIssuanceService;
         this.identityService = identityService;
+        this.referenceSnapshotSyncService = referenceSnapshotSyncService;
+    }
+
+    @Override
+    @Transactional
+    public MaterialResponse update(Long id, MaterialRequest request) {
+        String currentBrand = requireEntity(id).getBrand();
+        MaterialResponse response = super.update(id, request);
+        if (!currentBrand.equals(request.brand())) {
+            referenceSnapshotSyncService.syncMaterialName(id, request.brand());
+        }
+        return response;
     }
 
     public Page<MaterialResponse> page(PageQuery query, String keyword, String category, String material) {

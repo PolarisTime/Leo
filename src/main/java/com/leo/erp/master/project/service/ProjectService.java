@@ -40,6 +40,7 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
     private final MasterDataReferenceGuard referenceGuard;
     private final CustomerRepository customerRepository;
     private final MasterDataCodeIssuanceService codeIssuanceService;
+    private final com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService;
 
     @Autowired
     public ProjectService(SnowflakeIdGenerator snowflakeIdGenerator,
@@ -47,13 +48,26 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
                           ProjectMapper projectMapper,
                           MasterDataReferenceGuard referenceGuard,
                           CustomerRepository customerRepository,
-                          MasterDataCodeIssuanceService codeIssuanceService) {
+                          MasterDataCodeIssuanceService codeIssuanceService,
+                          com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
         super(snowflakeIdGenerator);
         this.projectRepository = projectRepository;
         this.projectMapper = projectMapper;
         this.referenceGuard = referenceGuard;
         this.customerRepository = customerRepository;
         this.codeIssuanceService = codeIssuanceService;
+        this.referenceSnapshotSyncService = referenceSnapshotSyncService;
+    }
+
+    @Override
+    @Transactional
+    public ProjectResponse update(Long id, ProjectRequest request) {
+        String currentName = requireEntity(id).getProjectName();
+        ProjectResponse response = super.update(id, request);
+        if (!currentName.equals(request.projectName())) {
+            referenceSnapshotSyncService.syncProjectName(id, request.projectName());
+        }
+        return response;
     }
 
     @Transactional(readOnly = true)

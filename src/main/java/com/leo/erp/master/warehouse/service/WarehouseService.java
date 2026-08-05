@@ -31,6 +31,7 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
     private final WarehouseSelectionSupport warehouseSelectionSupport;
     private final WarehouseReferenceGuard warehouseReferenceGuard;
     private final MasterDataCodeIssuanceService codeIssuanceService;
+    private final com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService;
 
     @Autowired
     public WarehouseService(WarehouseRepository warehouseRepository,
@@ -38,13 +39,26 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
                             WarehouseMapper warehouseMapper,
                             WarehouseSelectionSupport warehouseSelectionSupport,
                             MasterDataReferenceGuard referenceGuard,
-                            MasterDataCodeIssuanceService codeIssuanceService) {
+                            MasterDataCodeIssuanceService codeIssuanceService,
+                            com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
         super(snowflakeIdGenerator);
         this.warehouseRepository = warehouseRepository;
         this.warehouseMapper = warehouseMapper;
         this.warehouseSelectionSupport = warehouseSelectionSupport;
         this.warehouseReferenceGuard = referenceGuard == null ? null : new WarehouseReferenceGuard(referenceGuard);
         this.codeIssuanceService = codeIssuanceService;
+        this.referenceSnapshotSyncService = referenceSnapshotSyncService;
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public WarehouseResponse update(Long id, WarehouseRequest request) {
+        String currentName = requireEntity(id).getWarehouseName();
+        WarehouseResponse response = super.update(id, request);
+        if (!currentName.equals(request.warehouseName())) {
+            referenceSnapshotSyncService.syncWarehouseName(id, request.warehouseName());
+        }
+        return response;
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
