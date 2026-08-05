@@ -1,3 +1,10 @@
+# [9.7.0](https://github.com/PolarisTime/Leo/compare/v9.6.0...v9.7.0) (2026-08-05)
+
+
+### Features
+
+* **master:** 主数据改名级联同步引用表快照 ([6797bf5](https://github.com/PolarisTime/Leo/commit/6797bf55de9f20ad4029c2c2d55b7597c62fe75a))
+
 # [9.6.0](https://github.com/PolarisTime/Leo/compare/v9.5.0...v9.6.0) (2026-08-05)
 
 
