@@ -75,15 +75,18 @@ public class PrintPdfFormRenderer {
         boolean renderTable = tableConfig.isObject();
 
         int itemIndex = 0;
+        boolean firstPage = true;
         do {
             PdfCanvas canvas = new PdfCanvas(pdf.addNewPage(new PageSize(pageMetrics.width(), pageMetrics.height())));
             pageContentRenderer.drawStatic(canvas, font, root.path("static"), variables, pageMetrics);
             pageContentRenderer.drawFields(canvas, fieldsConfig, data, font, pageMetrics);
-            float rowTop = tableTop + (renderTable ? headerHeight : 0);
+            boolean renderHeader = renderTable && firstPage;
+            float rowTop = tableTop + (renderHeader ? headerHeight : 0);
             int rowsOnPage = 0;
-            if (renderTable) {
+            if (renderHeader) {
                 tableRenderer.drawHeader(canvas, font, tableConfig, columns, pageMetrics);
             }
+            firstPage = false;
             boolean lastPage = true;
             while (renderTable && itemIndex < items.size()) {
                 Map<String, String> item = items.get(itemIndex);

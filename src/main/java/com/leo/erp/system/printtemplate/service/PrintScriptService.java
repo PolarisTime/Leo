@@ -123,7 +123,12 @@ public class PrintScriptService {
 
         List<Map<String, String>> rows = new ArrayList<>();
         int lineIndex = 0;
+        boolean firstSourceGroup = true;
         for (List<Map<String, String>> groupItems : sourceGroups.values()) {
+            if (!firstSourceGroup) {
+                rows.add(blankGroupRow());
+            }
+            firstSourceGroup = false;
             rows.add(sourceGroupHeader(groupItems));
             Map<String, List<Map<String, String>>> projectGroups = new LinkedHashMap<>();
             for (Map<String, String> item : groupItems) {
@@ -140,6 +145,12 @@ public class PrintScriptService {
             }
         }
         return rows;
+    }
+
+    private Map<String, String> blankGroupRow() {
+        Map<String, String> row = new LinkedHashMap<>();
+        row.put("isBlankRow", "true");
+        return row;
     }
 
     private Map<String, String> sourceGroupHeader(List<Map<String, String>> groupItems) {

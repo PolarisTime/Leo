@@ -79,6 +79,10 @@ public class PrintPdfTableRenderer {
             drawGroupHeaderRow(canvas, font, tableConfig, top, item, pageMetrics);
             return;
         }
+        if ("true".equals(item.get("isBlankRow"))) {
+            // 空白分隔行：只占位推进行高，不绘制内容
+            return;
+        }
         float left = drawing.number(tableConfig, "left", 28f);
         float rowHeight = drawing.number(tableConfig, "rowHeight", 26f);
         Color borderColor = drawing.color(tableConfig, "borderColor", ColorConstants.BLACK);
@@ -98,20 +102,57 @@ public class PrintPdfTableRenderer {
                     drawing.number(column, "lineWidth", lineWidth),
                     pageMetrics
             );
-            drawing.drawCanvasText(
-                    canvas,
-                    font,
-                    value,
-                    left + 2,
-                    top + 7,
-                    width - 4,
-                    12,
-                    drawing.number(column, "fontSize", 8f),
-                    drawing.alignment(text(column, "align", "center")),
-                    drawing.color(column, "textColor", textColor),
-                    pageMetrics
-            );
+            float fontSize = drawing.number(column, "fontSize", 8f);
+            float availWidth = Math.max(4f, width - 4);
+            if (font.getWidth(value, fontSize) > availWidth) {
+                drawWrappedCell(canvas, font, column, left, top, width, rowHeight,
+                        value, fontSize, availWidth, textColor, pageMetrics);
+            } else {
+                drawing.drawCanvasText(
+                        canvas,
+                        font,
+                        value,
+                        left + 2,
+                        top + 7,
+                        width - 4,
+                        12,
+                        fontSize,
+                        drawing.alignment(text(column, "align", "center")),
+                        drawing.color(column, "textColor", textColor),
+                        pageMetrics
+                );
+            }
             left += width;
+        }
+    }
+
+    private void drawWrappedCell(
+            PdfCanvas canvas,
+            PdfFont font,
+            JsonNode column,
+            float left,
+            float top,
+            float width,
+            float rowHeight,
+            String value,
+            float fontSize,
+            float availWidth,
+            Color defaultTextColor,
+            PrintPdfDrawingSupport.PageMetrics pageMetrics
+    ) {
+        float lineHeight = Math.max(6f, fontSize * 1.2f);
+        int maxLines = Math.max(1, (int) ((rowHeight - 4) / lineHeight));
+        List<String> lines = drawing.wrapLines(font, value, fontSize, availWidth);
+        if (lines.size() > maxLines) {
+            lines = lines.subList(0, maxLines);
+        }
+        TextAlignment alignment = drawing.alignment(text(column, "align", "center"));
+        Color color = drawing.color(column, "textColor", defaultTextColor);
+        float y = top + 2;
+        for (String line : lines) {
+            drawing.drawCanvasText(canvas, font, line, left + 2, y, width - 4, lineHeight,
+                    fontSize, alignment, color, pageMetrics);
+            y += lineHeight;
         }
     }
 
