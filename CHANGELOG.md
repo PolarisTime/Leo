@@ -1,3 +1,10 @@
+## [9.7.1](https://github.com/PolarisTime/Leo/compare/v9.7.0...v9.7.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* **print:** 通用打印模板适用于所有结算主体 ([e3ac9e3](https://github.com/PolarisTime/Leo/commit/e3ac9e368eb28d0b87edd4df8a2dca699187c38b))
+
 # [9.7.0](https://github.com/PolarisTime/Leo/compare/v9.6.0...v9.7.0) (2026-08-05)
 
 
