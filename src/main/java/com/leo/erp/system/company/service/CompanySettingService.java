@@ -31,6 +31,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +46,31 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
 
     public static final String CURRENT_COMPANY_CACHE_KEY = "leo:company:current:v2";
     private static final TypeReference<List<CompanySettlementAccountResponse>> SETTLEMENT_ACCOUNT_LIST_TYPE = new TypeReference<>() { };
+    /** 冗余了结算主体名称快照的业务表，改名时需级联同步。 */
+    private static final String[] SETTLEMENT_COMPANY_NAME_TABLES = {
+            "lg_freight_bill",
+            "lg_freight_bill_item",
+            "so_sales_order",
+            "so_sales_order_item",
+            "so_sales_outbound",
+            "so_sales_outbound_item",
+            "po_purchase_order",
+            "po_purchase_inbound",
+            "po_purchase_inbound_item",
+            "po_purchase_refund",
+            "st_customer_statement",
+            "st_freight_statement",
+            "st_freight_statement_item",
+            "st_supplier_statement",
+            "fm_receipt",
+            "fm_payment",
+            "fm_invoice_issue",
+            "fm_invoice_receipt",
+            "fm_cash_reversal",
+            "fm_ledger_adjustment",
+            "fm_supplier_refund_receipt",
+            "sys_print_template"
+    };
 
     private final CompanySettingRepository companySettingRepository;
     private final CompanySettingMapper companySettingMapper;
@@ -52,6 +78,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     private final ObjectMapper objectMapper;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final MasterDataReferenceGuard referenceGuard;
+    private final JdbcTemplate jdbcTemplate;
     private CacheManager cacheManager;
 
     @Autowired
@@ -61,7 +88,8 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                                  DashboardSummaryService dashboardSummaryService,
                                  ObjectMapper objectMapper,
                                  RedisJsonCacheSupport redisJsonCacheSupport,
-                                 MasterDataReferenceGuard referenceGuard) {
+                                 MasterDataReferenceGuard referenceGuard,
+                                 JdbcTemplate jdbcTemplate) {
         super(snowflakeIdGenerator);
         this.companySettingRepository = companySettingRepository;
         this.companySettingMapper = companySettingMapper;
@@ -69,6 +97,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         this.objectMapper = objectMapper;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.referenceGuard = referenceGuard;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public CompanySettingService(CompanySettingRepository companySettingRepository,
@@ -77,7 +106,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                                  DashboardSummaryService dashboardSummaryService,
                                  ObjectMapper objectMapper) {
         this(companySettingRepository, snowflakeIdGenerator, companySettingMapper, dashboardSummaryService,
-                objectMapper, null, null);
+                objectMapper, null, null, null);
     }
 
     public CompanySettingService(CompanySettingRepository companySettingRepository,
@@ -87,7 +116,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                                  ObjectMapper objectMapper,
                                  RedisJsonCacheSupport redisJsonCacheSupport) {
         this(companySettingRepository, snowflakeIdGenerator, companySettingMapper, dashboardSummaryService,
-                objectMapper, redisJsonCacheSupport, null);
+                objectMapper, redisJsonCacheSupport, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -162,9 +191,13 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         }
 
         CompanySetting entity = currentEntity.get();
+        String currentName = entity.getCompanyName();
         validateUpdate(entity, request);
         apply(entity, request);
         CompanySetting saved = companySettingRepository.save(entity);
+        if (!currentName.equals(request.companyName())) {
+            syncSettlementCompanyName(entity.getId(), request.companyName());
+        }
         evictCache();
         dashboardSummaryService.evictAllCache();
         return toResponse(saved);
@@ -181,7 +214,30 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'")
     public CompanySettingResponse update(Long id, CompanySettingRequest request) {
-        return super.update(id, request);
+        String currentName = requireEntity(id).getCompanyName();
+        CompanySettingResponse response = super.update(id, request);
+        if (!currentName.equals(request.companyName())) {
+            syncSettlementCompanyName(id, request.companyName());
+        }
+        return response;
+    }
+
+    /**
+     * 结算主体改名时，级联同步各业务表冗余的 settlement_company_name 快照，
+     * 避免同一主体出现新旧名称混杂（反规范化快照漂移）。
+     */
+    private void syncSettlementCompanyName(Long companyId, String companyName) {
+        if (jdbcTemplate == null || companyId == null || companyName == null || companyName.isBlank()) {
+            return;
+        }
+        for (String table : SETTLEMENT_COMPANY_NAME_TABLES) {
+            jdbcTemplate.update(
+                    "UPDATE " + table
+                            + " SET settlement_company_name = ? WHERE settlement_company_id = ?",
+                    companyName,
+                    companyId
+            );
+        }
     }
 
     @Override
