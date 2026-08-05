@@ -139,9 +139,11 @@ public class SalesOutboundApplyService {
         Long sourceSalesOrderItemId = sourceService.resolveSourceSalesOrderItemId(source, item, lineNo);
         SalesOrderItem sourceSalesOrderItem =
                 sourceService.resolveSourceSalesOrderItem(sourceSalesOrderItemMap, sourceSalesOrderItemId, lineNo);
+        // 前端精简保存 payload 后不发送材料编码，后端按来源明细重载；请求显式提供时才覆盖来源值。
+        String requestedMaterialCode = trimToNull(source.materialCode());
         TradeMaterialSnapshot material = tradeItemMaterialSupport.resolveMaterial(
                 source.materialId() == null ? sourceSalesOrderItem.getMaterialId() : source.materialId(),
-                source.materialCode(),
+                requestedMaterialCode != null ? requestedMaterialCode : sourceSalesOrderItem.getMaterialCode(),
                 lineNo
         );
         item.setSourceSalesOrderItemId(sourceSalesOrderItemId);

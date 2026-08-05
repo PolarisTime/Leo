@@ -106,14 +106,15 @@ public class SalesOutboundSourceService {
         assertSameId(headerProjectId, sourceSalesOrder.getProjectId(), lineNo, "项目ID");
         assertSameOrderText(headerProjectName, sourceSalesOrder.getProjectName(), lineNo, "项目");
         assertSameId(request.materialId(), sourceSalesOrderItem.getMaterialId(), lineNo, "商品ID");
-        BusinessDocumentValidator.requireSameSourceText(request.materialCode(), sourceSalesOrderItem.getMaterialCode(), lineNo, "来源销售订单明细", "物料编码");
-        BusinessDocumentValidator.requireSameSourceText(request.brand(), sourceSalesOrderItem.getBrand(), lineNo, "来源销售订单明细", "品牌");
-        BusinessDocumentValidator.requireSameSourceText(request.category(), sourceSalesOrderItem.getCategory(), lineNo, "来源销售订单明细", "品类");
-        BusinessDocumentValidator.requireSameSourceText(request.material(), sourceSalesOrderItem.getMaterial(), lineNo, "来源销售订单明细", "材质");
-        BusinessDocumentValidator.requireSameSourceText(request.spec(), sourceSalesOrderItem.getSpec(), lineNo, "来源销售订单明细", "规格");
-        BusinessDocumentValidator.requireSameSourceText(request.unit(), sourceSalesOrderItem.getUnit(), lineNo, "来源销售订单明细", "单位");
+        // 前端精简保存 payload 后不发送材料类字段（后端按来源明细重载），请求显式提供时才比对一致性。
+        BusinessDocumentValidator.requireSameOptionalSourceText(request.materialCode(), sourceSalesOrderItem.getMaterialCode(), lineNo, "来源销售订单明细", "物料编码");
+        BusinessDocumentValidator.requireSameOptionalSourceText(request.brand(), sourceSalesOrderItem.getBrand(), lineNo, "来源销售订单明细", "品牌");
+        BusinessDocumentValidator.requireSameOptionalSourceText(request.category(), sourceSalesOrderItem.getCategory(), lineNo, "来源销售订单明细", "品类");
+        BusinessDocumentValidator.requireSameOptionalSourceText(request.material(), sourceSalesOrderItem.getMaterial(), lineNo, "来源销售订单明细", "材质");
+        BusinessDocumentValidator.requireSameOptionalSourceText(request.spec(), sourceSalesOrderItem.getSpec(), lineNo, "来源销售订单明细", "规格");
+        BusinessDocumentValidator.requireSameOptionalSourceText(request.unit(), sourceSalesOrderItem.getUnit(), lineNo, "来源销售订单明细", "单位");
         assertSameId(warehouseId, sourceSalesOrderItem.getWarehouseId(), lineNo, "仓库ID");
-        BusinessDocumentValidator.requireSameSourceText(warehouseName, sourceSalesOrderItem.getWarehouseName(), lineNo, "来源销售订单明细", "仓库");
+        BusinessDocumentValidator.requireSameOptionalSourceText(warehouseName, sourceSalesOrderItem.getWarehouseName(), lineNo, "来源销售订单明细", "仓库");
         BusinessDocumentValidator.requireSameSourceText(batchNo, sourceSalesOrderItem.getBatchNo(), lineNo, "来源销售订单明细", "批号");
 
         int currentQuantity = request.quantity() == null ? 0 : request.quantity();

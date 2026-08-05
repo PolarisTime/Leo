@@ -55,6 +55,18 @@ public final class BusinessDocumentValidator {
         requireSameText(expected, actual, sourceFieldMismatchMessage(lineNo, sourceName, fieldName));
     }
 
+    /**
+     * 请求字段显式提供时才与来源比对；请求未提供（null/空）时信任来源，不强制一致。
+     * 用于前端精简保存 payload 后（后端按来源明细重载材料类字段）的兼容校验。
+     */
+    public static void requireSameOptionalSourceText(String expected,
+                                                     String actual,
+                                                     int lineNo,
+                                                     String sourceName,
+                                                     String fieldName) {
+        requireSameOptionalCode(expected, actual, sourceFieldMismatchMessage(lineNo, sourceName, fieldName));
+    }
+
     public static void requireSameSourceInteger(Integer expected,
                                                 Integer actual,
                                                 int lineNo,
