@@ -1,3 +1,10 @@
+# [9.4.0](https://github.com/PolarisTime/Leo/compare/v9.3.0...v9.4.0) (2026-08-05)
+
+
+### Features
+
+* **print:** 物流对账单 PDF 分组打印 ([e92ca91](https://github.com/PolarisTime/Leo/commit/e92ca913cd2c18c9137e9d994b0b764c2f3312ae))
+
 # [9.3.0](https://github.com/PolarisTime/Leo/compare/v9.2.2...v9.3.0) (2026-08-04)
 
 
