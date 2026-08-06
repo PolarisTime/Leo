@@ -1,3 +1,15 @@
+# [9.10.0](https://github.com/PolarisTime/Leo/compare/v9.9.0...v9.10.0) (2026-08-06)
+
+
+### Bug Fixes
+
+* **sales-order:** 交付核定状态下保存误判为不能编辑 ([b9d3bd9](https://github.com/PolarisTime/Leo/commit/b9d3bd97158d63eb53909f8857a2ffb425edd129))
+
+
+### Features
+
+* **column-settings:** 列设置支持 columnSizes 远程同步 ([a56d7a0](https://github.com/PolarisTime/Leo/commit/a56d7a00cbb40f66313d40d75ba74078dd68f2f9))
+
 # [9.9.0](https://github.com/PolarisTime/Leo/compare/v9.8.0...v9.9.0) (2026-08-05)
 
 
