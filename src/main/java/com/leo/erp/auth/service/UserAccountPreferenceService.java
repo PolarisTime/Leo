@@ -85,14 +85,35 @@ public class UserAccountPreferenceService {
         return new UserAccountPreferencesPayload(normalizedPages);
     }
 
+    private static final int MIN_COLUMN_WIDTH = 80;
+    private static final int MAX_COLUMN_WIDTH = 800;
+
     private UserListColumnSettingsPayload normalizePageSettings(UserListColumnSettingsPayload settings) {
         if (settings == null) {
-            return new UserListColumnSettingsPayload(List.of(), List.of());
+            return new UserListColumnSettingsPayload(List.of(), List.of(), Map.of());
         }
         return new UserListColumnSettingsPayload(
                 normalizeKeys(settings.orderedKeys()),
-                normalizeKeys(settings.hiddenKeys())
+                normalizeKeys(settings.hiddenKeys()),
+                normalizeColumnSizes(settings.columnSizes())
         );
+    }
+
+    private Map<String, Integer> normalizeColumnSizes(Map<String, Integer> columnSizes) {
+        if (columnSizes == null || columnSizes.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, Integer> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, Integer> entry : columnSizes.entrySet()) {
+            String key = normalizeKey(entry.getKey());
+            Integer value = entry.getValue();
+            if (key == null || value == null || value <= 0) {
+                continue;
+            }
+            normalized.put(key, Math.min(Math.max(value, MIN_COLUMN_WIDTH), MAX_COLUMN_WIDTH));
+        }
+        return normalized;
     }
 
     private List<String> normalizeKeys(List<String> keys) {
