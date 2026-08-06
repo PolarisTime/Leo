@@ -59,8 +59,18 @@ public class SalesOrderAuditedPricingService {
         if (entityItems.size() != requestItems.size()) {
             return false;
         }
-        for (int i = 0; i < entityItems.size(); i++) {
-            if (!matchesPricingUpdateItem(entityItems.get(i), requestItems.get(i))) {
+        // 按明细 id 配对（与 applyAuditedPricingUpdate 一致），避免因
+        // 请求明细顺序与实体 line_no 顺序不一致导致误判。
+        Map<Long, SalesOrderItemRequest> requestItemById = requestItems.stream()
+                .filter(item -> item.id() != null)
+                .collect(java.util.stream.Collectors.toMap(
+                        SalesOrderItemRequest::id,
+                        item -> item,
+                        (left, right) -> right
+                ));
+        for (SalesOrderItem entityItem : entityItems) {
+            SalesOrderItemRequest requestItem = requestItemById.get(entityItem.getId());
+            if (requestItem == null || !matchesPricingUpdateItem(entityItem, requestItem)) {
                 return false;
             }
         }
