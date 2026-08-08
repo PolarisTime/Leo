@@ -1,3 +1,10 @@
+## [9.10.1](https://github.com/PolarisTime/Leo/compare/v9.10.0...v9.10.1) (2026-08-08)
+
+
+### Bug Fixes
+
+* **print:** 物流对账单表头仅在首页显示 ([85d9849](https://github.com/PolarisTime/Leo/commit/85d9849cb0fb34099ec00a87b167d608eb25a8df))
+
 # [9.10.0](https://github.com/PolarisTime/Leo/compare/v9.9.0...v9.10.0) (2026-08-06)
 
 
