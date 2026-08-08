@@ -1,3 +1,10 @@
+## [9.10.3](https://github.com/PolarisTime/Leo/compare/v9.10.2...v9.10.3) (2026-08-08)
+
+
+### Bug Fixes
+
+* **print:** 优化物流对账单分组表头与黑白打印 ([cf6f98d](https://github.com/PolarisTime/Leo/commit/cf6f98d6af563d2d157933031d69140f7604bd68))
+
 ## [9.10.2](https://github.com/PolarisTime/Leo/compare/v9.10.1...v9.10.2) (2026-08-08)
 
 
