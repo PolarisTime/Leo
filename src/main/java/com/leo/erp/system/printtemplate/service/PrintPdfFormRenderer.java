@@ -80,6 +80,9 @@ public class PrintPdfFormRenderer {
         boolean detailHeaderAfterProject = groupPaginator.isDetailHeaderAfterProject(
                 tableConfig, repeatHeaderPerSourceGroup
         );
+        boolean repeatGroupContextOnContinuation = drawing.bool(
+                tableConfig, "repeatGroupContextOnContinuation", true
+        );
         float sourceGroupGap = Math.max(0f, drawing.number(tableConfig, "sourceGroupGap", 0f));
 
         int itemIndex = 0;
@@ -98,17 +101,25 @@ public class PrintPdfFormRenderer {
                 tableRenderer.drawHeader(canvas, font, tableConfig, columns, currentTableTop, pageMetrics);
             }
             if (repeatHeaderPerSourceGroup && groupPaginator.isGroupContinuation(items, itemIndex)) {
-                if (!detailHeaderAfterProject) {
+                Map<String, String> continuationItem = items.get(itemIndex);
+                boolean continuationStartsProjectGroup = groupPaginator.isProjectGroupHeader(continuationItem);
+                if (!repeatGroupContextOnContinuation
+                        && (!detailHeaderAfterProject || !continuationStartsProjectGroup)) {
                     tableRenderer.drawHeader(canvas, font, tableConfig, columns, rowTop, pageMetrics);
                     rowTop += headerHeight;
-                }
-                for (Map<String, String> header : groupPaginator.groupContinuationHeaders(items, itemIndex)) {
-                    tableRenderer.drawItemRow(canvas, font, tableConfig, columns, rowTop, header, pageMetrics);
-                    rowTop += groupPaginator.groupHeaderHeight(tableConfig, header);
-                }
-                if (detailHeaderAfterProject && !groupPaginator.isProjectGroupHeader(items.get(itemIndex))) {
-                    tableRenderer.drawHeader(canvas, font, tableConfig, columns, rowTop, pageMetrics);
-                    rowTop += headerHeight;
+                } else if (repeatGroupContextOnContinuation) {
+                    if (!detailHeaderAfterProject) {
+                        tableRenderer.drawHeader(canvas, font, tableConfig, columns, rowTop, pageMetrics);
+                        rowTop += headerHeight;
+                    }
+                    for (Map<String, String> header : groupPaginator.groupContinuationHeaders(items, itemIndex)) {
+                        tableRenderer.drawItemRow(canvas, font, tableConfig, columns, rowTop, header, pageMetrics);
+                        rowTop += groupPaginator.groupHeaderHeight(tableConfig, header);
+                    }
+                    if (detailHeaderAfterProject && !continuationStartsProjectGroup) {
+                        tableRenderer.drawHeader(canvas, font, tableConfig, columns, rowTop, pageMetrics);
+                        rowTop += headerHeight;
+                    }
                 }
             }
             firstPage = false;

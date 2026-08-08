@@ -18,13 +18,14 @@
   },
   "table": {
     "source": "items",
-    "left": 28,
+    "left": 32,
     "top": 170,
     "continuationTop": 28,
     "bottom": 814,
-    "width": 539,
+    "width": 531,
     "headerHeight": 30,
     "repeatHeaderPerSourceGroup": true,
+    "repeatGroupContextOnContinuation": false,
     "detailHeaderPlacement": "afterProjectHeader",
     "sourceGroupGap": 10,
     "rowHeight": 26,
@@ -76,27 +77,25 @@
       }
     },
     "columns": [
-      {"key": "index", "label": "序号", "width": 24, "headerFontSize": 9, "fontSize": 9},
-      {"key": "sourceNo", "label": "来源单号", "width": 82, "headerFontSize": 9, "fontSize": 9},
-      {"key": "brand", "label": "品牌", "width": 44, "headerFontSize": 9, "fontSize": 9},
-      {"key": "category", "label": "品名", "width": 40, "headerFontSize": 9, "fontSize": 9},
-      {"key": "material", "label": "材质", "width": 50, "headerFontSize": 9, "fontSize": 9, "normalize": "compactAscii"},
-      {"key": "spec", "label": "规格", "width": 46, "headerFontSize": 9, "fontSize": 9},
-      {"key": "length", "label": "长度", "width": 30, "headerFontSize": 9, "fontSize": 9},
+      {"key": "index", "label": "序号", "width": 26, "headerFontSize": 9, "fontSize": 9},
+      {"key": "sourceNo", "label": "来源单号", "width": 104, "headerFontSize": 9, "fontSize": 9},
+      {"key": "brand", "label": "品牌", "width": 43, "headerFontSize": 9, "fontSize": 9},
+      {"key": "category", "label": "品名", "width": 41, "headerFontSize": 9, "fontSize": 9},
+      {"key": "material", "label": "材质", "width": 51, "headerFontSize": 9, "fontSize": 9, "normalize": "compactAscii"},
+      {"key": "spec", "label": "规格", "width": 45, "headerFontSize": 9, "fontSize": 9},
+      {"key": "length", "label": "长度", "width": 32, "headerFontSize": 9, "fontSize": 9},
       {"key": "quantity", "label": "件数", "width": 38, "headerFontSize": 9, "fontSize": 9},
-      {"key": "pieceWeightTon", "label": "件重", "width": 48, "headerFontSize": 9, "fontSize": 9},
-      {"key": "weightTon", "label": "重量", "width": 48, "headerFontSize": 9, "fontSize": 9},
-      {"key": "warehouseName", "label": "仓库", "width": 89, "headerFontSize": 9, "fontSize": 9}
+      {"key": "pieceWeightTon", "label": "件重", "width": 46, "headerFontSize": 9, "fontSize": 9},
+      {"key": "weightTon", "label": "重量", "width": 46, "headerFontSize": 9, "fontSize": 9},
+      {"key": "warehouseName", "label": "仓库", "width": 59, "headerFontSize": 9, "fontSize": 9}
     ]
   },
   "summary": {
     "height": 32,
     "template": "合计件数：${totalQuantity}件    合计吨位：${totalWeight}吨    合计运费：${totalFreight}元",
     "fontSize": 12,
-    "border": true,
+    "border": false,
     "fillColor": "#ffffff",
-    "borderColor": "#000000",
-    "textColor": "#000000",
-    "lineWidth": 1
+    "textColor": "#000000"
   }
 }

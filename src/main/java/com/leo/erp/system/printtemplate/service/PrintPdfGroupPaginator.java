@@ -155,7 +155,9 @@ public class PrintPdfGroupPaginator {
             JsonNode tableConfig,
             boolean repeatHeaderPerSourceGroup
     ) {
-        if (!repeatHeaderPerSourceGroup || !isProjectGroupHeader(items.get(groupHeaderIndex))) {
+        if (!repeatHeaderPerSourceGroup
+                || !drawing.bool(tableConfig, "repeatGroupContextOnContinuation", true)
+                || !isProjectGroupHeader(items.get(groupHeaderIndex))) {
             return 0f;
         }
         float height = 0f;
