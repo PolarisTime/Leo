@@ -1,3 +1,10 @@
+## [9.10.2](https://github.com/PolarisTime/Leo/compare/v9.10.1...v9.10.2) (2026-08-08)
+
+
+### Bug Fixes
+
+* **print:** 修复物流对账单分组分页与模板渲染 ([e22d88f](https://github.com/PolarisTime/Leo/commit/e22d88f269c6ee31edec909f708e2deb2ae1cd15))
+
 ## [9.10.1](https://github.com/PolarisTime/Leo/compare/v9.10.0...v9.10.1) (2026-08-08)
 
 
