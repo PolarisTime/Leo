@@ -13,6 +13,7 @@ public class PrintPdfGroupPaginator {
     private static final String GROUP_HEADER_SOURCE = "source";
     private static final String GROUP_HEADER_PROJECT = "project";
     private static final String GROUP_HEADER_KEY = "isGroupHeader";
+    private static final String DETAIL_HEADER_AFTER_PROJECT_HEADER = "afterProjectHeader";
 
     private final PrintPdfDrawingSupport drawing;
 
@@ -32,8 +33,6 @@ public class PrintPdfGroupPaginator {
     boolean shouldStartGroupOnNextPage(
             List<Map<String, String>> items,
             int itemIndex,
-            int rowsOnPage,
-            int maxRowsPerPage,
             float rowTop,
             float tableBottom,
             float continuationTableTop,
@@ -46,20 +45,18 @@ public class PrintPdfGroupPaginator {
         if (!isGroupHeader(item)) {
             return false;
         }
-        boolean canMoveGroup = rowsOnPage > 0
-                || (isSourceGroupHeader(item) && rowTop > continuationTableTop);
-        if (!canMoveGroup) {
+        if (rowTop <= continuationTableTop) {
             return false;
         }
-        int groupRows = groupDetailRows(items, itemIndex);
-        float groupHeight = groupHeight(
+        float minimumGroupHeight = minimumGroupHeight(
                 items, itemIndex, tableConfig, headerHeight, rowHeight, repeatHeaderPerSourceGroup
         );
+        float continuationContextHeight = continuationContextHeight(
+                items, itemIndex, tableConfig, repeatHeaderPerSourceGroup
+        );
         float fullPageHeight = tableBottom - continuationTableTop;
-        if (groupRows == 0 || groupRows > maxRowsPerPage || groupHeight > fullPageHeight) {
-            return false;
-        }
-        return rowsOnPage + groupRows > maxRowsPerPage || rowTop + groupHeight > tableBottom;
+        return minimumGroupHeight + continuationContextHeight <= fullPageHeight
+                && rowTop + minimumGroupHeight > tableBottom;
     }
 
     boolean isGroupContinuation(List<Map<String, String>> items, int itemIndex) {
@@ -103,6 +100,10 @@ public class PrintPdfGroupPaginator {
         return GROUP_HEADER_SOURCE.equals(item.get(GROUP_HEADER_KEY));
     }
 
+    boolean isProjectGroupHeader(Map<String, String> item) {
+        return GROUP_HEADER_PROJECT.equals(item.get(GROUP_HEADER_KEY));
+    }
+
     float groupHeaderHeight(JsonNode tableConfig, Map<String, String> item) {
         JsonNode groupHeader = tableConfig.path("groupHeader");
         String groupType = item.get(GROUP_HEADER_KEY);
@@ -114,22 +115,12 @@ public class PrintPdfGroupPaginator {
         );
     }
 
-    private int groupDetailRows(List<Map<String, String>> items, int groupHeaderIndex) {
-        String groupType = items.get(groupHeaderIndex).get(GROUP_HEADER_KEY);
-        int rows = 0;
-        for (int index = groupHeaderIndex + 1; index < items.size(); index++) {
-            Map<String, String> item = items.get(index);
-            if (isBlankRow(item) || startsNextGroup(item, groupType)) {
-                break;
-            }
-            if (!isGroupHeader(item)) {
-                rows++;
-            }
-        }
-        return rows;
+    boolean isDetailHeaderAfterProject(JsonNode tableConfig, boolean repeatHeaderPerSourceGroup) {
+        return repeatHeaderPerSourceGroup
+                && DETAIL_HEADER_AFTER_PROJECT_HEADER.equals(tableConfig.path("detailHeaderPlacement").asText());
     }
 
-    private float groupHeight(
+    private float minimumGroupHeight(
             List<Map<String, String>> items,
             int groupHeaderIndex,
             JsonNode tableConfig,
@@ -138,13 +129,38 @@ public class PrintPdfGroupPaginator {
             boolean repeatHeaderPerSourceGroup
     ) {
         String groupType = items.get(groupHeaderIndex).get(GROUP_HEADER_KEY);
-        float height = repeatHeaderPerSourceGroup && GROUP_HEADER_SOURCE.equals(groupType) ? headerHeight : 0f;
+        boolean detailHeaderAfterProject = isDetailHeaderAfterProject(tableConfig, repeatHeaderPerSourceGroup);
+        float height = repeatHeaderPerSourceGroup
+                && !detailHeaderAfterProject
+                && GROUP_HEADER_SOURCE.equals(groupType) ? headerHeight : 0f;
         for (int index = groupHeaderIndex; index < items.size(); index++) {
             Map<String, String> item = items.get(index);
             if (index > groupHeaderIndex && (isBlankRow(item) || startsNextGroup(item, groupType))) {
                 break;
             }
-            height += isGroupHeader(item) ? groupHeaderHeight(tableConfig, item) : rowHeight;
+            if (!isGroupHeader(item)) {
+                return height + rowHeight;
+            }
+            height += groupHeaderHeight(tableConfig, item);
+            if (detailHeaderAfterProject && isProjectGroupHeader(item)) {
+                height += headerHeight;
+            }
+        }
+        return height;
+    }
+
+    private float continuationContextHeight(
+            List<Map<String, String>> items,
+            int groupHeaderIndex,
+            JsonNode tableConfig,
+            boolean repeatHeaderPerSourceGroup
+    ) {
+        if (!repeatHeaderPerSourceGroup || !isProjectGroupHeader(items.get(groupHeaderIndex))) {
+            return 0f;
+        }
+        float height = 0f;
+        for (Map<String, String> header : groupContinuationHeaders(items, groupHeaderIndex)) {
+            height += groupHeaderHeight(tableConfig, header);
         }
         return height;
     }

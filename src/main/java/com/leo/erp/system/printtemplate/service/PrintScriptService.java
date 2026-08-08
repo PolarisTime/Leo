@@ -122,9 +122,9 @@ public class PrintScriptService {
         }
 
         List<Map<String, String>> rows = new ArrayList<>();
-        int lineIndex = 0;
         boolean firstSourceGroup = true;
         for (List<Map<String, String>> groupItems : sourceGroups.values()) {
+            int lineIndex = 0;
             if (!firstSourceGroup) {
                 rows.add(blankGroupRow());
             }
