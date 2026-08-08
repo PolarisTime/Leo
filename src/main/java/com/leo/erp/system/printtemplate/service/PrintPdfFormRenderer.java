@@ -66,8 +66,11 @@ public class PrintPdfFormRenderer {
 
         Map<String, String> variables = valueResolver.summaryVariables(data, items);
 
-        PrintPdfDrawingSupport.PageMetrics pageMetrics = drawing.pageMetrics(root.path("page"));
+        JsonNode pageConfig = root.path("page");
+        PrintPdfDrawingSupport.PageMetrics pageMetrics = drawing.pageMetrics(pageConfig);
+        boolean repeatHeader = drawing.bool(pageConfig, "repeatHeader", true);
         float tableTop = drawing.number(tableConfig, "top", 176f);
+        float continuationTableTop = drawing.number(tableConfig, "continuationTop", tableTop);
         float rowHeight = drawing.number(tableConfig, "rowHeight", 26f);
         float headerHeight = drawing.number(tableConfig, "headerHeight", 28f);
         int maxRowsPerPage = Math.max(1, drawing.integer(tableConfig, "maxRowsPerPage", 16));
@@ -78,10 +81,13 @@ public class PrintPdfFormRenderer {
         boolean firstPage = true;
         do {
             PdfCanvas canvas = new PdfCanvas(pdf.addNewPage(new PageSize(pageMetrics.width(), pageMetrics.height())));
-            pageContentRenderer.drawStatic(canvas, font, root.path("static"), variables, pageMetrics);
-            pageContentRenderer.drawFields(canvas, fieldsConfig, data, font, pageMetrics);
+            if (firstPage || repeatHeader) {
+                pageContentRenderer.drawStatic(canvas, font, root.path("static"), variables, pageMetrics);
+                pageContentRenderer.drawFields(canvas, fieldsConfig, data, font, pageMetrics);
+            }
             boolean renderHeader = renderTable && firstPage;
-            float rowTop = tableTop + (renderHeader ? headerHeight : 0);
+            float currentTableTop = firstPage ? tableTop : continuationTableTop;
+            float rowTop = currentTableTop + (renderHeader ? headerHeight : 0);
             int rowsOnPage = 0;
             if (renderHeader) {
                 tableRenderer.drawHeader(canvas, font, tableConfig, columns, pageMetrics);

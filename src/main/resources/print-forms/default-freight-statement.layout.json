@@ -1,5 +1,5 @@
 {
-  "page": {"width": 595, "height": 842},
+  "page": {"width": 595, "height": 842, "repeatHeader": false},
   "static": [
     {"type": "text", "text": "物流对账单", "left": 28, "top": 18, "width": 539, "height": 26, "fontSize": 18, "align": "center", "color": "#1677ff"},
     {"type": "rect", "left": 28, "top": 58, "width": 539, "height": 62, "fillColor": "#fafafa", "strokeColor": "#d9d9d9", "lineWidth": 1},
@@ -20,6 +20,7 @@
     "source": "items",
     "left": 28,
     "top": 170,
+    "continuationTop": 28,
     "width": 539,
     "headerHeight": 30,
     "rowHeight": 26,
