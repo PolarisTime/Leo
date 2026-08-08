@@ -27,9 +27,15 @@ public class PrintPdfTableRenderer {
         this.drawing = drawing;
     }
 
-    void drawHeader(PdfCanvas canvas, PdfFont font, JsonNode tableConfig, List<JsonNode> columns, PrintPdfDrawingSupport.PageMetrics pageMetrics) {
+    void drawHeader(
+            PdfCanvas canvas,
+            PdfFont font,
+            JsonNode tableConfig,
+            List<JsonNode> columns,
+            float top,
+            PrintPdfDrawingSupport.PageMetrics pageMetrics
+    ) {
         float left = drawing.number(tableConfig, "left", 28f);
-        float top = drawing.number(tableConfig, "top", 176f);
         float headerHeight = drawing.number(tableConfig, "headerHeight", 28f);
         Color headerFillColor = drawing.color(tableConfig, "headerFillColor", null);
         Color borderColor = drawing.color(tableConfig, "borderColor", ColorConstants.BLACK);
@@ -169,54 +175,117 @@ public class PrintPdfTableRenderer {
         float lineWidth = drawing.number(tableConfig, "lineWidth", 1f);
         Color borderColor = drawing.color(tableConfig, "borderColor", ColorConstants.BLACK);
         JsonNode headerConfig = tableConfig.path("groupHeader");
-        float rowHeight = drawing.number(headerConfig, "height", 18f);
+        String groupType = groupHeader.get(GROUP_HEADER_KEY);
+        boolean sourceHeader = GROUP_HEADER_SOURCE.equals(groupType);
+        JsonNode groupTypeConfig = headerConfig.path(groupType);
+        float rowHeight = drawing.number(
+                groupTypeConfig,
+                "height",
+                drawing.number(
+                        headerConfig,
+                        sourceHeader ? "sourceHeight" : "projectHeight",
+                        drawing.number(headerConfig, "height", 18f)
+                )
+        );
         Color fillColor = drawing.color(
-                headerConfig,
+                groupTypeConfig,
                 "fillColor",
-                drawing.color(tableConfig, "headerFillColor", ColorConstants.WHITE)
+                drawing.color(
+                        headerConfig,
+                        "fillColor",
+                        drawing.color(tableConfig, "headerFillColor", ColorConstants.WHITE)
+                )
         );
         Color textColor = drawing.color(
-                headerConfig,
+                groupTypeConfig,
                 "textColor",
-                drawing.color(tableConfig, "textColor", ColorConstants.BLACK)
+                drawing.color(
+                        headerConfig,
+                        "textColor",
+                        drawing.color(tableConfig, "textColor", ColorConstants.BLACK)
+                )
         );
-        float fontSize = drawing.number(headerConfig, "fontSize", 8.5f);
+        float fontSize = drawing.number(
+                groupTypeConfig,
+                "fontSize",
+                drawing.number(headerConfig, "fontSize", 8.5f)
+        );
 
         drawing.drawRect(canvas, left, top, width, rowHeight, fillColor, borderColor, lineWidth, pageMetrics);
-        drawing.drawCanvasText(
+        drawGroupHeaderLines(
                 canvas,
                 font,
-                groupHeaderLabel(groupHeader),
-                left + 4,
-                top + 4,
-                width - 8,
-                rowHeight - 4,
+                headerConfig,
+                groupTypeConfig,
+                groupHeader,
+                left,
+                top,
+                width,
+                rowHeight,
                 fontSize,
-                TextAlignment.LEFT,
                 textColor,
                 pageMetrics
         );
     }
 
-    private String groupHeaderLabel(Map<String, String> groupHeader) {
-        if (GROUP_HEADER_SOURCE.equals(groupHeader.get(GROUP_HEADER_KEY))) {
-            String billTime = groupValue(groupHeader, "billTime", "");
-            return "来源物流单：" + groupValue(groupHeader, "sourceNo", "-")
-                    + (billTime.isBlank() ? "" : "（" + billTime + "）")
-                    + "  合计：数量 " + groupValue(groupHeader, "totalQuantity", "0")
-                    + "，重量 " + groupValue(groupHeader, "totalWeightTon", "0") + " 吨"
-                    + "，运费单价 " + groupValue(groupHeader, "unitPrice", "0.00") + " 元/吨"
-                    + "，运费总价 " + groupValue(groupHeader, "totalFreight", "0.00") + " 元";
+    private void drawGroupHeaderLines(
+            PdfCanvas canvas,
+            PdfFont font,
+            JsonNode headerConfig,
+            JsonNode groupTypeConfig,
+            Map<String, String> variables,
+            float left,
+            float top,
+            float width,
+            float rowHeight,
+            float fontSize,
+            Color textColor,
+            PrintPdfDrawingSupport.PageMetrics pageMetrics
+    ) {
+        List<String> lines = drawing.childTextValues(groupTypeConfig.path("lines"));
+        if (lines.isEmpty()) {
+            return;
         }
-        return "客户：" + groupValue(groupHeader, "customerName", "-")
-                + "  项目：" + groupValue(groupHeader, "projectName", "-")
-                + "  小计：数量 " + groupValue(groupHeader, "totalQuantity", "0")
-                + "，重量 " + groupValue(groupHeader, "totalWeightTon", "0") + " 吨";
-    }
-
-    private String groupValue(Map<String, String> groupHeader, String key, String fallback) {
-        String value = groupHeader == null ? null : groupHeader.get(key);
-        return value == null || value.isBlank() ? fallback : value;
+        float paddingLeft = drawing.number(
+                groupTypeConfig,
+                "paddingLeft",
+                drawing.number(headerConfig, "paddingLeft", 4f)
+        );
+        float paddingRight = drawing.number(
+                groupTypeConfig,
+                "paddingRight",
+                drawing.number(headerConfig, "paddingRight", paddingLeft)
+        );
+        float paddingTop = drawing.number(
+                groupTypeConfig,
+                "paddingTop",
+                drawing.number(headerConfig, "paddingTop", 2f)
+        );
+        TextAlignment alignment = drawing.alignment(
+                text(groupTypeConfig, "align", text(headerConfig, "align", "left"))
+        );
+        float lineHeight = rowHeight / lines.size();
+        for (int index = 0; index < lines.size(); index++) {
+            String line = valueResolver.applyTemplate(
+                    lines.get(index),
+                    variables,
+                    groupTypeConfig.path("formats"),
+                    groupTypeConfig.path("defaults")
+            );
+            drawing.drawCanvasText(
+                    canvas,
+                    font,
+                    line,
+                    left + paddingLeft,
+                    top + index * lineHeight + paddingTop,
+                    width - paddingLeft - paddingRight,
+                    Math.max(1f, lineHeight - paddingTop),
+                    fontSize,
+                    alignment,
+                    textColor,
+                    pageMetrics
+            );
+        }
     }
 
     void drawNoContentRow(PdfCanvas canvas, PdfFont font, JsonNode tableConfig, float top, PrintPdfDrawingSupport.PageMetrics pageMetrics) {

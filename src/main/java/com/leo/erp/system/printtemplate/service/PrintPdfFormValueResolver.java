@@ -48,6 +48,15 @@ public class PrintPdfFormValueResolver {
     }
 
     String applyTemplate(String template, Map<String, String> variables) {
+        return applyTemplate(template, variables, null, null);
+    }
+
+    String applyTemplate(
+            String template,
+            Map<String, String> variables,
+            JsonNode formats,
+            JsonNode defaults
+    ) {
         if (template == null || template.isEmpty()) {
             return "";
         }
@@ -55,7 +64,12 @@ public class PrintPdfFormValueResolver {
         StringBuilder result = new StringBuilder();
         while (matcher.find()) {
             String key = matcher.group(1);
-            matcher.appendReplacement(result, Matcher.quoteReplacement(templateValue(key, variables.get(key))));
+            String value = variables == null ? null : variables.get(key);
+            String formattedValue = formatValue(value, text(formats, key, ""));
+            matcher.appendReplacement(
+                    result,
+                    Matcher.quoteReplacement(templateValue(key, formattedValue, defaults))
+            );
         }
         matcher.appendTail(result);
         return result.toString();
@@ -130,8 +144,12 @@ public class PrintPdfFormValueResolver {
         return value.compareTo(BigDecimal.ZERO) == 0 ? "0" : value.stripTrailingZeros().toPlainString();
     }
 
-    private String templateValue(String key, String value) {
+    private String templateValue(String key, String value, JsonNode defaults) {
         if (value == null || value.isBlank()) {
+            String configuredDefault = text(defaults, key, null);
+            if (configuredDefault != null) {
+                return configuredDefault;
+            }
             return runtimeProperties.templateDefault(key);
         }
         return value;
@@ -142,6 +160,9 @@ public class PrintPdfFormValueResolver {
     }
 
     private String text(JsonNode node, String field, String fallback) {
+        if (node == null) {
+            return fallback;
+        }
         JsonNode child = node.path(field);
         return child.isMissingNode() || child.isNull() ? fallback : child.asText(fallback);
     }

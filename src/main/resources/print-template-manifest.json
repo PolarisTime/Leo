@@ -73,14 +73,6 @@
       "settlementCompanyName": "嘉兴颖捷建材有限公司"
     },
     {
-      "sourceRef": "print-forms/freight-statement-summary.lodop.txt",
-      "billType": "freight-statement",
-      "templateName": "物流对账单-汇总",
-      "templateCode": "TPL_700540000000000026",
-      "isDefault": false,
-      "settlementCompanyName": "嘉兴颖捷建材有限公司"
-    },
-    {
       "sourceRef": "print-forms/customer-statement-a4.lodop.txt",
       "billType": "customer-statement",
       "templateName": "客户对账单-A4",

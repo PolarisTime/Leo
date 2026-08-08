@@ -21,8 +21,10 @@
     "left": 28,
     "top": 170,
     "continuationTop": 28,
+    "bottom": 814,
     "width": 539,
     "headerHeight": 30,
+    "repeatHeaderPerSourceGroup": true,
     "rowHeight": 26,
     "maxRowsPerPage": 15,
     "headerFillColor": "#f5f7fa",
@@ -33,10 +35,43 @@
     "emptyTextColor": "#8c8c8c",
     "lineWidth": 1,
     "groupHeader": {
-      "height": 18,
       "fillColor": "#e6f4ff",
       "textColor": "#1f1f1f",
-      "fontSize": 8.5
+      "fontSize": 8.5,
+      "paddingLeft": 4,
+      "paddingTop": 2,
+      "align": "left",
+      "source": {
+        "height": 36,
+        "lines": [
+          "来源物流单：${sourceNo}    日期：${billTime}",
+          "合计：数量 ${totalQuantity}，重量 ${totalWeightTon} 吨，运费单价 ${unitPrice} 元/吨，运费总价 ${totalFreight} 元"
+        ],
+        "formats": {
+          "billTime": "chineseDate"
+        },
+        "defaults": {
+          "sourceNo": "-",
+          "billTime": "-",
+          "totalQuantity": "0",
+          "totalWeightTon": "0",
+          "unitPrice": "0.00",
+          "totalFreight": "0.00"
+        }
+      },
+      "project": {
+        "height": 36,
+        "lines": [
+          "客户：${customerName}    小计：数量 ${totalQuantity}，重量 ${totalWeightTon} 吨",
+          "项目：${projectName}"
+        ],
+        "defaults": {
+          "customerName": "-",
+          "projectName": "-",
+          "totalQuantity": "0",
+          "totalWeightTon": "0"
+        }
+      }
     },
     "columns": [
       {"key": "index", "label": "序号", "width": 24, "headerFontSize": 9, "fontSize": 9},

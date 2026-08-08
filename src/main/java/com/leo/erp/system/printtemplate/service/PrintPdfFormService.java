@@ -46,7 +46,8 @@ public class PrintPdfFormService {
                 new PrintPdfFontFactory(),
                 drawing,
                 new PrintPdfPageContentRenderer(valueResolver, drawing),
-                new PrintPdfTableRenderer(valueResolver, drawing)
+                new PrintPdfTableRenderer(valueResolver, drawing),
+                new PrintPdfGroupPaginator(drawing)
         );
     }
 

@@ -18,26 +18,25 @@ import java.util.Map;
 @Service
 public class PrintPdfFormRenderer {
 
-    private static final String GROUP_HEADER_SOURCE = "source";
-    private static final String GROUP_HEADER_PROJECT = "project";
-    private static final String GROUP_HEADER_KEY = "isGroupHeader";
-
     private final PrintPdfFormValueResolver valueResolver;
     private final PrintPdfFontFactory fontFactory;
     private final PrintPdfDrawingSupport drawing;
     private final PrintPdfPageContentRenderer pageContentRenderer;
     private final PrintPdfTableRenderer tableRenderer;
+    private final PrintPdfGroupPaginator groupPaginator;
 
     public PrintPdfFormRenderer(PrintPdfFormValueResolver valueResolver,
                                 PrintPdfFontFactory fontFactory,
                                 PrintPdfDrawingSupport drawing,
                                 PrintPdfPageContentRenderer pageContentRenderer,
-                                PrintPdfTableRenderer tableRenderer) {
+                                PrintPdfTableRenderer tableRenderer,
+                                PrintPdfGroupPaginator groupPaginator) {
         this.valueResolver = valueResolver;
         this.fontFactory = fontFactory;
         this.drawing = drawing;
         this.pageContentRenderer = pageContentRenderer;
         this.tableRenderer = tableRenderer;
+        this.groupPaginator = groupPaginator;
     }
 
     byte[] render(PrintPdfFormPayload payload) {
@@ -71,11 +70,13 @@ public class PrintPdfFormRenderer {
         boolean repeatHeader = drawing.bool(pageConfig, "repeatHeader", true);
         float tableTop = drawing.number(tableConfig, "top", 176f);
         float continuationTableTop = drawing.number(tableConfig, "continuationTop", tableTop);
+        float tableBottom = drawing.number(tableConfig, "bottom", pageMetrics.height() - 28f);
         float rowHeight = drawing.number(tableConfig, "rowHeight", 26f);
         float headerHeight = drawing.number(tableConfig, "headerHeight", 28f);
         int maxRowsPerPage = Math.max(1, drawing.integer(tableConfig, "maxRowsPerPage", 16));
         List<JsonNode> columns = drawing.childObjects(tableConfig.path("columns"));
         boolean renderTable = tableConfig.isObject();
+        boolean repeatHeaderPerSourceGroup = drawing.bool(tableConfig, "repeatHeaderPerSourceGroup", false);
 
         int itemIndex = 0;
         boolean firstPage = true;
@@ -85,24 +86,60 @@ public class PrintPdfFormRenderer {
                 pageContentRenderer.drawStatic(canvas, font, root.path("static"), variables, pageMetrics);
                 pageContentRenderer.drawFields(canvas, fieldsConfig, data, font, pageMetrics);
             }
-            boolean renderHeader = renderTable && firstPage;
+            boolean renderHeader = renderTable && firstPage && !repeatHeaderPerSourceGroup;
             float currentTableTop = firstPage ? tableTop : continuationTableTop;
             float rowTop = currentTableTop + (renderHeader ? headerHeight : 0);
             int rowsOnPage = 0;
             if (renderHeader) {
-                tableRenderer.drawHeader(canvas, font, tableConfig, columns, pageMetrics);
+                tableRenderer.drawHeader(canvas, font, tableConfig, columns, currentTableTop, pageMetrics);
+            }
+            if (repeatHeaderPerSourceGroup && groupPaginator.isGroupContinuation(items, itemIndex)) {
+                tableRenderer.drawHeader(canvas, font, tableConfig, columns, rowTop, pageMetrics);
+                rowTop += headerHeight;
+                for (Map<String, String> header : groupPaginator.groupContinuationHeaders(items, itemIndex)) {
+                    tableRenderer.drawItemRow(canvas, font, tableConfig, columns, rowTop, header, pageMetrics);
+                    rowTop += groupPaginator.groupHeaderHeight(tableConfig, header);
+                }
             }
             firstPage = false;
             boolean lastPage = true;
             while (renderTable && itemIndex < items.size()) {
                 Map<String, String> item = items.get(itemIndex);
-                boolean groupHeader = isGroupHeader(item);
-                if (rowsOnPage >= maxRowsPerPage) {
+                if (groupPaginator.isBlankRow(item)) {
+                    itemIndex++;
+                    continue;
+                }
+                if (groupPaginator.shouldStartGroupOnNextPage(
+                        items,
+                        itemIndex,
+                        rowsOnPage,
+                        maxRowsPerPage,
+                        rowTop,
+                        tableBottom,
+                        continuationTableTop,
+                        tableConfig,
+                        headerHeight,
+                        rowHeight,
+                        repeatHeaderPerSourceGroup
+                )) {
                     lastPage = false;
                     break;
                 }
+                boolean groupHeader = groupPaginator.isGroupHeader(item);
+                float itemHeight = groupHeader
+                        ? groupPaginator.groupHeaderHeight(tableConfig, item)
+                        : rowHeight;
+                if (rowsOnPage >= maxRowsPerPage
+                        || rowsOnPage > 0 && rowTop + itemHeight > tableBottom) {
+                    lastPage = false;
+                    break;
+                }
+                if (repeatHeaderPerSourceGroup && groupPaginator.isSourceGroupHeader(item)) {
+                    tableRenderer.drawHeader(canvas, font, tableConfig, columns, rowTop, pageMetrics);
+                    rowTop += headerHeight;
+                }
                 tableRenderer.drawItemRow(canvas, font, tableConfig, columns, rowTop, item, pageMetrics);
-                rowTop += groupHeader ? groupHeaderHeight(tableConfig) : rowHeight;
+                rowTop += itemHeight;
                 if (!groupHeader) {
                     rowsOnPage++;
                 }
@@ -113,7 +150,9 @@ public class PrintPdfFormRenderer {
                 rowTop += rowHeight;
             }
             if (renderTable && lastPage) {
-                rowTop = tableRenderer.drawSummary(canvas, font, root.path("summary"), tableConfig, variables, rowTop, pageMetrics);
+                rowTop = tableRenderer.drawSummary(
+                        canvas, font, root.path("summary"), tableConfig, variables, rowTop, pageMetrics
+                );
                 tableRenderer.drawClauses(canvas, font, root.path("clauses"), tableConfig, rowTop, pageMetrics);
             }
             canvas.release();
@@ -121,15 +160,6 @@ public class PrintPdfFormRenderer {
                 break;
             }
         } while (true);
-    }
-
-    private boolean isGroupHeader(Map<String, String> item) {
-        return GROUP_HEADER_SOURCE.equals(item.get(GROUP_HEADER_KEY))
-                || GROUP_HEADER_PROJECT.equals(item.get(GROUP_HEADER_KEY));
-    }
-
-    private float groupHeaderHeight(JsonNode tableConfig) {
-        return drawing.number(tableConfig.path("groupHeader"), "height", 18f);
     }
 
 }
