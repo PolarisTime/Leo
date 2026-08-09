@@ -31,6 +31,8 @@ public record FreightStatementItemResponse(
         String warehouseName,
         Long sourceFreightBillId,
         Long sourceFreightBillItemId,
-        Long sourceSalesOrderItemId
+        Long sourceSalesOrderItemId,
+        BigDecimal sourceFreightBillUnitPrice,
+        BigDecimal sourceFreightBillTotalFreight
 ) {
 }

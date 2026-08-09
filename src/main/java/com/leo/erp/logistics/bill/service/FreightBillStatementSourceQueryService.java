@@ -87,6 +87,7 @@ public class FreightBillStatementSourceQueryService implements FreightBillStatem
                 bill.getSettlementCompanyId(),
                 bill.getSettlementCompanyName(),
                 bill.getBillTime(),
+                bill.getUnitPrice(),
                 bill.getTotalFreight(),
                 bill.getStatus(),
                 bill.getItems().stream().map(this::toItemSnapshot).toList()

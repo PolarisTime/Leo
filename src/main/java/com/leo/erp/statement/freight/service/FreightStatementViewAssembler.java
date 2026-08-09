@@ -2,13 +2,17 @@ package com.leo.erp.statement.freight.service;
 
 import com.leo.erp.attachment.api.AttachmentQuery;
 import com.leo.erp.attachment.api.AttachmentView;
+import com.leo.erp.logistics.api.FreightBillStatementSourceQuery;
+import com.leo.erp.logistics.api.FreightBillStatementSourceQuery.BillSnapshot;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -17,16 +21,25 @@ public class FreightStatementViewAssembler {
     private static final String MODULE_KEY = "freight-statement";
 
     private final AttachmentQuery attachmentQuery;
+    private final FreightBillStatementSourceQuery sourceQuery;
 
-    public FreightStatementViewAssembler(AttachmentQuery attachmentQuery) {
+    public FreightStatementViewAssembler(AttachmentQuery attachmentQuery,
+                                         FreightBillStatementSourceQuery sourceQuery) {
         this.attachmentQuery = attachmentQuery;
+        this.sourceQuery = sourceQuery;
     }
 
     FreightStatementView toDetailView(FreightStatement entity) {
-        return toView(entity, resolveAttachments(entity));
+        return toView(entity, resolveAttachments(entity), resolveSourceBills(entity));
     }
 
     FreightStatementView toView(FreightStatement entity, List<AttachmentView> attachments) {
+        return toView(entity, attachments, Map.of());
+    }
+
+    private FreightStatementView toView(FreightStatement entity,
+                                        List<AttachmentView> attachments,
+                                        Map<Long, BillSnapshot> sourceBillsById) {
         return new FreightStatementView(
                 entity.getId(),
                 entity.getStatementNo(),
@@ -45,12 +58,14 @@ public class FreightStatementViewAssembler {
                 joinAttachmentNames(attachments),
                 attachments,
                 entity.getRemark(),
-                entity.getItems().stream().map(this::toItemView).toList(),
+                entity.getItems().stream()
+                        .map(item -> toItemView(item, sourceBillsById.get(item.getSourceFreightBillId())))
+                        .toList(),
                 entity.getCarrierId()
         );
     }
 
-    FreightStatementItemView toItemView(FreightStatementItem item) {
+    private FreightStatementItemView toItemView(FreightStatementItem item, BillSnapshot sourceBill) {
         return new FreightStatementItemView(
                 item.getId(),
                 item.getLineNo(),
@@ -79,8 +94,27 @@ public class FreightStatementViewAssembler {
                 item.getProjectId(),
                 item.getMaterialId(),
                 item.getWarehouseId(),
-                item.getBatchNoNormalized()
+                item.getBatchNoNormalized(),
+                sourceBill == null ? null : sourceBill.unitPrice(),
+                sourceBill == null ? null : sourceBill.totalFreight()
         );
+    }
+
+    private Map<Long, BillSnapshot> resolveSourceBills(FreightStatement entity) {
+        LinkedHashSet<Long> sourceBillIds = entity.getItems().stream()
+                .map(FreightStatementItem::getSourceFreightBillId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (sourceBillIds.isEmpty()) {
+            return Map.of();
+        }
+        return sourceQuery.findByBillIds(sourceBillIds).stream()
+                .collect(Collectors.toMap(
+                        BillSnapshot::id,
+                        snapshot -> snapshot,
+                        (first, ignored) -> first,
+                        LinkedHashMap::new
+                ));
     }
 
     Map<Long, List<AttachmentView>> resolveAttachmentsByStatement(List<FreightStatement> statements) {

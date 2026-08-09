@@ -30,6 +30,8 @@ public record FreightStatementItemView(
         Long projectId,
         Long materialId,
         Long warehouseId,
-        String batchNoNormalized
+        String batchNoNormalized,
+        BigDecimal sourceFreightBillUnitPrice,
+        BigDecimal sourceFreightBillTotalFreight
 ) {
 }

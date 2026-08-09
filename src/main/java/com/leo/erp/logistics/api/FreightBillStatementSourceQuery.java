@@ -68,6 +68,7 @@ public interface FreightBillStatementSourceQuery {
             Long settlementCompanyId,
             String settlementCompanyName,
             LocalDate billTime,
+            BigDecimal unitPrice,
             BigDecimal totalFreight,
             String status,
             List<ItemSnapshot> items
