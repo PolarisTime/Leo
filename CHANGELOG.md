@@ -1,3 +1,11 @@
+## [9.10.4](https://github.com/PolarisTime/Leo/compare/v9.10.3...v9.10.4) (2026-08-09)
+
+
+### Bug Fixes
+
+* **freight-statement:** 返回来源物流单运费信息 ([4ad2feb](https://github.com/PolarisTime/Leo/commit/4ad2feb1bf567f23e4dcf6060991c056f0a16bab))
+* **print:** 优化物流对账单续页与表头宽度 ([094af45](https://github.com/PolarisTime/Leo/commit/094af457f7292f53cba282e40a59848fc1c71f7e))
+
 ## [9.10.3](https://github.com/PolarisTime/Leo/compare/v9.10.2...v9.10.3) (2026-08-08)
 
 
