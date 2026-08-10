@@ -267,4 +267,78 @@ class SalesOutboundServiceTest {
                 org.mockito.ArgumentMatchers.eq(5L), org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString());
     }
+
+    // ---------- save 事件与回滚 ----------
+
+    @Test
+    void saveCreatedEntity_shouldPublishEvent() {
+        SalesOutbound entity = entity(StatusConstants.DRAFT);
+        when(saveService.save(entity)).thenReturn(entity);
+
+        service.saveCreatedEntity(entity, request("OB001", "SO001", StatusConstants.DRAFT));
+
+        verify(businessOperationEventPublisher).publish(
+                org.mockito.ArgumentMatchers.eq("SALES_OUTBOUND_CREATED"),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.eq(5L), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void saveUpdatedEntity_shouldPublishEvent() {
+        SalesOutbound entity = entity(StatusConstants.DRAFT);
+        when(saveService.save(entity)).thenReturn(entity);
+
+        service.saveUpdatedEntity(entity, request("OB001", "SO001", StatusConstants.DRAFT));
+
+        verify(businessOperationEventPublisher).publish(
+                org.mockito.ArgumentMatchers.eq("SALES_OUTBOUND_UPDATED"),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.eq(5L), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void beforeDelete_shouldRollbackSourceOrder() {
+        SalesOutbound entity = entity(StatusConstants.DRAFT);
+        SalesOutboundItem item = new SalesOutboundItem();
+        item.setSourceSalesOrderItemId(11L);
+        entity.setItems(List.of(item));
+        // sourceSalesOrderIds 解析：salesOutboundApplyService 返回来源订单 id
+        org.mockito.Mockito.doReturn(List.of(1L))
+                .when(salesOutboundApplyService).sourceSalesOrderIds(entity);
+        com.leo.erp.sales.order.domain.entity.SalesOrder order =
+                new com.leo.erp.sales.order.domain.entity.SalesOrder();
+        order.setId(1L);
+        order.setOrderNo("SO001");
+        order.setStatus(StatusConstants.AUDITED);
+        order.setItems(List.of());
+        when(salesOrderRepository.findForUpdateByIdAndDeletedFlagFalse(1L))
+                .thenReturn(java.util.Optional.of(order));
+        when(salesOrderRepository.save(order)).thenReturn(order);
+
+        service.beforeDelete(entity);
+
+        assertThat(order.getStatus()).isEqualTo(StatusConstants.DRAFT); // 来源订单回退草稿
+        verify(salesOrderRepository).save(order);
+    }
+
+    @Test
+    void page_shouldMapEntities() {
+        com.leo.erp.common.api.PageQuery query = mock(com.leo.erp.common.api.PageQuery.class);
+        when(query.toPageable("id")).thenReturn(org.springframework.data.domain.PageRequest.of(0, 10));
+        SalesOutbound entity = entity(StatusConstants.DRAFT);
+        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
+        when(responseAssembler.toSummaryResponse(entity)).thenReturn(response);
+        when(repository.findAll(any(org.springframework.data.jpa.domain.Specification.class),
+                any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(entity)));
+
+        org.springframework.data.domain.Page<SalesOutboundResponse> result =
+                service.page(query, mock(com.leo.erp.common.api.PageFilter.class), null);
+
+        assertThat(result.getContent()).containsExactly(response);
+    }
 }

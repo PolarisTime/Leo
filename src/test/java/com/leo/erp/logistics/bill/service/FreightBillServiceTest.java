@@ -271,4 +271,44 @@ class FreightBillServiceTest {
         verify(businessOperationEventPublisher).publish(eq("FREIGHT_BILL_STATUS_CHANGED"), anyString(), anyString(),
                 anyString(), anyString(), eq(5L), anyString(), anyString());
     }
+
+    // ---------- save 事件与 normalize ----------
+
+    @Test
+    void saveCreatedEntity_shouldPublishEvent() {
+        FreightBill entity = new FreightBill();
+        entity.setId(5L);
+        entity.setBillNo("FB001");
+        when(repository.save(entity)).thenReturn(entity);
+
+        service.saveCreatedEntity(entity, request("FB001", 1L, StatusConstants.DRAFT));
+
+        verify(businessOperationEventPublisher).publish(eq("FREIGHT_BILL_CREATED"), anyString(), anyString(),
+                anyString(), anyString(), eq(5L), anyString(), anyString());
+    }
+
+    @Test
+    void saveUpdatedEntity_shouldPublishEvent() {
+        FreightBill entity = new FreightBill();
+        entity.setId(5L);
+        entity.setBillNo("FB001");
+        when(repository.save(entity)).thenReturn(entity);
+
+        service.saveUpdatedEntity(entity, request("FB001", 1L, StatusConstants.DRAFT));
+
+        verify(businessOperationEventPublisher).publish(eq("FREIGHT_BILL_UPDATED"), anyString(), anyString(),
+                anyString(), anyString(), eq(5L), anyString(), anyString());
+    }
+
+    @Test
+    void normalizeUpdateRequest_shouldRejectStatusChange() {
+        FreightBill entity = new FreightBill();
+        entity.setBillNo("FB001");
+        entity.setStatus(StatusConstants.AUDITED);
+        FreightBillRequest request = request("FB001", 1L, StatusConstants.DRAFT);
+
+        assertThatThrownBy(() -> service.normalizeUpdateRequest(entity, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("只能通过审核或反审核操作变更");
+    }
 }

@@ -32,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -98,10 +99,10 @@ class SalesOrderServiceTest {
 
     private void loginAs(Long userId) {
         SecurityPrincipal principal = mock(SecurityPrincipal.class);
-        when(principal.id()).thenReturn(userId);
+        lenient().when(principal.id()).thenReturn(userId);
         Authentication auth = mock(Authentication.class);
-        when(auth.isAuthenticated()).thenReturn(true);
-        when(auth.getPrincipal()).thenReturn(principal);
+        lenient().when(auth.isAuthenticated()).thenReturn(true);
+        lenient().when(auth.getPrincipal()).thenReturn(principal);
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(auth);
         SecurityContextHolder.setContext(context);
@@ -247,5 +248,114 @@ class SalesOrderServiceTest {
         assertThat(result).isSameAs(response);
         verify(businessOperationEventPublisher).publish(eq("SALES_ORDER_COMPLETED"), anyString(), anyString(),
                 anyString(), anyString(), eq(5L), anyString(), anyString());
+    }
+
+    // ---------- apply ----------
+
+    @Test
+    void apply_shouldApplyWhenCreating() {
+        loginAs(1L);
+        SalesOrder entity = new SalesOrder();
+        entity.setId(5L);
+        when(salesOrderAuditedPricingService.isAuditedPricingUpdate(any(), any())).thenReturn(false);
+
+        service.apply(entity, request("SO001", StatusConstants.DRAFT));
+
+        verify(salesOrderApplyService).apply(any(), any(), any());
+    }
+
+    @Test
+    void apply_shouldUsePricingUpdatePathWhenAuditedPricingUpdate() {
+        loginAs(1L);
+        SalesOrder entity = new SalesOrder();
+        entity.setId(5L);
+        when(salesOrderAuditedPricingService.isAuditedPricingUpdate(any(), any())).thenReturn(true);
+
+        service.apply(entity, request("SO001", StatusConstants.AUDITED));
+
+        verify(salesOrderApplyService).validateCustomerSnapshot(any(SalesOrderRequest.class));
+        verify(salesOrderAuditedPricingService).applyAuditedPricingUpdate(any(), any());
+        verify(salesOrderApplyService, org.mockito.Mockito.never()).apply(any(), any(), any());
+    }
+
+    @Test
+    void apply_shouldGuardWhenExistingItemsAndNotPricingUpdate() {
+        loginAs(1L);
+        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+        com.leo.erp.sales.order.domain.entity.SalesOrderItem item =
+                new com.leo.erp.sales.order.domain.entity.SalesOrderItem();
+        item.setId(100L);
+        entity.setItems(List.of(item));
+        when(salesOrderAuditedPricingService.isAuditedPricingUpdate(any(), any())).thenReturn(false);
+
+        service.apply(entity, request("SO001", StatusConstants.DRAFT));
+
+        verify(downstreamMutationGuard).assertNoFreightReference(any(), anyString());
+        verify(downstreamMutationGuard).assertSourceLineMutationAllowed(any(), any(), anyString());
+        verify(salesOrderApplyService).apply(any(), any(), any());
+    }
+
+    // ---------- save 事件 ----------
+
+    @Test
+    void saveCreatedEntity_shouldPublishEvent() {
+        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+        when(saveService.save(entity)).thenReturn(entity);
+
+        service.saveCreatedEntity(entity, request("SO001", StatusConstants.DRAFT));
+
+        verify(businessOperationEventPublisher).publish(eq("SALES_ORDER_CREATED"), anyString(), anyString(),
+                anyString(), anyString(), eq(5L), anyString(), anyString());
+    }
+
+    @Test
+    void saveUpdatedEntity_shouldUsePricingSaveWhenAuditedPricingUpdate() {
+        SalesOrder entity = entity(1L, StatusConstants.AUDITED);
+        when(salesOrderAuditedPricingService.isAuditedPricingUpdate(any(), any())).thenReturn(true);
+        when(saveService.saveAuditedPricingUpdate(entity)).thenReturn(entity);
+
+        service.saveUpdatedEntity(entity, request("SO001", StatusConstants.AUDITED));
+
+        verify(saveService).saveAuditedPricingUpdate(entity);
+        verify(saveService, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    void saveStatusEntity_shouldUseSaveStatus() {
+        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+        when(saveService.saveStatus(entity)).thenReturn(entity);
+
+        assertThat(service.saveStatusEntity(entity)).isSameAs(entity);
+    }
+
+    // ---------- 允许写最终状态 ----------
+
+    @Test
+    void allowRequestToWriteFinalStatus_shouldAllowDeliveryVerification() {
+        SalesOrder entity = entity(1L, StatusConstants.DELIVERY_VERIFICATION);
+        SalesOrderRequest request = request("SO001", StatusConstants.DELIVERY_VERIFICATION);
+
+        boolean allowed = service.allowRequestToWriteFinalStatus(
+                entity, request, java.util.Optional.of(StatusConstants.DELIVERY_VERIFICATION));
+
+        assertThat(allowed).isTrue();
+    }
+
+    // ---------- page ----------
+
+    @Test
+    void page_shouldMapEntities() {
+        loginAs(1L);
+        com.leo.erp.common.api.PageQuery query = mock(com.leo.erp.common.api.PageQuery.class);
+        when(query.toPageable("id")).thenReturn(org.springframework.data.domain.PageRequest.of(0, 10));
+        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+        SalesOrderResponse response = mock(SalesOrderResponse.class);
+        when(responseAssembler.toSummaryResponse(entity)).thenReturn(response);
+        when(repository.findAll(any(org.springframework.data.jpa.domain.Specification.class),
+                any(Pageable.class))).thenReturn(new PageImpl<>(List.of(entity)));
+
+        Page<SalesOrderResponse> result = service.page(query, mock(com.leo.erp.common.api.PageFilter.class), null);
+
+        assertThat(result.getContent()).containsExactly(response);
     }
 }

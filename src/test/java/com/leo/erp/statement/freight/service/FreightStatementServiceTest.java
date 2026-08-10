@@ -242,4 +242,58 @@ class FreightStatementServiceTest {
         verify(businessOperationEventPublisher).publish(eq("FREIGHT_STATEMENT_STATUS_CHANGED"), anyString(), anyString(),
                 anyString(), anyString(), eq(5L), anyString(), anyString());
     }
+
+    // ---------- save 事件与 normalize ----------
+
+    @Test
+    void saveCreatedEntity_shouldPublishEvent() {
+        FreightStatement entity = new FreightStatement();
+        entity.setId(5L);
+        entity.setStatementNo("FS001");
+        when(repository.save(entity)).thenReturn(entity);
+        when(statementSettlementSyncService.syncFreightStatement(entity)).thenReturn(entity);
+
+        service.saveCreatedEntity(entity, command("FS001", StatusConstants.DRAFT));
+
+        verify(businessOperationEventPublisher).publish(eq("FREIGHT_STATEMENT_CREATED"), anyString(), anyString(),
+                anyString(), anyString(), eq(5L), anyString(), anyString());
+    }
+
+    @Test
+    void saveUpdatedEntity_shouldPublishEvent() {
+        FreightStatement entity = new FreightStatement();
+        entity.setId(5L);
+        entity.setStatementNo("FS001");
+        when(repository.save(entity)).thenReturn(entity);
+        when(statementSettlementSyncService.syncFreightStatement(entity)).thenReturn(entity);
+
+        service.saveUpdatedEntity(entity, command("FS001", StatusConstants.DRAFT));
+
+        verify(businessOperationEventPublisher).publish(eq("FREIGHT_STATEMENT_UPDATED"), anyString(), anyString(),
+                anyString(), anyString(), eq(5L), anyString(), anyString());
+    }
+
+    @Test
+    void normalizeUpdateRequest_shouldRejectStatusChange() {
+        FreightStatement entity = new FreightStatement();
+        entity.setStatementNo("FS001");
+        entity.setStatus(StatusConstants.DRAFT);
+        FreightStatementCommand cmd = command("FS001", StatusConstants.AUDITED);
+
+        assertThatThrownBy(() -> service.normalizeUpdateRequest(entity, cmd))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("只能通过审核或反审核操作变更");
+    }
+
+    @Test
+    void normalizeUpdateRequest_shouldKeepStatementNo() {
+        FreightStatement entity = new FreightStatement();
+        entity.setStatementNo("FS001");
+        entity.setStatus(StatusConstants.DRAFT);
+        FreightStatementCommand cmd = command("FS999", StatusConstants.DRAFT);
+
+        FreightStatementCommand normalized = service.normalizeUpdateRequest(entity, cmd);
+
+        assertThat(normalized.statementNo()).isEqualTo("FS001"); // 保留实体单号
+    }
 }

@@ -142,4 +142,52 @@ class SalesOrderPrintExportServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INTERNAL_ERROR);
     }
+
+    @Test
+    void export_shouldFillAllLayoutCells() {
+        SalesOrder order = new SalesOrder();
+        order.setId(1L);
+        order.setProjectId(20L);
+        when(salesOrderRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        // 完整 layout：header 各字段、detail 各类型、summary、pieceWeight suppress 规则
+        PrintXlsxExportLayout layout = new PrintXlsxExportLayout(
+                "sales-order", "print-forms/sales-order-print-v1.1.xlsx", "", 5, 6, 10,
+                List.of(new PrintXlsxExportLayout.HeaderCell("orderNo", "B2"),
+                        new PrintXlsxExportLayout.HeaderCell("settlementCompanyName", "B3"),
+                        new PrintXlsxExportLayout.HeaderCell("customerName", "B4"),
+                        new PrintXlsxExportLayout.HeaderCell("projectName", "B5"),
+                        new PrintXlsxExportLayout.HeaderCell("remark", "B6"),
+                        new PrintXlsxExportLayout.HeaderCell("deliveryYear", "B7"),
+                        new PrintXlsxExportLayout.HeaderCell("deliveryMonth", "B8"),
+                        new PrintXlsxExportLayout.HeaderCell("deliveryDay", "B9"),
+                        new PrintXlsxExportLayout.HeaderCell("deliveryDate", "B10"),
+                        new PrintXlsxExportLayout.HeaderCell("unknownField", "B11")),
+                List.of(new PrintXlsxExportLayout.DetailColumn("brand", 0, "number"),
+                        new PrintXlsxExportLayout.DetailColumn("quantity", 1, "number"),
+                        new PrintXlsxExportLayout.DetailColumn("weightTon", 2, "number"),
+                        new PrintXlsxExportLayout.DetailColumn("pieceWeightTon", 3, "pieceWeight"),
+                        new PrintXlsxExportLayout.DetailColumn("material", 4, "text")),
+                new PrintXlsxExportLayout.Summary(20, List.of(
+                        new PrintXlsxExportLayout.SummaryCell("totalQuantity", 0, "number", "", 0, ""),
+                        new PrintXlsxExportLayout.SummaryCell("totalWeight", 1, "text", "", 2, "吨"),
+                        new PrintXlsxExportLayout.SummaryCell(null, 2, "text", "备注文本", 0, ""))),
+                new PrintXlsxExportLayout.PieceWeight("**", 3,
+                        List.of(new PrintXlsxExportLayout.SuppressRule("material", List.of("螺纹钢"))))
+        );
+        when(layoutProvider.layout("sales-order")).thenReturn(layout);
+        SalesOrderPrintLine line1 = new SalesOrderPrintLine("L1", "品牌A", "型钢", "螺纹钢", "HRB400", 10,
+                new BigDecimal("1.250"), new BigDecimal("12.500"), new BigDecimal("4000"));
+        SalesOrderPrintLine line2 = new SalesOrderPrintLine("L2", "品牌A", "型钢", "其他材质", "HRB400", 4,
+                null, new BigDecimal("12.000"), new BigDecimal("4000"));
+        SalesOrderPrintPage page = new SalesOrderPrintPage(1, List.of(line1, line2), 14, new BigDecimal("24.5"));
+        SalesOrderPrintDocument doc = new SalesOrderPrintDocument("SO001", "结算公司A", "客户A", "项目A", "备注",
+                LocalDate.of(2026, 8, 1), List.of(page));
+        when(printDocumentFactory.create(any(), any(), anyInt())).thenReturn(doc);
+        lenient().when(filenameService.forOrder(any(), any(), any(), any(), any(), any()))
+                .thenReturn("SO001.xlsx");
+
+        FileDownloadResponse response = service.exportSalesOrderPrint(1L);
+
+        assertThat(response.content()).isNotEmpty();
+    }
 }

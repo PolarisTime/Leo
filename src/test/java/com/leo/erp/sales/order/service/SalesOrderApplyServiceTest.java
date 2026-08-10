@@ -28,6 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -220,5 +221,65 @@ class SalesOrderApplyServiceTest {
         entity.setProjectName("项目A");
 
         service.validateCustomerSnapshot(entity); // 不抛
+    }
+
+    // ---------- 明细应用与结算主体 ----------
+
+    private SalesOrderRequest requestWithItems(List<SalesOrderItemRequest> items) {
+        return new SalesOrderRequest(
+                "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A", null, null,
+                LocalDate.of(2026, 8, 1), "销售员A", null, null, items);
+    }
+
+    private SalesOrderItemRequest item() {
+        return new SalesOrderItemRequest(
+                null, 500L, "M001", "品牌A", "型钢", "螺纹钢", "HRB400", "12m", "吨",
+                1L, null, 1L, "库房A", "B001", 5, "件", new BigDecimal("1.250"), 100,
+                new BigDecimal("12.500"), new BigDecimal("4000"), null);
+    }
+
+    @Test
+    void apply_shouldApplyDetailItem() {
+        stubHappyPath();
+        when(sourceAllocationService.resolveSourceInbound(any(), any())).thenReturn(null);
+        SalesOrder entity = new SalesOrder();
+
+        service.apply(entity, requestWithItems(List.of(item())), () -> 100L);
+
+        assertThat(entity.getItems()).hasSize(1);
+        // item 字段由 salesOrderItemMapper.applyItemFields 填充（此处 mock 验证被调用）
+        verify(salesOrderItemMapper).applyItemFields(any(), any(), any(), anyInt(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void apply_shouldUseRequestedSettlementCompany() {
+        stubHappyPath();
+        SalesOrderRequest req = new SalesOrderRequest(
+                "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A", 30L, null,
+                LocalDate.of(2026, 8, 1), "销售员A", null, null, List.of());
+        com.leo.erp.system.company.domain.entity.CompanySetting company =
+                new com.leo.erp.system.company.domain.entity.CompanySetting();
+        company.setId(30L);
+        company.setCompanyName("指定结算");
+        when(companySettingService.requireActiveSettlementCompany(30L)).thenReturn(company);
+        SalesOrder entity = new SalesOrder();
+
+        service.apply(entity, req, () -> 100L);
+
+        assertThat(entity.getSettlementCompanyId()).isEqualTo(30L);
+        assertThat(entity.getSettlementCompanyName()).isEqualTo("指定结算");
+    }
+
+    @Test
+    void apply_shouldRejectLineValidationFailure() {
+        stubHappyPath();
+        org.mockito.Mockito.doThrow(new BusinessException(
+                com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "数量不足"))
+                .when(sourceAllocationService).validateLine(any(), anyInt(), any());
+
+        assertThatThrownBy(() -> service.apply(new SalesOrder(),
+                requestWithItems(List.of(item())), () -> 100L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("数量不足");
     }
 }
