@@ -2,34 +2,31 @@
   "page": {"width": 595, "height": 842, "repeatHeader": false},
   "static": [
     {"type": "text", "text": "物流对账单", "left": 28, "top": 18, "width": 539, "height": 26, "fontSize": 18, "align": "center", "color": "#000000"},
-    {"type": "rect", "left": 28, "top": 58, "width": 539, "height": 62, "fillColor": "#ffffff", "strokeColor": "#000000", "lineWidth": 1},
-    {"type": "line", "x1": 387, "y1": 58, "x2": 387, "y2": 120, "strokeColor": "#000000", "lineWidth": 1},
-    {"type": "line", "x1": 28, "y1": 89, "x2": 567, "y2": 89, "strokeColor": "#000000", "lineWidth": 1},
-    {"type": "text", "text": "物流商：", "left": 42, "top": 68, "width": 64, "height": 14, "fontSize": 11, "color": "#000000"},
-    {"type": "text", "text": "对账单号：", "left": 400, "top": 68, "width": 70, "height": 14, "fontSize": 11, "color": "#000000"},
-    {"type": "text", "text": "对账周期：", "left": 42, "top": 99, "width": 64, "height": 14, "fontSize": 11, "color": "#000000"},
-    {"type": "text", "text": "结束日期：", "left": 400, "top": 99, "width": 70, "height": 14, "fontSize": 11, "color": "#000000"}
+    {"type": "text", "text": "物流商：", "left": 32, "top": 62, "width": 64, "height": 14, "fontSize": 11, "color": "#595959"},
+    {"type": "text", "text": "对账单号：", "left": 400, "top": 62, "width": 72, "height": 14, "fontSize": 11, "color": "#595959"},
+    {"type": "text", "text": "对账周期：", "left": 32, "top": 93, "width": 64, "height": 14, "fontSize": 11, "color": "#595959"},
+    {"type": "text", "text": "结束日期：", "left": 400, "top": 93, "width": 72, "height": 14, "fontSize": 11, "color": "#595959"}
   ],
   "fields": {
-    "customerName": {"source": ["carrierName", "customerName", "supplierName", "counterpartyName"], "left": 108, "top": 64, "width": 266, "height": 22, "fontSize": 12, "color": "#000000"},
-    "billNo": {"source": ["billNo", "statementNo", "orderNo"], "left": 472, "top": 64, "width": 82, "height": 22, "fontSize": 12, "color": "#000000"},
-    "period": {"source": ["period", "dateRange", "startDate"], "left": 108, "top": 95, "width": 266, "height": 22, "fontSize": 12, "color": "#000000"},
-    "endDate": {"source": ["endDate", "billDate", "statementDate"], "format": "chineseDate", "left": 472, "top": 95, "width": 82, "height": 22, "fontSize": 12, "color": "#000000"}
+    "customerName": {"source": ["carrierName", "customerName", "supplierName", "counterpartyName"], "left": 100, "top": 58, "width": 280, "height": 22, "fontSize": 12, "color": "#000000"},
+    "billNo": {"source": ["billNo", "statementNo", "orderNo"], "left": 474, "top": 58, "width": 82, "height": 22, "fontSize": 12, "color": "#000000"},
+    "period": {"source": ["period", "dateRange", "startDate"], "left": 100, "top": 89, "width": 280, "height": 22, "fontSize": 12, "color": "#000000"},
+    "endDate": {"source": ["endDate", "billDate", "statementDate"], "format": "chineseDate", "left": 474, "top": 89, "width": 82, "height": 22, "fontSize": 12, "color": "#000000"}
   },
   "table": {
     "source": "items",
     "left": 32,
-    "top": 170,
+    "top": 162,
     "continuationTop": 28,
     "bottom": 814,
     "width": 531,
-    "headerHeight": 30,
+    "headerHeight": 26,
     "repeatHeaderPerSourceGroup": true,
     "repeatGroupContextOnContinuation": false,
     "detailHeaderPlacement": "afterProjectHeader",
-    "sourceGroupGap": 10,
-    "rowHeight": 26,
-    "maxRowsPerPage": 15,
+    "sourceGroupGap": 8,
+    "rowHeight": 23,
+    "maxRowsPerPage": 16,
     "headerFillColor": "#ffffff",
     "borderColor": "#000000",
     "headerTextColor": "#000000",
@@ -45,9 +42,9 @@
       "paddingTop": 2,
       "align": "left",
       "source": {
-        "height": 36,
+        "height": 34,
         "lines": [
-          "来源物流单：${sourceNo}    日期：${billTime}",
+          "来源物流单：${sourceNo}    日期：${billTime}    车号：${vehiclePlate}",
           "合计：数量 ${totalQuantity}，重量 ${totalWeightTon} 吨，运费单价 ${unitPrice} 元/吨，运费总价 ${totalFreight} 元"
         ],
         "formats": {
@@ -56,6 +53,7 @@
         "defaults": {
           "sourceNo": "-",
           "billTime": "-",
+          "vehiclePlate": "-",
           "totalQuantity": "0",
           "totalWeightTon": "0",
           "unitPrice": "0.00",
@@ -63,17 +61,27 @@
         }
       },
       "project": {
-        "height": 36,
+        "height": 26,
         "lines": [
-          "客户：${customerName}    小计：数量 ${totalQuantity}，重量 ${totalWeightTon} 吨",
+          "客户：${customerName}",
           "项目：${projectName}"
         ],
         "defaults": {
           "customerName": "-",
-          "projectName": "-",
-          "totalQuantity": "0",
-          "totalWeightTon": "0"
+          "projectName": "-"
         }
+      },
+      "subtotal": {
+        "height": 22,
+        "fillColor": "#f5f7fa",
+        "textColor": "#000000",
+        "fontSize": 9,
+        "paddingLeft": 6,
+        "paddingTop": 4,
+        "align": "right",
+        "lines": [
+          "小计：数量 ${totalQuantity} 件，重量 ${totalWeightTon} 吨"
+        ]
       }
     },
     "columns": [

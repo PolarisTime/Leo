@@ -16,6 +16,7 @@ public class PrintPdfTableRenderer {
 
     private static final String GROUP_HEADER_SOURCE = "source";
     private static final String GROUP_HEADER_PROJECT = "project";
+    private static final String GROUP_HEADER_SUBTOTAL = "subtotal";
     private static final String GROUP_HEADER_KEY = "isGroupHeader";
 
     private final PrintPdfFormValueResolver valueResolver;
@@ -81,7 +82,8 @@ public class PrintPdfTableRenderer {
             PrintPdfDrawingSupport.PageMetrics pageMetrics
     ) {
         if (GROUP_HEADER_SOURCE.equals(item.get(GROUP_HEADER_KEY))
-                || GROUP_HEADER_PROJECT.equals(item.get(GROUP_HEADER_KEY))) {
+                || GROUP_HEADER_PROJECT.equals(item.get(GROUP_HEADER_KEY))
+                || GROUP_HEADER_SUBTOTAL.equals(item.get(GROUP_HEADER_KEY))) {
             drawGroupHeaderRow(canvas, font, tableConfig, top, item, pageMetrics);
             return;
         }

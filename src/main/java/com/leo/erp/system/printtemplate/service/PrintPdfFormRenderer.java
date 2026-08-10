@@ -165,13 +165,17 @@ public class PrintPdfFormRenderer {
                     break;
                 }
                 boolean groupHeader = groupPaginator.isGroupHeader(item);
-                float itemHeight = groupHeader
+                boolean subtotal = groupPaginator.isSubtotalRow(item);
+                float itemHeight = subtotal
+                        ? groupPaginator.subtotalHeight(tableConfig)
+                        : groupHeader
                         ? groupPaginator.groupHeaderHeight(tableConfig, item)
                         : rowHeight;
                 float followingHeaderHeight = detailHeaderAfterProject
                         && groupPaginator.isProjectGroupHeader(item) ? headerHeight : 0f;
+                float followingSubtotalHeight = followingSubtotalHeight(items, itemIndex, tableConfig);
                 if (rowsOnPage >= maxRowsPerPage
-                        || rowTop + itemHeight + followingHeaderHeight > tableBottom) {
+                        || rowTop + itemHeight + followingHeaderHeight + followingSubtotalHeight > tableBottom) {
                     lastPage = false;
                     break;
                 }
@@ -187,7 +191,7 @@ public class PrintPdfFormRenderer {
                     tableRenderer.drawHeader(canvas, font, tableConfig, columns, rowTop, pageMetrics);
                     rowTop += headerHeight;
                 }
-                if (!groupHeader) {
+                if (!groupHeader && !subtotal) {
                     rowsOnPage++;
                 }
                 itemIndex++;
@@ -207,6 +211,22 @@ public class PrintPdfFormRenderer {
                 break;
             }
         } while (true);
+    }
+
+    /**
+     * 当前行之后若紧跟小计行，返回其高度；用于明细行绘制前预判，
+     * 保证小计行与本组最后一条明细分页时不被拆开。
+     */
+    private float followingSubtotalHeight(
+            List<Map<String, String>> items,
+            int itemIndex,
+            JsonNode tableConfig
+    ) {
+        int next = itemIndex + 1;
+        if (next >= items.size() || !groupPaginator.isSubtotalRow(items.get(next))) {
+            return 0f;
+        }
+        return groupPaginator.subtotalHeight(tableConfig);
     }
 
 }

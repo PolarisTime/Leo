@@ -12,6 +12,7 @@ public class PrintPdfGroupPaginator {
 
     private static final String GROUP_HEADER_SOURCE = "source";
     private static final String GROUP_HEADER_PROJECT = "project";
+    private static final String GROUP_HEADER_SUBTOTAL = "subtotal";
     private static final String GROUP_HEADER_KEY = "isGroupHeader";
     private static final String DETAIL_HEADER_AFTER_PROJECT_HEADER = "afterProjectHeader";
 
@@ -28,6 +29,20 @@ public class PrintPdfGroupPaginator {
 
     boolean isBlankRow(Map<String, String> item) {
         return "true".equals(item.get("isBlankRow"));
+    }
+
+    /** 组内明细末尾的小计汇总行。 */
+    boolean isSubtotalRow(Map<String, String> item) {
+        return GROUP_HEADER_SUBTOTAL.equals(item.get(GROUP_HEADER_KEY));
+    }
+
+    /** 小计行高度，取 groupHeader.subtotal.height，缺省回落 groupHeader.height。 */
+    float subtotalHeight(JsonNode tableConfig) {
+        return drawing.number(
+                tableConfig.path("groupHeader").path(GROUP_HEADER_SUBTOTAL),
+                "height",
+                drawing.number(tableConfig.path("groupHeader"), "height", 18f)
+        );
     }
 
     boolean shouldStartGroupOnNextPage(
@@ -138,13 +153,23 @@ public class PrintPdfGroupPaginator {
             if (index > groupHeaderIndex && (isBlankRow(item) || startsNextGroup(item, groupType))) {
                 break;
             }
-            if (!isGroupHeader(item)) {
-                return height + rowHeight;
+            if (isGroupHeader(item)) {
+                height += groupHeaderHeight(tableConfig, item);
+                if (detailHeaderAfterProject && isProjectGroupHeader(item)) {
+                    height += headerHeight;
+                }
+                continue;
             }
-            height += groupHeaderHeight(tableConfig, item);
-            if (detailHeaderAfterProject && isProjectGroupHeader(item)) {
-                height += headerHeight;
+            if (isSubtotalRow(item)) {
+                height += subtotalHeight(tableConfig);
+                return height;
             }
+            height += rowHeight;
+            // 明细行后若紧跟小计行，一并计入，避免小计与明细分页分离
+            if (index + 1 < items.size() && isSubtotalRow(items.get(index + 1))) {
+                height += subtotalHeight(tableConfig);
+            }
+            return height;
         }
         return height;
     }

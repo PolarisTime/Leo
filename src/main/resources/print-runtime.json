@@ -331,14 +331,15 @@
       {
         "type": "itemLookupByField",
         "sourceField": "sourceNo",
-        "sql": "SELECT bill_no, bill_time, carrier_name, unit_price, total_freight, remark FROM lg_freight_bill WHERE deleted_flag = FALSE AND bill_no IN (:values)",
+        "sql": "SELECT bill_no, bill_time, carrier_name, unit_price, total_freight, remark, vehicle_plate FROM lg_freight_bill WHERE deleted_flag = FALSE AND bill_no IN (:values)",
         "lookupKeyColumn": "bill_no",
         "targetFields": {
           "billTime": "bill_time",
           "carrierName": "carrier_name",
           "unitPrice": "unit_price",
           "amount": "total_freight",
-          "remark": "remark"
+          "remark": "remark",
+          "vehiclePlate": "vehicle_plate"
         },
         "fallbackFields": {"carrierName": "carrierName"}
       }
