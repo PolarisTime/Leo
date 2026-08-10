@@ -129,8 +129,8 @@ jobs:
             -Dflyway.placeholderReplacement=false \
             -Dflyway.validateMigrationNaming=true
 
-      - name: Package
-        run: mvn -B -ntp -DskipTests package
+      - name: Test & Package
+        run: mvn -B -ntp package
 
       - name: Release
         env:
