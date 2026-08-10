@@ -1,0 +1,251 @@
+package com.leo.erp.sales.order.service;
+
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.sales.order.domain.entity.SalesOrder;
+import com.leo.erp.sales.order.repository.SalesOrderOutboundCandidateQueryRepository;
+import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
+import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
+import com.leo.erp.security.support.SecurityPrincipal;
+import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+/**
+ * SalesOrderService 极端情况测试。
+ */
+@ExtendWith(MockitoExtension.class)
+class SalesOrderServiceTest {
+
+    @Mock
+    private SalesOrderRepository repository;
+
+    @Mock
+    private SnowflakeIdGenerator idGenerator;
+
+    @Mock
+    private SalesOrderResponseAssembler responseAssembler;
+
+    @Mock
+    private SalesOrderApplyService salesOrderApplyService;
+
+    @Mock
+    private SalesOrderAuditedPricingService salesOrderAuditedPricingService;
+
+    @Mock
+    private SalesOrderProtectedUpdatePolicy protectedUpdatePolicy;
+
+    @Mock
+    private SalesOrderSaveService saveService;
+
+    @Mock
+    private com.leo.erp.common.concurrency.SourceAllocationLockService sourceAllocationLockService;
+
+    @Mock
+    private SalesOrderDeliveryVerificationGuard deliveryVerificationGuard;
+
+    @Mock
+    private SalesOrderDownstreamMutationGuard downstreamMutationGuard;
+
+    @Mock
+    private SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository;
+
+    @Mock
+    private BusinessOperationEventPublisher businessOperationEventPublisher;
+
+    @InjectMocks
+    private SalesOrderService service;
+
+    private SalesOrderRequest request(String orderNo, String status) {
+        return new SalesOrderRequest(
+                orderNo, null, null, "CUST001", 10L, "客户A", 20L, "项目A", null, null,
+                LocalDate.of(2026, 8, 1), "销售员A", status, null, List.of());
+    }
+
+    private SalesOrder entity(Long ownerUserId, String status) {
+        SalesOrder entity = new SalesOrder();
+        entity.setId(5L);
+        entity.setOrderNo("SO001");
+        entity.setOwnerUserId(ownerUserId);
+        entity.setStatus(status);
+        return entity;
+    }
+
+    private void loginAs(Long userId) {
+        SecurityPrincipal principal = mock(SecurityPrincipal.class);
+        when(principal.id()).thenReturn(userId);
+        Authentication auth = mock(Authentication.class);
+        when(auth.isAuthenticated()).thenReturn(true);
+        when(auth.getPrincipal()).thenReturn(principal);
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(auth);
+        SecurityContextHolder.setContext(context);
+    }
+
+    // ---------- 单号/导入校验 ----------
+
+    @Test
+    void validateCreate_shouldRejectDuplicateOrderNo() {
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO001")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.validateCreate(request("SO001", StatusConstants.DRAFT)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("订单号已存在");
+    }
+
+    @Test
+    void validateCreate_shouldRejectNonDraftStatus() {
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO001")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.validateCreate(request("SO001", StatusConstants.AUDITED)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("只能保存为草稿");
+    }
+
+    @Test
+    void validateUpdate_shouldRejectNotOwnedByCurrentUser() {
+        loginAs(1L);
+        SalesOrder entity = entity(999L, StatusConstants.DRAFT); // 属于他人
+
+        assertThatThrownBy(() -> service.validateUpdate(entity, request("SO001", StatusConstants.DRAFT)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("本人负责");
+    }
+
+    @Test
+    void validateUpdate_shouldRejectChangedDuplicateNo() {
+        loginAs(1L);
+        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO999")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.validateUpdate(entity, request("SO999", StatusConstants.DRAFT)))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void validateUpdate_shouldPassWhenOwnedAndNoDuplicate() {
+        loginAs(1L);
+        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+
+        service.validateUpdate(entity, request("SO001", StatusConstants.DRAFT)); // 不抛
+    }
+
+    // ---------- 出库导入候选 ----------
+
+    @Test
+    void outboundImportCandidates_shouldMapCandidates() {
+        SalesOrder order = entity(1L, StatusConstants.AUDITED);
+        SalesOrderResponse response = mock(SalesOrderResponse.class);
+        when(outboundCandidateQueryRepository.pageIds(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(5L), org.springframework.data.domain.PageRequest.of(0, 10), 1));
+        when(repository.findByIdInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(responseAssembler.toDetailResponse(order)).thenReturn(response);
+
+        Page<SalesOrderResponse> result = service.outboundImportCandidates(
+                mock(com.leo.erp.common.api.PageQuery.class), mock(com.leo.erp.common.api.PageFilter.class));
+
+        assertThat(result.getContent()).containsExactly(response);
+    }
+
+    // ---------- 删除/状态守卫与事件 ----------
+
+    @Test
+    void beforeDelete_shouldGuard() {
+        loginAs(1L);
+        SalesOrder entity = entity(1L, StatusConstants.AUDITED);
+        org.mockito.Mockito.doThrow(new BusinessException(
+                com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "已使用"))
+                .when(downstreamMutationGuard).assertMutable(any(), anyString());
+
+        assertThatThrownBy(() -> service.beforeDelete(entity)).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void afterDelete_shouldPublishEvent() {
+        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+
+        service.afterDelete(entity);
+
+        verify(businessOperationEventPublisher).publish(eq("SALES_ORDER_DELETED"), anyString(), anyString(),
+                anyString(), anyString(), eq(5L), anyString(), anyString());
+    }
+
+    @Test
+    void beforeStatusUpdate_shouldRejectCompleteViaStatus() {
+        loginAs(1L);
+        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+
+        assertThatThrownBy(() -> service.beforeStatusUpdate(
+                entity, StatusConstants.DRAFT, StatusConstants.SALES_COMPLETED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("专用完成操作");
+    }
+
+    @Test
+    void beforeStatusUpdate_shouldGuardDeliveryVerificationReverse() {
+        loginAs(1L);
+        SalesOrder entity = entity(1L, StatusConstants.SALES_COMPLETED);
+        org.mockito.Mockito.doThrow(new BusinessException(
+                com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "已使用"))
+                .when(deliveryVerificationGuard).assertMutable(any(), anyString());
+
+        assertThatThrownBy(() -> service.beforeStatusUpdate(
+                entity, StatusConstants.SALES_COMPLETED, StatusConstants.DELIVERY_VERIFICATION))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    // ---------- completeSalesOrder ----------
+
+    @Test
+    void completeSalesOrder_shouldRejectWhenNotDeliveryVerification() {
+        loginAs(1L);
+        SalesOrder order = entity(1L, StatusConstants.DRAFT);
+        when(repository.findForUpdateByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.completeSalesOrder(5L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("只有交付核定状态可以完成销售");
+    }
+
+    @Test
+    void completeSalesOrder_shouldCompleteWhenDeliveryVerification() {
+        loginAs(1L);
+        SalesOrder order = entity(1L, StatusConstants.DELIVERY_VERIFICATION);
+        when(repository.findForUpdateByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(order));
+        when(saveService.saveStatus(order)).thenReturn(order);
+        SalesOrderResponse response = mock(SalesOrderResponse.class);
+        when(responseAssembler.toDetailResponse(order)).thenReturn(response);
+
+        SalesOrderResponse result = service.completeSalesOrder(5L);
+
+        assertThat(order.getStatus()).isEqualTo(StatusConstants.SALES_COMPLETED);
+        assertThat(result).isSameAs(response);
+        verify(businessOperationEventPublisher).publish(eq("SALES_ORDER_COMPLETED"), anyString(), anyString(),
+                anyString(), anyString(), eq(5L), anyString(), anyString());
+    }
+}
