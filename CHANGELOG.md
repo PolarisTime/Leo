@@ -1,3 +1,10 @@
+# [9.11.0](https://github.com/PolarisTime/Leo/compare/v9.10.4...v9.11.0) (2026-08-10)
+
+
+### Features
+
+* **print:** 物流对账单模板无框化并新增分组小计行 ([c38e559](https://github.com/PolarisTime/Leo/commit/c38e559d65f709019476e96091928a88781c204d))
+
 ## [9.10.4](https://github.com/PolarisTime/Leo/compare/v9.10.3...v9.10.4) (2026-08-09)
 
 
