@@ -46,7 +46,8 @@ class PrintRecordEnricher {
                     applyItemLookup(data, items, rule);
                 }
             } catch (RuntimeException ex) {
-                log.debug("打印字段补充失败, moduleKey={}, type={}", moduleKey, type, ex);
+                // SQL 执行异常升为 WARN：缺字段照常出单会打出不完整单据，必须可发现。
+                log.warn("打印字段补充失败, moduleKey={}, type={}", moduleKey, type, ex);
             }
         }
         enrichSettlementCompanyName(data);
@@ -68,7 +69,7 @@ class PrintRecordEnricher {
                 data.put(SETTLEMENT_COMPANY_NAME, companyName);
             }
         } catch (RuntimeException ex) {
-            log.debug("打印结算主体匹配失败, settlementCompanyId={}", argument, ex);
+            log.warn("打印结算主体匹配失败, settlementCompanyId={}", argument, ex);
         }
     }
 

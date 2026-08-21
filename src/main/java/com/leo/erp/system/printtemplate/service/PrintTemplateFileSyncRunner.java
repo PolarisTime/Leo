@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,17 +68,25 @@ public class PrintTemplateFileSyncRunner implements ApplicationRunner {
         int registeredCount = 0;
         int updatedCount = 0;
         int disabledCount = 0;
+        // 单个坏文件只记 WARN 跳过，不阻断启动；结束后汇总告警。
+        List<String> failedSourceRefs = new ArrayList<>();
 
         // 1) manifest 驱动：登记缺失的模板文件并同步内容，实现"新增/修改文件跟随部署"
         for (PrintTemplateManifest.Item item : manifest.getTemplates()) {
-            PrintTemplate template = bySourceRef.get(item.getSourceRef());
-            if (template == null) {
-                template = registerTemplate(item);
-                bySourceRef.put(item.getSourceRef(), template);
-                registeredCount++;
-            }
-            if (syncTemplate(template)) {
-                updatedCount++;
+            try {
+                PrintTemplate template = bySourceRef.get(item.getSourceRef());
+                if (template == null) {
+                    template = registerTemplate(item);
+                    bySourceRef.put(item.getSourceRef(), template);
+                    registeredCount++;
+                }
+                if (syncTemplate(template)) {
+                    updatedCount++;
+                }
+            } catch (RuntimeException ex) {
+                failedSourceRefs.add(item.getSourceRef());
+                log.warn("打印模板文件同步失败，已跳过: sourceRef={}, reason={}",
+                        item.getSourceRef(), ex.getMessage());
             }
         }
 
@@ -98,6 +107,9 @@ public class PrintTemplateFileSyncRunner implements ApplicationRunner {
             }
         }
 
+        if (!failedSourceRefs.isEmpty()) {
+            log.warn("打印模板文件同步存在失败项（共 {} 个）: {}", failedSourceRefs.size(), failedSourceRefs);
+        }
         if (registeredCount > 0 || updatedCount > 0 || disabledCount > 0) {
             log.info("Print template file sync completed: registered={}, updated={}, disabled={}",
                     registeredCount, updatedCount, disabledCount);
