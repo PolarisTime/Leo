@@ -88,7 +88,7 @@ public class SalesOutboundService extends AbstractStatusCrudService<
 
     @Transactional(readOnly = true)
     public Page<SalesOutboundResponse> page(PageQuery query, PageFilter filter, String productKeyword) {
-        Specification<SalesOutbound> spec = Specs.<SalesOutbound>keywordLike(filter.keyword(), "outboundNo", "salesOrderNo", "customerName", "projectName")
+        Specification<SalesOutbound> spec = Specs.<SalesOutbound>keywordLike(filter.keyword(), OUTBOUND_SEARCH_FIELDS)
                 .and(Specs.collectionKeywordLike(productKeyword, "items", PRODUCT_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalIfPresent("projectName", filter.projectName()))

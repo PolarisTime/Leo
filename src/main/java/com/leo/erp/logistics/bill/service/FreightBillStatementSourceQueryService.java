@@ -1,5 +1,6 @@
 package com.leo.erp.logistics.bill.service;
 
+import com.leo.erp.common.api.CandidatePageables;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.logistics.api.FreightBillStatementSourceQuery;
@@ -33,6 +34,8 @@ public class FreightBillStatementSourceQueryService implements FreightBillStatem
 
     private final FreightBillRepository freightBillRepository;
 
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("id", "billNo", "carrierCode", "carrierName", "vehiclePlate", "customerName", "projectName", "billTime", "unitPrice", "totalWeight", "totalFreight");
+
     public FreightBillStatementSourceQueryService(FreightBillRepository freightBillRepository) {
         this.freightBillRepository = freightBillRepository;
     }
@@ -49,8 +52,9 @@ public class FreightBillStatementSourceQueryService implements FreightBillStatem
                 .and(Specs.equalValueIfPresent("settlementCompanyId", criteria.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", StatusConstants.AUDITED))
                 .and(Specs.betweenIfPresent("billTime", criteria.startDate(), criteria.endDate()))
-                .and(excludeIds(excludedBillIds));
-        Page<CandidateSnapshot> page = freightBillRepository.findAll(specification, toPageable(criteria))
+                .and(Specs.idNotIn(excludedBillIds));
+        Page<CandidateSnapshot> page = freightBillRepository.findAll(specification, CandidatePageables.of(
+                criteria.page(), criteria.size(), criteria.sortBy(), criteria.direction(), ALLOWED_SORT_FIELDS))
                 .map(this::toCandidateSnapshot);
         return new CandidatePage(
                 page.getContent(),
@@ -140,17 +144,4 @@ public class FreightBillStatementSourceQueryService implements FreightBillStatem
         );
     }
 
-    private Pageable toPageable(CandidateCriteria criteria) {
-        String property = criteria.sortBy() == null || criteria.sortBy().isBlank() ? "id" : criteria.sortBy();
-        Sort.Direction direction = "asc".equalsIgnoreCase(criteria.direction())
-                ? Sort.Direction.ASC
-                : Sort.Direction.DESC;
-        return PageRequest.of(criteria.page(), criteria.size(), Sort.by(direction, property));
-    }
-
-    private Specification<FreightBill> excludeIds(Set<Long> excludedIds) {
-        return (root, query, builder) -> excludedIds.isEmpty()
-                ? builder.conjunction()
-                : builder.not(root.get("id").in(excludedIds));
-    }
 }

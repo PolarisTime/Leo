@@ -117,6 +117,13 @@ public final class Specs {
         };
     }
 
+    /** 按主键集合排除（空集合时为无操作），供候选查询排除已引用记录复用。 */
+    public static <T> Specification<T> idNotIn(java.util.Collection<Long> excludedIds) {
+        return (root, q, cb) -> excludedIds == null || excludedIds.isEmpty()
+                ? cb.conjunction()
+                : cb.not(root.get("id").in(excludedIds));
+    }
+
     public static <T, V extends Comparable<? super V>> Specification<T> betweenIfPresent(String field, V start, V end) {
         return (root, q, cb) -> {
             var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>(2);

@@ -36,4 +36,18 @@ public final class SettlementAllocationRule {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, mismatchMessage);
         }
     }
+
+    /**
+     * 校验追加核销后累计金额不超过对账单上限，收付款两侧共用同一规则骨架。
+     */
+    public static void assertWithinAllocatedLimit(BigDecimal settledAllocatedAmount,
+                                                  BigDecimal incomingAmount,
+                                                  BigDecimal statementCapAmount,
+                                                  String exceedMessage) {
+        BigDecimal nextSettledAmount = TradeItemCalculator.safeBigDecimal(settledAllocatedAmount)
+                .add(incomingAmount);
+        if (nextSettledAmount.compareTo(statementCapAmount) > 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, exceedMessage);
+        }
+    }
 }

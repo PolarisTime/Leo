@@ -4,6 +4,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.finance.common.service.SettlementAllocationRule;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.payment.repository.PaymentAllocationRepository;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
@@ -95,10 +96,12 @@ public class PaymentStatementAllocationValidator {
                             currentPaymentId
                     )
             );
-            BigDecimal nextSettledAmount = settledAmount.add(allocatedAmount);
-            if (nextSettledAmount.compareTo(statement.totalFreight()) > 0) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行关联物流对账单累计付款金额不能超过总运费");
-            }
+            SettlementAllocationRule.assertWithinAllocatedLimit(
+                    settledAmount,
+                    allocatedAmount,
+                    statement.totalFreight(),
+                    "第" + lineNo + "行关联物流对账单累计付款金额不能超过总运费"
+            );
         }
         requestAllocatedAmountMap.put(statement.id(), allocatedAmount);
         return validatedStatement;

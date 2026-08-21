@@ -4,6 +4,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.finance.common.service.SettlementAllocationRule;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.receipt.repository.ReceiptAllocationRepository;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
@@ -76,10 +77,12 @@ public class ReceiptStatementAllocationValidator {
                             currentReceiptId
                     )
             );
-            BigDecimal nextSettledAmount = settledAmount.add(allocatedAmount);
-            if (nextSettledAmount.compareTo(statement.salesAmount()) > 0) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行关联客户对账单累计收款金额不能超过销售金额");
-            }
+            SettlementAllocationRule.assertWithinAllocatedLimit(
+                    settledAmount,
+                    allocatedAmount,
+                    statement.salesAmount(),
+                    "第" + lineNo + "行关联客户对账单累计收款金额不能超过销售金额"
+            );
         }
         requestAllocatedAmountMap.put(statement.id(), allocatedAmount);
         return statement;

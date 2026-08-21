@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.common.api.CandidatePageables;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
@@ -37,6 +38,8 @@ public class SalesOrderStatementSourceQueryService implements SalesOrderStatemen
     };
 
     private final SalesOrderRepository salesOrderRepository;
+
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("id", "orderNo", "purchaseInboundNo", "purchaseOrderNo", "customerName", "projectName", "deliveryDate", "salesName", "totalWeight", "totalAmount", "status");
     private final SalesOutboundRepository salesOutboundRepository;
 
     public SalesOrderStatementSourceQueryService(SalesOrderRepository salesOrderRepository,
@@ -62,8 +65,9 @@ public class SalesOrderStatementSourceQueryService implements SalesOrderStatemen
                 .and(Specs.equalValueIfPresent("settlementCompanyId", criteria.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", StatusConstants.SALES_COMPLETED))
                 .and(Specs.betweenIfPresent("deliveryDate", criteria.startDate(), criteria.endDate()))
-                .and(excludeIds(excludedOrderIds));
-        Page<CandidateSnapshot> page = salesOrderRepository.findAll(specification, toPageable(criteria))
+                .and(Specs.idNotIn(excludedOrderIds));
+        Page<CandidateSnapshot> page = salesOrderRepository.findAll(specification, CandidatePageables.of(
+                criteria.page(), criteria.size(), criteria.sortBy(), criteria.direction(), ALLOWED_SORT_FIELDS))
                 .map(this::toCandidateSnapshot);
         return new CandidatePage(
                 page.getContent(),
@@ -186,17 +190,4 @@ public class SalesOrderStatementSourceQueryService implements SalesOrderStatemen
         );
     }
 
-    private Pageable toPageable(CandidateCriteria criteria) {
-        String property = criteria.sortBy() == null || criteria.sortBy().isBlank() ? "id" : criteria.sortBy();
-        Sort.Direction direction = "asc".equalsIgnoreCase(criteria.direction())
-                ? Sort.Direction.ASC
-                : Sort.Direction.DESC;
-        return PageRequest.of(criteria.page(), criteria.size(), Sort.by(direction, property));
-    }
-
-    private Specification<SalesOrder> excludeIds(Set<Long> excludedIds) {
-        return (root, query, builder) -> excludedIds.isEmpty()
-                ? builder.conjunction()
-                : builder.not(root.get("id").in(excludedIds));
-    }
 }

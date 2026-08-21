@@ -1,6 +1,5 @@
 package com.leo.erp.master.supplier.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.persistence.Specs;
@@ -8,7 +7,6 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
-import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
@@ -36,12 +34,9 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
 
     private static final String SUPPLIER_CACHE_KEY = "leo:supplier:all";
     private static final String CODE_MODULE_KEY = "supplier";
-    private static final Duration SUPPLIER_CACHE_TTL = Duration.ofMinutes(30);
-    private static final TypeReference<List<SupplierOptionResponse>> SUPPLIER_OPTION_LIST_TYPE = new TypeReference<>() { };
 
     private final SupplierRepository supplierRepository;
     private final SupplierMapper supplierMapper;
-    private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final MasterDataReferenceGuard referenceGuard;
     private final MasterDataCodeIssuanceService codeIssuanceService;
     private final com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService;
@@ -51,14 +46,12 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     public SupplierService(SupplierRepository supplierRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            SupplierMapper supplierMapper,
-                           RedisJsonCacheSupport redisJsonCacheSupport,
                            MasterDataReferenceGuard referenceGuard,
                            MasterDataCodeIssuanceService codeIssuanceService,
                            com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
         super(snowflakeIdGenerator);
         this.supplierRepository = supplierRepository;
         this.supplierMapper = supplierMapper;
-        this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.referenceGuard = referenceGuard;
         this.codeIssuanceService = codeIssuanceService;
         this.referenceSnapshotSyncService = referenceSnapshotSyncService;
@@ -123,20 +116,11 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     @Transactional(readOnly = true)
     public CacheHealthCheckResult verifyAndRefreshCache() {
         List<SupplierOptionResponse> expected = loadActiveOptions();
-        if (cacheManager != null) {
-            return verifyAndRefreshSpringCache(
-                    cacheManager,
-                    CacheConfig.CACHE_OPTIONS,
-                    SUPPLIER_CACHE_KEY,
-                    expected.isEmpty() ? null : expected
-            );
-        }
-        return verifyAndRefreshListCache(
-                redisJsonCacheSupport,
+        return verifyAndRefreshSpringCache(
+                cacheManager,
+                CacheConfig.CACHE_OPTIONS,
                 SUPPLIER_CACHE_KEY,
-                SUPPLIER_CACHE_TTL,
-                SUPPLIER_OPTION_LIST_TYPE,
-                expected
+                expected.isEmpty() ? null : expected
         );
     }
 

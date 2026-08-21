@@ -1,6 +1,5 @@
 package com.leo.erp.master.customer.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.persistence.Specs;
@@ -8,7 +7,6 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
-import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.master.service.ReferenceSnapshotSyncService;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -43,12 +41,9 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
 
     private static final String CUSTOMER_CACHE_KEY = "leo:customer:all";
     private static final String CODE_MODULE_KEY = "customer";
-    private static final Duration CUSTOMER_CACHE_TTL = Duration.ofMinutes(30);
-    private static final TypeReference<List<CustomerOptionResponse>> CUSTOMER_OPTION_LIST_TYPE = new TypeReference<>() { };
 
     private final CustomerRepository customerRepository;
     private final CustomerMapper customerMapper;
-    private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final MasterDataReferenceGuard referenceGuard;
     private final CompanySettingService companySettingService;
     private final MasterDataCodeIssuanceService codeIssuanceService;
@@ -60,7 +55,6 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     public CustomerService(CustomerRepository customerRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            CustomerMapper customerMapper,
-                           RedisJsonCacheSupport redisJsonCacheSupport,
                            MasterDataReferenceGuard referenceGuard,
                            CompanySettingService companySettingService,
                            MasterDataCodeIssuanceService codeIssuanceService,
@@ -69,7 +63,6 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         super(snowflakeIdGenerator);
         this.customerRepository = customerRepository;
         this.customerMapper = customerMapper;
-        this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.referenceGuard = referenceGuard;
         this.companySettingService = companySettingService;
         this.codeIssuanceService = codeIssuanceService;
@@ -140,20 +133,11 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     @Transactional(readOnly = true)
     public CacheHealthCheckResult verifyAndRefreshCache() {
         List<CustomerOptionResponse> expected = loadActiveOptions();
-        if (cacheManager != null) {
-            return verifyAndRefreshSpringCache(
-                    cacheManager,
-                    CacheConfig.CACHE_OPTIONS,
-                    CUSTOMER_CACHE_KEY,
-                    expected.isEmpty() ? null : expected
-            );
-        }
-        return verifyAndRefreshListCache(
-                redisJsonCacheSupport,
+        return verifyAndRefreshSpringCache(
+                cacheManager,
+                CacheConfig.CACHE_OPTIONS,
                 CUSTOMER_CACHE_KEY,
-                CUSTOMER_CACHE_TTL,
-                CUSTOMER_OPTION_LIST_TYPE,
-                expected
+                expected.isEmpty() ? null : expected
         );
     }
 
