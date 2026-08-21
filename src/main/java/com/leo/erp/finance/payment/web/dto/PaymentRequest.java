@@ -37,7 +37,8 @@ public record PaymentRequest(
         String operatorName,
         String remark,
         @Valid
-        List<PaymentAllocationRequest> items
+        List<PaymentAllocationRequest> items,
+        boolean audit
 ) {
     public PaymentRequest(String paymentNo,
                           String businessType,
@@ -61,7 +62,7 @@ public record PaymentRequest(
         this(paymentNo, businessType, null, paymentPurpose, counterpartyCode, counterpartyName,
                 sourceStatementId, sourcePurchaseOrderId, purchaseOrderNo, supplierCode, supplierName,
                 settlementCompanyId, settlementCompanyName, paymentDate, payType, amount, status,
-                operatorName, remark, items);
+                operatorName, remark, items, false);
     }
 
     public PaymentRequest(String paymentNo,
@@ -96,7 +97,8 @@ public record PaymentRequest(
                 status,
                 operatorName,
                 remark,
-                items
+                items,
+                false
         );
     }
 
@@ -131,7 +133,8 @@ public record PaymentRequest(
                 status,
                 operatorName,
                 remark,
-                items
+                items,
+                false
         );
     }
 

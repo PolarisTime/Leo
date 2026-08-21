@@ -37,7 +37,7 @@ class FreightStatementApplyServiceTest {
                                             String carrierCode) {
         return new FreightStatementCommand("FS001", carrierCode, carrierName, null, null,
                 LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), new BigDecimal("100"),
-                new BigDecimal("5000"), null, null, status, attachment, null, List.of(), null);
+                new BigDecimal("5000"), null, null, status, attachment, null, List.of(), null, false);
     }
 
     private FreightStatementSourceService.SourceApplyResult result() {

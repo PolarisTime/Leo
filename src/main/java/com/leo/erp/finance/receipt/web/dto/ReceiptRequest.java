@@ -36,7 +36,8 @@ public record ReceiptRequest(
         String operatorName,
         String remark,
         @Valid
-        List<ReceiptAllocationRequest> items
+        List<ReceiptAllocationRequest> items,
+        boolean audit
 ) {
     public ReceiptRequest(String receiptNo,
                           Long customerId,
@@ -58,7 +59,7 @@ public record ReceiptRequest(
                 "CUSTOMER_STATEMENT_SETTLEMENT", customerId, customerCode, customerName,
                 projectId, projectName, settlementCompanyId, settlementCompanyName,
                 sourceCustomerStatementId, receiptDate, payType, amount, status, operatorName,
-                remark, items);
+                remark, items, false);
     }
 
     public ReceiptRequest(String receiptNo,

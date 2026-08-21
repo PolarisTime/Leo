@@ -24,6 +24,7 @@ public record FreightStatementRequest(
         @Size(max = 500) String attachment,
         @Size(max = 255) String remark,
         @Valid @NotEmpty List<FreightStatementItemRequest> items,
-        Long carrierId
+        Long carrierId,
+        boolean audit
 ) {
 }

@@ -25,7 +25,8 @@ public record CustomerStatementRequest(
         String status,
         String remark,
         @Valid @NotEmpty List<CustomerStatementItemRequest> items,
-        Long customerId
+        Long customerId,
+        boolean audit
 ) {
     public CustomerStatementRequest(String statementNo,
                                     String customerCode,
@@ -44,7 +45,7 @@ public record CustomerStatementRequest(
                                     List<CustomerStatementItemRequest> items) {
         this(statementNo, customerCode, customerName, projectId, projectName, settlementCompanyId,
                 settlementCompanyName, startDate, endDate, salesAmount, receiptAmount, closingAmount, status,
-                remark, items, null);
+                remark, items, null, false);
     }
 
     public CustomerStatementRequest(String statementNo,
@@ -59,7 +60,7 @@ public record CustomerStatementRequest(
                                     String remark,
                                     List<CustomerStatementItemRequest> items) {
         this(statementNo, null, customerName, null, projectName, null, null, startDate, endDate,
-                salesAmount, receiptAmount, closingAmount, status, remark, items, null);
+                salesAmount, receiptAmount, closingAmount, status, remark, items, null, false);
     }
 
     public CustomerStatementRequest(String statementNo,
@@ -76,6 +77,6 @@ public record CustomerStatementRequest(
                                     String remark,
                                     List<CustomerStatementItemRequest> items) {
         this(statementNo, customerCode, customerName, projectId, projectName, null, null, startDate, endDate,
-                salesAmount, receiptAmount, closingAmount, status, remark, items, null);
+                salesAmount, receiptAmount, closingAmount, status, remark, items, null, false);
     }
 }

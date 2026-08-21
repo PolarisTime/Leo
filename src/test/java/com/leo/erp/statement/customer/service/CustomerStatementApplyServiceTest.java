@@ -39,7 +39,7 @@ class CustomerStatementApplyServiceTest {
         return new CustomerStatementRequest(
                 "CS001", null, "客户A", null, "项目A", null, null,
                 LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31),
-                new BigDecimal("5000"), null, null, status, null, List.of(), null);
+                new BigDecimal("5000"), null, null, status, null, List.of(), null, false);
     }
 
     private CustomerStatement entity() {

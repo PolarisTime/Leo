@@ -97,27 +97,11 @@ public class V2FreightStatementController {
                 "/freight-statements", freightStatementService.responseCreate(request));
     }
 
-    @Operation(summary = "保存并审核物流对账单")
-    @PostMapping("/save-and-audit")
-    @DomainEventAudited
-    @V2Created
-    public ResponseEntity<FreightStatementResponse> createAndAudit(@Valid @RequestBody FreightStatementRequest request) {
-        return V2ResponseSupport.created(
-                "/freight-statements", freightStatementService.responseCreateAndAudit(request));
-    }
-
     @Operation(summary = "更新物流对账单")
     @PutMapping("/{id}")
     @DomainEventAudited
     public FreightStatementResponse update(@PathVariable Long id, @Valid @RequestBody FreightStatementRequest request) {
         return freightStatementService.responseUpdate(id, request);
-    }
-
-    @Operation(summary = "保存并审核物流对账单")
-    @PutMapping("/{id}/save-and-audit")
-    @DomainEventAudited
-    public FreightStatementResponse updateAndAudit(@PathVariable Long id, @Valid @RequestBody FreightStatementRequest request) {
-        return freightStatementService.responseUpdateAndAudit(id, request);
     }
 
     @Operation(summary = "更新物流对账单状态")

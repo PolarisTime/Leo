@@ -61,7 +61,7 @@ class V2FreightStatementControllerTest {
     private FreightStatementRequest request() {
         return new FreightStatementRequest(
                 "FS001", "C001", "承运商A", 30L, "结算公司A", null, null, null, null,
-                null, null, "DRAFT", null, null, List.of(), 100L);
+                null, null, "DRAFT", null, null, List.of(), 100L, false);
     }
 
     @Test
@@ -125,29 +125,11 @@ class V2FreightStatementControllerTest {
     }
 
     @Test
-    void createAndAudit_shouldReturnCreated() {
-        FreightStatementResponse response = mock(FreightStatementResponse.class);
-        when(freightStatementService.responseCreateAndAudit(any())).thenReturn(response);
-
-        ResponseEntity<FreightStatementResponse> result = controller.createAndAudit(request());
-
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-    }
-
-    @Test
     void update_shouldDelegate() {
         FreightStatementResponse response = mock(FreightStatementResponse.class);
         when(freightStatementService.responseUpdate(anyLong(), any())).thenReturn(response);
 
         assertThat(controller.update(5L, request())).isSameAs(response);
-    }
-
-    @Test
-    void updateAndAudit_shouldDelegate() {
-        FreightStatementResponse response = mock(FreightStatementResponse.class);
-        when(freightStatementService.responseUpdateAndAudit(anyLong(), any())).thenReturn(response);
-
-        assertThat(controller.updateAndAudit(5L, request())).isSameAs(response);
     }
 
     @Test

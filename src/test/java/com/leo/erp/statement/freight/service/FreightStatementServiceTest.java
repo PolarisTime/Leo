@@ -88,7 +88,7 @@ class FreightStatementServiceTest {
     private FreightStatementCommand command(String statementNo, String status) {
         return new FreightStatementCommand(
                 statementNo, "C001", "承运商A", 30L, "结算公司A", null, null, null, null,
-                null, null, status, null, null, List.of(), 100L);
+                null, null, status, null, null, List.of(), 100L, false);
     }
 
     // ---------- 查询 ----------

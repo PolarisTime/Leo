@@ -164,16 +164,26 @@ public class FreightStatementService extends AbstractStatusCrudService<
         return freightStatementWebMapper.toResponse(updateStatus(id, status));
     }
 
+    @Override
     @Transactional
-    public FreightStatementResponse responseCreateAndAudit(FreightStatementRequest request) {
-        FreightStatementView created = create(withStatus(freightStatementWebMapper.toCommand(request), StatusConstants.DRAFT));
-        return freightStatementWebMapper.toResponse(updateStatus(created.id(), StatusConstants.AUDITED));
+    public FreightStatementView create(FreightStatementCommand command) {
+        FreightStatementView created = super.create(
+                command.audit() ? withStatus(command, StatusConstants.DRAFT) : command);
+        if (command.audit()) {
+            return updateStatus(created.id(), StatusConstants.AUDITED);
+        }
+        return created;
     }
 
+    @Override
     @Transactional
-    public FreightStatementResponse responseUpdateAndAudit(Long id, FreightStatementRequest request) {
-        update(id, withStatus(freightStatementWebMapper.toCommand(request), StatusConstants.DRAFT));
-        return freightStatementWebMapper.toResponse(updateStatus(id, StatusConstants.AUDITED));
+    public FreightStatementView update(Long id, FreightStatementCommand command) {
+        FreightStatementView updated = super.update(id,
+                command.audit() ? withStatus(command, StatusConstants.DRAFT) : command);
+        if (command.audit()) {
+            return updateStatus(id, StatusConstants.AUDITED);
+        }
+        return updated;
     }
 
     @Transactional(readOnly = true)
@@ -235,7 +245,8 @@ public class FreightStatementService extends AbstractStatusCrudService<
                 command.attachment(),
                 command.remark(),
                 command.items(),
-                command.carrierId()
+                command.carrierId(),
+                command.audit()
         );
     }
 
@@ -261,7 +272,8 @@ public class FreightStatementService extends AbstractStatusCrudService<
                 command.attachment(),
                 command.remark(),
                 command.items(),
-                command.carrierId()
+                command.carrierId(),
+                command.audit()
         );
     }
 
@@ -270,7 +282,7 @@ public class FreightStatementService extends AbstractStatusCrudService<
                 command.statementNo(), command.carrierCode(), command.carrierName(),
                 command.settlementCompanyId(), command.settlementCompanyName(), command.startDate(), command.endDate(),
                 command.totalWeight(), command.totalFreight(), command.paidAmount(), command.unpaidAmount(), status,
-                command.attachment(), command.remark(), command.items(), command.carrierId()
+                command.attachment(), command.remark(), command.items(), command.carrierId(), command.audit()
         );
     }
 

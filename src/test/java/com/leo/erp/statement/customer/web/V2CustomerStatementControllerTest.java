@@ -61,7 +61,7 @@ class V2CustomerStatementControllerTest {
         return new CustomerStatementRequest(
                 "CS001", null, "客户A", null, "项目A", null, null,
                 LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31),
-                new BigDecimal("5000"), null, null, "DRAFT", null, List.of(), null);
+                new BigDecimal("5000"), null, null, "DRAFT", null, List.of(), null, false);
     }
 
     @Test
@@ -128,29 +128,11 @@ class V2CustomerStatementControllerTest {
     }
 
     @Test
-    void createAndConfirm_shouldReturnCreated() {
-        CustomerStatementResponse response = mock(CustomerStatementResponse.class);
-        when(customerStatementService.createAndConfirm(any())).thenReturn(response);
-
-        ResponseEntity<CustomerStatementResponse> result = controller.createAndConfirm(request());
-
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-    }
-
-    @Test
     void update_shouldDelegate() {
         CustomerStatementResponse response = mock(CustomerStatementResponse.class);
         when(customerStatementService.update(anyLong(), any())).thenReturn(response);
 
         assertThat(controller.update(5L, request())).isSameAs(response);
-    }
-
-    @Test
-    void updateAndConfirm_shouldDelegate() {
-        CustomerStatementResponse response = mock(CustomerStatementResponse.class);
-        when(customerStatementService.updateAndConfirm(anyLong(), any())).thenReturn(response);
-
-        assertThat(controller.updateAndConfirm(5L, request())).isSameAs(response);
     }
 
     @Test

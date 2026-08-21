@@ -8,7 +8,6 @@ import com.leo.erp.finance.payment.service.PaymentService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentResponse;
-import com.leo.erp.system.operationlog.support.OperationLoggable;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -72,30 +71,10 @@ public class V2PaymentController {
         return V2ResponseSupport.created("/payments", paymentService.create(request));
     }
 
-    @Operation(summary = "保存并审核付款单")
-    @PostMapping("/save-and-audit")
-    @OperationLoggable(moduleName = "付款单", actionType = "保存并审核", businessNoFields = {"paymentNo"})
-    @V2Created
-    public ResponseEntity<PaymentResponse> createAndAudit(@Valid @RequestBody PaymentRequest request) {
-        return V2ResponseSupport.created("/payments", paymentService.createAndAudit(request));
-    }
-
     @Operation(summary = "更新付款单")
     @PutMapping("/{id}")
     public PaymentResponse update(@PathVariable Long id, @Valid @RequestBody PaymentRequest request) {
         return paymentService.update(id, request);
-    }
-
-    @Operation(summary = "保存并审核付款单")
-    @PutMapping("/{id}/save-and-audit")
-    @OperationLoggable(
-            moduleName = "付款单",
-            actionType = "保存并审核",
-            businessNoFields = {"paymentNo"},
-            recordIdField = "id"
-    )
-    public PaymentResponse updateAndAudit(@PathVariable Long id, @Valid @RequestBody PaymentRequest request) {
-        return paymentService.updateAndAudit(id, request);
     }
 
     @Operation(summary = "更新付款单状态")

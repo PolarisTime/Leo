@@ -20,6 +20,7 @@ public record FreightStatementCommand(
         String attachment,
         String remark,
         List<FreightStatementItemCommand> items,
-        Long carrierId
+        Long carrierId,
+        boolean audit
 ) {
 }

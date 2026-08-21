@@ -114,16 +114,26 @@ public class CustomerStatementService extends AbstractStatusCrudService<
         return customerStatementSourceService.candidatePage(query, filter);
     }
 
+    @Override
     @Transactional
-    public CustomerStatementResponse createAndConfirm(CustomerStatementRequest request) {
-        CustomerStatementResponse created = create(withStatus(request, StatusConstants.PENDING_CONFIRM));
-        return updateStatus(created.id(), StatusConstants.CONFIRMED);
+    public CustomerStatementResponse create(CustomerStatementRequest request) {
+        CustomerStatementResponse created = super.create(
+                request.audit() ? withStatus(request, StatusConstants.PENDING_CONFIRM) : request);
+        if (request.audit()) {
+            return updateStatus(created.id(), StatusConstants.CONFIRMED);
+        }
+        return created;
     }
 
+    @Override
     @Transactional
-    public CustomerStatementResponse updateAndConfirm(Long id, CustomerStatementRequest request) {
-        update(id, withStatus(request, StatusConstants.PENDING_CONFIRM));
-        return updateStatus(id, StatusConstants.CONFIRMED);
+    public CustomerStatementResponse update(Long id, CustomerStatementRequest request) {
+        CustomerStatementResponse updated = super.update(id,
+                request.audit() ? withStatus(request, StatusConstants.PENDING_CONFIRM) : request);
+        if (request.audit()) {
+            return updateStatus(id, StatusConstants.CONFIRMED);
+        }
+        return updated;
     }
 
     @Override
@@ -169,7 +179,8 @@ public class CustomerStatementService extends AbstractStatusCrudService<
                 request.status(),
                 request.remark(),
                 request.items(),
-                request.customerId()
+                request.customerId(),
+                request.audit()
         );
     }
 
@@ -190,7 +201,8 @@ public class CustomerStatementService extends AbstractStatusCrudService<
                 status,
                 request.remark(),
                 request.items(),
-                request.customerId()
+                request.customerId(),
+                request.audit()
         );
     }
 
@@ -212,7 +224,8 @@ public class CustomerStatementService extends AbstractStatusCrudService<
                 request.status(),
                 request.remark(),
                 request.items(),
-                request.customerId()
+                request.customerId(),
+                request.audit()
         );
     }
 

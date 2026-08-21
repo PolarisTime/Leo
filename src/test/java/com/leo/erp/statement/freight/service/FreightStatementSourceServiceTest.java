@@ -72,7 +72,7 @@ class FreightStatementSourceServiceTest {
                                             List<FreightStatementItemCommand> items) {
         return new FreightStatementCommand(
                 "FS001", carrierCode, "承运商A", settlementCompanyId, "结算公司A",
-                null, null, null, null, null, null, "DRAFT", null, null, items, carrierId);
+                null, null, null, null, null, null, "DRAFT", null, null, items, carrierId, false);
     }
 
     private void stubSingleBill(BillSnapshot bill, FreightStatementCommand cmd, Long currentStatementId) {

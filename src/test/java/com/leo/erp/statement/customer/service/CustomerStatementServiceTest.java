@@ -83,7 +83,7 @@ class CustomerStatementServiceTest {
         return new CustomerStatementRequest(
                 "CS001", null, "客户A", null, "项目A", null, null,
                 LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31),
-                new BigDecimal("5000"), null, null, null, null, List.of(), null);
+                new BigDecimal("5000"), null, null, null, null, List.of(), null, false);
     }
 
     // ---------- 查询 ----------
@@ -150,7 +150,7 @@ class CustomerStatementServiceTest {
         CustomerStatementRequest req = new CustomerStatementRequest(
                 "CS999", null, "客户A", null, "项目A", null, null,
                 LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31),
-                new BigDecimal("5000"), null, null, null, null, List.of(), null);
+                new BigDecimal("5000"), null, null, null, null, List.of(), null, false);
         // 单号变更且重复 → 抛
         when(repository.existsByStatementNoAndDeletedFlagFalse("CS999")).thenReturn(true);
 
@@ -225,11 +225,11 @@ class CustomerStatementServiceTest {
     // ---------- 雪花 ID 边界 ----------
 
     @Test
-    void createAndConfirm_shouldFailForZeroSnowflakeId() {
+    void create_shouldFailForZeroSnowflakeId() {
         // resolveCreateBusinessNo 对非正 entityId 抛
         when(idGenerator.nextId()).thenReturn(0L);
 
-        assertThatThrownBy(() -> service.createAndConfirm(request()))
+        assertThatThrownBy(() -> service.create(request()))
                 .isInstanceOf(BusinessException.class);
     }
 

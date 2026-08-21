@@ -81,16 +81,26 @@ public class PaymentService extends AbstractStatusCrudService<Payment, PaymentRe
         return search(keyword, PAYMENT_SEARCH_FIELDS, maxSize, null, paymentRepository);
     }
 
+    @Override
     @Transactional
-    public PaymentResponse createAndAudit(PaymentRequest request) {
-        PaymentResponse created = create(withStatus(request, StatusConstants.DRAFT));
-        return updateStatus(created.id(), StatusConstants.AUDITED);
+    public PaymentResponse create(PaymentRequest request) {
+        PaymentResponse created = super.create(
+                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        if (request.audit()) {
+            return updateStatus(created.id(), StatusConstants.AUDITED);
+        }
+        return created;
     }
 
+    @Override
     @Transactional
-    public PaymentResponse updateAndAudit(Long id, PaymentRequest request) {
-        update(id, withStatus(request, StatusConstants.DRAFT));
-        return updateStatus(id, StatusConstants.AUDITED);
+    public PaymentResponse update(Long id, PaymentRequest request) {
+        PaymentResponse updated = super.update(id,
+                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        if (request.audit()) {
+            return updateStatus(id, StatusConstants.AUDITED);
+        }
+        return updated;
     }
 
     @Override
@@ -145,7 +155,8 @@ public class PaymentService extends AbstractStatusCrudService<Payment, PaymentRe
                 request.status(),
                 request.operatorName(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 
@@ -170,7 +181,8 @@ public class PaymentService extends AbstractStatusCrudService<Payment, PaymentRe
                 status,
                 request.operatorName(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 
@@ -196,7 +208,8 @@ public class PaymentService extends AbstractStatusCrudService<Payment, PaymentRe
                 request.status(),
                 request.operatorName(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 

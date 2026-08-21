@@ -89,16 +89,26 @@ public class ReceiptService extends AbstractStatusCrudService<Receipt, ReceiptRe
         return search(keyword, RECEIPT_SEARCH_FIELDS, maxSize, null, receiptRepository);
     }
 
+    @Override
     @Transactional
-    public ReceiptResponse createAndAudit(ReceiptRequest request) {
-        ReceiptResponse created = create(withStatus(request, StatusConstants.DRAFT));
-        return updateStatus(created.id(), StatusConstants.AUDITED);
+    public ReceiptResponse create(ReceiptRequest request) {
+        ReceiptResponse created = super.create(
+                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        if (request.audit()) {
+            return updateStatus(created.id(), StatusConstants.AUDITED);
+        }
+        return created;
     }
 
+    @Override
     @Transactional
-    public ReceiptResponse updateAndAudit(Long id, ReceiptRequest request) {
-        update(id, withStatus(request, StatusConstants.DRAFT));
-        return updateStatus(id, StatusConstants.AUDITED);
+    public ReceiptResponse update(Long id, ReceiptRequest request) {
+        ReceiptResponse updated = super.update(id,
+                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        if (request.audit()) {
+            return updateStatus(id, StatusConstants.AUDITED);
+        }
+        return updated;
     }
 
     @Override
@@ -153,7 +163,8 @@ public class ReceiptService extends AbstractStatusCrudService<Receipt, ReceiptRe
                 request.status(),
                 request.operatorName(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 
@@ -179,7 +190,8 @@ public class ReceiptService extends AbstractStatusCrudService<Receipt, ReceiptRe
                 status,
                 request.operatorName(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 
@@ -206,7 +218,8 @@ public class ReceiptService extends AbstractStatusCrudService<Receipt, ReceiptRe
                 request.status(),
                 request.operatorName(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 

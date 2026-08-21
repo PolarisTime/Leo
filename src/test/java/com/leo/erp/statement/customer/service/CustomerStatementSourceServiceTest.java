@@ -91,7 +91,7 @@ class CustomerStatementSourceServiceTest {
         return new CustomerStatementRequest(
                 "CS001", customerCode, customerName, projectId, projectName, settlementCompanyId,
                 "结算公司A", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31),
-                new BigDecimal("50000.00"), null, null, "DRAFT", null, items, customerId);
+                new BigDecimal("50000.00"), null, null, "DRAFT", null, items, customerId, false);
     }
 
     private CustomerStatement entity() {
