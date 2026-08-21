@@ -5,6 +5,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -16,6 +17,10 @@ public class PrintTemplate extends AbstractAuditableEntity {
 
     @Id
     private Long id;
+
+    /** JPA 乐观锁版本号，对应 V121 迁移新增的 version 列，并发更新冲突时抛 OptimisticLockException。 */
+    @Version
+    private Long version;
 
     @Column(name = "bill_type", nullable = false, length = 64)
     private String billType;
