@@ -3,6 +3,7 @@ package com.leo.erp.sales.order.service;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.SourceLineDiffSupport;
 import com.leo.erp.sales.api.SalesOrderDownstreamReference;
 import com.leo.erp.sales.api.SalesOrderReferenceGuard;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
@@ -11,11 +12,13 @@ import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+
+import static com.leo.erp.common.support.SourceLineDiffSupport.sameNumber;
+import static com.leo.erp.common.support.SourceLineDiffSupport.sameOptionalNumber;
+import static com.leo.erp.common.support.SourceLineDiffSupport.sameText;
 
 @Service
 public class SalesOrderDownstreamMutationGuard {
@@ -36,7 +39,8 @@ public class SalesOrderDownstreamMutationGuard {
 
     public void assertMutable(SalesOrder order, String action) {
         assertNoFreightReference(order, action);
-        List<Long> itemIds = sourceItemIds(order);
+        List<Long> itemIds = SourceLineDiffSupport.sourceItemIds(
+                order == null ? null : order.getItems(), SalesOrderItem::getId);
         if (itemIds.isEmpty()) {
             return;
         }
@@ -83,39 +87,16 @@ public class SalesOrderDownstreamMutationGuard {
         }
     }
 
-    private List<Long> sourceItemIds(SalesOrder order) {
-        if (order == null || order.getItems() == null) {
-            return List.of();
-        }
-        return order.getItems().stream()
-                .map(SalesOrderItem::getId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .sorted()
-                .toList();
-    }
-
     private boolean sourceLinesChanged(
             SalesOrder order,
             Collection<SalesOrderItemRequest> requestedItems
     ) {
-        List<SalesOrderItem> currentItems = order == null || order.getItems() == null
-                ? List.of()
-                : order.getItems().stream()
-                .sorted(Comparator.comparing(SalesOrderItem::getLineNo))
-                .toList();
-        List<SalesOrderItemRequest> nextItems = requestedItems == null
-                ? List.of()
-                : List.copyOf(requestedItems);
-        if (currentItems.size() != nextItems.size()) {
-            return true;
-        }
-        for (int index = 0; index < currentItems.size(); index++) {
-            if (!sameSourceLine(currentItems.get(index), nextItems.get(index))) {
-                return true;
-            }
-        }
-        return false;
+        return SourceLineDiffSupport.sourceLinesChanged(
+                order == null ? null : order.getItems(),
+                requestedItems,
+                SalesOrderItem::getLineNo,
+                this::sameSourceLine
+        );
     }
 
     private boolean sameSourceLine(SalesOrderItem current, SalesOrderItemRequest next) {
@@ -140,21 +121,5 @@ public class SalesOrderDownstreamMutationGuard {
                 && Objects.equals(current.getPiecesPerBundle(), next.piecesPerBundle())
                 && sameOptionalNumber(current.getWeightTon(), next.weightTon())
                 && sameNumber(current.getUnitPrice(), next.unitPrice());
-    }
-
-    private boolean sameText(String left, String right) {
-        return normalize(left).equals(normalize(right));
-    }
-
-    private String normalize(String value) {
-        return value == null ? "" : value.trim();
-    }
-
-    private boolean sameNumber(BigDecimal left, BigDecimal right) {
-        return left == null ? right == null : right != null && left.compareTo(right) == 0;
-    }
-
-    private boolean sameOptionalNumber(BigDecimal current, BigDecimal requested) {
-        return requested == null || sameNumber(current, requested);
     }
 }

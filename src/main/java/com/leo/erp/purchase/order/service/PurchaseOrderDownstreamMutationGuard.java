@@ -3,6 +3,7 @@ package com.leo.erp.purchase.order.service;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.SourceLineDiffSupport;
 import com.leo.erp.purchase.api.PurchaseOrderReferenceGuard;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
@@ -10,11 +11,13 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemRequest;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+
+import static com.leo.erp.common.support.SourceLineDiffSupport.sameNumber;
+import static com.leo.erp.common.support.SourceLineDiffSupport.sameOptionalNumber;
+import static com.leo.erp.common.support.SourceLineDiffSupport.sameText;
 
 @Service
 public class PurchaseOrderDownstreamMutationGuard {
@@ -34,7 +37,8 @@ public class PurchaseOrderDownstreamMutationGuard {
     }
 
     public void assertMutable(PurchaseOrder order, String action) {
-        List<Long> itemIds = sourceItemIds(order);
+        List<Long> itemIds = SourceLineDiffSupport.sourceItemIds(
+                order == null ? null : order.getItems(), PurchaseOrderItem::getId);
         if (itemIds.isEmpty()) {
             return;
         }
@@ -63,39 +67,16 @@ public class PurchaseOrderDownstreamMutationGuard {
         }
     }
 
-    private List<Long> sourceItemIds(PurchaseOrder order) {
-        if (order == null || order.getItems() == null) {
-            return List.of();
-        }
-        return order.getItems().stream()
-                .map(PurchaseOrderItem::getId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .sorted()
-                .toList();
-    }
-
     private boolean sourceLinesChanged(
             PurchaseOrder order,
             Collection<PurchaseOrderItemRequest> requestedItems
     ) {
-        List<PurchaseOrderItem> currentItems = order == null || order.getItems() == null
-                ? List.of()
-                : order.getItems().stream()
-                .sorted(Comparator.comparing(PurchaseOrderItem::getLineNo))
-                .toList();
-        List<PurchaseOrderItemRequest> nextItems = requestedItems == null
-                ? List.of()
-                : List.copyOf(requestedItems);
-        if (currentItems.size() != nextItems.size()) {
-            return true;
-        }
-        for (int index = 0; index < currentItems.size(); index++) {
-            if (!sameSourceLine(currentItems.get(index), nextItems.get(index))) {
-                return true;
-            }
-        }
-        return false;
+        return SourceLineDiffSupport.sourceLinesChanged(
+                order == null ? null : order.getItems(),
+                requestedItems,
+                PurchaseOrderItem::getLineNo,
+                this::sameSourceLine
+        );
     }
 
     private boolean sameSourceLine(PurchaseOrderItem current, PurchaseOrderItemRequest next) {
@@ -118,21 +99,5 @@ public class PurchaseOrderDownstreamMutationGuard {
                 && Objects.equals(current.getPiecesPerBundle(), next.piecesPerBundle())
                 && sameOptionalNumber(current.getWeightTon(), next.weightTon())
                 && sameNumber(current.getUnitPrice(), next.unitPrice());
-    }
-
-    private boolean sameText(String left, String right) {
-        return normalize(left).equals(normalize(right));
-    }
-
-    private String normalize(String value) {
-        return value == null ? "" : value.trim();
-    }
-
-    private boolean sameNumber(BigDecimal left, BigDecimal right) {
-        return left == null ? right == null : right != null && left.compareTo(right) == 0;
-    }
-
-    private boolean sameOptionalNumber(BigDecimal current, BigDecimal requested) {
-        return requested == null || sameNumber(current, requested);
     }
 }
