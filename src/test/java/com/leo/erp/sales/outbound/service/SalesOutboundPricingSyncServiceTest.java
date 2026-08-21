@@ -95,4 +95,40 @@ class SalesOutboundPricingSyncServiceTest {
         assertThat(outbound.getTotalAmount()).isEqualByComparingTo("1025");
         verify(salesOutboundRepository).saveAll(List.of(outbound));
     }
+
+    @Test
+    void shouldSetZeroTotalAmountWhenItemsEmpty() {
+        SalesOutbound outbound = new SalesOutbound();
+        outbound.setItems(List.of());
+        when(salesOutboundRepository.findAllByStatusesAndSourceSalesOrderItemIds(any(), any()))
+                .thenReturn(List.of(outbound));
+
+        service.syncAuditedOutboundPricing(List.of(11L), Map.of(11L, new BigDecimal("100")));
+
+        assertThat(outbound.getTotalAmount()).isEqualByComparingTo("0");
+        verify(salesOutboundRepository).saveAll(List.of(outbound));
+    }
+
+    @Test
+    void shouldAggregateTotalAcrossMultipleOutbounds() {
+        SalesOutboundItem firstMatched = item(11L, "10.000", null);
+        SalesOutboundItem unmatched = item(22L, "5.000", null);
+        SalesOutbound first = new SalesOutbound();
+        first.setItems(List.of(firstMatched, unmatched));
+        SalesOutboundItem secondMatched = item(33L, "2.000", null);
+        SalesOutbound second = new SalesOutbound();
+        second.setItems(List.of(secondMatched));
+        when(salesOutboundRepository.findAllByStatusesAndSourceSalesOrderItemIds(any(), any()))
+                .thenReturn(List.of(first, second));
+
+        service.syncAuditedOutboundPricing(
+                List.of(11L, 33L),
+                Map.of(11L, new BigDecimal("100"), 33L, new BigDecimal("100"))
+        );
+
+        // 未匹配项 amount 为 null 时按 0 计入；两个出库 totalAmount 各自独立聚合。
+        assertThat(first.getTotalAmount()).isEqualByComparingTo("1000");
+        assertThat(second.getTotalAmount()).isEqualByComparingTo("200");
+        verify(salesOutboundRepository).saveAll(List.of(first, second));
+    }
 }
