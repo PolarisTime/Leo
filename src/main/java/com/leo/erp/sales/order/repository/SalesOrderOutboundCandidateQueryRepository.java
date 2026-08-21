@@ -2,6 +2,7 @@ package com.leo.erp.sales.order.repository;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.StatusConstants;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -56,10 +57,10 @@ public class SalesOrderOutboundCandidateQueryRepository {
                   AND (:endDate IS NULL OR sales_order.delivery_date <= :endDate)
                   AND (
                       :keyword IS NULL
-                      OR COALESCE(sales_order.order_no, '') LIKE '%' || :keyword || '%'
-                      OR COALESCE(sales_order.purchase_order_no, '') LIKE '%' || :keyword || '%'
-                      OR COALESCE(sales_order.customer_name, '') LIKE '%' || :keyword || '%'
-                      OR COALESCE(sales_order.project_name, '') LIKE '%' || :keyword || '%'
+                      OR LOWER(COALESCE(sales_order.order_no, '')) LIKE :keyword ESCAPE '\\'
+                      OR LOWER(COALESCE(sales_order.purchase_order_no, '')) LIKE :keyword ESCAPE '\\'
+                      OR LOWER(COALESCE(sales_order.customer_name, '')) LIKE :keyword ESCAPE '\\'
+                      OR LOWER(COALESCE(sales_order.project_name, '')) LIKE :keyword ESCAPE '\\'
                   )
                   AND EXISTS (
                       SELECT 1
@@ -107,7 +108,7 @@ public class SalesOrderOutboundCandidateQueryRepository {
     private MapSqlParameterSource parameters(PageQuery query, PageFilter filter) {
         return new MapSqlParameterSource()
                 .addValue("auditedStatus", StatusConstants.AUDITED, Types.VARCHAR)
-                .addValue("keyword", normalize(filter.keyword()), Types.VARCHAR)
+                .addValue("keyword", Specs.containsLikePatternIgnoreCase(filter.keyword()), Types.VARCHAR)
                 .addValue("customerId", filter.customerId(), Types.BIGINT)
                 .addValue("customerName", normalize(filter.name()), Types.VARCHAR)
                 .addValue("projectId", filter.projectId(), Types.BIGINT)

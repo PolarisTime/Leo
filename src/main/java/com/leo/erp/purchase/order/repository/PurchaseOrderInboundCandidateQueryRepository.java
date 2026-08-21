@@ -2,6 +2,7 @@ package com.leo.erp.purchase.order.repository;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.StatusConstants;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -51,8 +52,8 @@ public class PurchaseOrderInboundCandidateQueryRepository {
                   AND (:endDateExclusive IS NULL OR purchase_order.order_date < :endDateExclusive)
                   AND (
                       :keyword IS NULL
-                      OR COALESCE(purchase_order.order_no, '') LIKE '%' || :keyword || '%'
-                      OR COALESCE(purchase_order.supplier_name, '') LIKE '%' || :keyword || '%'
+                      OR LOWER(COALESCE(purchase_order.order_no, '')) LIKE :keyword ESCAPE '\\'
+                      OR LOWER(COALESCE(purchase_order.supplier_name, '')) LIKE :keyword ESCAPE '\\'
                   )
                   AND (
                       SELECT COALESCE(SUM(source_item.quantity), 0)
@@ -103,7 +104,7 @@ public class PurchaseOrderInboundCandidateQueryRepository {
         return new MapSqlParameterSource()
                 .addValue("auditedStatus", StatusConstants.AUDITED, Types.VARCHAR)
                 .addValue("requestedStatus", normalize(filter.status()), Types.VARCHAR)
-                .addValue("keyword", normalize(filter.keyword()), Types.VARCHAR)
+                .addValue("keyword", Specs.containsLikePatternIgnoreCase(filter.keyword()), Types.VARCHAR)
                 .addValue("supplierId", filter.supplierId(), Types.BIGINT)
                 .addValue("supplierName", normalize(filter.name()), Types.VARCHAR)
                 .addValue("settlementCompanyId", filter.settlementCompanyId(), Types.BIGINT)

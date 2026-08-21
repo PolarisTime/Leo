@@ -18,13 +18,17 @@ public final class Specs {
         return (root, q, cb) -> cb.isFalse(root.get("deletedFlag"));
     }
 
+    /**
+     * 多字段关键字模糊匹配：忽略大小写，转义 LIKE 通配符（%、_、\），
+     * 与 {@link #containsLikePatternIgnoreCase(String)} 语义一致。
+     */
     public static <T> Specification<T> keywordLike(String keyword, String... fields) {
         return (root, q, cb) -> {
-            if (keyword == null || keyword.isBlank()) return cb.conjunction();
-            String pattern = "%" + keyword.trim() + "%";
+            String pattern = containsLikePatternIgnoreCase(keyword);
+            if (pattern == null) return cb.conjunction();
             var predicates = new jakarta.persistence.criteria.Predicate[fields.length];
             for (int i = 0; i < fields.length; i++) {
-                predicates[i] = cb.like(root.get(fields[i]), pattern);
+                predicates[i] = cb.like(cb.lower(root.get(fields[i])), pattern, '\\');
             }
             return cb.or(predicates);
         };

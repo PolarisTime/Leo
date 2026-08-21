@@ -95,6 +95,8 @@ public class FreightBillApplyService {
         item.setProjectName(sourceOrder.projectName());
         item.setMaterialId(source.materialId());
         item.setMaterialCode(source.materialCode());
+        // material_name 为历史遗留列：上游快照无独立物料名称数据源，
+        // 全链路（前端导入映射、运费对账单读取）均以品牌值填充，保持一致。
         item.setMaterialName(source.brand());
         item.setBrand(source.brand());
         item.setCategory(source.category());

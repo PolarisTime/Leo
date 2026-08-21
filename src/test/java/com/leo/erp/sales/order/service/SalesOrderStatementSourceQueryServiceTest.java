@@ -40,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyChar;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
@@ -432,7 +433,7 @@ class SalesOrderStatementSourceQueryServiceTest {
         verify(salesOrderRepository).findAll(specCaptor.capture(), any(Pageable.class));
         assertThatCode(() -> executeSpec(specCaptor.getValue())).doesNotThrowAnyException();
         verify(criteriaBuilder).not(any(Expression.class));
-        verify(criteriaBuilder, atLeastOnce()).like(any(), anyString());
+        verify(criteriaBuilder, atLeastOnce()).like(any(), anyString(), anyChar());
     }
 
     @Test
@@ -459,7 +460,7 @@ class SalesOrderStatementSourceQueryServiceTest {
         Path<Object> idPath = mock(Path.class);
         when(criteriaBuilder.conjunction()).thenReturn(mock(Predicate.class));
         when(criteriaBuilder.isFalse(any(Expression.class))).thenReturn(mock(Predicate.class));
-        when(criteriaBuilder.like(any(), anyString())).thenReturn(mock(Predicate.class));
+        when(criteriaBuilder.like(any(), anyString(), anyChar())).thenReturn(mock(Predicate.class));
         when(criteriaBuilder.or(any(Predicate[].class))).thenReturn(mock(Predicate.class));
         when(criteriaBuilder.and(any(Predicate[].class))).thenReturn(mock(Predicate.class));
         when(criteriaBuilder.equal(any(Expression.class), any())).thenReturn(mock(Predicate.class));
