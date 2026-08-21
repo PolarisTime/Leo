@@ -23,7 +23,7 @@ public class V2MetaController {
     }
 
     @Operation(summary = "获取错误码和系统元数据")
-    @GetMapping("/code")
+    @GetMapping("/codes")
     public MetaCodeResponse codes() {
         return metaService.codes();
     }
