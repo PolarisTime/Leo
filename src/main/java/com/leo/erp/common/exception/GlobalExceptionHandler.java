@@ -308,6 +308,7 @@ public class GlobalExceptionHandler {
             case UNSUPPORTED_MEDIA_TYPE -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;
             case CONCURRENT_MODIFICATION, REFRESH_TOKEN_REUSE_CONFLICT -> HttpStatus.CONFLICT;
             case BUSINESS_ERROR -> HttpStatus.UNPROCESSABLE_ENTITY;
+            case TOO_MANY_REQUESTS -> HttpStatus.TOO_MANY_REQUESTS;
             case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
             case SUCCESS -> HttpStatus.OK;
         };
