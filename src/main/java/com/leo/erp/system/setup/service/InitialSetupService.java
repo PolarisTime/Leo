@@ -1,6 +1,7 @@
 package com.leo.erp.system.setup.service;
 
 import com.leo.erp.auth.api.InitialAccountCommand;
+import com.leo.erp.auth.api.InitialAccountCreated;
 import com.leo.erp.auth.api.InitialAccountProvisioning;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -27,7 +28,7 @@ public class InitialSetupService {
     }
 
     @Transactional
-    public synchronized String configureAccount(InitialSetupAccountSubmitRequest request) {
+    public synchronized InitialAccountCreated configureAccount(InitialSetupAccountSubmitRequest request) {
         assertSetupRequired();
         if (isAccountConfigured()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "账号已完成初始化");
@@ -49,7 +50,7 @@ public class InitialSetupService {
         return initialAccountProvisioning.isConfigured();
     }
 
-    private String createAccount(InitialSetupAccountSubmitRequest request) {
+    private InitialAccountCreated createAccount(InitialSetupAccountSubmitRequest request) {
         if (request == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请填写账号信息");
         }

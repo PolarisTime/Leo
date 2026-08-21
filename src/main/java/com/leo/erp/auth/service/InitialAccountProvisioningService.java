@@ -1,6 +1,7 @@
 package com.leo.erp.auth.service;
 
 import com.leo.erp.auth.api.InitialAccountCommand;
+import com.leo.erp.auth.api.InitialAccountCreated;
 import com.leo.erp.auth.api.InitialAccountProvisioning;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.domain.enums.UserStatus;
@@ -41,7 +42,7 @@ public class InitialAccountProvisioningService implements InitialAccountProvisio
 
     @Override
     @Transactional
-    public String provision(InitialAccountCommand command) {
+    public InitialAccountCreated provision(InitialAccountCommand command) {
         if (isConfigured()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "账号已完成初始化");
         }
@@ -72,7 +73,7 @@ public class InitialAccountProvisioningService implements InitialAccountProvisio
 
         try {
             userAccountRepository.saveAndFlush(account);
-            return account.getLoginName();
+            return new InitialAccountCreated(account.getId(), account.getLoginName(), account.getUserName());
         } catch (DataIntegrityViolationException ex) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "登录账号已存在");
         }

@@ -1,5 +1,6 @@
 package com.leo.erp.system.setup.service;
 
+import com.leo.erp.auth.api.InitialAccountCreated;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.system.setup.domain.entity.BootstrapState;
@@ -31,7 +32,7 @@ public class InitialSetupCoordinator {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public String configureAccount(InitialSetupAccountSubmitRequest request) {
+    public InitialAccountCreated configureAccount(InitialSetupAccountSubmitRequest request) {
         return executeLocked(() -> initialSetupService.configureAccount(request));
     }
 

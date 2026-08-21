@@ -5,5 +5,5 @@ public interface InitialAccountProvisioning {
 
     boolean isConfigured();
 
-    String provision(InitialAccountCommand command);
+    InitialAccountCreated provision(InitialAccountCommand command);
 }
