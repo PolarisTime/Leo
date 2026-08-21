@@ -39,13 +39,16 @@ class MaterialImportProcessor {
                 ? Optional.empty()
                 : materialRepository.findByMaterialCode(providedMaterialCode);
         MaterialIdentityService.Identity identity = identityService.identity(data);
-        Material skipCandidate = materialByCode.orElse(session.identityIndex().get(identity));
-        if (identityService.isExactImportMatch(skipCandidate, data, materialByCode.isPresent())) {
-            return new ImportRowResult(ImportOutcome.SKIPPED, skipCandidate);
+        // 商品编码或身份（品牌、材质、规格、长度）命中已有商品时按更新处理，导入即批量维护主数据。
+        Material material = materialByCode.orElse(session.identityIndex().get(identity));
+        if (identityService.isExactImportMatch(material, data, materialByCode.isPresent())) {
+            return new ImportRowResult(ImportOutcome.SKIPPED, material);
         }
 
-        Material material = materialByCode.orElseGet(this::newMaterial);
-        boolean exists = materialByCode.isPresent();
+        boolean exists = material != null;
+        if (!exists) {
+            material = newMaterial();
+        }
         MaterialIdentityService.Identity previousIdentity = identityService.identity(material);
         identityService.validateImport(material, identity, session.identityIndex(), rowNumber);
         material.setDeletedFlag(false);

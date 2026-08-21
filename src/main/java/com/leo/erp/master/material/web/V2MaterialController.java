@@ -2,7 +2,6 @@ package com.leo.erp.master.material.web;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
-import com.leo.erp.common.excel.dto.ImportResult;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.master.material.service.MaterialDocumentService;
 import com.leo.erp.master.material.service.MaterialService;
@@ -107,7 +106,7 @@ public class V2MaterialController {
     }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ImportResult importMaterials(@RequestParam("file") MultipartFile file) throws IOException {
+    public MaterialImportResultResponse importMaterials(@RequestParam("file") MultipartFile file) throws IOException {
         return materialImportFileAdapter.importSpreadsheet(file);
     }
 

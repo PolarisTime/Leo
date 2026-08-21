@@ -2,10 +2,11 @@ package com.leo.erp.master.material.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.excel.dto.ImportResult;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.web.dto.MaterialImportDTO;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,8 +26,30 @@ public class MaterialSpreadsheetImportService {
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
     }
 
+    /**
+     * 单行导入轨迹：outcome 为 null 表示该行失败，failReason 记录原因。
+     */
+    public record ImportRowTrace(int rowNumber, MaterialImportProcessor.ImportOutcome outcome, Material material,
+                                 String failReason) {
+
+        public String outcomeName() {
+            return outcome == null ? "FAILED" : outcome.name();
+        }
+    }
+
+    public record SpreadsheetImportResult(
+            int totalRows,
+            int successCount,
+            int createdCount,
+            int updatedCount,
+            int skippedCount,
+            int failCount,
+            List<ImportRowTrace> rows
+    ) {
+    }
+
     @Transactional
-    public ImportResult importRows(List<MaterialImportDTO> rows) {
+    public SpreadsheetImportResult importRows(List<MaterialImportDTO> rows) {
         MaterialImportProcessor.ImportSession session = importProcessor.start(
                 rows.stream().map(this::identity).toList()
         );
@@ -34,31 +57,44 @@ public class MaterialSpreadsheetImportService {
         int createdCount = 0;
         int updatedCount = 0;
         int skippedCount = 0;
-        List<Material> successRows = new ArrayList<>();
+        int failCount = 0;
+        boolean cacheEvicted = false;
+        List<ImportRowTrace> traces = new ArrayList<>(rows.size());
         for (int index = 0; index < rows.size(); index++) {
             int rowNumber = index + 2;
-            MaterialImportData importData = toImportData(rows.get(index), rowNumber);
-            MaterialImportProcessor.ImportRowResult result = importProcessor.importRow(
-                    session,
-                    importData,
-                    rowNumber
-            );
-            switch (result.outcome()) {
-                case CREATED -> createdCount++;
-                case UPDATED -> updatedCount++;
-                case SKIPPED -> skippedCount++;
+            // 行级失败只记录并跳过，不中断其余行的导入（与 CSV 导入路径行为一致）。
+            try {
+                MaterialImportData importData = toImportData(rows.get(index), rowNumber);
+                MaterialImportProcessor.ImportRowResult result = importProcessor.importRow(
+                        session,
+                        importData,
+                        rowNumber
+                );
+                traces.add(new ImportRowTrace(rowNumber, result.outcome(), result.material(), null));
+                switch (result.outcome()) {
+                    case CREATED -> createdCount++;
+                    case UPDATED -> updatedCount++;
+                    case SKIPPED -> skippedCount++;
+                }
+                if (result.outcome() != MaterialImportProcessor.ImportOutcome.SKIPPED && !cacheEvicted) {
+                    tradeItemMaterialSupport.evictCache();
+                    cacheEvicted = true;
+                }
+            } catch (BusinessException exception) {
+                failCount++;
+                traces.add(new ImportRowTrace(rowNumber, null, null, exception.getMessage()));
+            } catch (DataIntegrityViolationException exception) {
+                failCount++;
+                traces.add(new ImportRowTrace(rowNumber, null, null, "保存失败，请检查该行数据"));
+            } catch (DataAccessException exception) {
+                failCount++;
+                traces.add(new ImportRowTrace(rowNumber, null, null, "保存失败，请检查该行数据"));
             }
-            if (result.outcome() != MaterialImportProcessor.ImportOutcome.SKIPPED) {
-                successRows.add(result.material());
-            }
-        }
-        if (!successRows.isEmpty()) {
-            tradeItemMaterialSupport.evictCache();
         }
         int successCount = createdCount + updatedCount;
-        return new ImportResult(
-                rows.size(), successCount, createdCount, updatedCount, skippedCount, 0,
-                List.of(), new ArrayList<>(successRows)
+        return new SpreadsheetImportResult(
+                rows.size(), successCount, createdCount, updatedCount, skippedCount, failCount,
+                List.copyOf(traces)
         );
     }
 
