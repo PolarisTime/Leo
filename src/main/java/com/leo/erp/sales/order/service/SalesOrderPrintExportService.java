@@ -2,6 +2,7 @@ package com.leo.erp.sales.order.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
@@ -40,6 +41,9 @@ public class SalesOrderPrintExportService {
     private static final String PRINT_ACTION = "print";
     private static final String CELL_TYPE_NUMBER = "number";
     private static final String CELL_TYPE_PIECE_WEIGHT = "pieceWeight";
+    private static final String CELL_TYPE_WEIGHT = "weight";
+    /** Excel 单元格文本硬上限，超长内容会导致工作簿损坏 */
+    private static final int CELL_TEXT_MAX_LENGTH = 32767;
     private static final String FIELD_DELIVERY_DATE = "deliveryDate";
     private static final MediaType XLSX_MEDIA_TYPE = MediaType.parseMediaType(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -177,6 +181,12 @@ public class SalesOrderPrintExportService {
                 setNumber(sheet, layout.summary().row(), cell.column(), summaryNumber(page, cell.field()));
                 continue;
             }
+            if (CELL_TYPE_WEIGHT.equals(cell.type())) {
+                // 合计吨位强制 3 位小数并保留单位后缀（如 12.500T）
+                String value = fixedDecimal(page.totalWeight());
+                setText(sheet, layout.summary().row(), cell.column(), value + cell.suffix());
+                continue;
+            }
             setText(sheet, layout.summary().row(), cell.column(), summaryText(page, cell));
         }
     }
@@ -201,6 +211,11 @@ public class SalesOrderPrintExportService {
         }
         if (CELL_TYPE_PIECE_WEIGHT.equals(column.type())) {
             setText(sheet, rowIndex, column.column(), pieceWeight(item, pieceWeight));
+            return;
+        }
+        if (CELL_TYPE_WEIGHT.equals(column.type())) {
+            // 重量按系统内展示精度强制 3 位小数（如 1.000），文本写入避免 double 精度丢失
+            setText(sheet, rowIndex, column.column(), fixedDecimal(lineValue(item, column.field())));
             return;
         }
         setText(sheet, rowIndex, column.column(), stringValue(lineValue(item, column.field())));
@@ -282,7 +297,7 @@ public class SalesOrderPrintExportService {
                     RoundingMode.HALF_UP
             );
         }
-        return formatDecimal(pieceWeight, config.scale());
+        return fixedDecimal(pieceWeight);
     }
 
     private boolean shouldSuppressPieceWeight(SalesOrderPrintLine item, PrintXlsxExportLayout.PieceWeight config) {
@@ -299,16 +314,38 @@ public class SalesOrderPrintExportService {
         return value == null ? "" : String.valueOf(value);
     }
 
+    /**
+     * 重量按系统内展示精度（3 位小数）强制填充，不去尾零：1 → 1.000。
+     */
+    private String fixedDecimal(Object value) {
+        if (!(value instanceof BigDecimal decimal)) {
+            return "";
+        }
+        return decimal.setScale(PrecisionConstants.DISPLAY_WEIGHT_SCALE, RoundingMode.HALF_UP).toPlainString();
+    }
+
     private void setText(Sheet sheet, String address, String value) {
         Cell cell = getCell(sheet, address);
         cell.removeFormula();
-        cell.setCellValue(value == null ? "" : value);
+        cell.setCellValue(safeCellText(value));
     }
 
     private void setText(Sheet sheet, int rowIndex, int colIndex, String value) {
         Cell cell = getCell(sheet, rowIndex, colIndex);
         cell.removeFormula();
-        cell.setCellValue(value == null ? "" : value);
+        cell.setCellValue(safeCellText(value));
+    }
+
+    /**
+     * Excel 单元格文本硬上限 32767 字符，超长截断避免工作簿损坏。
+     */
+    private String safeCellText(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.length() > CELL_TEXT_MAX_LENGTH
+                ? value.substring(0, CELL_TEXT_MAX_LENGTH)
+                : value;
     }
 
     private void setNumber(Sheet sheet, int rowIndex, int colIndex, Integer value) {
@@ -369,7 +406,8 @@ public class SalesOrderPrintExportService {
         if (value == null) {
             return "";
         }
-        return value.setScale(scale, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
+        // 强制填充到指定位数（如 1.000），不去尾零
+        return value.setScale(scale, RoundingMode.HALF_UP).toPlainString();
     }
 
     private String twoDigits(int value) {

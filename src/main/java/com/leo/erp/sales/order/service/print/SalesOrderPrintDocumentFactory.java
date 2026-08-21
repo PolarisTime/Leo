@@ -4,6 +4,7 @@ import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderPrintXlsxOptions;
 import com.leo.erp.system.printtemplate.service.PrintItemOptions;
+import com.leo.erp.system.printtemplate.service.PrintSpecLengthRule;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -46,7 +47,7 @@ public class SalesOrderPrintDocumentFactory {
                 brand(item, options.itemOptions()),
                 item.getCategory(),
                 item.getMaterial(),
-                item.getSpec(),
+                PrintSpecLengthRule.apply(item.getSpec(), item.getLength()),
                 item.getQuantity(),
                 item.getPieceWeightTon(),
                 item.getWeightTon(),

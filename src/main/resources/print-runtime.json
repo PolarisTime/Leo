@@ -468,7 +468,7 @@
           {"field": "spec", "column": 3, "type": "text"},
           {"field": "quantity", "column": 4, "type": "number"},
           {"field": "pieceWeightTon", "column": 5, "type": "pieceWeight"},
-          {"field": "weightTon", "column": 6, "type": "number"},
+          {"field": "weightTon", "column": 6, "type": "weight"},
           {"field": "unitPrice", "column": 7, "type": "number"}
         ]
       },
@@ -478,7 +478,7 @@
           {"text": "合计件数", "column": 3, "type": "text"},
           {"field": "totalQuantity", "column": 4, "type": "number"},
           {"text": "合计吨位", "column": 5, "type": "text"},
-          {"field": "totalWeight", "column": 6, "type": "text", "scale": "weight", "suffix": "T"}
+          {"field": "totalWeight", "column": 6, "type": "weight", "scale": "weight", "suffix": "T"}
         ]
       },
       "pieceWeight": {

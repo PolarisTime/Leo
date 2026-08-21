@@ -190,4 +190,80 @@ class SalesOrderPrintExportServiceTest {
 
         assertThat(response.content()).isNotEmpty();
     }
+
+    @Test
+    void export_shouldFillWeightAsFixedThreeDecimalsAndAppendTwelveMeterSpec() throws Exception {
+        SalesOrder order = new SalesOrder();
+        order.setId(1L);
+        order.setProjectId(20L);
+        when(salesOrderRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        PrintXlsxExportLayout layout = new PrintXlsxExportLayout(
+                "sales-order", "print-forms/sales-order-print-v1.1.xlsx", "", 5, 6, 10,
+                List.of(),
+                List.of(new PrintXlsxExportLayout.DetailColumn("spec", 0, "text"),
+                        new PrintXlsxExportLayout.DetailColumn("weightTon", 1, "weight"),
+                        new PrintXlsxExportLayout.DetailColumn("pieceWeightTon", 2, "pieceWeight")),
+                new PrintXlsxExportLayout.Summary(20, List.of(
+                        new PrintXlsxExportLayout.SummaryCell("totalWeight", 0, "weight", "", 3, "T"))),
+                new PrintXlsxExportLayout.PieceWeight("-", 3, List.of())
+        );
+        when(layoutProvider.layout("sales-order")).thenReturn(layout);
+        // 12 米商品规格拼接 *12；重量 12.5 强制输出 12.500
+        SalesOrderPrintLine twelveMeter = new SalesOrderPrintLine(
+                "L1", "品牌A", "型钢", "螺纹钢", "HRB400", 10,
+                new BigDecimal("1.250"), new BigDecimal("12.5"), new BigDecimal("4000"));
+        SalesOrderPrintLine nineMeter = new SalesOrderPrintLine(
+                "L2", "品牌A", "型钢", "螺纹钢", "HRB400", 4,
+                new BigDecimal("0.8"), new BigDecimal("12"), new BigDecimal("4000"));
+        SalesOrderPrintPage page = new SalesOrderPrintPage(1, List.of(twelveMeter, nineMeter), 14,
+                new BigDecimal("24.5"));
+        SalesOrderPrintDocument doc = new SalesOrderPrintDocument("SO001", "结算公司A", "客户A", "项目A", "备注",
+                LocalDate.of(2026, 8, 1), List.of(page));
+        when(printDocumentFactory.create(any(), any(), anyInt())).thenReturn(doc);
+        lenient().when(filenameService.forOrder(any(), any(), any(), any(), any(), any()))
+                .thenReturn("SO001.xlsx");
+
+        FileDownloadResponse response = service.exportSalesOrderPrint(1L);
+
+        assertThat(response.content()).isNotEmpty();
+        try (var workbook = org.apache.poi.ss.usermodel.WorkbookFactory.create(
+                new java.io.ByteArrayInputStream(response.content()))) {
+            org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(0);
+            // 明细起始行 6：text 类型原样写入（12 米拼接在工厂层完成，见 SalesOrderPrintDocumentFactoryTest）
+            assertThat(sheet.getRow(6).getCell(0).getStringCellValue()).isEqualTo("HRB400");
+            // weight 类型强制 3 位小数：12.5 → "12.500"、12 → "12.000"
+            assertThat(sheet.getRow(6).getCell(1).getStringCellValue()).isEqualTo("12.500");
+            assertThat(sheet.getRow(7).getCell(1).getStringCellValue()).isEqualTo("12.000");
+            // 件重同样强制 3 位小数
+            assertThat(sheet.getRow(6).getCell(2).getStringCellValue()).isEqualTo("1.250");
+            // 合计吨位 24.5 → "24.500T"
+            assertThat(sheet.getRow(20).getCell(0).getStringCellValue()).isEqualTo("24.500T");
+        }
+    }
+
+    @Test
+    void export_shouldTruncateOverlongCellText() {
+        SalesOrder order = new SalesOrder();
+        order.setId(1L);
+        order.setProjectId(20L);
+        when(salesOrderRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        PrintXlsxExportLayout layout = new PrintXlsxExportLayout(
+                "sales-order", "print-forms/sales-order-print-v1.1.xlsx", "", 5, 6, 10,
+                List.of(new PrintXlsxExportLayout.HeaderCell("remark", "B2")),
+                List.of(),
+                new PrintXlsxExportLayout.Summary(20, List.of()),
+                new PrintXlsxExportLayout.PieceWeight("", 3, List.of())
+        );
+        when(layoutProvider.layout("sales-order")).thenReturn(layout);
+        String overlongRemark = "长".repeat(40000);
+        SalesOrderPrintDocument doc = new SalesOrderPrintDocument("SO001", "结算公司A", "客户A", "项目A",
+                overlongRemark, LocalDate.of(2026, 8, 1), List.of());
+        when(printDocumentFactory.create(any(), any(), anyInt())).thenReturn(doc);
+        lenient().when(filenameService.forOrder(any(), any(), any(), any(), any(), any()))
+                .thenReturn("SO001.xlsx");
+
+        FileDownloadResponse response = service.exportSalesOrderPrint(1L);
+
+        assertThat(response.content()).isNotEmpty();
+    }
 }

@@ -124,6 +124,31 @@ class PrintExportFilenameServiceTest {
     }
 
     @Test
+    void forOrder_shouldTruncateByUtf8Bytes() {
+        // 中文每字 3 字节：80 字中文 = 240 字节 ≤ 72 上限时按字节截断到 24 个中文字符。
+        String longChinese = "嘉".repeat(80);
+
+        String filename = service.forOrder(
+                "CG1", LocalDate.of(2026, 8, 10), null, longChinese, "公司", "pdf"
+        );
+
+        assertThat(filename).isEqualTo("CG1.2026-08-10." + "嘉".repeat(24) + ".公司.pdf");
+    }
+
+    @Test
+    void forOrder_shouldNotSplitUtf8SurrogatePair() {
+        // 增补平面字符（4 字节）放不下时整体丢弃，不产生残缺代理对。
+        String emoji = "😀".repeat(40); // 40 × 4 = 160 字节
+
+        String filename = service.forOrder(
+                "CG1", LocalDate.of(2026, 8, 10), null, emoji, "公司", "pdf"
+        );
+
+        // 72 / 4 = 18 个完整 emoji
+        assertThat(filename).isEqualTo("CG1.2026-08-10." + "😀".repeat(18) + ".公司.pdf");
+    }
+
+    @Test
     void forOrder_shouldSanitizeControlAndReservedCharacters() {
         // 控制字符（<32）与 \/:*?"<>| 统一替换为 '_'。
         String filename = service.forOrder(

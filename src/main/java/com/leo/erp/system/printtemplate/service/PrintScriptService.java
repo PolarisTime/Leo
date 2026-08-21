@@ -244,11 +244,9 @@ public class PrintScriptService {
     private List<Map<String, String>> appendLengthToSpec(List<Map<String, String>> items) {
         return items.stream().map(item -> {
             Map<String, String> printableItem = new HashMap<>(item);
-            String spec = normalizeText(printableItem.get("spec"));
-            String length = normalizeText(printableItem.get("length"));
-            if (!spec.isBlank() && "12米".equals(length) && !spec.endsWith("*12")) {
-                printableItem.put("spec", spec + "*12");
-            }
+            printableItem.put("spec", PrintSpecLengthRule.apply(
+                    normalizeText(printableItem.get("spec")),
+                    normalizeText(printableItem.get("length"))));
             return printableItem;
         }).toList();
     }
