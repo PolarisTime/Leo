@@ -36,6 +36,7 @@ public class MaterialCsvImportService {
         MaterialImportProcessor.ImportSession session = importProcessor.start(collectIdentities(table));
         ImportCounters counters = new ImportCounters();
         List<MaterialCsvImportResult.Failure> failures = new ArrayList<>();
+        List<MaterialCsvImportResult.RowTrace> rows = new ArrayList<>();
 
         for (int index = 1; index < table.rows().size(); index++) {
             List<String> row = table.rows().get(index);
@@ -43,13 +44,13 @@ public class MaterialCsvImportService {
                 continue;
             }
             counters.incrementTotal();
-            importRow(session, table.headerIndexes(), row, index + 1, counters, failures);
+            importRow(session, table.headerIndexes(), row, index + 1, counters, failures, rows);
         }
 
         if (counters.successCount() > 0) {
             tradeItemMaterialSupport.evictCache();
         }
-        return counters.toResult(failures);
+        return counters.toResult(failures, rows);
     }
 
     private void importRow(MaterialImportProcessor.ImportSession session,
@@ -57,18 +58,25 @@ public class MaterialCsvImportService {
                            List<String> row,
                            int rowNumber,
                            ImportCounters counters,
-                           List<MaterialCsvImportResult.Failure> failures) {
+                           List<MaterialCsvImportResult.Failure> failures,
+                           List<MaterialCsvImportResult.RowTrace> rows) {
         String materialCode = rowMapper.materialCode(row, headerIndexes);
         try {
             MaterialImportData data = rowMapper.toImportData(row, headerIndexes, rowNumber);
             MaterialImportProcessor.ImportRowResult result = importProcessor.importRow(session, data, rowNumber);
             counters.increment(result.outcome());
+            rows.add(new MaterialCsvImportResult.RowTrace(
+                    rowNumber, safe(data.materialCode()), data.brand(), data.material(),
+                    data.spec(), data.length(), result.outcome().name(), null));
         } catch (BusinessException exception) {
             failures.add(failure(rowNumber, materialCode, exception.getMessage()));
+            rows.add(MaterialCsvImportResult.RowTrace.failed(rowNumber, materialCode, exception.getMessage()));
         } catch (DataIntegrityViolationException exception) {
             failures.add(failure(rowNumber, materialCode, "保存失败，请检查该行数据"));
+            rows.add(MaterialCsvImportResult.RowTrace.failed(rowNumber, materialCode, "保存失败，请检查该行数据"));
         } catch (DataAccessException exception) {
             failures.add(failure(rowNumber, materialCode, "保存失败，请检查该行数据"));
+            rows.add(MaterialCsvImportResult.RowTrace.failed(rowNumber, materialCode, "保存失败，请检查该行数据"));
         }
     }
 
@@ -119,7 +127,8 @@ public class MaterialCsvImportService {
             return createdCount + updatedCount;
         }
 
-        MaterialCsvImportResult toResult(List<MaterialCsvImportResult.Failure> failures) {
+        MaterialCsvImportResult toResult(List<MaterialCsvImportResult.Failure> failures,
+                                         List<MaterialCsvImportResult.RowTrace> rows) {
             return new MaterialCsvImportResult(
                     totalRows,
                     successCount(),
@@ -127,7 +136,8 @@ public class MaterialCsvImportService {
                     updatedCount,
                     skippedCount,
                     failures.size(),
-                    List.copyOf(failures)
+                    List.copyOf(failures),
+                    List.copyOf(rows)
             );
         }
     }

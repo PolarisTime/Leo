@@ -75,7 +75,18 @@ public class MaterialImportFileAdapter {
                 result.skippedCount(),
                 result.failedCount(),
                 failures,
-                List.of()
+                result.rows().stream()
+                        .map(trace -> new MaterialImportRowResultResponse(
+                                trace.rowNumber(),
+                                trace.materialCode(),
+                                trace.brand(),
+                                trace.material(),
+                                trace.spec(),
+                                trace.length(),
+                                trace.outcome() == null ? "FAILED" : trace.outcome(),
+                                trace.reason()
+                        ))
+                        .toList()
         );
     }
 
