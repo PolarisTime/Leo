@@ -41,9 +41,6 @@ public interface PurchaseInboundRepository extends JpaRepository<PurchaseInbound
     boolean existsByInboundNoAndDeletedFlagFalse(String inboundNo);
 
     @EntityGraph(attributePaths = "items")
-    List<PurchaseInbound> findAllByDeletedFlagFalse();
-
-    @EntityGraph(attributePaths = "items")
     Optional<PurchaseInbound> findByIdAndDeletedFlagFalse(Long id);
 
     @EntityGraph(attributePaths = "items")

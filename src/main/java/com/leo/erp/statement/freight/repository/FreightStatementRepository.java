@@ -50,19 +50,6 @@ public interface FreightStatementRepository extends JpaRepository<FreightStateme
     Optional<FreightStatement> findByIdAndDeletedFlagFalseForSettlementUpdate(@Param("id") Long id);
 
     @Query("""
-            select distinct fs
-            from FreightStatement fs
-            join fetch fs.items item
-            where fs.deletedFlag = false
-              and item.sourceNo in :sourceNos
-              and (:currentStatementId is null or fs.id <> :currentStatementId)
-            """)
-    List<FreightStatement> findAllBySourceNosExcludingCurrentStatement(
-            @Param("sourceNos") Collection<String> sourceNos,
-            @Param("currentStatementId") Long currentStatementId
-    );
-
-    @Query("""
             select distinct item.sourceFreightBillId
             from FreightStatement fs
             join fs.items item

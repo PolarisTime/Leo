@@ -27,17 +27,6 @@ public class ItemAllocationNativeRepository {
              GROUP BY si.source_purchase_order_item_id
             """;
 
-    private static final String INBOUND_BY_PURCHASE_ORDER_ITEMS_SQL = """
-            SELECT pi.source_purchase_order_item_id AS source_item_id,
-                   SUM(pi.quantity)                  AS total_quantity,
-                   COALESCE(SUM(pi.weight_ton), 0)   AS total_weight_ton
-              FROM po_purchase_inbound_item pi
-              JOIN po_purchase_inbound inbound ON inbound.id = pi.inbound_id AND inbound.deleted_flag = FALSE
-             WHERE pi.source_purchase_order_item_id IN (:ids)
-               AND (:exclude_inbound_id IS NULL OR pi.inbound_id <> :exclude_inbound_id)
-             GROUP BY pi.source_purchase_order_item_id
-            """;
-
     private static final String SALES_BY_INBOUND_ITEMS_SQL = """
             SELECT si.source_inbound_item_id         AS source_item_id,
                    SUM(si.quantity)                  AS total_quantity,
@@ -49,26 +38,10 @@ public class ItemAllocationNativeRepository {
              GROUP BY si.source_inbound_item_id
             """;
 
-    private static final String WEIGHT_ADJUSTMENT_BY_PURCHASE_ORDER_ITEMS_SQL = """
-            SELECT pi.source_purchase_order_item_id AS source_item_id,
-                   COALESCE(SUM(pi.weight_adjustment_ton), 0) AS total_weight_ton
-              FROM po_purchase_inbound_item pi
-              JOIN po_purchase_inbound inbound ON inbound.id = pi.inbound_id AND inbound.deleted_flag = FALSE
-             WHERE pi.source_purchase_order_item_id IN (:ids)
-             GROUP BY pi.source_purchase_order_item_id
-            """;
-
     private static final RowMapper<AllocationProjection> ALLOCATION_ROW_MAPPER = (resultSet, rowNumber) ->
             new AllocationSummary(
                     resultSet.getObject("source_item_id", Long.class),
                     resultSet.getObject("total_quantity", Long.class),
-                    resultSet.getBigDecimal("total_weight_ton")
-            );
-
-    private static final RowMapper<AllocationProjection> WEIGHT_ADJUSTMENT_ROW_MAPPER =
-            (resultSet, rowNumber) -> new AllocationSummary(
-                    resultSet.getObject("source_item_id", Long.class),
-                    null,
                     resultSet.getBigDecimal("total_weight_ton")
             );
 
@@ -86,37 +59,12 @@ public class ItemAllocationNativeRepository {
         return queryAllocations(SALES_BY_PURCHASE_ORDER_ITEMS_SQL, ids, "exclude_order_id", excludeOrderId);
     }
 
-    /** 查询指定采购订单明细在采购入库中的分配量 */
-    public List<AllocationProjection> summarizeInboundByPurchaseOrderItems(
-            Collection<Long> ids,
-            Long excludeInboundId
-    ) {
-        return queryAllocations(
-                INBOUND_BY_PURCHASE_ORDER_ITEMS_SQL,
-                ids,
-                "exclude_inbound_id",
-                excludeInboundId
-        );
-    }
-
     /** 查询指定采购入库明细在销售订单中的分配量 */
     public List<AllocationProjection> summarizeSalesByInboundItems(
             Collection<Long> ids,
             Long excludeOrderId
     ) {
         return queryAllocations(SALES_BY_INBOUND_ITEMS_SQL, ids, "exclude_order_id", excludeOrderId);
-    }
-
-    /** 查询指定采购订单明细的重量调整量 */
-    public List<AllocationProjection> summarizeWeightAdjustmentByPurchaseOrderItems(Collection<Long> ids) {
-        if (ids.isEmpty()) {
-            return List.of();
-        }
-        return jdbcTemplate.query(
-                WEIGHT_ADJUSTMENT_BY_PURCHASE_ORDER_ITEMS_SQL,
-                new MapSqlParameterSource("ids", ids),
-                WEIGHT_ADJUSTMENT_ROW_MAPPER
-        );
     }
 
     private List<AllocationProjection> queryAllocations(

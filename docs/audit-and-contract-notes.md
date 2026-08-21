@@ -44,3 +44,9 @@ leo 后端存在三条审计写入路径，各自适用场景如下。新增模�
 | `aries/src/hooks/useModuleQueryRefresh.ts` | purchase-inbound ↔ purchase-order 关联失效规则 |
 
 同步提醒机制：修改上述后端契约时，在 PR 描述中勾对本清单逐项检查。
+
+## 安全敏感仓库的疑似死方法（保守保留）
+
+`SecuritySecretRepository` 与 `RefreshTokenSessionRepository` 中存在疑似零调用的
+派生查询方法（密钥轮转、令牌会话清理相关）。因涉及密钥与令牌生命周期，
+未纳入批量清理；后续调整密钥轮转/会话治理时一并确认处置。

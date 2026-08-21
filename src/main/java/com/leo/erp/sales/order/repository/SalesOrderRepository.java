@@ -45,9 +45,6 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
     List<SalesOrder> findByOrderNoInAndDeletedFlagFalse(Collection<String> orderNos);
 
     @EntityGraph(attributePaths = "items")
-    List<SalesOrder> findAllByDeletedFlagFalse();
-
-    @EntityGraph(attributePaths = "items")
     List<SalesOrder> findByIdInAndDeletedFlagFalse(Collection<Long> ids);
 
     @EntityGraph(attributePaths = "items")

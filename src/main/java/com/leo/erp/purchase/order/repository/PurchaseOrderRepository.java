@@ -44,9 +44,6 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
     boolean existsByOrderNoAndDeletedFlagFalse(String orderNo);
 
     @EntityGraph(attributePaths = "items")
-    List<PurchaseOrder> findAllByDeletedFlagFalse();
-
-    @EntityGraph(attributePaths = "items")
     List<PurchaseOrder> findAll(Specification<PurchaseOrder> specification, Sort sort);
 
     @EntityGraph(attributePaths = "items")

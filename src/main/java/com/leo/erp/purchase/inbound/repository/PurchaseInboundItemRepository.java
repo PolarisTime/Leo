@@ -93,23 +93,6 @@ public interface PurchaseInboundItemRepository extends JpaRepository<PurchaseInb
     );
 
     @Query("""
-            select distinct item.sourcePurchaseOrderItemId
-            from PurchaseInboundItem item
-            join item.purchaseInbound inbound
-            where inbound.deletedFlag = false
-              and inbound.status in :effectiveStatuses
-              and item.sourcePurchaseOrderItemId in :sourcePurchaseOrderItemIds
-              and trim(item.settlementMode) = '过磅'
-              and item.weighWeightTon is not null
-              and (:currentInboundId is null or inbound.id <> :currentInboundId)
-            """)
-    List<Long> findWeighedSourceItemIdsExcludingInbound(
-            @Param("sourcePurchaseOrderItemIds") Collection<Long> sourcePurchaseOrderItemIds,
-            @Param("currentInboundId") Long currentInboundId,
-            @Param("effectiveStatuses") Collection<String> effectiveStatuses
-    );
-
-    @Query("""
             select inbound.id as inboundId,
                    coalesce(sum(coalesce(item.weighWeightTon, item.weightTon)), 0) as totalWeighWeightTon,
                    coalesce(sum(item.weightAdjustmentTon), 0) as totalWeightAdjustmentTon
@@ -121,23 +104,6 @@ public interface PurchaseInboundItemRepository extends JpaRepository<PurchaseInb
             """)
     List<InboundWeightSummary> summarizeWeightByInboundIds(
             @Param("inboundIds") Collection<Long> inboundIds
-    );
-
-    @Query("""
-            select item.sourcePurchaseOrderItemId as sourcePurchaseOrderItemId,
-                   coalesce(sum(item.quantity), 0) as totalQuantity,
-                   coalesce(sum(coalesce(item.weighWeightTon, item.weightTon)), 0) as totalWeightTon,
-                   coalesce(sum(item.amount + coalesce(item.weightAdjustmentAmount, 0)), 0) as totalAmount
-            from PurchaseInboundItem item
-            join item.purchaseInbound inbound
-            where inbound.deletedFlag = false
-              and inbound.status in :effectiveStatuses
-              and item.sourcePurchaseOrderItemId in :sourcePurchaseOrderItemIds
-            group by item.sourcePurchaseOrderItemId
-            """)
-    List<PurchaseOrderInvoiceCapacitySummary> summarizeInvoiceCapacityBySourcePurchaseOrderItemIds(
-            @Param("sourcePurchaseOrderItemIds") Collection<Long> sourcePurchaseOrderItemIds,
-            @Param("effectiveStatuses") Collection<String> effectiveStatuses
     );
 
     interface PurchaseOrderAllocationSummary {

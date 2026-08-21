@@ -12,8 +12,6 @@ public interface AttachmentBindingRepository extends JpaRepository<AttachmentBin
 
     List<AttachmentBinding> findByModuleKeyAndRecordIdInAndDeletedFlagFalseOrderByRecordIdAscSortOrderAscIdAsc(String moduleKey, Collection<Long> recordIds);
 
-    List<AttachmentBinding> findByModuleKeyAndAttachmentIdAndDeletedFlagFalseOrderByRecordIdAscSortOrderAscIdAsc(String moduleKey, Long attachmentId);
-
     List<AttachmentBinding> findByAttachmentIdAndDeletedFlagFalseOrderByModuleKeyAscRecordIdAscSortOrderAscIdAsc(Long attachmentId);
 
     List<AttachmentBinding> findAllByOrderByAttachmentIdAscModuleKeyAscRecordIdAscSortOrderAscIdAsc();
