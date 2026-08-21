@@ -38,7 +38,7 @@ public class V2MaterialCategoryController {
     }
 
     @GetMapping
-    public PageResponse<MaterialCategoryResponse> page(@BindPageQuery PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String status) {
+    public PageResponse<MaterialCategoryResponse> page(@BindPageQuery(sortFieldKey = "material-category") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String status) {
         return PageResponse.from(service.page(query, keyword, status));
     }
 

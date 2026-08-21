@@ -7,6 +7,7 @@ public final class PageSortFieldCatalog {
 
     private static final Map<String, Set<String>> FIELDS_BY_KEY = Map.ofEntries(
             Map.entry("material", Set.of("id", "materialCode", "brand", "material", "category", "spec", "length", "unit", "quantityUnit", "pieceWeightTon", "piecesPerBundle", "unitPrice", "lengthSort", "specSort")),
+            Map.entry("material-category", Set.of("id", "categoryCode", "categoryName", "sortOrder", "purchaseWeighRequired", "status", "remark")),
             Map.entry("supplier", Set.of("id", "supplierCode", "supplierName", "contactName", "contactPhone", "city", "status")),
             Map.entry("customer", Set.of("id", "customerCode", "customerName", "contactName", "contactPhone", "city", "settlementMode", "projectName", "status")),
             Map.entry("carrier", Set.of("id", "carrierCode", "carrierName", "contactName", "contactPhone", "vehicleType", "priceMode", "status")),
