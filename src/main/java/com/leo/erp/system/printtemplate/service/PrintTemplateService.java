@@ -37,6 +37,23 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
             Pattern.compile("\\b(window|document|localStorage|sessionStorage|location|history|navigator)\\b", Pattern.CASE_INSENSITIVE),
             Pattern.compile("\\b(fetch|XMLHttpRequest|WebSocket)\\b", Pattern.CASE_INSENSITIVE)
     );
+
+    /**
+     * COORD 模板允许的 LODOP 绘制指令白名单：与前端 parseLodopScript 的
+     * METHOD_ARGUMENTS 键集保持一致（前端为执行侧权威实现）。保存侧先于
+     * 黑名单执行白名单校验，非白名单方法调用一律拒绝。
+     */
+    private static final Set<String> ALLOWED_LODOP_METHODS = Set.of(
+            "PRINT_INIT", "PRINT_INITA", "SET_PRINT_PAGESIZE",
+            "SET_PRINT_STYLE", "SET_PRINT_STYLEA",
+            "ADD_PRINT_TEXT", "ADD_PRINT_LINE", "ADD_PRINT_BARCODE",
+            "ADD_PRINT_RECT", "ADD_PRINT_ELLIPSE",
+            "NEWPAGE", "NewPage", "PREVIEW", "PRINT"
+    );
+
+    /** 提取 LODOP.getObjectMethod(...) 调用中的方法名。 */
+    private static final Pattern LODOP_METHOD_CALL = Pattern.compile(
+            "\\bLODOP\\s*\\.\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\(");
     private static final Set<String> ALLOWED_TEMPLATE_TYPES = Set.of("COORD", "PDF_FORM");
     private static final Set<String> ALLOWED_ENGINES = Set.of("LODOP", "PDF_FORM");
     private static final Set<String> ALLOWED_STATUSES = Set.of("ACTIVE", "DISABLED");
@@ -299,9 +316,24 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
             pdfFormTemplateValidator.validate(normalized);
             return;
         }
+        validateLodopMethodWhitelist(templateHtml);
         for (Pattern pattern : DANGEROUS_LODOP_PATTERNS) {
             if (pattern.matcher(templateHtml).find()) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模板内容包含不允许的脚本或危险标签");
+            }
+        }
+    }
+
+    /** COORD 模板中所有 LODOP.* 调用的方法名必须命中白名单；无调用则放行（空模板/纯文本场景）。 */
+    private void validateLodopMethodWhitelist(String templateHtml) {
+        java.util.regex.Matcher matcher = LODOP_METHOD_CALL.matcher(templateHtml);
+        while (matcher.find()) {
+            String method = matcher.group(1);
+            if (!ALLOWED_LODOP_METHODS.contains(method)) {
+                throw new BusinessException(
+                        ErrorCode.VALIDATION_ERROR,
+                        "模板包含不允许的 LODOP 指令: " + method
+                );
             }
         }
     }
