@@ -102,10 +102,10 @@ public class V2SalesOrderController {
         return service.detail(id);
     }
 
-    @Operation(summary = "按打印选项导出销售订单套打 Excel")
-    @PostMapping("/{id}/print-xlsx")
+    @Operation(summary = "创建销售订单套打 Excel 导出（同步返回文件）")
+    @PostMapping("/{id}/xlsx-exports")
     @OperationLoggable(moduleName = "销售订单", actionType = "打印", businessNoFields = {"id"}, recordIdField = "id")
-    public ResponseEntity<byte[]> exportPrintXlsx(@PathVariable Long id, @Valid @RequestBody(required = false) SalesOrderPrintXlsxRequest payload, HttpServletRequest request) {
+    public ResponseEntity<byte[]> createXlsxExport(@PathVariable Long id, @Valid @RequestBody(required = false) SalesOrderPrintXlsxRequest payload, HttpServletRequest request) {
         SalesOrderPrintXlsxOptions options = payload == null
                 ? SalesOrderPrintXlsxOptions.defaults()
                 : payload.resolvedPrintOptions();
@@ -120,26 +120,11 @@ public class V2SalesOrderController {
         return V2ResponseSupport.created("/sales-orders", service.create(request));
     }
 
-    @Operation(summary = "保存并审核销售订单")
-    @PostMapping("/save-and-audit")
-    @DomainEventAudited
-    @V2Created
-    public ResponseEntity<SalesOrderResponse> createAndAudit(@Valid @RequestBody SalesOrderRequest request) {
-        return V2ResponseSupport.created("/sales-orders", service.createAndAudit(request));
-    }
-
     @Operation(summary = "更新销售订单")
     @PutMapping("/{id}")
     @DomainEventAudited
     public SalesOrderResponse update(@PathVariable Long id, @Valid @RequestBody SalesOrderRequest request) {
         return service.update(id, request);
-    }
-
-    @Operation(summary = "保存并审核销售订单")
-    @PutMapping("/{id}/save-and-audit")
-    @DomainEventAudited
-    public SalesOrderResponse updateAndAudit(@PathVariable Long id, @Valid @RequestBody SalesOrderRequest request) {
-        return service.updateAndAudit(id, request);
     }
 
     @Operation(summary = "保存并确认销售订单交付核定")

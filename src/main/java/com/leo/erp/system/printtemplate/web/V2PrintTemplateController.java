@@ -60,9 +60,9 @@ public class V2PrintTemplateController {
         return printTemplateService.update(id, request);
     }
 
-    @PostMapping(value = "/{id}/upload-json", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @OperationLoggable(moduleName = "打印模板", actionType = "上传 JSON", businessNoFields = {"id"})
-    public PrintTemplateResponse uploadJson(@PathVariable @Positive Long id, @RequestParam("file") MultipartFile file) {
+    @PutMapping(value = "/{id}/content", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @OperationLoggable(moduleName = "打印模板", actionType = "替换内容", businessNoFields = {"id"})
+    public PrintTemplateResponse replaceContent(@PathVariable @Positive Long id, @RequestParam("file") MultipartFile file) {
         // 全局 multipart 限额为 20MB，本端点业务上限 1MB：入口早拒，避免超限文件完整传输后才被拒。
         if (file != null && file.getSize() > MAX_UPLOAD_JSON_BYTES) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件不能超过 1MB");

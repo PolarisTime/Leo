@@ -20,7 +20,7 @@ import java.util.List;
 
 @RestController
 @Validated
-@RequestMapping(ApiVersion.V2_PREFIX + "/print")
+@RequestMapping(ApiVersion.V2_PREFIX + "/print-outputs")
 public class V2PrintScriptController {
 
     private final PrintScriptService printScriptService;
@@ -32,7 +32,7 @@ public class V2PrintScriptController {
         this.printOutputService = printOutputService;
     }
 
-    @PostMapping("/record")
+    @PostMapping
     @OperationLoggable(
             moduleName = "打印",
             moduleNameField = "moduleKey",
