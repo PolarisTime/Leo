@@ -118,21 +118,31 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
         return search(keyword, SALES_ORDER_SEARCH_FIELDS, maxSize, null, repository);
     }
 
+    @Override
     @Transactional
-    public SalesOrderResponse createAndAudit(SalesOrderRequest request) {
-        SalesOrderResponse created = create(withStatus(request, StatusConstants.DRAFT));
-        return updateStatus(created.id(), StatusConstants.AUDITED);
+    public SalesOrderResponse create(SalesOrderRequest request) {
+        SalesOrderResponse created = super.create(
+                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        if (request.audit()) {
+            return updateStatus(created.id(), StatusConstants.AUDITED);
+        }
+        return created;
     }
 
+    @Override
     @Transactional
-    public SalesOrderResponse updateAndAudit(Long id, SalesOrderRequest request) {
-        update(id, withStatus(request, StatusConstants.DRAFT));
-        return updateStatus(id, StatusConstants.AUDITED);
+    public SalesOrderResponse update(Long id, SalesOrderRequest request) {
+        SalesOrderResponse updated = super.update(id,
+                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        if (request.audit()) {
+            return updateStatus(id, StatusConstants.AUDITED);
+        }
+        return updated;
     }
 
     @Transactional
     public SalesOrderResponse updateAndComplete(Long id, SalesOrderRequest request) {
-        update(id, withStatus(request, StatusConstants.DELIVERY_VERIFICATION));
+        super.update(id, withStatus(request, StatusConstants.DELIVERY_VERIFICATION));
         return completeSalesOrder(id);
     }
 
@@ -196,7 +206,8 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
                 request.salesName(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 
@@ -216,7 +227,8 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
                 request.salesName(),
                 status,
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 
@@ -238,7 +250,8 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
                 request.salesName(),
                 entity.getStatus(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 

@@ -87,7 +87,7 @@ class SalesOutboundServiceTest {
     private SalesOutboundRequest request(String outboundNo, String salesOrderNo, String status) {
         return new SalesOutboundRequest(
                 outboundNo, salesOrderNo, 10L, "客户A", 20L, "项目A", 1L, "库房A",
-                LocalDate.of(2026, 8, 1), status, null, List.of());
+                LocalDate.of(2026, 8, 1), status, null, List.of(), false);
     }
 
     private SalesOutbound entity(String status) {

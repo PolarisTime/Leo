@@ -19,6 +19,7 @@ public record SalesOutboundRequest(
         @NotNull LocalDate outboundDate,
         String status,
         String remark,
-        @Valid @NotEmpty List<SalesOutboundItemRequest> items
+        @Valid @NotEmpty List<SalesOutboundItemRequest> items,
+        boolean audit
 ) {
 }

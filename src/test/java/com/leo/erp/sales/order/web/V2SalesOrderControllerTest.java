@@ -70,7 +70,7 @@ class V2SalesOrderControllerTest {
     private SalesOrderRequest request() {
         return new SalesOrderRequest(
                 "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A", null, null,
-                LocalDate.of(2026, 8, 1), "销售员A", "DRAFT", null, List.of());
+                LocalDate.of(2026, 8, 1), "销售员A", "DRAFT", null, List.of(), false);
     }
 
     @Test
@@ -128,14 +128,14 @@ class V2SalesOrderControllerTest {
     }
 
     @Test
-    void exportPrintXlsx_shouldReturnFile() {
+    void createXlsxExport_shouldReturnFile() {
         FileDownloadResponse download = mock(FileDownloadResponse.class);
         when(download.contentType()).thenReturn(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM);
         when(download.filename()).thenReturn("SO001.xlsx");
         when(download.content()).thenReturn(new byte[]{1, 2, 3});
         when(printExportService.exportSalesOrderPrint(anyLong(), any())).thenReturn(download);
 
-        ResponseEntity<byte[]> result = controller.exportPrintXlsx(5L, null, new MockHttpServletRequest());
+        ResponseEntity<byte[]> result = controller.createXlsxExport(5L, null, new MockHttpServletRequest());
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody()).containsExactly(1, 2, 3);
@@ -153,29 +153,11 @@ class V2SalesOrderControllerTest {
     }
 
     @Test
-    void createAndAudit_shouldReturnCreated() {
-        SalesOrderResponse response = mock(SalesOrderResponse.class);
-        when(service.createAndAudit(any())).thenReturn(response);
-
-        ResponseEntity<SalesOrderResponse> result = controller.createAndAudit(request());
-
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-    }
-
-    @Test
     void update_shouldDelegate() {
         SalesOrderResponse response = mock(SalesOrderResponse.class);
         when(service.update(anyLong(), any())).thenReturn(response);
 
         assertThat(controller.update(5L, request())).isSameAs(response);
-    }
-
-    @Test
-    void updateAndAudit_shouldDelegate() {
-        SalesOrderResponse response = mock(SalesOrderResponse.class);
-        when(service.updateAndAudit(anyLong(), any())).thenReturn(response);
-
-        assertThat(controller.updateAndAudit(5L, request())).isSameAs(response);
     }
 
     @Test

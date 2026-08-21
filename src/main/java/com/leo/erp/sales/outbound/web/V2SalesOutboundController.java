@@ -74,26 +74,11 @@ public class V2SalesOutboundController {
         return V2ResponseSupport.created("/sales-outbounds", service.create(request));
     }
 
-    @PostMapping("/save-and-audit")
-    @Operation(summary = "保存并审核销售出库")
-    @DomainEventAudited
-    @V2Created
-    public ResponseEntity<SalesOutboundResponse> createAndAudit(@Valid @RequestBody SalesOutboundRequest request) {
-        return V2ResponseSupport.created("/sales-outbounds", service.createAndAudit(request));
-    }
-
     @PutMapping("/{id}")
     @Operation(summary = "更新销售出库")
     @DomainEventAudited
     public SalesOutboundResponse update(@PathVariable Long id, @Valid @RequestBody SalesOutboundRequest request) {
         return service.update(id, request);
-    }
-
-    @PutMapping("/{id}/save-and-audit")
-    @Operation(summary = "保存并审核销售出库")
-    @DomainEventAudited
-    public SalesOutboundResponse updateAndAudit(@PathVariable Long id, @Valid @RequestBody SalesOutboundRequest request) {
-        return service.updateAndAudit(id, request);
     }
 
     @PatchMapping("/{id}/status")

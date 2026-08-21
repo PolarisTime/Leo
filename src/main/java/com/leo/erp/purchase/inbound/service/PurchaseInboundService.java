@@ -104,16 +104,26 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
                 .toList();
     }
 
+    @Override
     @Transactional
-    public PurchaseInboundResponse createAndAudit(PurchaseInboundRequest request) {
-        PurchaseInboundResponse created = create(withStatus(request, StatusConstants.DRAFT));
-        return updateStatus(created.id(), StatusConstants.AUDITED);
+    public PurchaseInboundResponse create(PurchaseInboundRequest request) {
+        PurchaseInboundResponse created = super.create(
+                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        if (request.audit()) {
+            return updateStatus(created.id(), StatusConstants.AUDITED);
+        }
+        return created;
     }
 
+    @Override
     @Transactional
-    public PurchaseInboundResponse updateAndAudit(Long id, PurchaseInboundRequest request) {
-        update(id, withStatus(request, StatusConstants.DRAFT));
-        return updateStatus(id, StatusConstants.AUDITED);
+    public PurchaseInboundResponse update(Long id, PurchaseInboundRequest request) {
+        PurchaseInboundResponse updated = super.update(id,
+                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        if (request.audit()) {
+            return updateStatus(id, StatusConstants.AUDITED);
+        }
+        return updated;
     }
 
     @Override
@@ -153,7 +163,8 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
                 request.settlementMode(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 
@@ -170,7 +181,8 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
                 request.settlementMode(),
                 status,
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 
@@ -190,7 +202,8 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
                 request.settlementMode(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 

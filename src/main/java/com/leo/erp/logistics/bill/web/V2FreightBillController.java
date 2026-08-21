@@ -84,23 +84,10 @@ public class V2FreightBillController {
         return V2ResponseSupport.created("/freight-bills", service.create(request));
     }
 
-    @PostMapping("/save-and-audit")
-    @DomainEventAudited
-    @V2Created
-    public ResponseEntity<FreightBillResponse> createAndAudit(@Valid @RequestBody FreightBillRequest request) {
-        return V2ResponseSupport.created("/freight-bills", service.createAndAudit(request));
-    }
-
     @PutMapping("/{id}")
     @DomainEventAudited
     public FreightBillResponse update(@PathVariable Long id, @Valid @RequestBody FreightBillRequest request) {
         return service.update(id, request);
-    }
-
-    @PutMapping("/{id}/save-and-audit")
-    @DomainEventAudited
-    public FreightBillResponse updateAndAudit(@PathVariable Long id, @Valid @RequestBody FreightBillRequest request) {
-        return service.updateAndAudit(id, request);
     }
 
     @PatchMapping("/{id}/status")

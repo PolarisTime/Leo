@@ -93,16 +93,26 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                 null, purchaseOrderRepository);
     }
 
+    @Override
     @Transactional
-    public PurchaseOrderResponse createAndAudit(PurchaseOrderRequest request) {
-        PurchaseOrderResponse created = create(withStatus(request, StatusConstants.DRAFT));
-        return updateStatus(created.id(), StatusConstants.AUDITED);
+    public PurchaseOrderResponse create(PurchaseOrderRequest request) {
+        PurchaseOrderResponse created = super.create(
+                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        if (request.audit()) {
+            return updateStatus(created.id(), StatusConstants.AUDITED);
+        }
+        return created;
     }
 
+    @Override
     @Transactional
-    public PurchaseOrderResponse updateAndAudit(Long id, PurchaseOrderRequest request) {
-        update(id, withStatus(request, StatusConstants.DRAFT));
-        return updateStatus(id, StatusConstants.AUDITED);
+    public PurchaseOrderResponse update(Long id, PurchaseOrderRequest request) {
+        PurchaseOrderResponse updated = super.update(id,
+                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        if (request.audit()) {
+            return updateStatus(id, StatusConstants.AUDITED);
+        }
+        return updated;
     }
 
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
@@ -186,7 +196,8 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                 request.settlementCompanyId(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 
@@ -201,7 +212,8 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                 request.settlementCompanyId(),
                 status,
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 
@@ -219,7 +231,8 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                 request.settlementCompanyId(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 

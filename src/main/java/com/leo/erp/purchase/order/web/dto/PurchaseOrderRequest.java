@@ -22,7 +22,8 @@ public record PurchaseOrderRequest(
         String remark,
         @Valid
         @NotEmpty(message = "订单明细不能为空")
-        List<PurchaseOrderItemRequest> items
+        List<PurchaseOrderItemRequest> items,
+        boolean audit
 ) {
     public PurchaseOrderRequest(String orderNo,
                                 String supplierCode,
@@ -33,7 +34,7 @@ public record PurchaseOrderRequest(
                                 String status,
                                 String remark,
                                 List<PurchaseOrderItemRequest> items) {
-        this(orderNo, null, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId, status, remark, items);
+        this(orderNo, null, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId, status, remark, items, false);
     }
 
     public PurchaseOrderRequest(String orderNo,
@@ -44,6 +45,6 @@ public record PurchaseOrderRequest(
                                 String status,
                                 String remark,
                                 List<PurchaseOrderItemRequest> items) {
-        this(orderNo, null, null, supplierName, orderDate, buyerName, settlementCompanyId, status, remark, items);
+        this(orderNo, null, null, supplierName, orderDate, buyerName, settlementCompanyId, status, remark, items, false);
     }
 }

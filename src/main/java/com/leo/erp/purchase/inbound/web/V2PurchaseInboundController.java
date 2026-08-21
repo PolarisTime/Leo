@@ -73,26 +73,11 @@ public class V2PurchaseInboundController {
         return V2ResponseSupport.created("/purchase-inbounds", service.create(request));
     }
 
-    @PostMapping("/save-and-audit")
-    @Operation(summary = "保存并审核采购入库")
-    @DomainEventAudited
-    @V2Created
-    public ResponseEntity<PurchaseInboundResponse> createAndAudit(@Valid @RequestBody PurchaseInboundRequest request) {
-        return V2ResponseSupport.created("/purchase-inbounds", service.createAndAudit(request));
-    }
-
     @PutMapping("/{id}")
     @Operation(summary = "更新采购入库")
     @DomainEventAudited
     public PurchaseInboundResponse update(@PathVariable Long id, @Valid @RequestBody PurchaseInboundRequest request) {
         return service.update(id, request);
-    }
-
-    @PutMapping("/{id}/save-and-audit")
-    @Operation(summary = "保存并审核采购入库")
-    @DomainEventAudited
-    public PurchaseInboundResponse updateAndAudit(@PathVariable Long id, @Valid @RequestBody PurchaseInboundRequest request) {
-        return service.updateAndAudit(id, request);
     }
 
     @PatchMapping("/{id}/status")

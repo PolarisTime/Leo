@@ -66,7 +66,7 @@ class V2FreightBillControllerTest {
     private FreightBillRequest request() {
         return new FreightBillRequest(
                 "FB001", 1L, "C001", "承运商A", 30L, "结算公司A", null, null,
-                LocalDate.of(2026, 8, 1), new BigDecimal("100"), "DRAFT", null, List.of());
+                LocalDate.of(2026, 8, 1), new BigDecimal("100"), "DRAFT", null, List.of(), false);
     }
 
     @Test
@@ -129,29 +129,11 @@ class V2FreightBillControllerTest {
     }
 
     @Test
-    void createAndAudit_shouldReturnCreated() {
-        FreightBillResponse response = mock(FreightBillResponse.class);
-        when(service.createAndAudit(any())).thenReturn(response);
-
-        ResponseEntity<FreightBillResponse> result = controller.createAndAudit(request());
-
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-    }
-
-    @Test
     void update_shouldDelegate() {
         FreightBillResponse response = mock(FreightBillResponse.class);
         when(service.update(anyLong(), any())).thenReturn(response);
 
         assertThat(controller.update(5L, request())).isSameAs(response);
-    }
-
-    @Test
-    void updateAndAudit_shouldDelegate() {
-        FreightBillResponse response = mock(FreightBillResponse.class);
-        when(service.updateAndAudit(anyLong(), any())).thenReturn(response);
-
-        assertThat(controller.updateAndAudit(5L, request())).isSameAs(response);
     }
 
     @Test

@@ -85,7 +85,7 @@ class FreightBillServiceTest {
     private FreightBillRequest request(String billNo, Long carrierId, String status) {
         return new FreightBillRequest(
                 billNo, carrierId, "C001", "承运商A", null, null, null, null,
-                LocalDate.of(2026, 8, 1), new BigDecimal("100"), status, null, List.of());
+                LocalDate.of(2026, 8, 1), new BigDecimal("100"), status, null, List.of(), false);
     }
 
     private CarrierQuery.CarrierSnapshot carrier(Long id, Long defaultSettlementId) {
@@ -189,7 +189,7 @@ class FreightBillServiceTest {
         FreightBill entity = new FreightBill();
         FreightBillRequest request = new FreightBillRequest(
                 "FB001", 1L, "C001", "承运商A", null, null, 5L, "沪A123",
-                LocalDate.of(2026, 8, 1), new BigDecimal("100"), StatusConstants.DRAFT, null, List.of());
+                LocalDate.of(2026, 8, 1), new BigDecimal("100"), StatusConstants.DRAFT, null, List.of(), false);
         when(carrierQuery.findActiveById(1L)).thenReturn(Optional.of(carrier(1L, 30L)));
         // 车辆 carrierId=99 与物流商 1 不一致
         when(vehicleQuery.findById(5L)).thenReturn(Optional.of(new VehicleQuery.VehicleSnapshot(5L, 99L, "沪A123")));
@@ -204,7 +204,7 @@ class FreightBillServiceTest {
         FreightBill entity = new FreightBill();
         FreightBillRequest request = new FreightBillRequest(
                 "FB001", 1L, "C001", "承运商A", null, null, 5L, "沪A999",
-                LocalDate.of(2026, 8, 1), new BigDecimal("100"), StatusConstants.DRAFT, null, List.of());
+                LocalDate.of(2026, 8, 1), new BigDecimal("100"), StatusConstants.DRAFT, null, List.of(), false);
         when(carrierQuery.findActiveById(1L)).thenReturn(Optional.of(carrier(1L, 30L)));
         when(vehicleQuery.findById(5L)).thenReturn(Optional.of(new VehicleQuery.VehicleSnapshot(5L, 1L, "沪A123")));
 

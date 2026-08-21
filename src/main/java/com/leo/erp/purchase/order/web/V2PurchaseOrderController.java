@@ -111,26 +111,11 @@ public class V2PurchaseOrderController {
         return V2ResponseSupport.created("/purchase-orders", purchaseOrderService.create(request));
     }
 
-    @Operation(summary = "保存并审核采购订单")
-    @PostMapping("/save-and-audit")
-    @DomainEventAudited
-    @V2Created
-    public ResponseEntity<PurchaseOrderResponse> createAndAudit(@Valid @RequestBody PurchaseOrderRequest request) {
-        return V2ResponseSupport.created("/purchase-orders", purchaseOrderService.createAndAudit(request));
-    }
-
     @Operation(summary = "更新采购订单")
     @PutMapping("/{id}")
     @DomainEventAudited
     public PurchaseOrderResponse update(@PathVariable Long id, @Valid @RequestBody PurchaseOrderRequest request) {
         return purchaseOrderService.update(id, request);
-    }
-
-    @Operation(summary = "保存并审核采购订单")
-    @PutMapping("/{id}/save-and-audit")
-    @DomainEventAudited
-    public PurchaseOrderResponse updateAndAudit(@PathVariable Long id, @Valid @RequestBody PurchaseOrderRequest request) {
-        return purchaseOrderService.updateAndAudit(id, request);
     }
 
     @Operation(summary = "更新采购订单状态")

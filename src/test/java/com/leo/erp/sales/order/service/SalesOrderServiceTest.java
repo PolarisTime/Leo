@@ -85,7 +85,7 @@ class SalesOrderServiceTest {
     private SalesOrderRequest request(String orderNo, String status) {
         return new SalesOrderRequest(
                 orderNo, null, null, "CUST001", 10L, "客户A", 20L, "项目A", null, null,
-                LocalDate.of(2026, 8, 1), "销售员A", status, null, List.of());
+                LocalDate.of(2026, 8, 1), "销售员A", status, null, List.of(), false);
     }
 
     private SalesOrder entity(Long ownerUserId, String status) {

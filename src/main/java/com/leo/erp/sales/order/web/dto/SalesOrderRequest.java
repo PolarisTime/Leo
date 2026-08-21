@@ -22,7 +22,8 @@ public record SalesOrderRequest(
         @jakarta.validation.constraints.NotBlank String salesName,
         String status,
         String remark,
-        @Valid @NotEmpty List<SalesOrderItemRequest> items
+        @Valid @NotEmpty List<SalesOrderItemRequest> items,
+        boolean audit
 ) {
     public SalesOrderRequest(String orderNo,
                              String purchaseInboundNo,
@@ -39,7 +40,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
-                settlementCompanyId, settlementCompanyName, deliveryDate, salesName, status, remark, items);
+                settlementCompanyId, settlementCompanyName, deliveryDate, salesName, status, remark, items, false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -55,7 +56,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
-                null, null, deliveryDate, salesName, status, remark, items);
+                null, null, deliveryDate, salesName, status, remark, items, false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -70,7 +71,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, null, customerCode, null, customerName, projectId, projectName,
-                null, null, deliveryDate, salesName, status, remark, items);
+                null, null, deliveryDate, salesName, status, remark, items, false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -83,7 +84,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, null, null, null, customerName, null, projectName,
-                null, null, deliveryDate, salesName, status, remark, items);
+                null, null, deliveryDate, salesName, status, remark, items, false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -97,7 +98,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, null, null, customerName, null, projectName,
-                null, null, deliveryDate, salesName, status, remark, items);
+                null, null, deliveryDate, salesName, status, remark, items, false);
     }
 
 }

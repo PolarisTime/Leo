@@ -20,7 +20,8 @@ public record PurchaseInboundRequest(
         String settlementMode,
         String status,
         String remark,
-        @Valid @NotEmpty List<PurchaseInboundItemRequest> items
+        @Valid @NotEmpty List<PurchaseInboundItemRequest> items,
+        boolean audit
 ) {
     public PurchaseInboundRequest(String inboundNo,
                                   String purchaseOrderNo,
@@ -33,7 +34,7 @@ public record PurchaseInboundRequest(
                                   String remark,
                                   List<PurchaseInboundItemRequest> items) {
         this(inboundNo, purchaseOrderNo, null, supplierCode, supplierName, null, warehouseName, inboundDate,
-                settlementMode, status, remark, items);
+                settlementMode, status, remark, items, false);
     }
 
     public PurchaseInboundRequest(String inboundNo,
@@ -46,6 +47,6 @@ public record PurchaseInboundRequest(
                                   String remark,
                                   List<PurchaseInboundItemRequest> items) {
         this(inboundNo, purchaseOrderNo, null, null, supplierName, null, warehouseName, inboundDate,
-                settlementMode, status, remark, items);
+                settlementMode, status, remark, items, false);
     }
 }

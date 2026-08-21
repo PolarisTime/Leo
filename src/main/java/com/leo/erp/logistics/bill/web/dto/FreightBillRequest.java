@@ -22,6 +22,7 @@ public record FreightBillRequest(
         @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
         String status,
         String remark,
-        @Valid @NotEmpty List<FreightBillItemRequest> items
+        @Valid @NotEmpty List<FreightBillItemRequest> items,
+        boolean audit
 ) {
 }

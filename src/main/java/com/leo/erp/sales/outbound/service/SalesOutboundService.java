@@ -107,16 +107,26 @@ public class SalesOutboundService extends AbstractStatusCrudService<
         return search(keyword, OUTBOUND_SEARCH_FIELDS, maxSize, null, repository);
     }
 
+    @Override
     @Transactional
-    public SalesOutboundResponse createAndAudit(SalesOutboundRequest request) {
-        SalesOutboundResponse created = create(withStatus(request, StatusConstants.DRAFT));
-        return updateStatus(created.id(), StatusConstants.AUDITED);
+    public SalesOutboundResponse create(SalesOutboundRequest request) {
+        SalesOutboundResponse created = super.create(
+                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        if (request.audit()) {
+            return updateStatus(created.id(), StatusConstants.AUDITED);
+        }
+        return created;
     }
 
+    @Override
     @Transactional
-    public SalesOutboundResponse updateAndAudit(Long id, SalesOutboundRequest request) {
-        update(id, withStatus(request, StatusConstants.DRAFT));
-        return updateStatus(id, StatusConstants.AUDITED);
+    public SalesOutboundResponse update(Long id, SalesOutboundRequest request) {
+        SalesOutboundResponse updated = super.update(id,
+                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        if (request.audit()) {
+            return updateStatus(id, StatusConstants.AUDITED);
+        }
+        return updated;
     }
 
     @Override
@@ -159,7 +169,8 @@ public class SalesOutboundService extends AbstractStatusCrudService<
                 request.outboundDate(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 
@@ -176,7 +187,8 @@ public class SalesOutboundService extends AbstractStatusCrudService<
                 request.outboundDate(),
                 status,
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 
@@ -198,7 +210,8 @@ public class SalesOutboundService extends AbstractStatusCrudService<
                 request.outboundDate(),
                 entity.getStatus(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.audit()
         );
     }
 
@@ -243,7 +256,8 @@ public class SalesOutboundService extends AbstractStatusCrudService<
                 request.outboundDate(),
                 entity.getStatus(),
                 request.remark(),
-                restrictedItems
+                restrictedItems,
+                request.audit()
         );
     }
 

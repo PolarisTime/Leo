@@ -59,7 +59,7 @@ class V2SalesOutboundControllerTest {
     private SalesOutboundRequest request() {
         return new SalesOutboundRequest(
                 "OB001", "SO001", 10L, "客户A", 20L, "项目A", 1L, "库房A",
-                LocalDate.of(2026, 8, 1), "DRAFT", null, List.of());
+                LocalDate.of(2026, 8, 1), "DRAFT", null, List.of(), false);
     }
 
     @Test
@@ -115,30 +115,11 @@ class V2SalesOutboundControllerTest {
     }
 
     @Test
-    void createAndAudit_shouldReturnCreated() {
-        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
-        when(service.createAndAudit(any())).thenReturn(response);
-
-        ResponseEntity<SalesOutboundResponse> result = controller.createAndAudit(request());
-
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        assertThat(result.getBody()).isSameAs(response);
-    }
-
-    @Test
     void update_shouldDelegate() {
         SalesOutboundResponse response = mock(SalesOutboundResponse.class);
         when(service.update(anyLong(), any())).thenReturn(response);
 
         assertThat(controller.update(5L, request())).isSameAs(response);
-    }
-
-    @Test
-    void updateAndAudit_shouldDelegate() {
-        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
-        when(service.updateAndAudit(anyLong(), any())).thenReturn(response);
-
-        assertThat(controller.updateAndAudit(5L, request())).isSameAs(response);
     }
 
     @Test

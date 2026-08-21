@@ -115,7 +115,7 @@ class SalesOutboundApplyServiceTest {
                                          Long warehouseId, String warehouseName, List<SalesOutboundItemRequest> items) {
         return new SalesOutboundRequest(
                 "OB001", null, customerId, customerName, projectId, projectName, warehouseId, warehouseName,
-                LocalDate.of(2026, 8, 1), "DRAFT", null, items);
+                LocalDate.of(2026, 8, 1), "DRAFT", null, items, false);
     }
 
     private void stubSingleSource(SalesOrder order, SalesOrderItem item) {

@@ -88,16 +88,26 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
         return super.page(query, spec, repository);
     }
 
+    @Override
     @Transactional
-    public FreightBillResponse createAndAudit(FreightBillRequest request) {
-        FreightBillResponse created = create(copyRequestWithStatus(request, StatusConstants.DRAFT));
-        return updateStatus(created.id(), StatusConstants.AUDITED);
+    public FreightBillResponse create(FreightBillRequest request) {
+        FreightBillResponse created = super.create(
+                request.audit() ? copyRequestWithStatus(request, StatusConstants.DRAFT) : request);
+        if (request.audit()) {
+            return updateStatus(created.id(), StatusConstants.AUDITED);
+        }
+        return created;
     }
 
+    @Override
     @Transactional
-    public FreightBillResponse updateAndAudit(Long id, FreightBillRequest request) {
-        update(id, copyRequestWithStatus(request, StatusConstants.DRAFT));
-        return updateStatus(id, StatusConstants.AUDITED);
+    public FreightBillResponse update(Long id, FreightBillRequest request) {
+        FreightBillResponse updated = super.update(id,
+                request.audit() ? copyRequestWithStatus(request, StatusConstants.DRAFT) : request);
+        if (request.audit()) {
+            return updateStatus(id, StatusConstants.AUDITED);
+        }
+        return updated;
     }
 
     @Transactional(readOnly = true)
@@ -164,7 +174,7 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
                 billNo, request.carrierId(), request.carrierCode(), request.carrierName(),
                 request.settlementCompanyId(), request.settlementCompanyName(), request.vehicleId(),
                 request.vehiclePlate(), request.billTime(),
-                request.unitPrice(), request.status(), request.remark(), request.items()
+                request.unitPrice(), request.status(), request.remark(), request.items(), request.audit()
         );
     }
 
@@ -173,7 +183,7 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
                 request.billNo(), request.carrierId(), request.carrierCode(), request.carrierName(),
                 request.settlementCompanyId(), request.settlementCompanyName(), request.vehicleId(),
                 request.vehiclePlate(), request.billTime(),
-                request.unitPrice(), status, request.remark(), request.items()
+                request.unitPrice(), status, request.remark(), request.items(), request.audit()
         );
     }
 
