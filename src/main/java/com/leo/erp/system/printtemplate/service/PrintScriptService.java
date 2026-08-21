@@ -59,7 +59,7 @@ public class PrintScriptService {
     }
 
     public Map<String, Object> generateFromRecord(String templateId, String moduleKey, Long recordId, PrintRenderOptions options) {
-        PrintTemplate template = templateRepository.findByIdAndDeletedFlagFalse(Long.parseLong(templateId))
+        PrintTemplate template = templateRepository.findByIdAndDeletedFlagFalse(parseTemplateId(templateId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "打印模板不存在"));
         if (!"ACTIVE".equals(template.getStatus())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "打印模板已禁用");
@@ -69,7 +69,7 @@ public class PrintScriptService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "打印模板与当前模块不匹配");
         }
         dataProvider.requireSupported(moduleKey);
-        recordAccessService.assertRecordExists(moduleKey, recordId);
+        // loadRecord 内部一次查询完成存在性校验与数据加载，记录不存在时抛 NOT_FOUND
         PrintRecordData recordData = dataProvider.loadRecord(moduleKey, recordId);
         Map<String, String> data = recordData.data();
         List<Map<String, String>> items = recordData.items();
@@ -406,5 +406,13 @@ public class PrintScriptService {
             }
         }
         return "";
+    }
+
+    /** 模板 ID 解析：非正整数入参返回 422 语义校验错误，而非 NumberFormatException 500。 */
+    private Long parseTemplateId(String templateId) {
+        if (templateId == null || !templateId.matches("[1-9]\\d{0,18}")) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "打印模板 ID 格式不合法");
+        }
+        return Long.parseLong(templateId);
     }
 }

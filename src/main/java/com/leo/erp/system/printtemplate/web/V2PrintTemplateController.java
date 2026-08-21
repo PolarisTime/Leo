@@ -22,6 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2NoContent;
@@ -31,6 +33,8 @@ import org.springframework.http.ResponseEntity;
 @Validated
 @RequestMapping(ApiVersion.V2_PREFIX + "/print-templates")
 public class V2PrintTemplateController {
+
+    private static final long MAX_UPLOAD_JSON_BYTES = 1024L * 1024L;
 
     private final PrintTemplateService printTemplateService;
 
@@ -59,6 +63,10 @@ public class V2PrintTemplateController {
     @PostMapping(value = "/{id}/upload-json", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @OperationLoggable(moduleName = "打印模板", actionType = "上传 JSON", businessNoFields = {"id"})
     public PrintTemplateResponse uploadJson(@PathVariable @Positive Long id, @RequestParam("file") MultipartFile file) {
+        // 全局 multipart 限额为 20MB，本端点业务上限 1MB：入口早拒，避免超限文件完整传输后才被拒。
+        if (file != null && file.getSize() > MAX_UPLOAD_JSON_BYTES) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件不能超过 1MB");
+        }
         return printTemplateService.uploadJson(id, file);
     }
 

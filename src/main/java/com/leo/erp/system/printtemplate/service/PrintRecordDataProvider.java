@@ -1,5 +1,7 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -25,11 +27,17 @@ class PrintRecordDataProvider {
         source(moduleKey);
     }
 
+    /**
+     * 一次查询同时完成存在性校验与数据加载：记录不存在时抛出与
+     * assertRecordExists 相同的业务异常，避免两次重复查询。
+     */
     PrintRecordData loadRecord(String moduleKey, Long recordId) {
         PrintRecordSource source = source(moduleKey);
-        Map<String, Object> row = jdbc.queryForMap(
-                "SELECT * FROM " + source.tableName() + " WHERE id = ? AND deleted_flag = FALSE", recordId);
-        return new PrintRecordData(formatter.toCamelStringMap(row), loadItems(source, recordId));
+        List<Map<String, Object>> rows = jdbc.queryForList(recordSql(source), recordId);
+        if (rows.isEmpty()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "业务记录不存在");
+        }
+        return new PrintRecordData(formatter.toCamelStringMap(rows.get(0)), loadItems(source, recordId));
     }
 
     List<PrintRecordItem> listPrintItems(String moduleKey, List<Long> recordIds) {
@@ -44,13 +52,20 @@ class PrintRecordDataProvider {
                 .toList();
     }
 
+    private String recordSql(PrintRecordSource source) {
+        return "SELECT " + String.join(", ", source.printColumns())
+                + " FROM " + source.tableName()
+                + " WHERE id = ? AND deleted_flag = FALSE";
+    }
+
     private PrintRecordSource source(String moduleKey) {
         return runtimeProperties.source(moduleKey);
     }
 
     private List<Map<String, String>> loadItems(PrintRecordSource source, Long recordId) {
         List<Map<String, String>> result = new ArrayList<>();
-        String sql = "SELECT * FROM " + source.itemTableName()
+        String sql = "SELECT " + String.join(", ", source.itemPrintColumns())
+                + " FROM " + source.itemTableName()
                 + " WHERE " + source.itemFkColumn() + " = ? ORDER BY line_no ASC, id ASC";
         var items = jdbc.queryForList(sql, recordId);
         for (var item : items) {

@@ -39,7 +39,9 @@ public class PrintRuntimeProperties {
                 bool(module, "productPrintItems", false),
                 bool(module, "printItemAmount", false),
                 optionalIdentifier(module, "settlementModeColumn"),
-                optionalIdentifier(module, "allocationAmountColumn")
+                optionalIdentifier(module, "allocationAmountColumn"),
+                requiredIdentifiers(module, "printColumns"),
+                requiredIdentifiers(module, "itemPrintColumns")
         );
     }
 
@@ -200,6 +202,15 @@ public class PrintRuntimeProperties {
     private String optionalIdentifier(JsonNode node, String field) {
         String value = text(node, field, "");
         return value.isBlank() ? "" : validateIdentifier(value, field);
+    }
+
+    private List<String> requiredIdentifiers(JsonNode node, String field) {
+        List<String> values = childTextValues(node.path(field));
+        if (values.isEmpty()) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "打印运行时配置缺少字段: " + field);
+        }
+        values.forEach(value -> validateIdentifier(value, field));
+        return List.copyOf(values);
     }
 
     private String validateIdentifier(String value, String field) {

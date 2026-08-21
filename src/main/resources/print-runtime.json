@@ -2,66 +2,165 @@
   "modules": {
     "purchase-order": {
       "tableName": "po_purchase_order",
+      "printColumns": [
+        "id", "order_no", "supplier_name", "order_date", "buyer_name",
+        "total_weight", "total_amount", "status", "remark",
+        "settlement_company_id", "settlement_company_name"
+      ],
       "itemTableName": "po_purchase_order_item",
       "itemFkColumn": "order_id",
+      "itemPrintColumns": [
+        "id", "order_id", "line_no", "material_code", "brand", "category", "material",
+        "spec", "length", "unit", "quantity", "piece_weight_ton", "pieces_per_bundle",
+        "weight_ton", "unit_price", "amount", "quantity_unit", "batch_no",
+        "warehouse_name", "actual_weight_ton", "actual_piece_weight_ton"
+      ],
       "productPrintItems": true,
       "printItemAmount": true
     },
     "sales-order": {
       "tableName": "so_sales_order",
+      "printColumns": [
+        "id", "order_no", "purchase_inbound_no", "customer_name", "project_name",
+        "delivery_date", "sales_name", "total_weight", "total_amount", "status", "remark",
+        "purchase_order_no", "customer_code", "project_id",
+        "settlement_company_id", "settlement_company_name"
+      ],
       "itemTableName": "so_sales_order_item",
       "itemFkColumn": "order_id",
+      "itemPrintColumns": [
+        "id", "order_id", "line_no", "material_code", "brand", "category", "material",
+        "spec", "length", "unit", "quantity", "piece_weight_ton", "pieces_per_bundle",
+        "weight_ton", "unit_price", "amount", "quantity_unit", "batch_no",
+        "source_inbound_item_id", "warehouse_name", "source_purchase_order_item_id",
+        "original_weight_ton", "settlement_company_id", "settlement_company_name"
+      ],
       "productPrintItems": true,
       "printItemAmount": true
     },
     "purchase-inbound": {
       "tableName": "po_purchase_inbound",
+      "printColumns": [
+        "id", "inbound_no", "purchase_order_no", "supplier_name", "warehouse_name",
+        "inbound_date", "settlement_mode", "total_weight", "total_amount", "status", "remark",
+        "settlement_company_id", "settlement_company_name"
+      ],
       "itemTableName": "po_purchase_inbound_item",
       "itemFkColumn": "inbound_id",
+      "itemPrintColumns": [
+        "id", "inbound_id", "line_no", "material_code", "brand", "category", "material",
+        "spec", "length", "unit", "batch_no", "quantity", "piece_weight_ton",
+        "pieces_per_bundle", "weight_ton", "unit_price", "amount", "quantity_unit",
+        "warehouse_name", "source_purchase_order_item_id", "weigh_weight_ton",
+        "weight_adjustment_ton", "weight_adjustment_amount", "settlement_mode",
+        "settlement_company_id", "settlement_company_name"
+      ],
       "productPrintItems": true,
       "printItemAmount": true,
       "settlementModeColumn": "settlement_mode"
     },
     "sales-outbound": {
       "tableName": "so_sales_outbound",
+      "printColumns": [
+        "id", "outbound_no", "sales_order_no", "customer_name", "project_name",
+        "warehouse_name", "outbound_date", "total_weight", "total_amount", "status", "remark",
+        "settlement_company_id", "settlement_company_name"
+      ],
       "itemTableName": "so_sales_outbound_item",
       "itemFkColumn": "outbound_id",
+      "itemPrintColumns": [
+        "id", "outbound_id", "line_no", "material_code", "brand", "category", "material",
+        "spec", "length", "unit", "batch_no", "quantity", "piece_weight_ton",
+        "pieces_per_bundle", "weight_ton", "unit_price", "amount", "quantity_unit",
+        "warehouse_name", "source_sales_order_item_id",
+        "settlement_company_id", "settlement_company_name"
+      ],
       "productPrintItems": true,
       "printItemAmount": true
     },
     "freight-bill": {
       "tableName": "lg_freight_bill",
+      "printColumns": [
+        "id", "bill_no", "carrier_name", "customer_name", "project_name", "bill_time",
+        "unit_price", "total_weight", "total_freight", "status", "remark", "vehicle_plate",
+        "settlement_company_id", "settlement_company_name"
+      ],
       "itemTableName": "lg_freight_bill_item",
       "itemFkColumn": "bill_id",
+      "itemPrintColumns": [
+        "id", "bill_id", "line_no", "source_no", "customer_name", "project_name",
+        "material_code", "material_name", "brand", "category", "material", "spec", "length",
+        "quantity", "piece_weight_ton", "pieces_per_bundle", "batch_no", "weight_ton",
+        "warehouse_name", "quantity_unit", "source_sales_outbound_item_id",
+        "settlement_company_id", "settlement_company_name"
+      ],
       "productPrintItems": true,
       "printItemAmount": false
     },
     "customer-statement": {
       "tableName": "st_customer_statement",
+      "printColumns": [
+        "id", "statement_no", "customer_name", "project_name", "start_date", "end_date",
+        "sales_amount", "receipt_amount", "closing_amount", "status", "remark",
+        "customer_code", "project_id", "settlement_company_id", "settlement_company_name"
+      ],
       "itemTableName": "st_customer_statement_item",
       "itemFkColumn": "statement_id",
+      "itemPrintColumns": [
+        "id", "statement_id", "line_no", "source_no", "material_code", "brand", "category",
+        "material", "spec", "length", "unit", "quantity", "quantity_unit", "piece_weight_ton",
+        "pieces_per_bundle", "weight_ton", "unit_price", "amount", "batch_no",
+        "source_sales_order_item_id", "project_id", "customer_code"
+      ],
       "productPrintItems": true,
       "printItemAmount": true
     },
     "freight-statement": {
       "tableName": "st_freight_statement",
+      "printColumns": [
+        "id", "statement_no", "carrier_name", "start_date", "end_date", "total_weight",
+        "total_freight", "paid_amount", "unpaid_amount", "status", "sign_status", "attachment",
+        "remark", "carrier_code", "settlement_company_id", "settlement_company_name"
+      ],
       "itemTableName": "st_freight_statement_item",
       "itemFkColumn": "statement_id",
+      "itemPrintColumns": [
+        "id", "statement_id", "line_no", "source_no", "customer_name", "project_name",
+        "material_code", "material_name", "brand", "category", "material", "spec", "length",
+        "quantity", "piece_weight_ton", "pieces_per_bundle", "batch_no", "weight_ton",
+        "warehouse_name", "quantity_unit", "source_sales_outbound_item_id",
+        "settlement_company_id", "settlement_company_name"
+      ],
       "productPrintItems": true,
       "printItemAmount": false
     },
     "receipt": {
       "tableName": "fm_receipt",
+      "printColumns": [
+        "id", "receipt_no", "customer_name", "project_name", "receipt_date", "pay_type",
+        "amount", "status", "operator_name", "remark", "source_customer_statement_id",
+        "customer_code", "project_id", "settlement_company_id", "settlement_company_name"
+      ],
       "itemTableName": "fm_receipt_allocation",
       "itemFkColumn": "receipt_id",
+      "itemPrintColumns": [
+        "id", "receipt_id", "line_no", "source_statement_id", "allocated_amount"
+      ],
       "productPrintItems": false,
       "printItemAmount": false,
       "allocationAmountColumn": "allocated_amount"
     },
     "payment": {
       "tableName": "fm_payment",
+      "printColumns": [
+        "id", "payment_no", "business_type", "counterparty_name", "payment_date", "pay_type",
+        "amount", "status", "operator_name", "remark", "source_statement_id", "counterparty_code"
+      ],
       "itemTableName": "fm_payment_allocation",
       "itemFkColumn": "payment_id",
+      "itemPrintColumns": [
+        "id", "payment_id", "line_no", "source_statement_id", "allocated_amount"
+      ],
       "productPrintItems": false,
       "printItemAmount": false,
       "allocationAmountColumn": "allocated_amount"
