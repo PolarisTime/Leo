@@ -1,3 +1,10 @@
+# [9.12.0](https://github.com/PolarisTime/Leo/compare/v9.11.0...v9.12.0) (2026-08-21)
+
+
+### Features
+
+* **material:** 商品导入身份冲突改为更新已有商品并返回行级结果明细 ([232bb00](https://github.com/PolarisTime/Leo/commit/232bb00b8f2236ad7b4da88cf6b7eafaeb635f27))
+
 # [9.11.0](https://github.com/PolarisTime/Leo/compare/v9.10.4...v9.11.0) (2026-08-10)
 
 
