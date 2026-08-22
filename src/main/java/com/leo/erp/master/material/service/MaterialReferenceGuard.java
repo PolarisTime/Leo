@@ -75,6 +75,11 @@ public class MaterialReferenceGuard {
                         "st_freight_statement_item",
                         "material_id",
                         materialId
+                ),
+                ReferenceCheck.active(
+                        "bd_document_charge_item",
+                        "material_id",
+                        materialId
                 )
         );
     }

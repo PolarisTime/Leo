@@ -50,6 +50,10 @@ public record MaterialImportDTO(
 
         @ImportColumn(header = "备注", required = false, order = 12, example = "示例数据，可删除")
         @ExportColumn(header = "备注", order = 12)
-        String remark
+        String remark,
+
+        @ImportColumn(header = "商品类型", required = false, order = 13, example = "实体商品")
+        @ExportColumn(header = "商品类型", order = 13)
+        String materialType
 ) {
 }

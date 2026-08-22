@@ -79,6 +79,7 @@ class MaterialCsvFileReader {
             case "每件支数", "piecesperbundle" -> "piecesPerBundle";
             case "单价", "unitprice" -> "unitPrice";
             case "备注", "remark" -> "remark";
+            case "商品类型", "materialtype" -> "materialType";
             default -> value;
         };
     }

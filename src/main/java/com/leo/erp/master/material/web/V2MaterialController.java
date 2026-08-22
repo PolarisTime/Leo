@@ -61,8 +61,8 @@ public class V2MaterialController {
     }
 
     @GetMapping
-    public PageResponse<MaterialResponse> page(@BindPageQuery(sortFieldKey = "material") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String category, @RequestParam(required = false) String material) {
-        return PageResponse.from(materialService.page(query, keyword, category, material));
+    public PageResponse<MaterialResponse> page(@BindPageQuery(sortFieldKey = "material") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String category, @RequestParam(required = false) String material, @RequestParam(required = false) String materialType) {
+        return PageResponse.from(materialService.page(query, keyword, category, material, materialType));
     }
 
     @GetMapping("/{id}")

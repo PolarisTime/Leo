@@ -89,6 +89,9 @@ class MaterialImportProcessor {
         material.setPiecesPerBundle(data.piecesPerBundle() == null ? 0 : data.piecesPerBundle());
         material.setUnitPrice(data.unitPrice() == null ? BigDecimal.ZERO : data.unitPrice());
         material.setRemark(data.remark());
+        material.setMaterialType(data.isExpense()
+                ? MaterialImportData.TYPE_EXPENSE
+                : MaterialImportData.TYPE_PHYSICAL);
     }
 
     private String resolveMaterialCode(String currentCode, Long materialId) {

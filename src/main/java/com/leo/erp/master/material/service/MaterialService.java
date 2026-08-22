@@ -1,6 +1,7 @@
 package com.leo.erp.master.material.service;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -59,17 +60,20 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     public MaterialResponse update(Long id, MaterialRequest request) {
         String currentBrand = requireEntity(id).getBrand();
         MaterialResponse response = super.update(id, request);
-        if (!currentBrand.equals(request.brand())) {
+        // 品牌变更同步引用快照；附加费用类无品牌语义，不触发。
+        if (!request.isExpense() && !currentBrand.equals(request.brand())) {
             referenceSnapshotSyncService.syncMaterialName(id, request.brand());
         }
         return response;
     }
 
-    public Page<MaterialResponse> page(PageQuery query, String keyword, String category, String material) {
+    public Page<MaterialResponse> page(PageQuery query, String keyword, String category, String material,
+                                       String materialType) {
         Pageable pageable = query.sortBy() != null
                 ? query.toPageable("id")
                 : PageRequest.of(query.page(), query.size(), MaterialSearchPolicy.DEFAULT_SORT);
-        return materialRepository.findAll(MaterialSearchPolicy.page(keyword, category, material), pageable)
+        return materialRepository.findAll(
+                MaterialSearchPolicy.page(keyword, category, material, materialType), pageable)
                 .map(this::toResponse);
     }
 
@@ -131,17 +135,52 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                 entity.getMaterialCode(),
                 request.materialCode()
         ));
-        entity.setBrand(request.brand());
+        if (request.isExpense()) {
+            applyExpense(entity, request);
+            return;
+        }
+        entity.setMaterialType(MaterialRequest.TYPE_PHYSICAL);
+        entity.setBrand(requireText(request.brand(), "品牌不能为空"));
         entity.setMaterial(request.material());
         entity.setCategory(request.category());
-        entity.setSpec(request.spec());
+        entity.setSpec(requireText(request.spec(), "规格不能为空"));
         entity.setLength(request.length());
         entity.setUnit(request.unit());
         entity.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(request.quantityUnit()));
-        entity.setPieceWeightTon(request.pieceWeightTon());
+        entity.setPieceWeightTon(requireWeight(request.pieceWeightTon()));
         entity.setPiecesPerBundle(request.piecesPerBundle() == null ? 0 : request.piecesPerBundle());
         entity.setUnitPrice(request.unitPrice() == null ? BigDecimal.ZERO : request.unitPrice());
         entity.setRemark(request.remark());
+    }
+
+    /** 附加费用类：物理属性列存空串/零值，名称即品名，类别固定"附加费用"。 */
+    private void applyExpense(Material entity, MaterialRequest request) {
+        entity.setMaterialType(MaterialRequest.TYPE_EXPENSE);
+        entity.setBrand("");
+        entity.setMaterial(request.material());
+        entity.setCategory("附加费用");
+        entity.setSpec("");
+        entity.setLength("");
+        entity.setUnit(request.unit());
+        entity.setQuantityUnit(request.unit());
+        entity.setPieceWeightTon(BigDecimal.ZERO);
+        entity.setPiecesPerBundle(0);
+        entity.setUnitPrice(request.unitPrice() == null ? BigDecimal.ZERO : request.unitPrice());
+        entity.setRemark(request.remark());
+    }
+
+    private String requireText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, message);
+        }
+        return value.trim();
+    }
+
+    private BigDecimal requireWeight(BigDecimal value) {
+        if (value == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "件重不能为空");
+        }
+        return value;
     }
 
     @Override

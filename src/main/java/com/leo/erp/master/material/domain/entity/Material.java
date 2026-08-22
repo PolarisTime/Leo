@@ -55,6 +55,10 @@ public class Material extends AbstractAuditableEntity {
     @Column(name = "remark", length = 255)
     private String remark;
 
+    /** 商品类型：实体商品 / 附加费用（附加费用类复用主数据体系，物理属性列存空串/零值）。 */
+    @Column(name = "material_type", nullable = false, length = 16)
+    private String materialType;
+
     @Column(name = "length_sort", insertable = false, updatable = false)
     private BigDecimal lengthSort;
 

@@ -29,9 +29,10 @@ final class MaterialSearchPolicy {
                 .and(Specs.keywordLike(keyword, SEARCH_FIELDS));
     }
 
-    static Specification<Material> page(String keyword, String category, String material) {
+    static Specification<Material> page(String keyword, String category, String material, String materialType) {
         return search(keyword)
                 .and(Specs.equalIfPresent("category", category))
-                .and(Specs.equalIfPresent("material", material));
+                .and(Specs.equalIfPresent("material", material))
+                .and(Specs.equalIfPresent("materialType", materialType));
     }
 }

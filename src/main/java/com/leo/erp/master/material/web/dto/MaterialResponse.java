@@ -15,6 +15,7 @@ public record MaterialResponse(
         BigDecimal pieceWeightTon,
         Integer piecesPerBundle,
         BigDecimal unitPrice,
-        String remark
+        String remark,
+        String materialType
 ) {
 }

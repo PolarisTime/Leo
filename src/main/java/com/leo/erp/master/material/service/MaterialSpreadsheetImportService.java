@@ -103,19 +103,22 @@ public class MaterialSpreadsheetImportService {
     }
 
     private MaterialImportData toImportData(MaterialImportDTO row, int rowNumber) {
+        boolean expense = MaterialImportData.TYPE_EXPENSE.equals(
+                row.materialType() == null ? "" : row.materialType().trim());
         return new MaterialImportData(
                 row.materialCode(),
-                row.brand(),
+                expense ? "" : row.brand(),
                 row.material(),
-                row.category(),
-                row.spec(),
-                row.length(),
+                expense ? "附加费用" : row.category(),
+                expense ? "" : row.spec(),
+                expense ? "" : row.length(),
                 row.unit(),
                 row.quantityUnit(),
-                parseBigDecimalOrZero(row.pieceWeightTon(), rowNumber, "件重(吨)"),
-                parseIntegerOrZero(row.piecesPerBundle(), rowNumber, "每件支数"),
+                expense ? java.math.BigDecimal.ZERO : parseBigDecimalOrZero(row.pieceWeightTon(), rowNumber, "件重(吨)"),
+                expense ? 0 : parseIntegerOrZero(row.piecesPerBundle(), rowNumber, "每件支数"),
                 parseBigDecimalOrZero(row.unitPrice(), rowNumber, "单价"),
-                row.remark()
+                row.remark(),
+                expense ? MaterialImportData.TYPE_EXPENSE : MaterialImportData.TYPE_PHYSICAL
         );
     }
 

@@ -14,6 +14,14 @@ record MaterialImportData(
         BigDecimal pieceWeightTon,
         Integer piecesPerBundle,
         BigDecimal unitPrice,
-        String remark
+        String remark,
+        String materialType
 ) {
+
+    static final String TYPE_PHYSICAL = "实体商品";
+    static final String TYPE_EXPENSE = "附加费用";
+
+    boolean isExpense() {
+        return TYPE_EXPENSE.equals(materialType);
+    }
 }

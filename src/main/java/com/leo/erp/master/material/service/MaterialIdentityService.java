@@ -106,7 +106,18 @@ class MaterialIdentityService {
                 && sameDecimal(existing.getPieceWeightTon(), data.pieceWeightTon())
                 && sameInteger(existing.getPiecesPerBundle(), data.piecesPerBundle())
                 && sameDecimal(existing.getUnitPrice(), data.unitPrice())
-                && sameText(existing.getRemark(), data.remark());
+                && sameText(existing.getRemark(), data.remark())
+                && sameMaterialType(existing.getMaterialType(), data);
+    }
+
+    /** 商品类型比较：存量行为空视为实体商品（V122 回填前的历史数据）。 */
+    private boolean sameMaterialType(String existingType, MaterialImportData data) {
+        String normalized = existingType == null || existingType.isBlank()
+                ? MaterialImportData.TYPE_PHYSICAL
+                : existingType.trim();
+        return normalized.equals(data.isExpense()
+                ? MaterialImportData.TYPE_EXPENSE
+                : MaterialImportData.TYPE_PHYSICAL);
     }
 
     BusinessException mapViolation(DataIntegrityViolationException exception,

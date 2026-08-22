@@ -14,27 +14,42 @@ class MaterialCsvRowMapper {
     MaterialImportData toImportData(List<String> row,
                                     Map<String, Integer> headerIndexes,
                                     int rowNumber) {
-        String category = requiredValue(row, headerIndexes, "category", "类别", rowNumber);
+        String materialType = resolveMaterialType(row, headerIndexes);
+        boolean expense = MaterialImportData.TYPE_EXPENSE.equals(materialType);
+        String category = expense ? "附加费用" : requiredValue(row, headerIndexes, "category", "类别", rowNumber);
         MaterialImportData data = new MaterialImportData(
                 materialCode(row, headerIndexes),
-                requiredValue(row, headerIndexes, "brand", "品牌", rowNumber),
-                requiredValue(row, headerIndexes, "material", "材质", rowNumber),
+                expense ? "" : requiredValue(row, headerIndexes, "brand", "品牌", rowNumber),
+                requiredValue(row, headerIndexes, "material", "名称", rowNumber),
                 category,
-                requiredValue(row, headerIndexes, "spec", "规格", rowNumber),
-                optionalValue(row, headerIndexes, "length"),
+                expense ? "" : requiredValue(row, headerIndexes, "spec", "规格", rowNumber),
+                expense ? "" : optionalValue(row, headerIndexes, "length"),
                 requiredValue(row, headerIndexes, "unit", "单位", rowNumber),
                 optionalValue(row, headerIndexes, "quantityUnit"),
-                parseBigDecimal(
+                expense ? BigDecimal.ZERO : parseBigDecimal(
                         requiredValue(row, headerIndexes, "pieceWeightTon", "件重(吨)", rowNumber),
                         rowNumber,
                         "件重(吨)"
                 ),
-                parsePiecesPerBundle(row, headerIndexes, rowNumber, category),
+                expense ? 0 : parsePiecesPerBundle(row, headerIndexes, rowNumber, category),
                 parseBigDecimalOrNull(optionalValue(row, headerIndexes, "unitPrice"), rowNumber, "单价"),
-                optionalValue(row, headerIndexes, "remark")
+                optionalValue(row, headerIndexes, "remark"),
+                materialType
         );
         validate(data, rowNumber);
         return data;
+    }
+
+    /** 商品类型列可选，缺省为实体商品；非法值直接拒绝。 */
+    private String resolveMaterialType(List<String> row, Map<String, Integer> headerIndexes) {
+        String raw = optionalValue(row, headerIndexes, "materialType");
+        if (raw == null || raw.isBlank() || MaterialImportData.TYPE_PHYSICAL.equals(raw.trim())) {
+            return MaterialImportData.TYPE_PHYSICAL;
+        }
+        if (MaterialImportData.TYPE_EXPENSE.equals(raw.trim())) {
+            return MaterialImportData.TYPE_EXPENSE;
+        }
+        return raw.trim();
     }
 
     MaterialIdentityService.Identity toIdentity(List<String> row,

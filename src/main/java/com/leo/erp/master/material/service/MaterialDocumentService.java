@@ -116,7 +116,8 @@ public class MaterialDocumentService {
                 material.getPieceWeightTon() == null ? null : material.getPieceWeightTon().toPlainString(),
                 material.getPiecesPerBundle() == null ? null : material.getPiecesPerBundle().toString(),
                 material.getUnitPrice() == null ? null : material.getUnitPrice().toPlainString(),
-                material.getRemark()
+                material.getRemark(),
+                material.getMaterialType()
         );
     }
 
