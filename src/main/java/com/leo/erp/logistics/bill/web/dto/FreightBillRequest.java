@@ -7,6 +7,8 @@ import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import com.leo.erp.common.charge.web.dto.DocumentChargeItemRequest;
+
 import java.util.List;
 
 public record FreightBillRequest(
@@ -23,6 +25,13 @@ public record FreightBillRequest(
         String status,
         String remark,
         @Valid @NotEmpty List<FreightBillItemRequest> items,
+        @Valid List<DocumentChargeItemRequest> chargeItems,
         boolean audit
 ) {
+
+    public FreightBillRequest {
+        if (chargeItems == null) {
+            chargeItems = List.of();
+        }
+    }
 }

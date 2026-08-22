@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.web.dto;
 
+import com.leo.erp.common.charge.web.dto.DocumentChargeItemRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -23,8 +24,25 @@ public record PurchaseOrderRequest(
         @Valid
         @NotEmpty(message = "订单明细不能为空")
         List<PurchaseOrderItemRequest> items,
+        @Valid
+        List<DocumentChargeItemRequest> chargeItems,
         boolean audit
 ) {
+
+    public PurchaseOrderRequest(String orderNo,
+                                Long supplierId,
+                                String supplierCode,
+                                String supplierName,
+                                LocalDateTime orderDate,
+                                String buyerName,
+                                Long settlementCompanyId,
+                                String status,
+                                String remark,
+                                List<PurchaseOrderItemRequest> items,
+                                boolean audit) {
+        this(orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
+                status, remark, items, List.of(), audit);
+    }
     public PurchaseOrderRequest(String orderNo,
                                 String supplierCode,
                                 String supplierName,

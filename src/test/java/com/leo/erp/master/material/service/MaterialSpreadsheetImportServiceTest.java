@@ -141,7 +141,8 @@ class MaterialSpreadsheetImportServiceTest {
                                   String piecesPerBundle, String unitPrice, String remark) {
         return new MaterialImportDTO(
                 materialCode, brand, material, category, spec, length, unit, quantityUnit,
-                pieceWeightTon, piecesPerBundle, unitPrice, remark
+                pieceWeightTon, piecesPerBundle, unitPrice, remark,
+                com.leo.erp.master.material.web.dto.MaterialRequest.TYPE_PHYSICAL
         );
     }
 

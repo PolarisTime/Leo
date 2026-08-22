@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
@@ -28,6 +29,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -35,6 +37,10 @@ import java.util.stream.Stream;
 
 @Service
 public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, SalesOrderRequest, SalesOrderResponse> {
+    private final DocumentChargeItemService documentChargeItemService;
+
+    private static final String MODULE_KEY = "sales-order";
+
 
     private static final String[] PRODUCT_SEARCH_FIELDS = {"materialCode", "brand", "material", "spec"};
 
@@ -62,8 +68,10 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
                              SalesOrderDeliveryVerificationGuard deliveryVerificationGuard,
                              SalesOrderDownstreamMutationGuard downstreamMutationGuard,
                              SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository,
-                             BusinessOperationEventPublisher businessOperationEventPublisher) {
+                             BusinessOperationEventPublisher businessOperationEventPublisher,
+                             DocumentChargeItemService documentChargeItemService) {
         super(idGenerator);
+        this.documentChargeItemService = documentChargeItemService;
         this.repository = repository;
         this.responseAssembler = responseAssembler;
         this.salesOrderApplyService = salesOrderApplyService;
@@ -123,6 +131,7 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
     public SalesOrderResponse create(SalesOrderRequest request) {
         SalesOrderResponse created = super.create(
                 request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        applyChargeTotal(created.id(), BigDecimal.ZERO);
         if (request.audit()) {
             return updateStatus(created.id(), StatusConstants.AUDITED);
         }
@@ -132,8 +141,12 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
     @Override
     @Transactional
     public SalesOrderResponse update(Long id, SalesOrderRequest request) {
+        BigDecimal previousExpenseTotal = documentChargeItemService
+                .sumAmount(documentChargeItemService.list(MODULE_KEY, id));
         SalesOrderResponse updated = super.update(id,
                 request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        documentChargeItemService.sync(MODULE_KEY, id, request.chargeItems());
+        applyChargeTotal(id, previousExpenseTotal);
         if (request.audit()) {
             return updateStatus(id, StatusConstants.AUDITED);
         }
@@ -207,8 +220,22 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
                 request.status(),
                 request.remark(),
                 request.items(),
+                request.chargeItems(),
                 request.audit()
         );
+    }
+
+    /**
+     * 单据总金额 = 货物明细小计 + 附加费用小计；totalWeight 永远仅货物。
+     * 以「sync 前已落库的费用合计」做差额校正，避免二次保存重复计费。
+     */
+    private void applyChargeTotal(Long orderId, java.math.BigDecimal previousExpenseTotal) {
+        SalesOrder order = requireEntity(orderId);
+        java.math.BigDecimal currentExpense = documentChargeItemService
+                .sumAmount(documentChargeItemService.list(MODULE_KEY, orderId));
+        order.setTotalAmount(order.getTotalAmount()
+                .subtract(previousExpenseTotal)
+                .add(currentExpense));
     }
 
     private SalesOrderRequest withStatus(SalesOrderRequest request, String status) {
@@ -228,6 +255,7 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
                 status,
                 request.remark(),
                 request.items(),
+                request.chargeItems(),
                 request.audit()
         );
     }
@@ -251,6 +279,7 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
                 entity.getStatus(),
                 request.remark(),
                 request.items(),
+                request.chargeItems(),
                 request.audit()
         );
     }
@@ -298,6 +327,7 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
 
     @Override
     protected void afterDelete(SalesOrder entity) {
+        documentChargeItemService.removeAll(MODULE_KEY, entity.getId());
         publishEvent(entity, "SALES_ORDER_DELETED", "删除", "删除销售订单 " + entity.getOrderNo());
     }
 

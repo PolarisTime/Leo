@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.service;
 
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.mapper.PurchaseOrderMapper;
@@ -14,11 +15,14 @@ public class PurchaseOrderResponseAssembler {
 
     private final PurchaseOrderMapper mapper;
     private final PurchaseOrderAvailabilityService availabilityService;
+    private final DocumentChargeItemService documentChargeItemService;
 
     public PurchaseOrderResponseAssembler(PurchaseOrderMapper mapper,
-                                          PurchaseOrderAvailabilityService availabilityService) {
+                                          PurchaseOrderAvailabilityService availabilityService,
+                                          DocumentChargeItemService documentChargeItemService) {
         this.mapper = mapper;
         this.availabilityService = availabilityService;
+        this.documentChargeItemService = documentChargeItemService;
     }
 
     PurchaseOrderResponse toDetailResponse(PurchaseOrder order) {
@@ -46,7 +50,8 @@ public class PurchaseOrderResponseAssembler {
                                 allocatedQuantityMap,
                                 salesAllocatedQuantityMap
                         ))
-                        .toList()
+                        .toList(),
+                documentChargeItemService.list("purchase-order", order.getId())
         );
     }
 

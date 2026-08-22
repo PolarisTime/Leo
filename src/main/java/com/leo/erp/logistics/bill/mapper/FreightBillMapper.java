@@ -10,5 +10,7 @@ import org.mapstruct.Mapping;
 public interface FreightBillMapper {
 
     @Mapping(target = "items", ignore = true)
+    @Mapping(target = "chargeItems", ignore = true)
+    @Mapping(target = "totalExpenseAmount", ignore = true)
     FreightBillResponse toResponse(FreightBill bill);
 }

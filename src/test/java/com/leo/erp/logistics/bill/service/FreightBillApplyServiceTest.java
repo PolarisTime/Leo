@@ -74,7 +74,7 @@ class FreightBillApplyServiceTest {
 
     private FreightBillRequest request(List<FreightBillItemRequest> items) {
         return new FreightBillRequest("FB001", 1L, "C001", "承运商A", 30L, "结算公司A", null, null,
-                LocalDate.of(2026, 8, 1), new BigDecimal("100"), "DRAFT", null, items, false);
+                LocalDate.of(2026, 8, 1), new BigDecimal("100"), "DRAFT", null, items, List.of(), false);
     }
 
     private void stubSources(SalesOrderSourceSnapshot order) {

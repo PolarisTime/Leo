@@ -73,7 +73,7 @@ class SalesOrderApplyServiceTest {
                                       Long projectId, String projectName, String status) {
         return new SalesOrderRequest(
                 "SO001", null, null, customerCode, customerId, customerName, projectId, projectName,
-                null, null, LocalDate.of(2026, 8, 1), "销售员A", status, null, List.of(), false);
+                null, null, LocalDate.of(2026, 8, 1), "销售员A", status, null, List.of(), List.of(), false);
     }
 
     private void stubHappyPath() {
@@ -228,7 +228,7 @@ class SalesOrderApplyServiceTest {
     private SalesOrderRequest requestWithItems(List<SalesOrderItemRequest> items) {
         return new SalesOrderRequest(
                 "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A", null, null,
-                LocalDate.of(2026, 8, 1), "销售员A", null, null, items, false);
+                LocalDate.of(2026, 8, 1), "销售员A", null, null, items, List.of(), false);
     }
 
     private SalesOrderItemRequest item() {
@@ -256,7 +256,7 @@ class SalesOrderApplyServiceTest {
         stubHappyPath();
         SalesOrderRequest req = new SalesOrderRequest(
                 "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A", 30L, null,
-                LocalDate.of(2026, 8, 1), "销售员A", null, null, List.of(), false);
+                LocalDate.of(2026, 8, 1), "销售员A", null, null, List.of(), List.of(), false);
         com.leo.erp.system.company.domain.entity.CompanySetting company =
                 new com.leo.erp.system.company.domain.entity.CompanySetting();
         company.setId(30L);

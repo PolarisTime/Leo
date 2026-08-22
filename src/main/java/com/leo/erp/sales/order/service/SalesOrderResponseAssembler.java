@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.mapper.SalesOrderMapper;
@@ -11,9 +12,12 @@ import org.springframework.stereotype.Service;
 public class SalesOrderResponseAssembler {
 
     private final SalesOrderMapper salesOrderMapper;
+    private final DocumentChargeItemService documentChargeItemService;
 
-    public SalesOrderResponseAssembler(SalesOrderMapper salesOrderMapper) {
+    public SalesOrderResponseAssembler(SalesOrderMapper salesOrderMapper,
+                                       DocumentChargeItemService documentChargeItemService) {
         this.salesOrderMapper = salesOrderMapper;
+        this.documentChargeItemService = documentChargeItemService;
     }
 
     SalesOrderResponse toSummaryResponse(SalesOrder entity) {
@@ -46,7 +50,8 @@ public class SalesOrderResponseAssembler {
                 response.status(),
                 response.deletedFlag(),
                 response.remark(),
-                entity.getItems().stream().filter(itemFilter).map(this::toItemResponse).toList()
+                entity.getItems().stream().filter(itemFilter).map(this::toItemResponse).toList(),
+                documentChargeItemService.list("sales-order", entity.getId())
         );
     }
 

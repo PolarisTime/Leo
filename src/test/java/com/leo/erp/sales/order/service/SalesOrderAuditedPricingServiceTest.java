@@ -90,7 +90,7 @@ class SalesOrderAuditedPricingServiceTest {
     private SalesOrderRequest request(String status, String orderNo, List<SalesOrderItemRequest> items) {
         return new SalesOrderRequest(
                 orderNo, "IB001", "PO001", "CUST001", 10L, "客户A", 20L, "项目A", null, null,
-                LocalDate.of(2026, 8, 1), "销售员A", status, null, items, false);
+                LocalDate.of(2026, 8, 1), "销售员A", status, null, items, List.of(), false);
     }
 
     // ---------- isAuditedPricingUpdate ----------
@@ -268,7 +268,7 @@ class SalesOrderAuditedPricingServiceTest {
                                           String projectName, String salesName, List<SalesOrderItemRequest> items) {
         return new SalesOrderRequest(
                 orderNo, inboundNo, poNo, customerCode, customerId, customerName, projectId, projectName,
-                null, null, LocalDate.of(2026, 8, 1), salesName, StatusConstants.AUDITED, null, items, false);
+                null, null, LocalDate.of(2026, 8, 1), salesName, StatusConstants.AUDITED, null, items, List.of(), false);
     }
 
     @Test

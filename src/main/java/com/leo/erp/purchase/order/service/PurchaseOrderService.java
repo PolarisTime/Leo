@@ -1,5 +1,7 @@
 package com.leo.erp.purchase.order.service;
 
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
+import com.leo.erp.common.charge.web.dto.DocumentChargeItemResponse;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
@@ -20,6 +22,7 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
+import java.math.BigDecimal;
 import java.util.function.Function;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -47,6 +50,9 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
     private final PurchaseOrderDownstreamMutationGuard downstreamMutationGuard;
     private final PurchaseOrderAuditPublisher purchaseOrderAuditPublisher;
     private final PurchaseOrderInboundCandidateQueryRepository inboundCandidateQueryRepository;
+    private final DocumentChargeItemService documentChargeItemService;
+
+    private static final String MODULE_KEY = "purchase-order";
 
     @Autowired
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
@@ -59,7 +65,8 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                                 PurchaseOrderPrepaymentReferenceGuard purchasePrepaymentReferenceGuard,
                                 PurchaseOrderDownstreamMutationGuard downstreamMutationGuard,
                                 PurchaseOrderAuditPublisher purchaseOrderAuditPublisher,
-                                PurchaseOrderInboundCandidateQueryRepository inboundCandidateQueryRepository) {
+                                PurchaseOrderInboundCandidateQueryRepository inboundCandidateQueryRepository,
+                                DocumentChargeItemService documentChargeItemService) {
         super(snowflakeIdGenerator);
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.availabilityService = availabilityService;
@@ -71,6 +78,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         this.downstreamMutationGuard = downstreamMutationGuard;
         this.purchaseOrderAuditPublisher = purchaseOrderAuditPublisher;
         this.inboundCandidateQueryRepository = inboundCandidateQueryRepository;
+        this.documentChargeItemService = documentChargeItemService;
     }
 
     private static final String[] PURCHASE_ORDER_SEARCH_FIELDS = {"orderNo", "supplierName"};
@@ -98,6 +106,8 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
     public PurchaseOrderResponse create(PurchaseOrderRequest request) {
         PurchaseOrderResponse created = super.create(
                 request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        documentChargeItemService.sync(MODULE_KEY, created.id(), request.chargeItems());
+        applyChargeTotal(created.id(), BigDecimal.ZERO);
         if (request.audit()) {
             return updateStatus(created.id(), StatusConstants.AUDITED);
         }
@@ -107,8 +117,12 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
     @Override
     @Transactional
     public PurchaseOrderResponse update(Long id, PurchaseOrderRequest request) {
+        BigDecimal previousExpenseTotal = documentChargeItemService
+                .sumAmount(documentChargeItemService.list(MODULE_KEY, id));
         PurchaseOrderResponse updated = super.update(id,
                 request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        documentChargeItemService.sync(MODULE_KEY, id, request.chargeItems());
+        applyChargeTotal(id, previousExpenseTotal);
         if (request.audit()) {
             return updateStatus(id, StatusConstants.AUDITED);
         }
@@ -201,6 +215,21 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         );
     }
 
+    /**
+     * 单据总金额 = 货物明细小计 + 附加费用小计；totalWeight 永远仅货物。
+     * 以「sync 前已落库的费用合计」做差额校正，避免二次保存重复计费：
+     * totalAmount(新) = totalAmount(当前) - 旧费用合计 + 新费用合计。
+     */
+    private void applyChargeTotal(Long orderId, BigDecimal previousExpenseTotal) {
+        PurchaseOrder order = requireEntity(orderId);
+        BigDecimal currentExpense = documentChargeItemService
+                .sumAmount(documentChargeItemService.list(MODULE_KEY, orderId));
+        BigDecimal adjusted = order.getTotalAmount()
+                .subtract(previousExpenseTotal)
+                .add(currentExpense);
+        order.setTotalAmount(adjusted);
+    }
+
     private PurchaseOrderRequest withStatus(PurchaseOrderRequest request, String status) {
         return new PurchaseOrderRequest(
                 request.orderNo(),
@@ -213,6 +242,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                 status,
                 request.remark(),
                 request.items(),
+                request.chargeItems(),
                 request.audit()
         );
     }
@@ -232,6 +262,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                 request.status(),
                 request.remark(),
                 request.items(),
+                request.chargeItems(),
                 request.audit()
         );
     }
@@ -399,6 +430,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
 
     @Override
     protected void afterDelete(PurchaseOrder entity) {
+        documentChargeItemService.removeAll(MODULE_KEY, entity.getId());
         publishMutationEvent(entity, "PURCHASE_ORDER_DELETED", "删除");
     }
 

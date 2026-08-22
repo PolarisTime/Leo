@@ -5,6 +5,8 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
+import com.leo.erp.common.charge.web.dto.DocumentChargeItemRequest;
+
 import java.util.List;
 
 public record SalesOrderRequest(
@@ -23,8 +25,15 @@ public record SalesOrderRequest(
         String status,
         String remark,
         @Valid @NotEmpty List<SalesOrderItemRequest> items,
+        @Valid List<DocumentChargeItemRequest> chargeItems,
         boolean audit
 ) {
+
+    public SalesOrderRequest {
+        if (chargeItems == null) {
+            chargeItems = List.of();
+        }
+    }
     public SalesOrderRequest(String orderNo,
                              String purchaseInboundNo,
                              String purchaseOrderNo,
@@ -40,7 +49,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
-                settlementCompanyId, settlementCompanyName, deliveryDate, salesName, status, remark, items, false);
+                settlementCompanyId, settlementCompanyName, deliveryDate, salesName, status, remark, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -56,7 +65,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
-                null, null, deliveryDate, salesName, status, remark, items, false);
+                null, null, deliveryDate, salesName, status, remark, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -71,7 +80,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, null, customerCode, null, customerName, projectId, projectName,
-                null, null, deliveryDate, salesName, status, remark, items, false);
+                null, null, deliveryDate, salesName, status, remark, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -84,7 +93,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, null, null, null, customerName, null, projectName,
-                null, null, deliveryDate, salesName, status, remark, items, false);
+                null, null, deliveryDate, salesName, status, remark, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -98,7 +107,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, null, null, customerName, null, projectName,
-                null, null, deliveryDate, salesName, status, remark, items, false);
+                null, null, deliveryDate, salesName, status, remark, items, List.of(), false);
     }
 
 }

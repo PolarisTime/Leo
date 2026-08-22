@@ -2,6 +2,7 @@ package com.leo.erp.purchase.order.web.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import com.leo.erp.common.charge.web.dto.DocumentChargeItemResponse;
 import java.util.List;
 
 public record PurchaseOrderResponse(
@@ -19,8 +20,28 @@ public record PurchaseOrderResponse(
         String status,
         boolean deletedFlag,
         String remark,
-        List<PurchaseOrderItemResponse> items
+        List<PurchaseOrderItemResponse> items,
+        List<DocumentChargeItemResponse> chargeItems
 ) {
+
+    public PurchaseOrderResponse(Long id,
+                                 String orderNo,
+                                 Long supplierId,
+                                 String supplierCode,
+                                 String supplierName,
+                                 LocalDateTime orderDate,
+                                 String buyerName,
+                                 Long settlementCompanyId,
+                                 String settlementCompanyName,
+                                 BigDecimal totalWeight,
+                                 BigDecimal totalAmount,
+                                 String status,
+                                 boolean deletedFlag,
+                                 String remark,
+                                 List<PurchaseOrderItemResponse> items) {
+        this(id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
+                settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, List.of());
+    }
     public PurchaseOrderResponse(Long id,
                                  String orderNo,
                                  String supplierCode,
@@ -36,7 +57,7 @@ public record PurchaseOrderResponse(
                                  String remark,
                                  List<PurchaseOrderItemResponse> items) {
         this(id, orderNo, null, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
-                settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items);
+                settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, List.of());
     }
 
     public PurchaseOrderResponse(Long id,
@@ -53,7 +74,7 @@ public record PurchaseOrderResponse(
                                  String remark,
                                  List<PurchaseOrderItemResponse> items) {
         this(id, orderNo, null, null, supplierName, orderDate, buyerName, settlementCompanyId,
-                settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items);
+                settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, List.of());
     }
 
     public PurchaseOrderResponse(Long id,

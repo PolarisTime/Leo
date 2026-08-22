@@ -66,7 +66,7 @@ class V2FreightBillControllerTest {
     private FreightBillRequest request() {
         return new FreightBillRequest(
                 "FB001", 1L, "C001", "承运商A", 30L, "结算公司A", null, null,
-                LocalDate.of(2026, 8, 1), new BigDecimal("100"), "DRAFT", null, List.of(), false);
+                LocalDate.of(2026, 8, 1), new BigDecimal("100"), "DRAFT", null, List.of(), List.of(), false);
     }
 
     @Test

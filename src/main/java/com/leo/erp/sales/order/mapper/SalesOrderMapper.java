@@ -10,5 +10,6 @@ import org.mapstruct.Mapping;
 public interface SalesOrderMapper {
 
     @Mapping(target = "items", ignore = true)
+    @Mapping(target = "chargeItems", ignore = true)
     SalesOrderResponse toResponse(SalesOrder order);
 }

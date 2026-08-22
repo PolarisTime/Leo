@@ -54,7 +54,8 @@ class MaterialIdentityServiceTest {
     void identity_materialImportData_shouldMapFields() {
         MaterialImportData data = new MaterialImportData(
                 "M001", " 钢 ", "Q235", "型钢", "5mm", "6m",
-                "吨", "件", new BigDecimal("1.5"), 10, new BigDecimal("4000"), "备注"
+                "吨", "件", new BigDecimal("1.5"), 10, new BigDecimal("4000"), "备注",
+                MaterialImportData.TYPE_PHYSICAL
         );
 
         MaterialIdentityService.Identity identity = service.identity(data);
@@ -291,7 +292,8 @@ class MaterialIdentityServiceTest {
         // data.quantityUnit 为 null/空白 → normalizeQuantityUnit 默认"件"。
         MaterialImportData data = new MaterialImportData(
                 "M001", "钢", "Q235", "型钢", "5mm", "6m", "吨", null,
-                new BigDecimal("1.5"), 10, new BigDecimal("4000"), "备注"
+                new BigDecimal("1.5"), 10, new BigDecimal("4000"), "备注",
+                MaterialImportData.TYPE_PHYSICAL
         );
 
         assertThat(service.isExactImportMatch(existing, data, true)).isTrue();
@@ -306,7 +308,8 @@ class MaterialIdentityServiceTest {
         // data 的数值字段为 null → 与 0 视为相等（BigDecimal compareTo / int 相等）。
         MaterialImportData data = new MaterialImportData(
                 "M001", "钢", "Q235", "型钢", "5mm", "6m", "吨", "件",
-                null, null, null, "备注"
+                null, null, null, "备注",
+                MaterialImportData.TYPE_PHYSICAL
         );
 
         assertThat(service.isExactImportMatch(existing, data, true)).isTrue();
@@ -377,7 +380,8 @@ class MaterialIdentityServiceTest {
     private MaterialImportData matchingData() {
         return new MaterialImportData(
                 "M001", "钢", "Q235", "型钢", "5mm", "6m",
-                "吨", "件", new BigDecimal("1.5"), 10, new BigDecimal("4000"), "备注"
+                "吨", "件", new BigDecimal("1.5"), 10, new BigDecimal("4000"), "备注",
+                MaterialImportData.TYPE_PHYSICAL
         );
     }
 }

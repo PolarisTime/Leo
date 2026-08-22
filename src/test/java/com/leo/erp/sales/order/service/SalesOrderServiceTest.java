@@ -1,6 +1,7 @@
 package com.leo.erp.sales.order.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
@@ -79,13 +80,15 @@ class SalesOrderServiceTest {
     @Mock
     private BusinessOperationEventPublisher businessOperationEventPublisher;
 
+    @Mock
+    private DocumentChargeItemService documentChargeItemService;
     @InjectMocks
     private SalesOrderService service;
 
     private SalesOrderRequest request(String orderNo, String status) {
         return new SalesOrderRequest(
                 orderNo, null, null, "CUST001", 10L, "客户A", 20L, "项目A", null, null,
-                LocalDate.of(2026, 8, 1), "销售员A", status, null, List.of(), false);
+                LocalDate.of(2026, 8, 1), "销售员A", status, null, List.of(), List.of(), false);
     }
 
     private SalesOrder entity(Long ownerUserId, String status) {

@@ -70,7 +70,7 @@ class V2SalesOrderControllerTest {
     private SalesOrderRequest request() {
         return new SalesOrderRequest(
                 "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A", null, null,
-                LocalDate.of(2026, 8, 1), "销售员A", "DRAFT", null, List.of(), false);
+                LocalDate.of(2026, 8, 1), "销售员A", "DRAFT", null, List.of(), List.of(), false);
     }
 
     @Test

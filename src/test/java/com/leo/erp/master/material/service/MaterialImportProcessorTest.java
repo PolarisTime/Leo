@@ -179,7 +179,8 @@ class MaterialImportProcessorTest {
                                           Integer piecesPerBundle) {
         return new MaterialImportData(
                 code, brand, material, "直条", spec, length, "吨", "件",
-                new BigDecimal("1.998"), piecesPerBundle, BigDecimal.ZERO, null
+                new BigDecimal("1.998"), piecesPerBundle, BigDecimal.ZERO, null,
+                MaterialImportData.TYPE_PHYSICAL
         );
     }
 }

@@ -1,5 +1,7 @@
 package com.leo.erp.logistics.bill.service;
 
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
+import com.leo.erp.common.charge.web.dto.DocumentChargeItemResponse;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
@@ -31,6 +33,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -50,6 +53,9 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
     private final FreightBillDownstreamMutationGuard downstreamMutationGuard;
     private final VehicleQuery vehicleQuery;
     private final BusinessOperationEventPublisher businessOperationEventPublisher;
+    private final DocumentChargeItemService documentChargeItemService;
+
+    private static final String MODULE_KEY = "freight-bill";
 
     public FreightBillService(FreightBillRepository repository,
                               SnowflakeIdGenerator idGenerator,
@@ -60,8 +66,10 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
                               SourceAllocationLockService sourceAllocationLockService,
                               FreightBillDownstreamMutationGuard downstreamMutationGuard,
                               VehicleQuery vehicleQuery,
-                              BusinessOperationEventPublisher businessOperationEventPublisher) {
+                              BusinessOperationEventPublisher businessOperationEventPublisher,
+                              DocumentChargeItemService documentChargeItemService) {
         super(idGenerator);
+        this.documentChargeItemService = documentChargeItemService;
         this.repository = repository;
         this.mapper = mapper;
         this.applyService = applyService;
@@ -93,6 +101,7 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
     public FreightBillResponse create(FreightBillRequest request) {
         FreightBillResponse created = super.create(
                 request.audit() ? copyRequestWithStatus(request, StatusConstants.DRAFT) : request);
+        documentChargeItemService.sync(MODULE_KEY, created.id(), request.chargeItems());
         if (request.audit()) {
             return updateStatus(created.id(), StatusConstants.AUDITED);
         }
@@ -104,6 +113,7 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
     public FreightBillResponse update(Long id, FreightBillRequest request) {
         FreightBillResponse updated = super.update(id,
                 request.audit() ? copyRequestWithStatus(request, StatusConstants.DRAFT) : request);
+        documentChargeItemService.sync(MODULE_KEY, id, request.chargeItems());
         if (request.audit()) {
             return updateStatus(id, StatusConstants.AUDITED);
         }
@@ -118,12 +128,16 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
     @Override
     protected FreightBillResponse toDetailResponse(FreightBill entity) {
         FreightBillResponse response = mapper.toResponse(entity);
+        List<DocumentChargeItemResponse> chargeItems =
+                documentChargeItemService.list(MODULE_KEY, entity.getId());
+        BigDecimal totalExpenseAmount = documentChargeItemService.sumAmount(chargeItems);
         return new FreightBillResponse(
                 response.id(), response.billNo(), response.carrierId(), response.carrierCode(), response.carrierName(),
                 response.settlementCompanyId(), response.settlementCompanyName(), response.vehicleId(),
                 response.vehiclePlate(), response.billTime(),
                 response.unitPrice(), response.totalWeight(), response.totalFreight(), response.status(),
-                response.deletedFlag(), response.remark(), entity.getItems().stream().map(this::toItemResponse).toList()
+                response.deletedFlag(), response.remark(), entity.getItems().stream().map(this::toItemResponse).toList(),
+                totalExpenseAmount, chargeItems
         );
     }
 
@@ -174,7 +188,7 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
                 billNo, request.carrierId(), request.carrierCode(), request.carrierName(),
                 request.settlementCompanyId(), request.settlementCompanyName(), request.vehicleId(),
                 request.vehiclePlate(), request.billTime(),
-                request.unitPrice(), request.status(), request.remark(), request.items(), request.audit()
+                request.unitPrice(), request.status(), request.remark(), request.items(), request.chargeItems(), request.audit()
         );
     }
 
@@ -183,7 +197,7 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
                 request.billNo(), request.carrierId(), request.carrierCode(), request.carrierName(),
                 request.settlementCompanyId(), request.settlementCompanyName(), request.vehicleId(),
                 request.vehiclePlate(), request.billTime(),
-                request.unitPrice(), status, request.remark(), request.items(), request.audit()
+                request.unitPrice(), status, request.remark(), request.items(), request.chargeItems(), request.audit()
         );
     }
 
@@ -257,6 +271,7 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
 
     @Override
     protected void afterDelete(FreightBill entity) {
+        documentChargeItemService.removeAll(MODULE_KEY, entity.getId());
         entity.getSourceOrders().forEach(source -> source.setActiveFlag(false));
         publishEvent(entity, "FREIGHT_BILL_DELETED", "删除", "删除物流单 " + entity.getBillNo());
     }
