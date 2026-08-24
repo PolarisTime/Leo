@@ -23,18 +23,6 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
     @Query("SELECT u FROM UserAccount u WHERE u.id = :id AND u.deletedFlag = false")
     Optional<UserAccount> findByIdAndDeletedFlagFalseForUpdate(@Param("id") Long id);
 
-    @Query("""
-            SELECT u.credentialVersion AS credentialVersion
-              FROM UserAccount u
-             WHERE u.id = :id
-               AND u.deletedFlag = false
-               AND u.status = :status
-            """)
-    Optional<CredentialVersionProjection> findCredentialVersion(
-            @Param("id") Long id,
-            @Param("status") com.leo.erp.auth.domain.enums.UserStatus status
-    );
-
     boolean existsByLoginNameAndDeletedFlagFalse(String loginName);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
@@ -46,7 +34,4 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
             """, nativeQuery = true)
     int updatePreferencesJson(@Param("id") Long id, @Param("preferencesJson") String preferencesJson);
 
-    interface CredentialVersionProjection {
-        Long getCredentialVersion();
-    }
 }

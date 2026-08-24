@@ -1,37 +1,23 @@
 package com.leo.erp.common.support;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.web.OptionResponse;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
-import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Component
-public class WarehouseSelectionSupport implements RedisCacheHealthCheck {
-
-    private static final String WAREHOUSE_CACHE_KEY = "leo:warehouse:all";
-    private static final Duration WAREHOUSE_CACHE_TTL = Duration.ofMinutes(30);
-    private static final TypeReference<List<String>> WAREHOUSE_LIST_TYPE = new TypeReference<>() { };
+public class WarehouseSelectionSupport {
 
     private final WarehouseCatalog warehouseCatalog;
-    private final RedisJsonCacheSupport redisJsonCacheSupport;
-
-    @Autowired
-    public WarehouseSelectionSupport(WarehouseCatalog warehouseCatalog, RedisJsonCacheSupport redisJsonCacheSupport) {
-        this.warehouseCatalog = warehouseCatalog;
-        this.redisJsonCacheSupport = redisJsonCacheSupport;
-    }
 
     public WarehouseSelectionSupport(WarehouseCatalog warehouseCatalog) {
-        this(warehouseCatalog, null);
+        this.warehouseCatalog = warehouseCatalog;
     }
 
     public String normalizeWarehouseName(String warehouseName, int lineNo, boolean required) {
@@ -97,13 +83,6 @@ public class WarehouseSelectionSupport implements RedisCacheHealthCheck {
         }
     }
 
-    public void evictCache() {
-        if (redisJsonCacheSupport == null) {
-            return;
-        }
-        redisJsonCacheSupport.deleteAfterCommit(WAREHOUSE_CACHE_KEY);
-    }
-
     public List<OptionResponse> listActiveOptions() {
         return loadActiveWarehouses().stream()
                 .filter(warehouse -> warehouse.warehouseName() != null && !warehouse.warehouseName().isBlank())
@@ -154,23 +133,6 @@ public class WarehouseSelectionSupport implements RedisCacheHealthCheck {
                 .filter(name -> name != null && !name.isBlank())
                 .map(String::trim)
                 .toList();
-    }
-
-    @Override
-    public String cacheName() {
-        return WAREHOUSE_CACHE_KEY;
-    }
-
-    @Override
-    public CacheHealthCheckResult verifyAndRefreshCache() {
-        List<String> expected = loadActiveWarehouseNamesFromCatalog();
-        return verifyAndRefreshListCache(
-                redisJsonCacheSupport,
-                WAREHOUSE_CACHE_KEY,
-                WAREHOUSE_CACHE_TTL,
-                WAREHOUSE_LIST_TYPE,
-                expected
-        );
     }
 
     private Set<String> loadActiveWarehouseNameSet() {

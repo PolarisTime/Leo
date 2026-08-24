@@ -167,6 +167,23 @@ public class SessionManagementService {
         }
     }
 
+    /**
+     * 账号状态变为禁用时吊销全部活动会话，并在事务提交后拉黑该账号已有 access token。
+     */
+    @Transactional
+    public void revokeActiveSessionsForAccountStatusChange(Long userId) {
+        findUserByIdForUpdate(userId);
+        var activeSessions = refreshTokenSessionRepository
+                .findByUserIdAndDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtAsc(
+                        userId,
+                        LocalDateTime.now()
+                );
+        for (RefreshTokenSession session : activeSessions) {
+            revokeSession(session, RevokeReason.ACCOUNT_DISABLED);
+        }
+        afterCommitExecutor.run(() -> blacklistService.blacklistUser(userId));
+    }
+
     public String generateRefreshToken() {
         byte[] randomBytes = new byte[64];
         SECURE_RANDOM.nextBytes(randomBytes);

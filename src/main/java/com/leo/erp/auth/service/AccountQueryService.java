@@ -41,13 +41,6 @@ public class AccountQueryService implements AccountQuery, AuthenticationAccountQ
                 ));
     }
 
-    @Override
-    public Optional<Long> findActiveCredentialVersion(Long userId) {
-        return userAccountRepository.findCredentialVersion(userId, UserStatus.NORMAL)
-                .map(UserAccountRepository.CredentialVersionProjection::getCredentialVersion)
-                .map(this::normalizeCredentialVersion);
-    }
-
     private long normalizeCredentialVersion(Long credentialVersion) {
         return credentialVersion == null ? 0L : credentialVersion;
     }

@@ -7,11 +7,13 @@ import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.security.support.SecurityPrincipal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -30,6 +32,7 @@ public class AuthenticatedUserCacheService {
     private final ObjectMapper objectMapper;
     private final AuthenticationAccountQuery authenticationAccountQuery;
     private final RedisTuningProperties redisTuningProperties;
+    private final DefaultRedisScript<Long> snapshotWriteScript;
 
     @Autowired
     public AuthenticatedUserCacheService(StringRedisTemplate redisTemplate,
@@ -40,6 +43,9 @@ public class AuthenticatedUserCacheService {
         this.objectMapper = objectMapper;
         this.authenticationAccountQuery = authenticationAccountQuery;
         this.redisTuningProperties = redisTuningProperties;
+        this.snapshotWriteScript = new DefaultRedisScript<>();
+        this.snapshotWriteScript.setLocation(new ClassPathResource("db/authenticated_user_snapshot_write.lua"));
+        this.snapshotWriteScript.setResultType(Long.class);
     }
 
     public Optional<SecurityPrincipal> getActivePrincipal(Long userId) {
@@ -48,13 +54,6 @@ public class AuthenticatedUserCacheService {
 
     public Optional<SecurityPrincipal> getActivePrincipal(Long userId, long credentialVersion) {
         return getActivePrincipal(userId, Long.valueOf(credentialVersion));
-    }
-
-    public Optional<Long> getAuthoritativeCredentialVersion(Long userId) {
-        if (userId == null) {
-            return Optional.empty();
-        }
-        return authenticationAccountQuery.findActiveCredentialVersion(userId);
     }
 
     private Optional<SecurityPrincipal> getActivePrincipal(Long userId, Long expectedCredentialVersion) {
@@ -189,13 +188,14 @@ public class AuthenticatedUserCacheService {
 
     private void writeSnapshot(String cacheKey, CachedAuthenticatedUser snapshot) {
         try {
-            redisTemplate.opsForValue().set(
-                    cacheKey,
+            redisTemplate.execute(
+                    snapshotWriteScript,
+                    List.of(cacheKey, USER_CACHE_INDEX_KEY),
                     objectMapper.writeValueAsString(snapshot),
-                    redisTuningProperties.withTtlJitter(redisTuningProperties.authUserTtl())
+                    String.valueOf(redisTuningProperties.withTtlJitter(redisTuningProperties.authUserTtl()).toMillis()),
+                    String.valueOf(redisTuningProperties.authUserIndexTtl().toMillis()),
+                    String.valueOf(snapshot.userId())
             );
-            redisTemplate.opsForSet().add(USER_CACHE_INDEX_KEY, String.valueOf(snapshot.userId()));
-            redisTemplate.expire(USER_CACHE_INDEX_KEY, redisTuningProperties.authUserIndexTtl());
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("认证用户缓存序列化失败", ex);
         }

@@ -3,10 +3,11 @@ package com.leo.erp.auth.service;
 import com.leo.erp.auth.config.AuthProperties;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
@@ -19,10 +20,14 @@ public class LoginAttemptService {
 
     private final StringRedisTemplate redisTemplate;
     private final AuthProperties authProperties;
+    private final DefaultRedisScript<Long> recordFailureScript;
 
     public LoginAttemptService(StringRedisTemplate redisTemplate, AuthProperties authProperties) {
         this.redisTemplate = redisTemplate;
         this.authProperties = authProperties;
+        this.recordFailureScript = new DefaultRedisScript<>();
+        this.recordFailureScript.setLocation(new ClassPathResource("db/login_attempt_record_failure.lua"));
+        this.recordFailureScript.setResultType(Long.class);
     }
 
     public void ensureLoginAllowed(String loginName) {
@@ -49,21 +54,16 @@ public class LoginAttemptService {
         }
 
         AuthProperties.LoginProtection config = authProperties.getLoginProtection();
-        String failureKey = failureKey(loginName);
-        Long failureCount = redisTemplate.opsForValue().increment(failureKey);
+        Long failureCount = redisTemplate.execute(
+                recordFailureScript,
+                java.util.List.of(failureKey(loginName), lockKey(loginName)),
+                String.valueOf(System.currentTimeMillis()),
+                String.valueOf(config.getFailureWindowSeconds()),
+                String.valueOf(config.getMaxFailures()),
+                String.valueOf(config.getLockDurationSeconds())
+        );
         if (failureCount == null) {
             return;
-        }
-        if (failureCount == 1L) {
-            redisTemplate.expire(failureKey, Duration.ofSeconds(config.getFailureWindowSeconds()));
-        }
-        if (failureCount >= config.getMaxFailures()) {
-            redisTemplate.opsForValue().set(
-                    lockKey(loginName),
-                    String.valueOf(System.currentTimeMillis()),
-                    Duration.ofSeconds(config.getLockDurationSeconds())
-            );
-            redisTemplate.delete(failureKey);
         }
     }
 

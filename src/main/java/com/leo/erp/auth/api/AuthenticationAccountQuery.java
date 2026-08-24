@@ -7,8 +7,6 @@ public interface AuthenticationAccountQuery {
 
     Optional<AuthenticatedAccountSnapshot> findActiveById(Long userId);
 
-    Optional<Long> findActiveCredentialVersion(Long userId);
-
     record AuthenticatedAccountSnapshot(
             Long userId,
             String loginName,

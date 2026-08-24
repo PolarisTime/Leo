@@ -9,7 +9,6 @@ import java.util.concurrent.ThreadLocalRandom;
 public class RedisTuningProperties {
 
     private static final Duration DEFAULT_STATIC_TTL = Duration.ofDays(7);
-    private static final Duration DEFAULT_HOT_TTL = Duration.ofMinutes(10);
     private static final Duration DEFAULT_OPTIONS_TTL = Duration.ofMinutes(30);
     private static final Duration DEFAULT_INDEX_TTL = Duration.ofDays(1);
     private static final Duration DEFAULT_AUTH_USER_TTL = Duration.ofMinutes(2);
@@ -38,7 +37,7 @@ public class RedisTuningProperties {
     }
 
     public Duration withTtlJitter(Duration ttl) {
-        Duration safeTtl = positiveDuration(ttl, DEFAULT_HOT_TTL);
+        Duration safeTtl = positiveDuration(ttl, DEFAULT_OPTIONS_TTL);
         int jitterPercent = bounded(cache.ttlJitterPercent, 0, 50, 10);
         if (jitterPercent == 0 || safeTtl.toMillis() <= 1) {
             return safeTtl;
@@ -97,7 +96,6 @@ public class RedisTuningProperties {
 
     public static class Cache {
         private Duration staticTtl = DEFAULT_STATIC_TTL;
-        private Duration hotTtl = DEFAULT_HOT_TTL;
         private Duration optionsTtl = DEFAULT_OPTIONS_TTL;
         private int ttlJitterPercent = 10;
 
@@ -107,14 +105,6 @@ public class RedisTuningProperties {
 
         public void setStaticTtl(Duration staticTtl) {
             this.staticTtl = staticTtl;
-        }
-
-        public Duration getHotTtl() {
-            return hotTtl;
-        }
-
-        public void setHotTtl(Duration hotTtl) {
-            this.hotTtl = hotTtl;
         }
 
         public Duration getOptionsTtl() {

@@ -6,7 +6,6 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemCalculator;
-import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.mapper.MaterialMapper;
@@ -31,7 +30,6 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
 
     private final MaterialRepository materialRepository;
     private final MaterialMapper materialMapper;
-    private final TradeItemMaterialSupport tradeItemMaterialSupport;
     private final MaterialReferenceGuard materialReferenceGuard;
     private final MasterDataCodeIssuanceService codeIssuanceService;
     private final MaterialIdentityService identityService;
@@ -40,7 +38,6 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     public MaterialService(MaterialRepository materialRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            MaterialMapper materialMapper,
-                           TradeItemMaterialSupport tradeItemMaterialSupport,
                            MaterialReferenceGuard materialReferenceGuard,
                            MasterDataCodeIssuanceService codeIssuanceService,
                            MaterialIdentityService identityService,
@@ -48,7 +45,6 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         super(snowflakeIdGenerator);
         this.materialRepository = materialRepository;
         this.materialMapper = materialMapper;
-        this.tradeItemMaterialSupport = tradeItemMaterialSupport;
         this.materialReferenceGuard = materialReferenceGuard;
         this.codeIssuanceService = codeIssuanceService;
         this.identityService = identityService;
@@ -186,9 +182,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     @Override
     protected Material saveEntity(Material entity) {
         try {
-            Material saved = materialRepository.save(entity);
-            tradeItemMaterialSupport.evictCache();
-            return saved;
+            return materialRepository.save(entity);
         } catch (DataIntegrityViolationException exception) {
             throw identityService.mapViolation(exception, ErrorCode.BUSINESS_ERROR, null);
         }

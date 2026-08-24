@@ -21,7 +21,6 @@ import java.time.Duration;
 public class CacheConfig {
 
     public static final String CACHE_STATIC = "static";
-    public static final String CACHE_HOT = "hot";
     public static final String CACHE_OPTIONS = "options";
     public static final String CACHE_KEY_PREFIX = "leo:cache:v4:";
     private static final String TYPE_HINT_PROPERTY = "@class";
@@ -33,21 +32,16 @@ public class CacheConfig {
         GenericJackson2JsonRedisSerializer serializer = redisValueSerializer(objectMapper);
 
         RedisCacheConfiguration staticConfig = cacheConfiguration(
-                redisTuningProperties.withTtlJitter(redisTuningProperties.getCache().getStaticTtl()),
-                serializer
-        );
-        RedisCacheConfiguration hotConfig = cacheConfiguration(
-                redisTuningProperties.withTtlJitter(redisTuningProperties.getCache().getHotTtl()),
+                redisTuningProperties.getCache().getStaticTtl(),
                 serializer
         );
         RedisCacheConfiguration optionsConfig = cacheConfiguration(
-                redisTuningProperties.withTtlJitter(redisTuningProperties.getCache().getOptionsTtl()),
+                redisTuningProperties.getCache().getOptionsTtl(),
                 serializer
         );
 
         return RedisCacheManager.builder(connectionFactory)
                 .withCacheConfiguration(CACHE_STATIC, staticConfig)
-                .withCacheConfiguration(CACHE_HOT, hotConfig)
                 .withCacheConfiguration(CACHE_OPTIONS, optionsConfig)
                 .transactionAware()
                 .build();

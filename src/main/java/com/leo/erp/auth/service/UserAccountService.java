@@ -2,6 +2,7 @@ package com.leo.erp.auth.service;
 
 import com.leo.erp.auth.api.UserAccountChangedEvent;
 import com.leo.erp.auth.domain.entity.UserAccount;
+import com.leo.erp.auth.domain.enums.UserStatus;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.web.dto.CurrentAccountResponse;
 import com.leo.erp.auth.web.dto.CurrentAccountUpdateRequest;
@@ -22,6 +23,7 @@ public class UserAccountService {
     private final PasswordEncoder passwordEncoder;
     private final SessionManagementService sessionManagementService;
     private final AuthenticatedUserCacheService authenticatedUserCacheService;
+    private final UserAccountStatusApplyService statusApplyService;
     private final ApplicationEventPublisher eventPublisher;
 
     public UserAccountService(
@@ -29,11 +31,13 @@ public class UserAccountService {
             PasswordEncoder passwordEncoder,
             SessionManagementService sessionManagementService,
             AuthenticatedUserCacheService authenticatedUserCacheService,
+            UserAccountStatusApplyService statusApplyService,
             ApplicationEventPublisher eventPublisher) {
         this.repository = repository;
         this.passwordEncoder = passwordEncoder;
         this.sessionManagementService = sessionManagementService;
         this.authenticatedUserCacheService = authenticatedUserCacheService;
+        this.statusApplyService = statusApplyService;
         this.eventPublisher = eventPublisher;
     }
 
@@ -71,6 +75,22 @@ public class UserAccountService {
         repository.saveAndFlush(account);
         sessionManagementService.revokeActiveSessionsForPasswordChange(userId);
         evictCaches(userId);
+    }
+
+    @Transactional
+    public void updateStatus(Long userId, UserStatus status) {
+        if (status == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "账号状态不能为空");
+        }
+        UserAccount account = getEntityForUpdate(userId);
+        if (account.getStatus() != status) {
+            statusApplyService.apply(account, status);
+            account = repository.saveAndFlush(account);
+        }
+        if (status == UserStatus.DISABLED) {
+            sessionManagementService.revokeActiveSessionsForAccountStatusChange(account.getId());
+        }
+        evictCaches(account.getId());
     }
 
     private UserAccount getEntity(Long userId) {

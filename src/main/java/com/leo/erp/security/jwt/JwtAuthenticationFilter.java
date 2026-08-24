@@ -69,16 +69,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 }
 
                 long tokenCredentialVersion = extractCredentialVersion(claims);
-                var currentCredentialVersion =
-                        authenticatedUserCacheService.getAuthoritativeCredentialVersion(userId);
-                if (currentCredentialVersion.isPresent()
-                        && currentCredentialVersion.get() != tokenCredentialVersion) {
-                    sendUnauthorized(request, response, "凭据已变更，请重新登录");
-                    return;
-                }
-
-                currentCredentialVersion
-                        .flatMap(version -> authenticatedUserCacheService.getActivePrincipal(userId, version))
+                authenticatedUserCacheService.getActivePrincipal(userId, tokenCredentialVersion)
                         .ifPresent(principal -> {
                             authenticate(request, principal);
                             sessionActivityService.touchSession(sessionId);

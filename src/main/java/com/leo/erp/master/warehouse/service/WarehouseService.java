@@ -4,7 +4,6 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
-import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
@@ -28,7 +27,6 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
 
     private final WarehouseRepository warehouseRepository;
     private final WarehouseMapper warehouseMapper;
-    private final WarehouseSelectionSupport warehouseSelectionSupport;
     private final WarehouseReferenceGuard warehouseReferenceGuard;
     private final MasterDataCodeIssuanceService codeIssuanceService;
     private final com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService;
@@ -37,14 +35,12 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
     public WarehouseService(WarehouseRepository warehouseRepository,
                             SnowflakeIdGenerator snowflakeIdGenerator,
                             WarehouseMapper warehouseMapper,
-                            WarehouseSelectionSupport warehouseSelectionSupport,
                             MasterDataReferenceGuard referenceGuard,
                             MasterDataCodeIssuanceService codeIssuanceService,
                             com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
         super(snowflakeIdGenerator);
         this.warehouseRepository = warehouseRepository;
         this.warehouseMapper = warehouseMapper;
-        this.warehouseSelectionSupport = warehouseSelectionSupport;
         this.warehouseReferenceGuard = referenceGuard == null ? null : new WarehouseReferenceGuard(referenceGuard);
         this.codeIssuanceService = codeIssuanceService;
         this.referenceSnapshotSyncService = referenceSnapshotSyncService;
@@ -131,9 +127,7 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
 
     @Override
     protected Warehouse saveEntity(Warehouse entity) {
-        Warehouse saved = warehouseRepository.save(entity);
-        warehouseSelectionSupport.evictCache();
-        return saved;
+        return warehouseRepository.save(entity);
     }
 
     @Override

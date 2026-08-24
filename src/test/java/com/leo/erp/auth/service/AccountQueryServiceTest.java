@@ -5,7 +5,6 @@ import com.leo.erp.auth.api.AuthenticationAccountQuery.AuthenticatedAccountSnaps
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.domain.enums.UserStatus;
 import com.leo.erp.auth.repository.UserAccountRepository;
-import com.leo.erp.auth.repository.UserAccountRepository.CredentialVersionProjection;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,7 +15,6 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -91,35 +89,4 @@ class AccountQueryServiceTest {
         ));
     }
 
-    // ---------- findActiveCredentialVersion ----------
-
-    @Test
-    void findActiveCredentialVersion_shouldReturnVersionWhenPresent() {
-        CredentialVersionProjection projection = mock(CredentialVersionProjection.class);
-        when(projection.getCredentialVersion()).thenReturn(5L);
-        when(userAccountRepository.findCredentialVersion(1L, UserStatus.NORMAL))
-                .thenReturn(Optional.of(projection));
-
-        assertThat(service.findActiveCredentialVersion(1L)).contains(5L);
-    }
-
-    @Test
-    void findActiveCredentialVersion_shouldReturnEmptyWhenMissing() {
-        when(userAccountRepository.findCredentialVersion(1L, UserStatus.NORMAL))
-                .thenReturn(Optional.empty());
-
-        assertThat(service.findActiveCredentialVersion(1L)).isEmpty();
-    }
-
-    // 投影返回 null 时 Optional.map 链短路为 empty（normalizeCredentialVersion 不参与该链），
-    // 该分支为真实行为：findActiveCredentialVersion 不会对 null 版本归一化。
-    @Test
-    void findActiveCredentialVersion_shouldReturnEmptyWhenProjectionVersionNull() {
-        CredentialVersionProjection projection = mock(CredentialVersionProjection.class);
-        when(projection.getCredentialVersion()).thenReturn(null);
-        when(userAccountRepository.findCredentialVersion(1L, UserStatus.NORMAL))
-                .thenReturn(Optional.of(projection));
-
-        assertThat(service.findActiveCredentialVersion(1L)).isEmpty();
-    }
 }

@@ -1,7 +1,6 @@
 package com.leo.erp.master.material.service;
 
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.repository.MaterialRepository;
 import com.leo.erp.master.material.web.dto.MaterialImportDTO;
@@ -17,9 +16,6 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyCollection;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -33,9 +29,6 @@ class MaterialSpreadsheetImportServiceTest {
     @Mock
     private MaterialRepository materialRepository;
 
-    @Mock
-    private TradeItemMaterialSupport tradeItemMaterialSupport;
-
     private MaterialSpreadsheetImportService service;
 
     @BeforeEach
@@ -43,7 +36,7 @@ class MaterialSpreadsheetImportServiceTest {
         MaterialIdentityService identityService = new MaterialIdentityService(materialRepository);
         MaterialImportProcessor processor = new MaterialImportProcessor(
                 materialRepository, new SnowflakeIdGenerator(1), identityService);
-        service = new MaterialSpreadsheetImportService(processor, tradeItemMaterialSupport);
+        service = new MaterialSpreadsheetImportService(processor);
     }
 
     @Test
@@ -107,20 +100,6 @@ class MaterialSpreadsheetImportServiceTest {
         assertThat(result.successCount()).isZero();
         assertThat(result.failCount()).isEqualTo(2);
         assertThat(result.rows()).allSatisfy(trace -> assertThat(trace.outcome()).isNull());
-        verify(tradeItemMaterialSupport, never()).evictCache();
-    }
-
-    @Test
-    void successfulRowsShouldEvictCacheOnlyOnce() {
-        when(materialRepository.findActiveIdentityCandidates(anyCollection(), anyCollection(), anyCollection()))
-                .thenReturn(List.of());
-
-        service.importRows(List.of(
-                dto(null, "中天", "HRB400E", "直条", "12", "9米", "吨", "件", "2.0", "250", "0", null),
-                dto(null, "中天", "HRB400E", "直条", "14", "9米", "吨", "件", "2.0", "188", "0", null)
-        ));
-
-        verify(tradeItemMaterialSupport, times(1)).evictCache();
     }
 
     @Test

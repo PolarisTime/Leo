@@ -2,7 +2,6 @@ package com.leo.erp.master.material.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.web.dto.MaterialImportDTO;
 import org.springframework.dao.DataAccessException;
@@ -18,12 +17,9 @@ import java.util.List;
 public class MaterialSpreadsheetImportService {
 
     private final MaterialImportProcessor importProcessor;
-    private final TradeItemMaterialSupport tradeItemMaterialSupport;
 
-    public MaterialSpreadsheetImportService(MaterialImportProcessor importProcessor,
-                                            TradeItemMaterialSupport tradeItemMaterialSupport) {
+    public MaterialSpreadsheetImportService(MaterialImportProcessor importProcessor) {
         this.importProcessor = importProcessor;
-        this.tradeItemMaterialSupport = tradeItemMaterialSupport;
     }
 
     /**
@@ -58,7 +54,6 @@ public class MaterialSpreadsheetImportService {
         int updatedCount = 0;
         int skippedCount = 0;
         int failCount = 0;
-        boolean cacheEvicted = false;
         List<ImportRowTrace> traces = new ArrayList<>(rows.size());
         for (int index = 0; index < rows.size(); index++) {
             int rowNumber = index + 2;
@@ -75,10 +70,6 @@ public class MaterialSpreadsheetImportService {
                     case CREATED -> createdCount++;
                     case UPDATED -> updatedCount++;
                     case SKIPPED -> skippedCount++;
-                }
-                if (result.outcome() != MaterialImportProcessor.ImportOutcome.SKIPPED && !cacheEvicted) {
-                    tradeItemMaterialSupport.evictCache();
-                    cacheEvicted = true;
                 }
             } catch (BusinessException exception) {
                 failCount++;

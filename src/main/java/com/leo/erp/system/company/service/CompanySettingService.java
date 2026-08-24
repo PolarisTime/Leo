@@ -9,7 +9,6 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
-import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
@@ -76,7 +75,6 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     private final CompanySettingMapper companySettingMapper;
     private final DashboardSummaryService dashboardSummaryService;
     private final ObjectMapper objectMapper;
-    private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final MasterDataReferenceGuard referenceGuard;
     private final JdbcTemplate jdbcTemplate;
     private CacheManager cacheManager;
@@ -87,7 +85,6 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                                  CompanySettingMapper companySettingMapper,
                                  DashboardSummaryService dashboardSummaryService,
                                  ObjectMapper objectMapper,
-                                 RedisJsonCacheSupport redisJsonCacheSupport,
                                  MasterDataReferenceGuard referenceGuard,
                                  JdbcTemplate jdbcTemplate) {
         super(snowflakeIdGenerator);
@@ -95,7 +92,6 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         this.companySettingMapper = companySettingMapper;
         this.dashboardSummaryService = dashboardSummaryService;
         this.objectMapper = objectMapper;
-        this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.referenceGuard = referenceGuard;
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -106,17 +102,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                                  DashboardSummaryService dashboardSummaryService,
                                  ObjectMapper objectMapper) {
         this(companySettingRepository, snowflakeIdGenerator, companySettingMapper, dashboardSummaryService,
-                objectMapper, null, null, null);
-    }
-
-    public CompanySettingService(CompanySettingRepository companySettingRepository,
-                                 SnowflakeIdGenerator snowflakeIdGenerator,
-                                 CompanySettingMapper companySettingMapper,
-                                 DashboardSummaryService dashboardSummaryService,
-                                 ObjectMapper objectMapper,
-                                 RedisJsonCacheSupport redisJsonCacheSupport) {
-        this(companySettingRepository, snowflakeIdGenerator, companySettingMapper, dashboardSummaryService,
-                objectMapper, redisJsonCacheSupport, null, null);
+                objectMapper, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -458,9 +444,6 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
             if (staticCache != null) {
                 staticCache.evict(CURRENT_COMPANY_CACHE_KEY);
             }
-        }
-        if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.delete(CURRENT_COMPANY_CACHE_KEY);
         }
     }
 

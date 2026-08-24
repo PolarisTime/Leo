@@ -1,7 +1,6 @@
 package com.leo.erp.master.material.service;
 
 import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.support.TradeItemMaterialSupport;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -18,16 +17,13 @@ public class MaterialCsvImportService {
     private final MaterialCsvFileReader fileReader;
     private final MaterialCsvRowMapper rowMapper;
     private final MaterialImportProcessor importProcessor;
-    private final TradeItemMaterialSupport tradeItemMaterialSupport;
 
     public MaterialCsvImportService(MaterialCsvFileReader fileReader,
                                     MaterialCsvRowMapper rowMapper,
-                                    MaterialImportProcessor importProcessor,
-                                    TradeItemMaterialSupport tradeItemMaterialSupport) {
+                                    MaterialImportProcessor importProcessor) {
         this.fileReader = fileReader;
         this.rowMapper = rowMapper;
         this.importProcessor = importProcessor;
-        this.tradeItemMaterialSupport = tradeItemMaterialSupport;
     }
 
     @Transactional
@@ -47,9 +43,6 @@ public class MaterialCsvImportService {
             importRow(session, table.headerIndexes(), row, index + 1, counters, failures, rows);
         }
 
-        if (counters.successCount() > 0) {
-            tradeItemMaterialSupport.evictCache();
-        }
         return counters.toResult(failures, rows);
     }
 

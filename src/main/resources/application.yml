@@ -185,8 +185,6 @@ leo:
     cache:
       # 静态缓存默认 TTL
       static-ttl: ${LEO_REDIS_CACHE_STATIC_TTL:7d}
-      # 热点缓存默认 TTL
-      hot-ttl: ${LEO_REDIS_CACHE_HOT_TTL:10m}
       # 下拉选项缓存默认 TTL
       options-ttl: ${LEO_REDIS_CACHE_OPTIONS_TTL:30m}
       # 写缓存时附加 TTL 抖动，降低同一时刻集中失效
