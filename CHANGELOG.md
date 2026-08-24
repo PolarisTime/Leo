@@ -1,3 +1,15 @@
+# [10.1.0](https://github.com/PolarisTime/Leo/compare/v10.0.1...v10.1.0) (2026-08-24)
+
+
+### Bug Fixes
+
+* **startup:** 修复交易物料支持组件启动失败 ([e144f33](https://github.com/PolarisTime/Leo/commit/e144f33dc5edb21d5f2d30a02de2ef98bc2ab518))
+
+
+### Features
+
+* **finance:** 支持收付款资金账户 ([2119b37](https://github.com/PolarisTime/Leo/commit/2119b37a2a43d275bb2254d1515bc59449c972d9))
+
 ## [10.0.1](https://github.com/PolarisTime/Leo/compare/v10.0.0...v10.0.1) (2026-08-24)
 
 
