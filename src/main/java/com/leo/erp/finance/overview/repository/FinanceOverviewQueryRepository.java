@@ -332,7 +332,9 @@ public class FinanceOverviewQueryRepository {
     }
 
     private String orderBy(PageQuery query) {
-        String column = SORT_COLUMNS.getOrDefault(query.sortBy(), "outstanding_amount");
+        String column = query.sortBy() == null
+                ? "outstanding_amount"
+                : SORT_COLUMNS.getOrDefault(query.sortBy(), "outstanding_amount");
         String direction = "asc".equalsIgnoreCase(query.direction()) ? "ASC" : "DESC";
         return " ORDER BY " + column + " " + direction
                 + ", counterparty_name ASC, counterparty_id ASC";
