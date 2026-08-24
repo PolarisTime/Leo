@@ -1,9 +1,9 @@
 package com.leo.erp.common.charge.service;
 
+import com.leo.erp.common.charge.api.DocumentChargeItemRequest;
+import com.leo.erp.common.charge.api.DocumentChargeItemResponse;
 import com.leo.erp.common.charge.domain.entity.DocumentChargeItem;
 import com.leo.erp.common.charge.repository.DocumentChargeItemRepository;
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemRequest;
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.error.ErrorCode;

@@ -1,4 +1,4 @@
-package com.leo.erp.common.charge.web.dto;
+package com.leo.erp.common.charge.api;
 
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;

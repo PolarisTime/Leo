@@ -1,7 +1,7 @@
 package com.leo.erp.logistics.bill.service;
 
+import com.leo.erp.common.charge.api.DocumentChargeItemResponse;
 import com.leo.erp.common.charge.service.DocumentChargeItemService;
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemResponse;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;

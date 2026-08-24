@@ -1,12 +1,11 @@
 package com.leo.erp.sales.order.web.dto;
 
+import com.leo.erp.common.charge.api.DocumentChargeItemRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemRequest;
-
 import java.util.List;
 
 public record SalesOrderRequest(

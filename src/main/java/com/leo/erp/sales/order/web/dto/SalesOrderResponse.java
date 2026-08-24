@@ -2,11 +2,10 @@ package com.leo.erp.sales.order.web.dto;
 
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import com.leo.erp.common.charge.api.DocumentChargeItemResponse;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemResponse;
-
 import java.util.List;
 
 public record SalesOrderResponse(

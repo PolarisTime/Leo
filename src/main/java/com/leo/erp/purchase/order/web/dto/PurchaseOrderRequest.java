@@ -1,6 +1,6 @@
 package com.leo.erp.purchase.order.web.dto;
 
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemRequest;
+import com.leo.erp.common.charge.api.DocumentChargeItemRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;

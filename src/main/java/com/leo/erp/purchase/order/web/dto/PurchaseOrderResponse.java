@@ -1,8 +1,9 @@
 package com.leo.erp.purchase.order.web.dto;
 
+import com.leo.erp.common.charge.api.DocumentChargeItemResponse;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemResponse;
 import java.util.List;
 
 public record PurchaseOrderResponse(

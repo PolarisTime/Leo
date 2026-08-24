@@ -1,4 +1,4 @@
-package com.leo.erp.common.charge.web.dto;
+package com.leo.erp.common.charge.api;
 
 import java.math.BigDecimal;
 
