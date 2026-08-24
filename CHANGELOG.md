@@ -1,3 +1,37 @@
+# [10.0.0](https://github.com/PolarisTime/Leo/compare/v9.12.0...v10.0.0) (2026-08-24)
+
+
+* refactor(api)!: 收付款与对账单保存并审核资源化 ([81660e2](https://github.com/PolarisTime/Leo/commit/81660e22b1e0756f5500e4c9c0c7800133c40c85))
+* refactor(api)!: 采购销售物流五单据保存并审核资源化 ([2d4ff0f](https://github.com/PolarisTime/Leo/commit/2d4ff0fada60b7b69407fdb725a6ce071929bcf1))
+
+
+### Bug Fixes
+
+* **ci:** 修复后端架构与发布门禁 ([3cb8e6f](https://github.com/PolarisTime/Leo/commit/3cb8e6f289e5920bf26e2835ccdee6eecdb667e8))
+* **common:** 统一关键字搜索为转义忽略大小写语义 ([31d87ae](https://github.com/PolarisTime/Leo/commit/31d87ae974496daafbe87cf65fed122fba382c33))
+* **material:** 商品类别分页接入排序白名单 ([0dfa85a](https://github.com/PolarisTime/Leo/commit/0dfa85a44a2a040a79c419c5d9e760efa556d396))
+* **printtemplate:** 打印取数显式列化与渲染健壮性 ([142388b](https://github.com/PolarisTime/Leo/commit/142388b792af093b69ca79ddd1991adf935d2f2e))
+* **print:** 销售订单 Excel 导出重量强制 3 位小数并拼接 12 米规格 ([be92c59](https://github.com/PolarisTime/Leo/commit/be92c599185480b62a642d2450e15a6085674558))
+
+
+### Features
+
+* **api:** 创建语义端点状态码修正与信任模型文档 ([5b0bcf8](https://github.com/PolarisTime/Leo/commit/5b0bcf83032c92338d9ff722e6a4447816161604))
+* **charge:** 通用单据附加费用表与三模块接入 ([e44c0e4](https://github.com/PolarisTime/Leo/commit/e44c0e4dd144a296d8e044223227a4b89360fb34))
+* **common:** 补齐 429 限流错误映射 ([cd47d20](https://github.com/PolarisTime/Leo/commit/cd47d2083ceadf95f8b5262ea50bf8b3a330c88b))
+* **material:** CSV 导入响应补齐行级结果明细 ([bc6e8b6](https://github.com/PolarisTime/Leo/commit/bc6e8b645970de5f6e22abbbd8b95ce2e93b88f5))
+* **material:** 商品资料增加商品类型支持附加费用 ([aa0dcc5](https://github.com/PolarisTime/Leo/commit/aa0dcc5fedc3537e52537df8bf433acd5dc00afa))
+* **printtemplate:** COORD 模板保存侧增加 LODOP 指令白名单校验 ([73954ac](https://github.com/PolarisTime/Leo/commit/73954ace93f551ba1714bb6a0d65e96e56c37a28))
+* **printtemplate:** 模板表唯一约束与乐观锁 ([3a02197](https://github.com/PolarisTime/Leo/commit/3a02197c88e8b23287d1092a1558b10a67cb36c7))
+
+
+### BREAKING CHANGES
+
+* 五个单据模块的 save-and-audit 端点移除，
+前端已同批切换为 audit 请求标志位
+* /receipts、/payments、/customer-statements、/freight-statements
+的 save-and-audit 端点移除，前端已同批切换为 audit 请求标志位
+
 # [9.12.0](https://github.com/PolarisTime/Leo/compare/v9.11.0...v9.12.0) (2026-08-21)
 
 
