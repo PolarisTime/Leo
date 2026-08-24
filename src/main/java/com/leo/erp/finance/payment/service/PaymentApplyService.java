@@ -57,6 +57,9 @@ public class PaymentApplyService {
         entity.setPaymentDate(request.paymentDate());
         entity.setPayType(request.payType());
         entity.setAmount(TradeItemCalculator.scaleAmount(request.amount()));
+        if (request.accountId() != null) {
+            entity.setAccountId(request.accountId());
+        }
         entity.setStatus(nextStatus);
         entity.setOperatorName(request.operatorName());
         entity.setRemark(request.remark());

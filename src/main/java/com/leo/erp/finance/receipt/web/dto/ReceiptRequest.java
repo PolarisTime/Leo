@@ -22,6 +22,8 @@ public record ReceiptRequest(
         String projectName,
         Long settlementCompanyId,
         String settlementCompanyName,
+        @NotNull(message = "资金账户不能为空")
+        Long accountId,
         Long sourceCustomerStatementId,
         @NotNull(message = "收款日期不能为空")
         LocalDate receiptDate,
@@ -39,6 +41,34 @@ public record ReceiptRequest(
         List<ReceiptAllocationRequest> items,
         boolean audit
 ) {
+    public ReceiptRequest(String receiptNo,
+                          String counterpartyType,
+                          Long counterpartyId,
+                          String counterpartyCode,
+                          String counterpartyName,
+                          String receiptPurpose,
+                          Long customerId,
+                          String customerCode,
+                          String customerName,
+                          Long projectId,
+                          String projectName,
+                          Long settlementCompanyId,
+                          String settlementCompanyName,
+                          Long sourceCustomerStatementId,
+                          LocalDate receiptDate,
+                          String payType,
+                          BigDecimal amount,
+                          String status,
+                          String operatorName,
+                          String remark,
+                          List<ReceiptAllocationRequest> items,
+                          boolean audit) {
+        this(receiptNo, counterpartyType, counterpartyId, counterpartyCode, counterpartyName,
+                receiptPurpose, customerId, customerCode, customerName, projectId, projectName,
+                settlementCompanyId, settlementCompanyName, null, sourceCustomerStatementId,
+                receiptDate, payType, amount, status, operatorName, remark, items, audit);
+    }
+
     public ReceiptRequest(String receiptNo,
                           Long customerId,
                           String customerCode,

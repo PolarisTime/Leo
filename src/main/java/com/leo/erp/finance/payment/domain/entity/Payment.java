@@ -74,6 +74,9 @@ public class Payment extends AbstractAuditableEntity implements StatusAwareEntit
     @Column(name = "settlement_company_name", length = 128)
     private String settlementCompanyName;
 
+    @Column(name = "account_id")
+    private Long accountId;
+
     @Column(name = "payment_date", nullable = false)
     private LocalDate paymentDate;
 

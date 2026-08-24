@@ -24,6 +24,8 @@ public record PaymentRequest(
         String supplierName,
         Long settlementCompanyId,
         String settlementCompanyName,
+        @NotNull(message = "资金账户不能为空")
+        Long accountId,
         @NotNull(message = "付款日期不能为空")
         LocalDate paymentDate,
         @jakarta.validation.constraints.NotBlank(message = "付款方式不能为空")
@@ -40,6 +42,33 @@ public record PaymentRequest(
         List<PaymentAllocationRequest> items,
         boolean audit
 ) {
+    public PaymentRequest(String paymentNo,
+                          String counterpartyType,
+                          Long counterpartyId,
+                          String paymentPurpose,
+                          String counterpartyCode,
+                          String counterpartyName,
+                          Long sourceStatementId,
+                          Long sourcePurchaseOrderId,
+                          String purchaseOrderNo,
+                          String supplierCode,
+                          String supplierName,
+                          Long settlementCompanyId,
+                          String settlementCompanyName,
+                          LocalDate paymentDate,
+                          String payType,
+                          BigDecimal amount,
+                          String status,
+                          String operatorName,
+                          String remark,
+                          List<PaymentAllocationRequest> items,
+                          boolean audit) {
+        this(paymentNo, counterpartyType, counterpartyId, paymentPurpose, counterpartyCode,
+                counterpartyName, sourceStatementId, sourcePurchaseOrderId, purchaseOrderNo,
+                supplierCode, supplierName, settlementCompanyId, settlementCompanyName, null,
+                paymentDate, payType, amount, status, operatorName, remark, items, audit);
+    }
+
     public PaymentRequest(String paymentNo,
                           String businessType,
                           String paymentPurpose,

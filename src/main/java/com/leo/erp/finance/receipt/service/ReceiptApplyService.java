@@ -41,6 +41,9 @@ public class ReceiptApplyService {
         entity.setReceiptDate(request.receiptDate());
         entity.setPayType(request.payType());
         entity.setAmount(TradeItemCalculator.scaleAmount(request.amount()));
+        if (request.accountId() != null) {
+            entity.setAccountId(request.accountId());
+        }
         entity.setOperatorName(request.operatorName());
         entity.setRemark(request.remark());
         if (TradeItemCalculator.safeBigDecimal(entity.getAmount()).compareTo(BigDecimal.ZERO) <= 0) {

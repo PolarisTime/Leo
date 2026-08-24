@@ -86,6 +86,9 @@ public class Receipt extends AbstractAuditableEntity implements StatusAwareEntit
     @Column(name = "settlement_company_name", length = 128)
     private String settlementCompanyName;
 
+    @Column(name = "account_id")
+    private Long accountId;
+
     @Column(name = "operator_name", nullable = false, length = 32)
     private String operatorName;
 

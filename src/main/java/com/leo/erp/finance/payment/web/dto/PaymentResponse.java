@@ -19,6 +19,7 @@ public record PaymentResponse(
         String supplierName,
         Long settlementCompanyId,
         String settlementCompanyName,
+        Long accountId,
         LocalDate paymentDate,
         String payType,
         BigDecimal amount,
@@ -28,6 +29,34 @@ public record PaymentResponse(
         String remark,
         List<PaymentAllocationResponse> items
 ) {
+    public PaymentResponse(Long id,
+                           String paymentNo,
+                           String counterpartyType,
+                           Long counterpartyId,
+                           String paymentPurpose,
+                           String counterpartyCode,
+                           String counterpartyName,
+                           Long sourceStatementId,
+                           Long sourcePurchaseOrderId,
+                           String purchaseOrderNo,
+                           String supplierCode,
+                           String supplierName,
+                           Long settlementCompanyId,
+                           String settlementCompanyName,
+                           LocalDate paymentDate,
+                           String payType,
+                           BigDecimal amount,
+                           String status,
+                           boolean deletedFlag,
+                           String operatorName,
+                           String remark,
+                           List<PaymentAllocationResponse> items) {
+        this(id, paymentNo, counterpartyType, counterpartyId, paymentPurpose, counterpartyCode,
+                counterpartyName, sourceStatementId, sourcePurchaseOrderId, purchaseOrderNo,
+                supplierCode, supplierName, settlementCompanyId, settlementCompanyName, null,
+                paymentDate, payType, amount, status, deletedFlag, operatorName, remark, items);
+    }
+
     public PaymentResponse(Long id,
                            String paymentNo,
                            String businessType,
