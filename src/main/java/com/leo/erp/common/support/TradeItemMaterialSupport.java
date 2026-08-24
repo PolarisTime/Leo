@@ -2,6 +2,7 @@ package com.leo.erp.common.support;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +21,7 @@ public class TradeItemMaterialSupport {
     private final MaterialCatalog materialCatalog;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
 
+    @Autowired
     public TradeItemMaterialSupport(MaterialCatalog materialCatalog,
                                     SnowflakeIdGenerator snowflakeIdGenerator) {
         this.materialCatalog = materialCatalog;
