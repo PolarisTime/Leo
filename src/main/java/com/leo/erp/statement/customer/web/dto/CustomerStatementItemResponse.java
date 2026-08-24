@@ -1,12 +1,14 @@
 package com.leo.erp.statement.customer.web.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 public record CustomerStatementItemResponse(
         Long id,
         Integer lineNo,
         String sourceNo,
         Long sourceSalesOrderItemId,
+        LocalDate deliveryDate,
         String materialCode,
         String brand,
         String category,
@@ -47,7 +49,7 @@ public record CustomerStatementItemResponse(
                                          BigDecimal weightTon,
                                          BigDecimal unitPrice,
                                          BigDecimal amount) {
-        this(id, lineNo, sourceNo, sourceSalesOrderItemId, materialCode, brand, category, material, spec, length,
+        this(id, lineNo, sourceNo, sourceSalesOrderItemId, null, materialCode, brand, category, material, spec, length,
                 unit, batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount,
                 null, null, null, null, null);
     }
