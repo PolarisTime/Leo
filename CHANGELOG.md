@@ -1,3 +1,11 @@
+## [10.0.1](https://github.com/PolarisTime/Leo/compare/v10.0.0...v10.0.1) (2026-08-24)
+
+
+### Bug Fixes
+
+* **auth:** 优化鉴权快照与缓存失效链路 ([f38f086](https://github.com/PolarisTime/Leo/commit/f38f086dd5fbd91cdd6cd6f21fe2ddbcb21e2e59))
+* **finance:** 修复财务概览默认排序报错 ([90201cd](https://github.com/PolarisTime/Leo/commit/90201cd17ac86a6b15c4e2af98ceb5f9394a2645))
+
 # [10.0.0](https://github.com/PolarisTime/Leo/compare/v9.12.0...v10.0.0) (2026-08-24)
 
 
