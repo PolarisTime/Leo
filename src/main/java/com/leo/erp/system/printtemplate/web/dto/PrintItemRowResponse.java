@@ -18,7 +18,16 @@ public record PrintItemRowResponse(
         String pieceWeightTon,
         String weightTon,
         String unitPrice,
-        String amount
+        String amount,
+        String sourceNo,
+        String deliveryDate,
+        String quantityUnit,
+        String customerName,
+        String projectName,
+        String sourceSalesOrderItemId,
+        String sourceFreightBillId,
+        String sourceFreightBillUnitPrice,
+        String sourceFreightBillTotalFreight
 ) {
 
     public static PrintItemRowResponse from(PrintRecordItem item) {
@@ -35,7 +44,16 @@ public record PrintItemRowResponse(
                 item.pieceWeightTon(),
                 item.weightTon(),
                 item.unitPrice(),
-                item.amount()
+                item.amount(),
+                item.sourceNo(),
+                item.deliveryDate(),
+                item.quantityUnit(),
+                item.customerName(),
+                item.projectName(),
+                item.sourceSalesOrderItemId(),
+                item.sourceFreightBillId(),
+                item.sourceFreightBillUnitPrice(),
+                item.sourceFreightBillTotalFreight()
         );
     }
 }

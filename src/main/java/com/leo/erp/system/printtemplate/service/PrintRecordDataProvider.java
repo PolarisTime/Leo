@@ -80,7 +80,7 @@ class PrintRecordDataProvider {
             return "SELECT id, " + source.itemFkColumn() + " AS record_id, "
                     + "'' AS brand, '' AS category, '' AS settlement_mode, '' AS material, '' AS spec, '' AS length, "
                     + "'' AS quantity, '' AS piece_weight_ton, '' AS weight_ton, '' AS unit_price, "
-                    + amountColumn + " AS amount "
+                    + amountColumn + " AS amount, " + statementGroupingColumns(moduleKey) + " "
                     + "FROM " + source.itemTableName()
                     + " WHERE " + source.itemFkColumn() + " IN (" + placeholders + ")"
                     + " ORDER BY " + source.itemFkColumn() + " ASC, line_no ASC, id ASC";
@@ -90,10 +90,36 @@ class PrintRecordDataProvider {
         String settlementMode = source.settlementModeColumn().isBlank() ? "''" : source.settlementModeColumn();
         return "SELECT id, " + source.itemFkColumn() + " AS record_id, brand, category, material, spec, length, "
                 + settlementMode + " AS settlement_mode, "
-                + "quantity, piece_weight_ton, weight_ton, " + unitPrice + " AS unit_price, " + amount + " AS amount "
+                + "quantity, piece_weight_ton, weight_ton, " + unitPrice + " AS unit_price, " + amount + " AS amount, "
+                + statementGroupingColumns(moduleKey) + " "
                 + "FROM " + source.itemTableName()
                 + " WHERE " + source.itemFkColumn() + " IN (" + placeholders + ")"
                 + " ORDER BY " + source.itemFkColumn() + " ASC, line_no ASC, id ASC";
+    }
+
+    private String statementGroupingColumns(String moduleKey) {
+        if ("customer-statement".equals(moduleKey)) {
+            return "source_no, quantity_unit, source_sales_order_item_id, "
+                    + "COALESCE((SELECT so.delivery_date::text FROM so_sales_order_item soi "
+                    + "JOIN so_sales_order so ON so.id = soi.order_id "
+                    + "WHERE soi.id = source_sales_order_item_id AND soi.deleted_flag = FALSE "
+                    + "AND so.deleted_flag = FALSE LIMIT 1), '') AS delivery_date, "
+                    + "'' AS customer_name, '' AS project_name, '' AS source_freight_bill_id, "
+                    + "'' AS source_freight_bill_unit_price, '' AS source_freight_bill_total_freight";
+        }
+        if ("freight-statement".equals(moduleKey)) {
+            return "source_no, customer_name, project_name, quantity_unit, source_freight_bill_id, "
+                    + "'' AS delivery_date, '' AS source_sales_order_item_id, "
+                    + "COALESCE((SELECT fb.unit_price FROM lg_freight_bill fb "
+                    + "WHERE fb.id = source_freight_bill_id AND fb.deleted_flag = FALSE LIMIT 1), 0) "
+                    + "AS source_freight_bill_unit_price, "
+                    + "COALESCE((SELECT fb.total_freight FROM lg_freight_bill fb "
+                    + "WHERE fb.id = source_freight_bill_id AND fb.deleted_flag = FALSE LIMIT 1), 0) "
+                    + "AS source_freight_bill_total_freight";
+        }
+        return "'' AS source_no, '' AS delivery_date, '' AS quantity_unit, '' AS customer_name, "
+                + "'' AS project_name, '' AS source_sales_order_item_id, '' AS source_freight_bill_id, "
+                + "'' AS source_freight_bill_unit_price, '' AS source_freight_bill_total_freight";
     }
 
     private PrintRecordItem toPrintRecordItem(Map<String, Object> row) {
@@ -111,7 +137,16 @@ class PrintRecordDataProvider {
                 formatter.value(item, "pieceWeightTon"),
                 formatter.value(item, "weightTon"),
                 formatter.value(item, "unitPrice"),
-                formatter.value(item, "amount")
+                formatter.value(item, "amount"),
+                formatter.value(item, "sourceNo"),
+                formatter.value(item, "deliveryDate"),
+                formatter.value(item, "quantityUnit"),
+                formatter.value(item, "customerName"),
+                formatter.value(item, "projectName"),
+                formatter.value(item, "sourceSalesOrderItemId"),
+                formatter.value(item, "sourceFreightBillId"),
+                formatter.value(item, "sourceFreightBillUnitPrice"),
+                formatter.value(item, "sourceFreightBillTotalFreight")
         );
     }
 }
