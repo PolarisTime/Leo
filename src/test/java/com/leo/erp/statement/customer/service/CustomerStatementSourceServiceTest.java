@@ -133,6 +133,25 @@ class CustomerStatementSourceServiceTest {
     }
 
     @Test
+    void candidatePage_shouldUseProjectSettlementCompany() {
+        when(repository.findOccupiedSourceSalesOrderItemIdsExcludingCurrentStatement(any())).thenReturn(List.of());
+        when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(
+                new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001", 40L, "项目主体")
+        ));
+        CandidateSnapshot candidate = new CandidateSnapshot(1L, "SO001", "客户A", "项目A", 30L, "订单快照主体",
+                LocalDate.of(2026, 8, 1), "销售员A", new BigDecimal("100"), new BigDecimal("5000"),
+                StatusConstants.SALES_COMPLETED, 10L, 20L);
+        when(sourceQuery.findCandidates(any())).thenReturn(new CandidatePage(List.of(candidate), 1, 1, 0, 10));
+        PageQuery query = mock(PageQuery.class);
+        when(query.toPageable("id")).thenReturn(PageRequest.of(0, 10));
+
+        Page<CustomerStatementCandidateResponse> result = service.candidatePage(query, mock(PageFilter.class));
+
+        assertThat(result.getContent().get(0).settlementCompanyId()).isEqualTo(40L);
+        assertThat(result.getContent().get(0).settlementCompanyName()).isEqualTo("项目主体");
+    }
+
+    @Test
     void candidatePage_shouldReturnEmptyPageWhenNoCandidates() {
         when(repository.findOccupiedSourceSalesOrderItemIdsExcludingCurrentStatement(any())).thenReturn(List.of());
         when(sourceQuery.findCandidates(any())).thenReturn(new CandidatePage(List.of(), 0, 0, 0, 10));

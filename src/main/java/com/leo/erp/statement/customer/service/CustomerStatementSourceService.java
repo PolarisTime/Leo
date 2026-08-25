@@ -366,13 +366,14 @@ public class CustomerStatementSourceService {
     }
 
     private CustomerStatementCandidateResponse toCandidateResponse(CandidateSnapshot order) {
+        SettlementCompanySnapshot settlementCompany = resolveCandidateProjectSettlementCompany(order);
         return new CustomerStatementCandidateResponse(
                 order.id(),
                 order.orderNo(),
                 order.customerName(),
                 order.projectName(),
-                order.settlementCompanyId(),
-                order.settlementCompanyName(),
+                settlementCompany.id(),
+                settlementCompany.name(),
                 order.deliveryDate(),
                 order.salesName(),
                 order.totalWeight(),
@@ -381,6 +382,18 @@ public class CustomerStatementSourceService {
                 order.customerId(),
                 order.projectId()
         );
+    }
+
+    private SettlementCompanySnapshot resolveCandidateProjectSettlementCompany(CandidateSnapshot order) {
+        if (order.projectId() == null) {
+            return new SettlementCompanySnapshot(null, null);
+        }
+        return projectQuery.findActiveById(order.projectId())
+                .map(project -> new SettlementCompanySnapshot(
+                        project.settlementCompanyId(),
+                        trimToNull(project.settlementCompanyName())
+                ))
+                .orElseGet(() -> new SettlementCompanySnapshot(null, null));
     }
 
     record SourceApplyResult(
