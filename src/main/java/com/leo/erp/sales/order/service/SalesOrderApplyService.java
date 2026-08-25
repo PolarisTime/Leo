@@ -142,7 +142,7 @@ public class SalesOrderApplyService {
         entity.setProjectId(project == null ? request.projectId() : project.id());
         entity.setDeliveryDate(request.deliveryDate());
         entity.setSalesName(request.salesName());
-        applyCustomerSettlementCompany(entity, request, customer);
+        applyProjectSettlementCompany(entity, request, project, customer);
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
     }
@@ -221,10 +221,20 @@ public class SalesOrderApplyService {
         return new ItemTotals(weightTon, amount);
     }
 
-    private void applyCustomerSettlementCompany(SalesOrder entity,
-                                                SalesOrderRequest request,
-                                                CustomerQuery.CustomerSnapshot customer) {
+    private void applyProjectSettlementCompany(SalesOrder entity,
+                                               SalesOrderRequest request,
+                                               ProjectQuery.ProjectSnapshot project,
+                                               CustomerQuery.CustomerSnapshot customer) {
         if (shouldPreserveExistingSettlementCompany(entity)) {
+            return;
+        }
+        if (project != null && project.settlementCompanyId() != null) {
+            if (request.settlementCompanyId() != null
+                    && !java.util.Objects.equals(request.settlementCompanyId(), project.settlementCompanyId())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "结算主体与所选项目不一致");
+            }
+            entity.setSettlementCompanyId(project.settlementCompanyId());
+            entity.setSettlementCompanyName(project.settlementCompanyName());
             return;
         }
         SettlementCompanySnapshot requestedSettlementCompany = resolveRequestedSettlementCompany(request);

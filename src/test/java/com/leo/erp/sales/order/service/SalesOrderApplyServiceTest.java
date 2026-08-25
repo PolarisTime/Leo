@@ -69,6 +69,12 @@ class SalesOrderApplyServiceTest {
         return new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001");
     }
 
+    private ProjectQuery.ProjectSnapshot projectWithSettlementCompany() {
+        return new ProjectQuery.ProjectSnapshot(
+                20L, "项目A", "项A", 10L, "CUST001", 40L, "项目结算公司"
+        );
+    }
+
     private SalesOrderRequest request(Long customerId, String customerCode, String customerName,
                                       Long projectId, String projectName, String status) {
         return new SalesOrderRequest(
@@ -102,6 +108,20 @@ class SalesOrderApplyServiceTest {
         assertThat(entity.getProjectName()).isEqualTo("项目A");
         assertThat(entity.getSettlementCompanyId()).isEqualTo(30L); // 客户默认结算主体
         assertThat(entity.getStatus()).isEqualTo(StatusConstants.DRAFT);
+    }
+
+    @Test
+    void apply_shouldPreferProjectSettlementCompanyOverCustomerDefault() {
+        when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(customer()));
+        when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(projectWithSettlementCompany()));
+        when(sourceAllocationService.prepareContext(any(), any(), any())).thenReturn(mock(SalesOrderSourceContext.class));
+
+        SalesOrder entity = new SalesOrder();
+
+        service.apply(entity, request(10L, "CUST001", "客户A", 20L, "项目A", null), () -> 100L);
+
+        assertThat(entity.getSettlementCompanyId()).isEqualTo(40L);
+        assertThat(entity.getSettlementCompanyName()).isEqualTo("项目结算公司");
     }
 
     // ---------- 客户解析校验 ----------

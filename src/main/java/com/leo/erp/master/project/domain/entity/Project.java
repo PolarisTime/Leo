@@ -38,6 +38,12 @@ public class Project extends AbstractAuditableEntity {
     @Column(name = "customer_code", nullable = false, length = 64)
     private String customerCode;
 
+    @Column(name = "settlement_company_id")
+    private Long settlementCompanyId;
+
+    @Column(name = "settlement_company_name", length = 128)
+    private String settlementCompanyName;
+
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 

@@ -11,6 +11,20 @@ public record ProjectOptionResponse(
         String customerCode,
         String projectCode,
         String projectName,
-        String projectNameAbbr
+        String projectNameAbbr,
+        @JsonSerialize(using = ToStringSerializer.class) Long settlementCompanyId,
+        String settlementCompanyName
 ) {
+
+    public ProjectOptionResponse(Long id,
+                                 String label,
+                                 Long value,
+                                 Long customerId,
+                                 String customerCode,
+                                 String projectCode,
+                                 String projectName,
+                                 String projectNameAbbr) {
+        this(id, label, value, customerId, customerCode, projectCode, projectName,
+                projectNameAbbr, null, null);
+    }
 }

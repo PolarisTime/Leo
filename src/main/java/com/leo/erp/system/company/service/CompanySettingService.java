@@ -49,6 +49,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     private static final String[] SETTLEMENT_COMPANY_NAME_TABLES = {
             "lg_freight_bill",
             "lg_freight_bill_item",
+            "md_project",
             "so_sales_order",
             "so_sales_order_item",
             "so_sales_outbound",
@@ -275,6 +276,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         referenceGuard.assertNoReferences("该结算主体", List.of(
                 ReferenceCheck.active("md_carrier", "default_settlement_company_id", entity.getId()),
                 ReferenceCheck.active("md_customer", "default_settlement_company_id", entity.getId()),
+                ReferenceCheck.active("md_project", "settlement_company_id", entity.getId()),
                 ReferenceCheck.active("po_purchase_order", "settlement_company_id", entity.getId()),
                 ReferenceCheck.active("po_purchase_inbound", "settlement_company_id", entity.getId()),
                 ReferenceCheck.ofActiveParent(

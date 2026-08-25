@@ -9,6 +9,8 @@ public record ProjectResponse(
         String projectManager,
         Long customerId,
         String customerCode,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         String status,
         String remark
 ) {
@@ -22,6 +24,6 @@ public record ProjectResponse(
                            String status,
                            String remark) {
         this(id, projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
-                null, customerCode, status, remark);
+                null, customerCode, null, null, status, remark);
     }
 }

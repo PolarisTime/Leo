@@ -41,7 +41,9 @@ public class ProjectQueryService implements ProjectQuery {
                 project.getProjectName(),
                 project.getProjectNameAbbr(),
                 project.getCustomerId(),
-                project.getCustomerCode()
+                project.getCustomerCode(),
+                project.getSettlementCompanyId(),
+                project.getSettlementCompanyName()
         );
     }
 }

@@ -15,6 +15,9 @@ public record ProjectRequest(
         Long customerId,
         @NotBlank(message = "客户编码不能为空")
         String customerCode,
+        @Positive(message = "结算主体ID必须为正整数")
+        Long settlementCompanyId,
+        String settlementCompanyName,
         @NotBlank(message = "状态不能为空")
         String status,
         String remark
@@ -28,6 +31,6 @@ public record ProjectRequest(
                           String status,
                           String remark) {
         this(projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
-                null, customerCode, status, remark);
+                null, customerCode, null, null, status, remark);
     }
 }

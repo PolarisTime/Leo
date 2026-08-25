@@ -18,6 +18,8 @@ import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.master.project.web.dto.ProjectRequest;
 import com.leo.erp.master.project.web.dto.ProjectOptionResponse;
 import com.leo.erp.master.project.web.dto.ProjectResponse;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +41,7 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
     private final ProjectMapper projectMapper;
     private final MasterDataReferenceGuard referenceGuard;
     private final CustomerRepository customerRepository;
+    private final CompanySettingService companySettingService;
     private final MasterDataCodeIssuanceService codeIssuanceService;
     private final com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService;
 
@@ -48,6 +51,7 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
                           ProjectMapper projectMapper,
                           MasterDataReferenceGuard referenceGuard,
                           CustomerRepository customerRepository,
+                          CompanySettingService companySettingService,
                           MasterDataCodeIssuanceService codeIssuanceService,
                           com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
         super(snowflakeIdGenerator);
@@ -55,6 +59,7 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
         this.projectMapper = projectMapper;
         this.referenceGuard = referenceGuard;
         this.customerRepository = customerRepository;
+        this.companySettingService = companySettingService;
         this.codeIssuanceService = codeIssuanceService;
         this.referenceSnapshotSyncService = referenceSnapshotSyncService;
     }
@@ -99,19 +104,35 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
                         project.getCustomerCode(),
                         project.getProjectCode(),
                         project.getProjectName(),
-                        project.getProjectNameAbbr()
+                        project.getProjectNameAbbr(),
+                        project.getSettlementCompanyId(),
+                        project.getSettlementCompanyName()
                 ))
                 .toList();
     }
 
     @Override
     protected ProjectRequest normalizeCreateRequest(ProjectRequest request) {
-        return normalizeCustomerIdentity(request);
+        return normalizeCustomerIdentity(request, null);
     }
 
     @Override
     protected ProjectRequest normalizeUpdateRequest(Project entity, ProjectRequest request) {
-        return normalizeCustomerIdentity(request);
+        Long settlementCompanyId = request.settlementCompanyId() == null
+                ? entity.getSettlementCompanyId()
+                : request.settlementCompanyId();
+        String settlementCompanyName = request.settlementCompanyId() == null
+                ? entity.getSettlementCompanyName()
+                : request.settlementCompanyName();
+        return normalizeCustomerIdentity(
+                new ProjectRequest(
+                        request.projectCode(), request.projectName(), request.projectNameAbbr(),
+                        request.projectAddress(), request.projectManager(), request.customerId(),
+                        request.customerCode(), settlementCompanyId, settlementCompanyName,
+                        request.status(), request.remark()
+                ),
+                entity
+        );
     }
 
     @Override
@@ -160,6 +181,8 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
         entity.setProjectManager(request.projectManager());
         entity.setCustomerId(request.customerId());
         entity.setCustomerCode(request.customerCode());
+        entity.setSettlementCompanyId(request.settlementCompanyId());
+        entity.setSettlementCompanyName(request.settlementCompanyName());
         entity.setStatus(request.status());
         entity.setRemark(request.remark());
     }
@@ -181,9 +204,9 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
         return projectMapper.toResponse(entity);
     }
 
-    private ProjectRequest normalizeCustomerIdentity(ProjectRequest request) {
+    private ProjectRequest normalizeCustomerIdentity(ProjectRequest request, Project existingEntity) {
         if (customerRepository == null) {
-            return request;
+            return resolveSettlementCompany(request, null, null);
         }
         String requestedCustomerCode = trimToNull(request.customerCode());
         if (request.customerId() == null && requestedCustomerCode == null) {
@@ -206,7 +229,13 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
         if (requestedCustomerCode != null && !requestedCustomerCode.equals(customerCode)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "客户ID与客户编码不一致");
         }
-        return new ProjectRequest(
+        Long fallbackSettlementCompanyId = request.settlementCompanyId();
+        String fallbackSettlementCompanyName = request.settlementCompanyName();
+        if (fallbackSettlementCompanyId == null && existingEntity == null) {
+            fallbackSettlementCompanyId = customer.getDefaultSettlementCompanyId();
+            fallbackSettlementCompanyName = customer.getDefaultSettlementCompanyName();
+        }
+        return resolveSettlementCompany(new ProjectRequest(
                 request.projectCode(),
                 request.projectName(),
                 request.projectNameAbbr(),
@@ -214,8 +243,36 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
                 request.projectManager(),
                 customer.getId(),
                 customerCode,
+                fallbackSettlementCompanyId,
+                fallbackSettlementCompanyName,
                 request.status(),
                 request.remark()
+        ), customer.getDefaultSettlementCompanyId(), customer.getDefaultSettlementCompanyName());
+    }
+
+    private ProjectRequest resolveSettlementCompany(ProjectRequest request,
+                                                    Long fallbackId,
+                                                    String fallbackName) {
+        Long settlementCompanyId = request.settlementCompanyId() == null
+                ? fallbackId
+                : request.settlementCompanyId();
+        String settlementCompanyName = request.settlementCompanyName() == null
+                ? fallbackName
+                : request.settlementCompanyName();
+        if (settlementCompanyId == null || companySettingService == null) {
+            return new ProjectRequest(
+                    request.projectCode(), request.projectName(), request.projectNameAbbr(),
+                    request.projectAddress(), request.projectManager(), request.customerId(),
+                    request.customerCode(), settlementCompanyId, settlementCompanyName,
+                    request.status(), request.remark()
+            );
+        }
+        CompanySetting company = companySettingService.requireActiveSettlementCompany(settlementCompanyId);
+        return new ProjectRequest(
+                request.projectCode(), request.projectName(), request.projectNameAbbr(),
+                request.projectAddress(), request.projectManager(), request.customerId(),
+                request.customerCode(), company.getId(), company.getCompanyName(),
+                request.status(), request.remark()
         );
     }
 

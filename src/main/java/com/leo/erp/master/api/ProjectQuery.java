@@ -14,7 +14,16 @@ public interface ProjectQuery {
             String name,
             String abbreviatedName,
             Long customerId,
-            String customerCode
+            String customerCode,
+            Long settlementCompanyId,
+            String settlementCompanyName
     ) {
+        public ProjectSnapshot(Long id,
+                               String name,
+                               String abbreviatedName,
+                               Long customerId,
+                               String customerCode) {
+            this(id, name, abbreviatedName, customerId, customerCode, null, null);
+        }
     }
 }
