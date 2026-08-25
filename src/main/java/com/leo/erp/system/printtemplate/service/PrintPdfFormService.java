@@ -47,7 +47,8 @@ public class PrintPdfFormService {
                 drawing,
                 new PrintPdfPageContentRenderer(valueResolver, drawing),
                 new PrintPdfTableRenderer(valueResolver, drawing),
-                new PrintPdfGroupPaginator(drawing)
+                new PrintPdfGroupPaginator(drawing),
+                new PrintPdfItemGrouper()
         );
     }
 

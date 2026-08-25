@@ -24,26 +24,35 @@ public class PrintPdfFormRenderer {
     private final PrintPdfPageContentRenderer pageContentRenderer;
     private final PrintPdfTableRenderer tableRenderer;
     private final PrintPdfGroupPaginator groupPaginator;
+    private final PrintPdfItemGrouper itemGrouper;
 
-    public PrintPdfFormRenderer(PrintPdfFormValueResolver valueResolver,
-                                PrintPdfFontFactory fontFactory,
-                                PrintPdfDrawingSupport drawing,
-                                PrintPdfPageContentRenderer pageContentRenderer,
-                                PrintPdfTableRenderer tableRenderer,
-                                PrintPdfGroupPaginator groupPaginator) {
+    public PrintPdfFormRenderer(
+            PrintPdfFormValueResolver valueResolver,
+            PrintPdfFontFactory fontFactory,
+            PrintPdfDrawingSupport drawing,
+            PrintPdfPageContentRenderer pageContentRenderer,
+            PrintPdfTableRenderer tableRenderer,
+            PrintPdfGroupPaginator groupPaginator,
+            PrintPdfItemGrouper itemGrouper
+    ) {
         this.valueResolver = valueResolver;
         this.fontFactory = fontFactory;
         this.drawing = drawing;
         this.pageContentRenderer = pageContentRenderer;
         this.tableRenderer = tableRenderer;
         this.groupPaginator = groupPaginator;
+        this.itemGrouper = itemGrouper;
     }
 
     byte[] render(PrintPdfFormPayload payload) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (PdfDocument pdf = new PdfDocument(new PdfWriter(out))) {
             PdfFont font = fontFactory.createDefaultFont();
-            drawContent(pdf, font, payload.root(), payload.data(), payload.items());
+            List<Map<String, String>> items = itemGrouper.group(
+                    payload.items(),
+                    payload.root().path("table").path("grouping")
+            );
+            drawContent(pdf, font, payload.root(), payload.data(), items);
         } catch (IOException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "生成 PDF 表单失败");
         }

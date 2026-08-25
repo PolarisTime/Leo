@@ -102,7 +102,7 @@
       "printColumns": [
         "id", "statement_no", "customer_name", "project_name", "start_date", "end_date",
         "sales_amount", "receipt_amount", "closing_amount", "status", "remark",
-        "customer_code", "project_id", "settlement_company_id", "settlement_company_name"
+        "customer_code", "project_id", "settlement_company_id", "settlement_company_name", "created_name"
       ],
       "itemTableName": "st_customer_statement_item",
       "itemFkColumn": "statement_id",

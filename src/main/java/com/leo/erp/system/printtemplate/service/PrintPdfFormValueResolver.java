@@ -24,12 +24,22 @@ public class PrintPdfFormValueResolver {
     }
 
     String fieldValue(Map<String, String> data, JsonNode fieldConfig, String fieldName) {
+        String template = text(fieldConfig, "template", "");
+        if (!template.isBlank()) {
+            return applyTemplate(
+                    template,
+                    data,
+                    fieldConfig.path("formats"),
+                    fieldConfig.path("defaults")
+            );
+        }
         String value = resolveValue(data, fieldConfig.path("source"), fieldName);
         return formatValue(value, text(fieldConfig, "format", ""));
     }
 
     String itemValue(Map<String, String> item, JsonNode column) {
         String value = resolveValue(item, column.path("source"), text(column, "key", ""));
+        value = formatValue(value, text(column, "format", ""));
         if ("compactAscii".equals(text(column, "normalize", ""))) {
             return compactAsciiToken(value);
         }

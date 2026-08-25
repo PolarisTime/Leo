@@ -266,6 +266,7 @@ public class PrintPdfTableRenderer {
         TextAlignment alignment = drawing.alignment(
                 text(groupTypeConfig, "align", text(headerConfig, "align", "left"))
         );
+        JsonNode lineAligns = groupTypeConfig.path("lineAligns");
         float lineHeight = rowHeight / lines.size();
         for (int index = 0; index < lines.size(); index++) {
             String line = valueResolver.applyTemplate(
@@ -283,11 +284,19 @@ public class PrintPdfTableRenderer {
                     width - paddingLeft - paddingRight,
                     Math.max(1f, lineHeight - paddingTop),
                     fontSize,
-                    alignment,
+                    lineAlignment(lineAligns, index, alignment),
                     textColor,
                     pageMetrics
             );
         }
+    }
+
+    private TextAlignment lineAlignment(JsonNode lineAligns, int index, TextAlignment fallback) {
+        if (!lineAligns.isArray() || index >= lineAligns.size()) {
+            return fallback;
+        }
+        String value = lineAligns.path(index).asText("");
+        return value.isBlank() ? fallback : drawing.alignment(value);
     }
 
     void drawNoContentRow(PdfCanvas canvas, PdfFont font, JsonNode tableConfig, float top, PrintPdfDrawingSupport.PageMetrics pageMetrics) {
