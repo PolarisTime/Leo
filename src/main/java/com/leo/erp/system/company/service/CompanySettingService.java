@@ -12,6 +12,7 @@ import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.api.SettlementCompanySnapshot;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
 import com.leo.erp.system.company.mapper.CompanySettingMapper;
 import com.leo.erp.system.company.web.dto.CompanySettingRequest;
@@ -138,6 +139,12 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         }
         return companySettingRepository.findByIdAndStatusAndDeletedFlagFalse(id, StatusConstants.NORMAL)
                 .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR, "结算主体不存在或已禁用"));
+    }
+
+    @Transactional(readOnly = true)
+    public SettlementCompanySnapshot requireActiveSettlementCompanySnapshot(Long id) {
+        CompanySetting company = requireActiveSettlementCompany(id);
+        return new SettlementCompanySnapshot(company.getId(), company.getCompanyName());
     }
 
     @Override

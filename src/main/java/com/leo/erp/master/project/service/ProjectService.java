@@ -18,7 +18,7 @@ import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.master.project.web.dto.ProjectRequest;
 import com.leo.erp.master.project.web.dto.ProjectOptionResponse;
 import com.leo.erp.master.project.web.dto.ProjectResponse;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.api.SettlementCompanySnapshot;
 import com.leo.erp.system.company.service.CompanySettingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -267,11 +267,12 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
                     request.status(), request.remark()
             );
         }
-        CompanySetting company = companySettingService.requireActiveSettlementCompany(settlementCompanyId);
+        SettlementCompanySnapshot company = companySettingService
+                .requireActiveSettlementCompanySnapshot(settlementCompanyId);
         return new ProjectRequest(
                 request.projectCode(), request.projectName(), request.projectNameAbbr(),
                 request.projectAddress(), request.projectManager(), request.customerId(),
-                request.customerCode(), company.getId(), company.getCompanyName(),
+                request.customerCode(), company.id(), company.name(),
                 request.status(), request.remark()
         );
     }
