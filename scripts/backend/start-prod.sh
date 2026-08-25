@@ -41,7 +41,7 @@ if [[ ! -f "$JAR_FILE" ]]; then
   echo "JAR 不存在: $JAR_FILE"
   echo "正在构建..."
   cd "$LEO_DIR"
-  mvn -q -Dmaven.test.skip=true package
+  bash "$LEO_DIR/scripts/maven.sh" -q -Dmaven.test.skip=true package
   JAR_FILE=$(ls "$LEO_DIR"/target/leo-*.jar 2>/dev/null | grep -v sources | head -1)
   if [[ -z "$JAR_FILE" ]]; then
     echo "构建失败：未找到 JAR 文件" >&2

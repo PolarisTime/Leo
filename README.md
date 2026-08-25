@@ -57,10 +57,10 @@ bash leo/scripts/dev.sh start
 ## 常用命令
 
 ```bash
-mvn -q -DskipTests compile
-mvn -B -ntp -DskipTests checkstyle:check
-mvn -B -ntp -DskipTests spotbugs:check
-mvn -DskipTests package
+bash scripts/maven.sh -q -DskipTests compile
+bash scripts/maven.sh -B -ntp -DskipTests checkstyle:check
+bash scripts/maven.sh -B -ntp -DskipTests spotbugs:check
+bash scripts/maven.sh -DskipTests package
 ```
 
 Swagger UI：

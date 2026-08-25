@@ -39,7 +39,7 @@ jobs:
           bash scripts/verify-modulith-architecture.sh
 
       - name: Static analysis
-        run: mvn -B -ntp -DskipTests checkstyle:check spotbugs:check
+        run: bash scripts/maven.sh -B -ntp -DskipTests checkstyle:check spotbugs:check
 
   package:
     name: Package & Smoke
@@ -99,7 +99,7 @@ jobs:
 
       - name: Verify Flyway migrations
         run: |
-          mvn -B -ntp flyway:migrate \
+          bash scripts/maven.sh -B -ntp flyway:migrate \
             -Dflyway.url="$SPRING_DATASOURCE_URL" \
             -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
             -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
@@ -107,7 +107,7 @@ jobs:
             -Dflyway.cleanDisabled=true \
             -Dflyway.placeholderReplacement=false \
             -Dflyway.validateMigrationNaming=true
-          mvn -B -ntp flyway:validate \
+          bash scripts/maven.sh -B -ntp flyway:validate \
             -Dflyway.url="$SPRING_DATASOURCE_URL" \
             -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
             -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
@@ -117,7 +117,7 @@ jobs:
             -Dflyway.validateMigrationNaming=true
 
       - name: Test & Package
-        run: mvn -B -ntp package
+        run: bash scripts/maven.sh -B -ntp package
 
       - name: Build backend image
         run: docker build -t leo-backend:ci .

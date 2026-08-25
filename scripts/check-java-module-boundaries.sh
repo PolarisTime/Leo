@@ -70,7 +70,7 @@ readonly VERIFIER_CLASSES
 
 (
   cd -- "$REPOSITORY_ROOT"
-  mvn -B -ntp -DskipTests -Parchitecture-verification compile dependency:build-classpath \
+  bash "$SCRIPT_DIR/maven.sh" -B -ntp -DskipTests -Parchitecture-verification compile dependency:build-classpath \
     "-Dmdep.outputFile=$CLASSPATH_FILE"
 )
 

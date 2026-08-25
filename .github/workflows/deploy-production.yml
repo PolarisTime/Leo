@@ -106,7 +106,7 @@ jobs:
 
       - name: Verify Flyway migrations
         run: |
-          mvn -B -ntp flyway:migrate \
+          bash scripts/maven.sh -B -ntp flyway:migrate \
             -Dflyway.url="$SPRING_DATASOURCE_URL" \
             -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
             -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
@@ -115,7 +115,7 @@ jobs:
             -Dflyway.cleanDisabled=true \
             -Dflyway.placeholderReplacement=false \
             -Dflyway.validateMigrationNaming=true
-          mvn -B -ntp flyway:validate \
+          bash scripts/maven.sh -B -ntp flyway:validate \
             -Dflyway.url="$SPRING_DATASOURCE_URL" \
             -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
             -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
@@ -126,7 +126,7 @@ jobs:
             -Dflyway.validateMigrationNaming=true
 
       - name: Test & Package
-        run: mvn -B -ntp package
+        run: bash scripts/maven.sh -B -ntp package
 
       - name: Upload backend artifact
         uses: actions/upload-artifact@v4

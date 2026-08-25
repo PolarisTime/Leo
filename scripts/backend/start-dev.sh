@@ -60,9 +60,9 @@ echo "[leo:dev] database=$SPRING_DATASOURCE_USERNAME@$SPRING_DATASOURCE_HOST:$SP
 echo "[leo:dev] purge compiled classes"
 rm -rf "$LEO_DIR/target/classes" "$LEO_DIR/target/test-classes"
 echo "[leo:dev] clean compile"
-mvn -q -Dmaven.test.skip=true clean compile
+bash "$LEO_DIR/scripts/maven.sh" -q -Dmaven.test.skip=true clean compile
 
 echo "[leo:dev] spring-boot:run"
-exec mvn -q -Dmaven.test.skip=true spring-boot:run \
+exec bash "$LEO_DIR/scripts/maven.sh" -q -Dmaven.test.skip=true spring-boot:run \
   -Dspring-boot.run.profiles=dev \
   -Dspring-boot.run.jvmArguments="-XX:TieredStopAtLevel=1 -XX:+UseG1GC"

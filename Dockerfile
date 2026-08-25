@@ -4,9 +4,10 @@ WORKDIR /workspace
 
 COPY pom.xml .
 COPY .mvn .mvn
+COPY scripts/maven.sh scripts/maven.sh
 COPY src src
 
-RUN mvn -q -DskipTests package
+RUN bash scripts/maven.sh -q -DskipTests package
 
 FROM eclipse-temurin:21-jre-jammy
 

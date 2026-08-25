@@ -131,7 +131,7 @@ resolve_setup_bootstrap_token() {
 
 read_maven_version() {
   local version
-  version="$(cd "$LEO_DIR" && mvn -q -DforceStdout help:evaluate -Dexpression=project.version)"
+  version="$(cd "$LEO_DIR" && bash scripts/maven.sh -q -DforceStdout help:evaluate -Dexpression=project.version)"
   if [[ -z "$version" ]]; then
     echo "无法读取 Maven 项目版本" >&2
     exit 1

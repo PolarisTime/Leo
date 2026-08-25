@@ -42,7 +42,7 @@ psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_ADMIN_USER" -d "$TMP_DB" \
   -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm;' >/dev/null
 
 cd "$WORK_DIR"
-mvn -q org.flywaydb:flyway-maven-plugin:11.20.3:migrate \
+bash scripts/maven.sh -q org.flywaydb:flyway-maven-plugin:11.20.3:migrate \
   -Dflyway.url="jdbc:postgresql://$DB_HOST:$DB_PORT/$TMP_DB" \
   -Dflyway.user="$DB_ADMIN_USER" \
   -Dflyway.password="$DB_ADMIN_PASSWORD" \

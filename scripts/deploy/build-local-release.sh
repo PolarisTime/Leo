@@ -60,7 +60,7 @@ require_command tar
 
 read_maven_version() {
   local version
-  version="$(cd "$LEO_DIR" && mvn -q -DforceStdout help:evaluate -Dexpression=project.version)"
+  version="$(cd "$LEO_DIR" && bash scripts/maven.sh -q -DforceStdout help:evaluate -Dexpression=project.version)"
   if [[ -z "$version" ]]; then
     echo "无法读取 Maven 项目版本" >&2
     exit 1
@@ -73,9 +73,9 @@ mkdir -p "$OUTPUT_DIR/release/deploy"
 
 echo "[build] Leo backend"
 if [[ "$SKIP_TESTS" == "true" ]]; then
-  (cd "$LEO_DIR" && mvn -B -ntp -DskipTests package)
+  (cd "$LEO_DIR" && bash scripts/maven.sh -B -ntp -DskipTests package)
 else
-  (cd "$LEO_DIR" && mvn -B -ntp package)
+  (cd "$LEO_DIR" && bash scripts/maven.sh -B -ntp package)
 fi
 
 executable_jar="$(find "$LEO_DIR/target" -maxdepth 1 -type f -name 'leo-*.jar' ! -name '*sources*' | sort | tail -1)"
