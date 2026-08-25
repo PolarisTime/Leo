@@ -23,8 +23,4 @@ CREATE INDEX idx_md_project_settlement_company
 ALTER TABLE public.md_project
     ADD CONSTRAINT fk_md_project_settlement_company
         FOREIGN KEY (settlement_company_id)
-        REFERENCES public.sys_company_setting(id)
-        NOT VALID;
-
-ALTER TABLE public.md_project
-    VALIDATE CONSTRAINT fk_md_project_settlement_company;
+        REFERENCES public.sys_company_setting(id);
