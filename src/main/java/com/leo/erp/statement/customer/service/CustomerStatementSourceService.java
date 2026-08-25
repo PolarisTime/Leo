@@ -9,6 +9,7 @@ import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.master.api.CustomerQuery;
+import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.sales.api.SalesOrderStatementSourceQuery;
 import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.AuditedOutboundActualSnapshot;
 import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.CandidateCriteria;
@@ -34,7 +35,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.LongSupplier;
-import java.util.stream.Collectors;
 
 @Service
 public class CustomerStatementSourceService {
@@ -42,13 +42,16 @@ public class CustomerStatementSourceService {
     private final CustomerStatementRepository repository;
     private final SalesOrderStatementSourceQuery sourceQuery;
     private final CustomerQuery customerQuery;
+    private final ProjectQuery projectQuery;
 
     public CustomerStatementSourceService(CustomerStatementRepository repository,
                                           SalesOrderStatementSourceQuery sourceQuery,
-                                          CustomerQuery customerQuery) {
+                                          CustomerQuery customerQuery,
+                                          ProjectQuery projectQuery) {
         this.repository = repository;
         this.sourceQuery = sourceQuery;
         this.customerQuery = customerQuery;
+        this.projectQuery = projectQuery;
     }
 
     Page<CustomerStatementCandidateResponse> candidatePage(PageQuery query, PageFilter filter) {
@@ -82,12 +85,8 @@ public class CustomerStatementSourceService {
         BigDecimal salesAmount = BigDecimal.ZERO;
         Map<Long, SourceSalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(request.items());
         validateSourceSalesOrders(request, sourceSalesOrderItemMap, entity.getId());
-        List<OrderSnapshot> sourceOrders = sourceSalesOrderItemMap.values().stream()
-                .map(SourceSalesOrderItem::order)
-                .distinct()
-                .toList();
-        SettlementCompanySnapshot settlementCompany = resolveStatementSettlementCompany(sourceOrders);
         PartyIdentity partyIdentity = resolvePartyIdentity(sourceSalesOrderItemMap.values());
+        SettlementCompanySnapshot settlementCompany = resolveProjectSettlementCompany(partyIdentity);
         entity.setCustomerId(partyIdentity.customerId());
         entity.setProjectId(partyIdentity.projectId());
         entity.setCustomerCode(resolveCustomerCode(
@@ -198,11 +197,6 @@ public class CustomerStatementSourceService {
                     Set.of(StatusConstants.SALES_COMPLETED),
                     "来源销售订单" + order.orderNo() + "未完成销售，不能生成客户对账单"
             );
-            if (request.settlementCompanyId() != null
-                    && order.settlementCompanyId() != null
-                    && !request.settlementCompanyId().equals(order.settlementCompanyId())) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单存在不同客户结算主体，不能合并生成客户对账单");
-            }
             requireSameIdentity(request.customerId(), order.customerId(), "客户ID与来源销售订单不一致");
             requireSameIdentity(request.projectId(), order.projectId(), "项目ID与来源销售订单不一致");
         }
@@ -350,30 +344,25 @@ public class CustomerStatementSourceService {
         return ids == null ? Set.of() : new LinkedHashSet<>(ids);
     }
 
-    private SettlementCompanySnapshot resolveStatementSettlementCompany(List<OrderSnapshot> orders) {
-        // 结算主体一致性按 id 判断：同一 id 下 name 快照可能存在历史写法差异，
-        // 不应因 name 不一致而误判为不同结算主体（反规范化快照漂移）。
-        Set<Long> companyIds = orders.stream()
-                .map(OrderSnapshot::settlementCompanyId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        List<String> companyNames = orders.stream()
-                .map(OrderSnapshot::settlementCompanyName)
-                .map(this::trimToNull)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        if (companyIds.size() > 1) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单存在不同客户结算主体，不能合并生成客户对账单");
+    private SettlementCompanySnapshot resolveProjectSettlementCompany(PartyIdentity partyIdentity) {
+        if (partyIdentity.projectId() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单未关联项目，不能生成客户对账单");
         }
-        if (companyIds.size() == 1) {
-            String name = companyNames.isEmpty() ? null : companyNames.get(0);
-            return new SettlementCompanySnapshot(companyIds.iterator().next(), name);
+        ProjectQuery.ProjectSnapshot project = projectQuery.findActiveById(partyIdentity.projectId())
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "项目不存在或已停用，不能生成客户对账单"
+                ));
+        if (!Objects.equals(project.customerId(), partyIdentity.customerId())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目与客户不一致，不能生成客户对账单");
         }
-        if (companyNames.size() > 1) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单存在不同客户结算主体，不能合并生成客户对账单");
+        if (project.settlementCompanyId() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目未配置结算主体，不能生成客户对账单");
         }
-        return new SettlementCompanySnapshot(null, companyNames.isEmpty() ? null : companyNames.get(0));
+        return new SettlementCompanySnapshot(
+                project.settlementCompanyId(),
+                trimToNull(project.settlementCompanyName())
+        );
     }
 
     private CustomerStatementCandidateResponse toCandidateResponse(CandidateSnapshot order) {

@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.api.CustomerQuery;
+import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.sales.api.SalesOrderStatementSourceQuery;
 import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.AuditedOutboundActualSnapshot;
 import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.CandidatePage;
@@ -17,6 +18,7 @@ import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementItemRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -56,8 +58,18 @@ class CustomerStatementSourceServiceTest {
     @Mock
     private CustomerQuery customerQuery;
 
+    @Mock
+    private ProjectQuery projectQuery;
+
     @InjectMocks
     private CustomerStatementSourceService service;
+
+    @BeforeEach
+    void stubProjectSettlementCompany() {
+        lenient().when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(
+                new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001", 30L, "结算公司A")
+        ));
+    }
 
     // ---------- 测试数据 ----------
 
@@ -200,14 +212,15 @@ class CustomerStatementSourceServiceTest {
     }
 
     @Test
-    void applyItems_shouldRejectMismatchedSettlementCompany() {
+    void applyItems_shouldIgnoreMismatchedRequestSettlementCompany() {
         stubSourceQuery(order(1L, "SO001", 10L, 20L, StatusConstants.SALES_COMPLETED, 30L, "结算公司A",
                 List.of(item(11L, actual(100, "100.00", "5000.00")))));
         CustomerStatementRequest request = request(10L, 20L, "客户A", "项目A", 999L, null,
                 List.of(itemRequest(null, 11L)));
 
-        assertThatThrownBy(() -> service.applyItems(entity(), request, () -> 100L))
-                .isInstanceOf(BusinessException.class);
+        CustomerStatementSourceService.SourceApplyResult result = service.applyItems(entity(), request, () -> 100L);
+
+        assertThat(result.settlementCompanyId()).isEqualTo(30L);
     }
 
     @Test
@@ -289,7 +302,7 @@ class CustomerStatementSourceServiceTest {
     }
 
     @Test
-    void applyItems_shouldRejectDifferentSettlementCompanies() {
+    void applyItems_shouldIgnoreDifferentSourceSettlementCompanies() {
         when(sourceQuery.findBySourceItemIds(any())).thenReturn(List.of(
                 order(1L, "SO001", 10L, 20L, StatusConstants.SALES_COMPLETED, 30L, "结算公司A",
                         List.of(item(11L, actual(100, "100.00", "5000.00")))),
@@ -301,8 +314,9 @@ class CustomerStatementSourceServiceTest {
         CustomerStatementRequest request = request(null, null, "客户A", "项目A", null, null,
                 List.of(itemRequest(null, 11L), itemRequest(null, 21L)));
 
-        assertThatThrownBy(() -> service.applyItems(entity(), request, () -> 100L))
-                .isInstanceOf(BusinessException.class);
+        CustomerStatementSourceService.SourceApplyResult result = service.applyItems(entity(), request, () -> 100L);
+
+        assertThat(result.settlementCompanyId()).isEqualTo(30L);
     }
 
     @Test
@@ -382,8 +396,40 @@ class CustomerStatementSourceServiceTest {
     }
 
     @Test
-    void applyItems_shouldResolveSettlementCompanyBySingleNameOnly() {
-        // 结算主体 ID 为 null，但名称唯一 → 以名称解析
+    void applyItems_shouldUseProjectSettlementCompanyAsSingleSource() {
+        when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(
+                new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001", 40L, "项目主体")
+        ));
+        stubSourceQuery(order(1L, "SO001", 10L, 20L, StatusConstants.SALES_COMPLETED, 30L, "订单快照主体",
+                List.of(item(11L, actual(100, "100.00", "5000.00")))));
+        CustomerStatementRequest request = request(10L, 20L, "客户A", "项目A", 999L, null,
+                List.of(itemRequest(null, 11L)));
+
+        CustomerStatementSourceService.SourceApplyResult result = service.applyItems(entity(), request, () -> 100L);
+
+        assertThat(result.settlementCompanyId()).isEqualTo(40L);
+        assertThat(result.settlementCompanyName()).isEqualTo("项目主体");
+        verify(projectQuery).findActiveById(20L);
+    }
+
+    @Test
+    void applyItems_shouldRejectProjectWithoutSettlementCompany() {
+        when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(
+                new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001", null, null)
+        ));
+        stubSourceQuery(order(1L, "SO001", 10L, 20L, StatusConstants.SALES_COMPLETED, 30L, "订单快照主体",
+                List.of(item(11L, actual(100, "100.00", "5000.00")))));
+        CustomerStatementRequest request = request(10L, 20L, "客户A", "项目A", null, null,
+                List.of(itemRequest(null, 11L)));
+
+        assertThatThrownBy(() -> service.applyItems(entity(), request, () -> 100L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("项目未配置结算主体");
+    }
+
+    @Test
+    void applyItems_shouldUseProjectSettlementWhenSourceSnapshotIsIncomplete() {
+        // 来源订单结算主体快照不完整时，仍以项目配置为准
         stubSourceQuery(order(1L, "SO001", 10L, 20L, StatusConstants.SALES_COMPLETED, null, "唯一结算公司",
                 List.of(item(11L, actual(100, "100.00", "5000.00")))));
         CustomerStatementRequest request = request(null, null, "客户A", "项目A", null, null,
@@ -392,8 +438,8 @@ class CustomerStatementSourceServiceTest {
         CustomerStatementSourceService.SourceApplyResult result =
                 service.applyItems(entity(), request, () -> 100L);
 
-        assertThat(result.settlementCompanyId()).isNull();
-        assertThat(result.settlementCompanyName()).isEqualTo("唯一结算公司");
+        assertThat(result.settlementCompanyId()).isEqualTo(30L);
+        assertThat(result.settlementCompanyName()).isEqualTo("结算公司A");
     }
 
     @Test
@@ -476,8 +522,8 @@ class CustomerStatementSourceServiceTest {
     // ---------- 补充边界分支 ----------
 
     @Test
-    void applyItems_shouldAcceptRequestSettlementCompanyWhenSourceNull() {
-        // request 提供结算主体、来源订单无结算主体 ID → 不校验，正常处理
+    void applyItems_shouldIgnoreRequestAndSourceSettlementSnapshots() {
+        // 请求和来源订单的结算主体均为快照，最终仍以项目配置为准
         OrderSnapshot order = new OrderSnapshot(1L, "SO001", "CUST001", 10L, "客户A", 20L, "项目A",
                 null, "结算公司A", StatusConstants.SALES_COMPLETED,
                 List.of(item(11L, actual(100, "100.00", "5000.00"))));
@@ -490,6 +536,7 @@ class CustomerStatementSourceServiceTest {
         CustomerStatementSourceService.SourceApplyResult result = service.applyItems(entity(), request, () -> 100L);
 
         assertThat(result.salesAmount()).isEqualByComparingTo("5000.00");
+        assertThat(result.settlementCompanyId()).isEqualTo(30L);
         assertThat(result.settlementCompanyName()).isEqualTo("结算公司A");
     }
 
@@ -507,7 +554,7 @@ class CustomerStatementSourceServiceTest {
     }
 
     @Test
-    void applyItems_shouldResolveNullSettlementWhenIdsAndNamesEmpty() {
+    void applyItems_shouldUseProjectSettlementWhenSourceSnapshotsAreEmpty() {
         stubSourceQuery(order(1L, "SO001", 10L, 20L, StatusConstants.SALES_COMPLETED, null, null,
                 List.of(item(11L, actual(100, "100.00", "5000.00")))));
         CustomerStatementRequest request = request(null, null, "客户A", "项目A", null, null,
@@ -515,13 +562,13 @@ class CustomerStatementSourceServiceTest {
 
         CustomerStatementSourceService.SourceApplyResult result = service.applyItems(entity(), request, () -> 100L);
 
-        assertThat(result.settlementCompanyId()).isNull();
-        assertThat(result.settlementCompanyName()).isNull();
+        assertThat(result.settlementCompanyId()).isEqualTo(30L);
+        assertThat(result.settlementCompanyName()).isEqualTo("结算公司A");
     }
 
     @Test
-    void applyItems_shouldRejectMultipleSettlementNames() {
-        // 两个来源订单均无结算主体 ID，但名称不同 → 抛
+    void applyItems_shouldIgnoreDifferentSourceSettlementSnapshotsForSameProject() {
+        // 同一项目的订单快照主体不同不影响对账单，最终以项目配置为准
         when(sourceQuery.findBySourceItemIds(any())).thenReturn(List.of(
                 order(1L, "SO001", 10L, 20L, StatusConstants.SALES_COMPLETED, null, "结算公司A",
                         List.of(item(11L, actual(100, "100.00", "5000.00")))),
@@ -533,12 +580,14 @@ class CustomerStatementSourceServiceTest {
         CustomerStatementRequest request = request(null, null, "客户A", "项目A", null, null,
                 List.of(itemRequest(null, 11L), itemRequest(null, 21L)));
 
-        assertThatThrownBy(() -> service.applyItems(entity(), request, () -> 100L))
-                .isInstanceOf(BusinessException.class);
+        CustomerStatementSourceService.SourceApplyResult result = service.applyItems(entity(), request, () -> 100L);
+
+        assertThat(result.settlementCompanyId()).isEqualTo(30L);
+        assertThat(result.settlementCompanyName()).isEqualTo("结算公司A");
     }
 
     @Test
-    void applyItems_shouldResolveCompanyNameNullWhenIdSingleButNameMissing() {
+    void applyItems_shouldUseProjectSettlementWhenSourceCompanyNameMissing() {
         OrderSnapshot order = new OrderSnapshot(1L, "SO001", "CUST001", 10L, "客户A", 20L, "项目A",
                 30L, null, StatusConstants.SALES_COMPLETED, List.of(item(11L, actual(100, "100.00", "5000.00"))));
         when(sourceQuery.findBySourceItemIds(any())).thenReturn(List.of(order));
@@ -550,7 +599,7 @@ class CustomerStatementSourceServiceTest {
         CustomerStatementSourceService.SourceApplyResult result = service.applyItems(entity(), request, () -> 100L);
 
         assertThat(result.settlementCompanyId()).isEqualTo(30L);
-        assertThat(result.settlementCompanyName()).isNull();
+        assertThat(result.settlementCompanyName()).isEqualTo("结算公司A");
     }
 
     @Test
@@ -573,7 +622,7 @@ class CustomerStatementSourceServiceTest {
     void applyItems_shouldReturnNullCustomerCodeWhenCustomerQueryNull() {
         // 显式构造无 CustomerQuery 的 service，覆盖 resolveCustomerCode 中 customerQuery==null 分支
         CustomerStatementSourceService svcWithoutCustomerQuery =
-                new CustomerStatementSourceService(repository, sourceQuery, null);
+                new CustomerStatementSourceService(repository, sourceQuery, null, projectQuery);
         OrderSnapshot order = new OrderSnapshot(1L, "SO001", null, 10L, "客户A", 20L, "项目A",
                 30L, "结算公司A", StatusConstants.SALES_COMPLETED, List.of(item(11L, actual(100, "100.00", "5000.00"))));
         when(sourceQuery.findBySourceItemIds(any())).thenReturn(List.of(order));

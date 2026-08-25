@@ -305,9 +305,7 @@ public class CustomerStatementService extends AbstractStatusCrudService<
         boolean identityChanged = explicitTextChanged(entity.getCustomerCode(), request.customerCode())
                 || !Objects.equals(normalizeText(entity.getCustomerName()), normalizeText(request.customerName()))
                 || (request.projectId() != null && !Objects.equals(entity.getProjectId(), request.projectId()))
-                || !Objects.equals(normalizeText(entity.getProjectName()), normalizeText(request.projectName()))
-                || (request.settlementCompanyId() != null
-                && !Objects.equals(entity.getSettlementCompanyId(), request.settlementCompanyId()));
+                || !Objects.equals(normalizeText(entity.getProjectName()), normalizeText(request.projectName()));
         Set<Long> existingSourceIds = entity.getItems().stream()
                 .map(CustomerStatementItem::getSourceSalesOrderItemId)
                 .filter(Objects::nonNull)
