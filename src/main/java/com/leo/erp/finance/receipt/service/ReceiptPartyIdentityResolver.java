@@ -48,7 +48,8 @@ public class ReceiptPartyIdentityResolver {
         ProjectQuery.ProjectSnapshot project = resolveOptionalProject(request);
         CompanySetting company = resolveCompany(
                 request.settlementCompanyId(),
-                request.settlementCompanyName()
+                request.settlementCompanyName(),
+                project
         );
         return new PartySnapshot(
                 customer.id(),
@@ -79,7 +80,8 @@ public class ReceiptPartyIdentityResolver {
         );
         CompanySetting company = resolveCompany(
                 request.settlementCompanyId(),
-                request.settlementCompanyName()
+                request.settlementCompanyName(),
+                null
         );
         return new SupplierPartySnapshot(
                 supplier.id(),
@@ -110,7 +112,25 @@ public class ReceiptPartyIdentityResolver {
         return project;
     }
 
-    private CompanySetting resolveCompany(Long companyId, String companyName) {
+    private CompanySetting resolveCompany(Long companyId,
+                                          String companyName,
+                                          ProjectQuery.ProjectSnapshot project) {
+        if (project != null && project.settlementCompanyId() != null) {
+            if (companyId != null && !project.settlementCompanyId().equals(companyId)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "结算主体与项目不一致");
+            }
+            CompanySetting projectCompany = companySettingRepository
+                    .findByIdAndDeletedFlagFalse(project.settlementCompanyId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "项目结算主体不存在"));
+            if (BusinessDocumentValidator.trimToNull(companyName) != null) {
+                BusinessDocumentValidator.requireSameText(
+                        companyName,
+                        projectCompany.getCompanyName(),
+                        "结算主体名称与项目不一致"
+                );
+            }
+            return projectCompany;
+        }
         if (companyId == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "结算主体不能为空");
         }

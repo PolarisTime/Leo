@@ -251,14 +251,16 @@ public class LedgerAdjustmentService extends AbstractStatusCrudService<
                 request.counterpartyCode(),
                 request.counterpartyName()
         );
-        CompanySetting settlementCompany = companySettingService.requireActiveSettlementCompany(
-                request.settlementCompanyId()
-        );
         ResolvedProject project = resolveProject(
                 counterpartyType,
                 counterparty.id(),
                 request.projectId(),
                 request.projectName()
+        );
+        CompanySetting settlementCompany = resolveSettlementCompany(
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
+                project
         );
 
         entity.setAdjustmentNo(request.adjustmentNo());
@@ -418,13 +420,13 @@ public class LedgerAdjustmentService extends AbstractStatusCrudService<
             if (projectId != null || normalizedName != null) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商或物流商台账调整不能选择项目");
             }
-            return new ResolvedProject(null, null);
+            return new ResolvedProject(null, null, null, null);
         }
         if (projectId == null) {
             if (normalizedName != null) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "项目名称不能脱离项目ID单独提交");
             }
-            return new ResolvedProject(null, null);
+            return new ResolvedProject(null, null, null, null);
         }
         return projectQuery.findActiveById(projectId)
                 .map(project -> {
@@ -432,9 +434,30 @@ public class LedgerAdjustmentService extends AbstractStatusCrudService<
                         throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不属于所选客户");
                     }
                     requireSnapshotMatches(projectName, project.name(), "项目名称与ID不一致");
-                    return new ResolvedProject(project.id(), project.name());
+                    return new ResolvedProject(
+                            project.id(),
+                            project.name(),
+                            project.settlementCompanyId(),
+                            project.settlementCompanyName()
+                    );
                 })
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不存在"));
+    }
+
+    private CompanySetting resolveSettlementCompany(Long requestedId,
+                                                     String requestedName,
+                                                     ResolvedProject project) {
+        if (project.settlementCompanyId() != null) {
+            if (requestedId != null && !project.settlementCompanyId().equals(requestedId)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "结算主体与项目不一致");
+            }
+            CompanySetting company = companySettingService.requireActiveSettlementCompany(
+                    project.settlementCompanyId()
+            );
+            requireSnapshotMatches(requestedName, company.getCompanyName(), "结算主体名称与项目不一致");
+            return company;
+        }
+        return companySettingService.requireActiveSettlementCompany(requestedId);
     }
 
     private void requireSnapshotMatches(String requestedValue, String resolvedValue, String message) {
@@ -462,6 +485,9 @@ public class LedgerAdjustmentService extends AbstractStatusCrudService<
     private record ResolvedCounterparty(Long id, String code, String name) {
     }
 
-    private record ResolvedProject(Long id, String name) {
+    private record ResolvedProject(Long id,
+                                   String name,
+                                   Long settlementCompanyId,
+                                   String settlementCompanyName) {
     }
 }
