@@ -1,3 +1,23 @@
+# [10.2.0](https://github.com/PolarisTime/Leo/compare/v10.1.0...v10.2.0) (2026-08-25)
+
+
+### Bug Fixes
+
+* **architecture:** 移除项目模块跨边界实体依赖 ([b46ed61](https://github.com/PolarisTime/Leo/commit/b46ed612bfa4d14d8fccc19f5344fb19e488b55a))
+* **build:** 隔离 Maven 用户级启动配置 ([7fbf021](https://github.com/PolarisTime/Leo/commit/7fbf021723b2318f272e6b01cc572518373a802e))
+* **database:** 恢复已执行的 V126 迁移脚本 ([5518760](https://github.com/PolarisTime/Leo/commit/55187608cb3ff3ebba603bd918975c4b6a6c743a))
+* **finance:** 让收款和台账调整遵循项目结算主体 ([8d43ff5](https://github.com/PolarisTime/Leo/commit/8d43ff5cd0903c75dfddd4ab2bc93e2a85cd6cfc))
+* **print:** 适配对账单打印作业明细 ([0f04815](https://github.com/PolarisTime/Leo/commit/0f0481519bc8698e20e09f8c2bf9be51bc238cb1))
+* **statement:** 候选订单主体跟随项目配置 ([40062d3](https://github.com/PolarisTime/Leo/commit/40062d349e3760637dbc10effe2e9160fd88dbd3))
+* **statement:** 按项目配置唯一结算主体生成客户对账单 ([e571f4c](https://github.com/PolarisTime/Leo/commit/e571f4c6fca8dbceb74ec119d7b64ba0b8ce6289))
+
+
+### Features
+
+* **finance:** 返回客户对账单交货日期 ([69e53a4](https://github.com/PolarisTime/Leo/commit/69e53a48f54f70e4a0d48d2692463f247cfeca7c))
+* **master:** 为项目增加结算主体 ([6e4ffa2](https://github.com/PolarisTime/Leo/commit/6e4ffa2e048199c8728fbeae4889d9cef5fd85c3))
+* **print:** 新增客户对账单 iText 分组模板 ([315365a](https://github.com/PolarisTime/Leo/commit/315365a842fb69c3f230c6707f53effa975ee1f3))
+
 # [10.1.0](https://github.com/PolarisTime/Leo/compare/v10.0.1...v10.1.0) (2026-08-24)
 
 
