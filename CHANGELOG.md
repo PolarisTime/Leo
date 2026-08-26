@@ -1,3 +1,10 @@
+## [10.2.1](https://github.com/PolarisTime/Leo/compare/v10.2.0...v10.2.1) (2026-08-26)
+
+
+### Bug Fixes
+
+* **print:** 省略 PDF 输出未使用字段 ([50d46e0](https://github.com/PolarisTime/Leo/commit/50d46e04d5b6bb7dff65b643007a3658d3e2d799))
+
 # [10.2.0](https://github.com/PolarisTime/Leo/compare/v10.1.0...v10.2.0) (2026-08-25)
 
 
