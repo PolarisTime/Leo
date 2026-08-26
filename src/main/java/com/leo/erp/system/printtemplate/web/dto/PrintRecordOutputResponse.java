@@ -1,5 +1,7 @@
 package com.leo.erp.system.printtemplate.web.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 import java.util.List;
 import java.util.Map;
 
@@ -7,6 +9,7 @@ import java.util.Map;
  * 打印输出响应：service 层 PrintOutput 的 web 契约形态，
  * 字段结构与 JSON 输出保持一致（data/items 为字符串映射），不泄漏 service 类型。
  */
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public record PrintRecordOutputResponse(
         String kind,
         String templateName,
