@@ -1,6 +1,7 @@
 package com.leo.erp.statement.freight.web.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 public record FreightStatementItemResponse(
         Long id,
@@ -33,6 +34,7 @@ public record FreightStatementItemResponse(
         Long sourceFreightBillItemId,
         Long sourceSalesOrderItemId,
         BigDecimal sourceFreightBillUnitPrice,
-        BigDecimal sourceFreightBillTotalFreight
+        BigDecimal sourceFreightBillTotalFreight,
+        LocalDate sourceFreightBillTime
 ) {
 }

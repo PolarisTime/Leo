@@ -1,6 +1,7 @@
 package com.leo.erp.statement.freight.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 public record FreightStatementItemView(
         Long id,
@@ -32,6 +33,7 @@ public record FreightStatementItemView(
         Long warehouseId,
         String batchNoNormalized,
         BigDecimal sourceFreightBillUnitPrice,
-        BigDecimal sourceFreightBillTotalFreight
+        BigDecimal sourceFreightBillTotalFreight,
+        LocalDate sourceFreightBillTime
 ) {
 }

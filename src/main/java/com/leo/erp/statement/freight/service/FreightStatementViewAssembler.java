@@ -96,7 +96,8 @@ public class FreightStatementViewAssembler {
                 item.getWarehouseId(),
                 item.getBatchNoNormalized(),
                 sourceBill == null ? null : sourceBill.unitPrice(),
-                sourceBill == null ? null : sourceBill.totalFreight()
+                sourceBill == null ? null : sourceBill.totalFreight(),
+                sourceBill == null ? null : sourceBill.billTime()
         );
     }
 
