@@ -1,3 +1,10 @@
+# [10.3.0](https://github.com/PolarisTime/Leo/compare/v10.2.1...v10.3.0) (2026-08-29)
+
+
+### Features
+
+* **statement:** 支持物流对账单明细按单号或日期排序 ([ea3b581](https://github.com/PolarisTime/Leo/commit/ea3b581665918ea1abd00d89d249152f559c6967))
+
 ## [10.2.1](https://github.com/PolarisTime/Leo/compare/v10.2.0...v10.2.1) (2026-08-26)
 
 
