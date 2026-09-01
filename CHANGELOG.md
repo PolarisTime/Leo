@@ -1,3 +1,10 @@
+## [10.3.1](https://github.com/PolarisTime/Leo/compare/v10.3.0...v10.3.1) (2026-09-01)
+
+
+### Bug Fixes
+
+* **print:** 移除物流对账单组内小计 ([0075418](https://github.com/PolarisTime/Leo/commit/0075418b29fecbbeb90aac981cf32938d8aa78db))
+
 # [10.3.0](https://github.com/PolarisTime/Leo/compare/v10.2.1...v10.3.0) (2026-08-29)
 
 
