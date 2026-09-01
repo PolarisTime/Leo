@@ -1,3 +1,10 @@
+## [10.4.1](https://github.com/PolarisTime/Leo/compare/v10.4.0...v10.4.1) (2026-09-01)
+
+
+### Bug Fixes
+
+* **orders:** 修复待处理查询字符串匹配 ([093feec](https://github.com/PolarisTime/Leo/commit/093feec91e3cfa902556cc39392f93aeba68e797))
+
 # [10.4.0](https://github.com/PolarisTime/Leo/compare/v10.3.2...v10.4.0) (2026-09-01)
 
 
