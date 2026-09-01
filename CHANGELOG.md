@@ -1,3 +1,15 @@
+# [10.4.0](https://github.com/PolarisTime/Leo/compare/v10.3.2...v10.4.0) (2026-09-01)
+
+
+### Bug Fixes
+
+* **orders:** 修复待处理订单查询架构依赖 ([c33382d](https://github.com/PolarisTime/Leo/commit/c33382d6a48801dc98d7db85030f473b83445449))
+
+
+### Features
+
+* **orders:** 增加订单下游引用状态与待处理筛选 ([69c802d](https://github.com/PolarisTime/Leo/commit/69c802d39486c63ad940d93091e237bf077b95c4))
+
 ## [10.3.2](https://github.com/PolarisTime/Leo/compare/v10.3.1...v10.3.2) (2026-09-01)
 
 
