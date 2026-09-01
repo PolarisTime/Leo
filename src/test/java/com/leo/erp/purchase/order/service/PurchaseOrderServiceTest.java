@@ -24,6 +24,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -89,5 +90,19 @@ class PurchaseOrderServiceTest {
                 any(Pageable.class));
         assertThat(startDate.getValue()).isEqualTo(LocalDateTime.of(1, 1, 1, 0, 0));
         assertThat(endDateExclusive.getValue()).isEqualTo(LocalDateTime.of(10000, 1, 1, 0, 0));
+    }
+
+    @Test
+    void page_withReferenceFilter_shouldDelegateToReferenceAwareQuery() {
+        PageQuery query = new PageQuery(0, 30, null, null);
+        PageFilter filter = PageFilter.of(null, null, null, null, null, null);
+        when(purchaseOrderRepository.findByReferenceFilter(
+                any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
+
+        service.page(query, filter, false, true);
+
+        verify(purchaseOrderRepository).findByReferenceFilter(
+                any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), any(Pageable.class));
     }
 }

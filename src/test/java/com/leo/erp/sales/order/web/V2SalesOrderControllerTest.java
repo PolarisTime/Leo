@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -92,6 +93,18 @@ class V2SalesOrderControllerTest {
                 "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
 
         assertThat(result).isNotNull();
+    }
+
+    @Test
+    void page_shouldForwardReferenceFilter() {
+        when(service.page(any(PageQuery.class), any(PageFilter.class), anyString(), any(), any()))
+                .thenReturn(mock(org.springframework.data.domain.Page.class));
+
+        var result = controller.page(mock(PageQuery.class), "kw", 10L, "客户A", 20L, "项目A", 30L,
+                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), false, true);
+
+        assertThat(result).isNotNull();
+        verify(service).page(any(PageQuery.class), any(PageFilter.class), anyString(), eq(false), eq(true));
     }
 
     @Test

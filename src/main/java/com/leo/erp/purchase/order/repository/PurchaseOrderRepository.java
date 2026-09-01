@@ -103,4 +103,103 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
             @Param("completedStatus") String completedStatus,
             Pageable pageable
     );
+
+    /** 按任一下游单据是否引用采购订单进行分页筛选。 */
+    @Query("""
+            select purchaseOrder
+            from PurchaseOrder purchaseOrder
+            where purchaseOrder.deletedFlag = false
+              and (:status is null or purchaseOrder.status = :status)
+              and (:supplierId is null or purchaseOrder.supplierId = :supplierId)
+              and (:supplierName is null or purchaseOrder.supplierName = :supplierName)
+              and (:settlementCompanyId is null
+                   or purchaseOrder.settlementCompanyId = :settlementCompanyId)
+              and purchaseOrder.orderDate >= :startDate
+              and purchaseOrder.orderDate < :endDateExclusive
+              and (
+                    :keyword = ''
+                    or position(:keyword in lower(purchaseOrder.orderNo)) > 0
+                    or position(:keyword in lower(purchaseOrder.supplierName)) > 0
+              )
+              and (
+                    :pendingOnly is null
+                    or :pendingOnly = false
+                    or (
+                        purchaseOrder.status <> :completedStatus
+                        and not exists (
+                            select pendingSalesItem.id
+                            from SalesOrderItem pendingSalesItem
+                            where pendingSalesItem.sourcePurchaseOrderItemId in (
+                                select pendingPurchaseItem.id
+                                from PurchaseOrderItem pendingPurchaseItem
+                                where pendingPurchaseItem.purchaseOrder = purchaseOrder
+                            )
+                            and pendingSalesItem.salesOrder.deletedFlag = false
+                        )
+                    )
+              )
+              and (
+                    (
+                        :referenced = true
+                        and (
+                            exists (
+                                select salesItem.id
+                                from SalesOrderItem salesItem
+                                where salesItem.sourcePurchaseOrderItemId in (
+                                    select purchaseItem.id
+                                    from PurchaseOrderItem purchaseItem
+                                    where purchaseItem.purchaseOrder = purchaseOrder
+                                )
+                                and salesItem.salesOrder.deletedFlag = false
+                            )
+                            or exists (
+                                select inboundItem.id
+                                from PurchaseInboundItem inboundItem
+                                where inboundItem.sourcePurchaseOrderItemId in (
+                                    select purchaseItem.id
+                                    from PurchaseOrderItem purchaseItem
+                                    where purchaseItem.purchaseOrder = purchaseOrder
+                                )
+                                and inboundItem.purchaseInbound.deletedFlag = false
+                            )
+                        )
+                    )
+                    or (
+                        :referenced = false
+                        and not exists (
+                            select salesItem.id
+                            from SalesOrderItem salesItem
+                            where salesItem.sourcePurchaseOrderItemId in (
+                                select purchaseItem.id
+                                from PurchaseOrderItem purchaseItem
+                                where purchaseItem.purchaseOrder = purchaseOrder
+                            )
+                            and salesItem.salesOrder.deletedFlag = false
+                        )
+                        and not exists (
+                            select inboundItem.id
+                            from PurchaseInboundItem inboundItem
+                            where inboundItem.sourcePurchaseOrderItemId in (
+                                select purchaseItem.id
+                                from PurchaseOrderItem purchaseItem
+                                where purchaseItem.purchaseOrder = purchaseOrder
+                            )
+                            and inboundItem.purchaseInbound.deletedFlag = false
+                        )
+                    )
+              )
+            """)
+    Page<PurchaseOrder> findByReferenceFilter(
+            @Param("keyword") String keyword,
+            @Param("supplierId") Long supplierId,
+            @Param("supplierName") String supplierName,
+            @Param("settlementCompanyId") Long settlementCompanyId,
+            @Param("status") String status,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDateExclusive") LocalDateTime endDateExclusive,
+            @Param("completedStatus") String completedStatus,
+            @Param("pendingOnly") Boolean pendingOnly,
+            @Param("referenced") Boolean referenced,
+            Pageable pageable
+    );
 }

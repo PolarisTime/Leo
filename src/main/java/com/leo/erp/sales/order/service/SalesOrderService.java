@@ -96,13 +96,45 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
 
     @Transactional(readOnly = true)
     public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter, String productKeyword) {
-        return page(query, filter, productKeyword, null);
+        return page(query, filter, productKeyword, null, null);
     }
 
     @Transactional(readOnly = true)
     public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter, String productKeyword, Boolean pendingOnly) {
+        return page(query, filter, productKeyword, pendingOnly, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SalesOrderResponse> page(PageQuery query,
+                                         PageFilter filter,
+                                         String productKeyword,
+                                         Boolean pendingOnly,
+                                         Boolean referenced) {
         Page<SalesOrder> entities;
-        if (Boolean.TRUE.equals(pendingOnly)) {
+        LocalDate startDate = filter.startDate() == null
+                ? MIN_PENDING_DELIVERY_DATE
+                : filter.startDate();
+        LocalDate endDate = filter.endDate() == null
+                ? MAX_PENDING_DELIVERY_DATE
+                : filter.endDate();
+        if (referenced != null) {
+            entities = repository.findByReferenceFilter(
+                    normalizeContains(filter.keyword()),
+                    filter.customerId(),
+                    normalizeExact(filter.name()),
+                    filter.projectId(),
+                    normalizeExact(filter.projectName()),
+                    filter.settlementCompanyId(),
+                    normalizeContains(productKeyword),
+                    normalizeExact(filter.status()),
+                    startDate,
+                    endDate,
+                    StatusConstants.SALES_COMPLETED,
+                    pendingOnly,
+                    referenced,
+                    query.toPageable("id")
+            );
+        } else if (Boolean.TRUE.equals(pendingOnly)) {
             entities = repository.findPending(
                     normalizeContains(filter.keyword()),
                     filter.customerId(),
@@ -112,8 +144,8 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
                     filter.settlementCompanyId(),
                     normalizeContains(productKeyword),
                     normalizeExact(filter.status()),
-                    filter.startDate() == null ? MIN_PENDING_DELIVERY_DATE : filter.startDate(),
-                    filter.endDate() == null ? MAX_PENDING_DELIVERY_DATE : filter.endDate(),
+                    startDate,
+                    endDate,
                     StatusConstants.SALES_COMPLETED,
                     query.toPageable("id")
             );

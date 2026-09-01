@@ -93,23 +93,49 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
 
     @Transactional(readOnly = true)
     public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter) {
-        return page(query, filter, null);
+        return page(query, filter, null, null);
     }
 
     @Transactional(readOnly = true)
     public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter, Boolean pendingOnly) {
+        return page(query, filter, pendingOnly, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PurchaseOrderResponse> page(PageQuery query,
+                                            PageFilter filter,
+                                            Boolean pendingOnly,
+                                            Boolean referenced) {
         Page<PurchaseOrder> entities;
-        if (Boolean.TRUE.equals(pendingOnly)) {
+        LocalDateTime startDate = filter.startDate() == null
+                ? MIN_PENDING_ORDER_DATE
+                : filter.startDate().atStartOfDay();
+        LocalDateTime endDateExclusive = filter.endDate() == null
+                ? MAX_PENDING_ORDER_DATE_EXCLUSIVE
+                : filter.endDate().plusDays(1).atStartOfDay();
+        if (referenced != null) {
+            entities = purchaseOrderRepository.findByReferenceFilter(
+                    normalizeContains(filter.keyword()),
+                    filter.supplierId(),
+                    normalizeExact(filter.name()),
+                    filter.settlementCompanyId(),
+                    normalizeExact(filter.status()),
+                    startDate,
+                    endDateExclusive,
+                    StatusConstants.PURCHASE_COMPLETED,
+                    pendingOnly,
+                    referenced,
+                    query.toPageable("id")
+            );
+        } else if (Boolean.TRUE.equals(pendingOnly)) {
             entities = purchaseOrderRepository.findPending(
                     normalizeContains(filter.keyword()),
                     filter.supplierId(),
                     normalizeExact(filter.name()),
                     filter.settlementCompanyId(),
                     normalizeExact(filter.status()),
-                    filter.startDate() == null ? MIN_PENDING_ORDER_DATE : filter.startDate().atStartOfDay(),
-                    filter.endDate() == null
-                            ? MAX_PENDING_ORDER_DATE_EXCLUSIVE
-                            : filter.endDate().plusDays(1).atStartOfDay(),
+                    startDate,
+                    endDateExclusive,
                     StatusConstants.PURCHASE_COMPLETED,
                     query.toPageable("id")
             );

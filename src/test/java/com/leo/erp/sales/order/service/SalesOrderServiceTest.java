@@ -129,6 +129,20 @@ class SalesOrderServiceTest {
         assertThat(endDate.getValue()).isEqualTo(LocalDate.of(9999, 12, 31));
     }
 
+    @Test
+    void page_withReferenceFilter_shouldDelegateToReferenceAwareQuery() {
+        PageQuery query = new PageQuery(0, 30, null, null);
+        PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
+        when(repository.findByReferenceFilter(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
+
+        service.page(query, filter, null, false, true);
+
+        verify(repository).findByReferenceFilter(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), any(Pageable.class));
+    }
+
     private SalesOrderRequest request(String orderNo, String status) {
         return new SalesOrderRequest(
                 orderNo, null, null, "CUST001", 10L, "客户A", 20L, "项目A", null, null,
