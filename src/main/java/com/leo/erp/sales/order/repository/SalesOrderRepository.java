@@ -94,10 +94,10 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
               and (:endDate is null or salesOrder.deliveryDate <= :endDate)
               and (
                     :keyword is null
-                    or position(:keyword in lower(coalesce(salesOrder.orderNo, ''))) > 0
-                    or position(:keyword in lower(coalesce(salesOrder.purchaseOrderNo, ''))) > 0
-                    or position(:keyword in lower(coalesce(salesOrder.customerName, ''))) > 0
-                    or position(:keyword in lower(coalesce(salesOrder.projectName, ''))) > 0
+                    or position(:keyword in lower(salesOrder.orderNo)) > 0
+                    or position(:keyword in lower(salesOrder.purchaseOrderNo)) > 0
+                    or position(:keyword in lower(salesOrder.customerName)) > 0
+                    or position(:keyword in lower(salesOrder.projectName)) > 0
               )
               and (
                     :productKeyword is null
@@ -106,10 +106,10 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
                         from SalesOrderItem salesItem
                         where salesItem.salesOrder = salesOrder
                           and (
-                                position(:productKeyword in lower(coalesce(salesItem.materialCode, ''))) > 0
-                                or position(:productKeyword in lower(coalesce(salesItem.brand, ''))) > 0
-                                or position(:productKeyword in lower(coalesce(salesItem.material, ''))) > 0
-                                or position(:productKeyword in lower(coalesce(salesItem.spec, ''))) > 0
+                                position(:productKeyword in lower(salesItem.materialCode)) > 0
+                                or position(:productKeyword in lower(salesItem.brand)) > 0
+                                or position(:productKeyword in lower(salesItem.material)) > 0
+                                or position(:productKeyword in lower(salesItem.spec)) > 0
                           )
                     )
               )

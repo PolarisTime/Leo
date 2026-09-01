@@ -78,8 +78,8 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
               and (:endDateExclusive is null or purchaseOrder.orderDate < :endDateExclusive)
               and (
                     :keyword is null
-                    or position(:keyword in lower(coalesce(purchaseOrder.orderNo, ''))) > 0
-                    or position(:keyword in lower(coalesce(purchaseOrder.supplierName, ''))) > 0
+                    or position(:keyword in lower(purchaseOrder.orderNo)) > 0
+                    or position(:keyword in lower(purchaseOrder.supplierName)) > 0
               )
               and not exists (
                     select salesItem.id
