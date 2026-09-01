@@ -1,51 +1,60 @@
 {
   "page": {"width": 595, "height": 842, "repeatHeader": false},
   "static": [
-    {"type": "text", "text": "物流对账单", "left": 28, "top": 18, "width": 539, "height": 26, "fontSize": 18, "align": "center", "color": "#000000"},
-    {"type": "text", "text": "物流商：", "left": 32, "top": 62, "width": 64, "height": 14, "fontSize": 11, "color": "#595959"},
-    {"type": "text", "text": "对账单号：", "left": 400, "top": 62, "width": 72, "height": 14, "fontSize": 11, "color": "#595959"},
-    {"type": "text", "text": "对账周期：", "left": 32, "top": 93, "width": 64, "height": 14, "fontSize": 11, "color": "#595959"},
-    {"type": "text", "text": "结束日期：", "left": 400, "top": 93, "width": 72, "height": 14, "fontSize": 11, "color": "#595959"}
+    {"type": "rect", "left": 28, "top": 18, "width": 539, "height": 44, "fillColor": "#173f46", "strokeColor": "#173f46", "lineWidth": 0.5},
+    {"type": "text", "text": "物流对账单", "left": 46, "top": 27, "width": 250, "height": 24, "fontSize": 19, "align": "left", "color": "#ffffff"},
+    {"type": "text", "text": "对账单号", "left": 336, "top": 32, "width": 82, "height": 14, "fontSize": 9, "align": "right", "color": "#bcd3d6"},
+    {"type": "line", "x1": 432, "y1": 27, "x2": 432, "y2": 53, "strokeColor": "#5d858a", "lineWidth": 0.6},
+    {"type": "rect", "left": 28, "top": 74, "width": 539, "height": 78, "fillColor": "#f4f8f8", "strokeColor": "#d5e2e3", "lineWidth": 0.8},
+    {"type": "line", "x1": 332, "y1": 74, "x2": 332, "y2": 152, "strokeColor": "#d5e2e3", "lineWidth": 0.8},
+    {"type": "text", "text": "物流商", "left": 44, "top": 84, "width": 54, "height": 14, "fontSize": 10, "color": "#60777b"},
+    {"type": "text", "text": "对账周期", "left": 44, "top": 120, "width": 54, "height": 14, "fontSize": 10, "color": "#60777b"},
+    {"type": "text", "text": "截止日期", "left": 350, "top": 120, "width": 60, "height": 14, "fontSize": 10, "color": "#60777b"}
   ],
   "fields": {
-    "customerName": {"source": ["carrierName", "customerName", "supplierName", "counterpartyName"], "left": 100, "top": 58, "width": 280, "height": 22, "fontSize": 12, "color": "#000000"},
-    "billNo": {"source": ["billNo", "statementNo", "orderNo"], "left": 474, "top": 58, "width": 82, "height": 22, "fontSize": 12, "color": "#000000"},
-    "period": {"source": ["period", "dateRange", "startDate"], "left": 100, "top": 89, "width": 280, "height": 22, "fontSize": 12, "color": "#000000"},
-    "endDate": {"source": ["endDate", "billDate", "statementDate"], "format": "chineseDate", "left": 474, "top": 89, "width": 82, "height": 22, "fontSize": 12, "color": "#000000"}
+    "customerName": {"source": ["carrierName", "customerName", "supplierName", "counterpartyName"], "left": 106, "top": 80, "width": 210, "height": 24, "fontSize": 12, "color": "#173f46"},
+    "billNo": {"source": ["billNo", "statementNo", "orderNo"], "left": 442, "top": 27, "width": 114, "height": 24, "fontSize": 10, "align": "right", "color": "#ffffff"},
+    "period": {"source": ["period", "dateRange", "startDate"], "left": 106, "top": 116, "width": 210, "height": 24, "fontSize": 11, "color": "#263f43"},
+    "endDate": {"source": ["endDate", "billDate", "statementDate"], "format": "chineseDate", "left": 414, "top": 116, "width": 137, "height": 24, "fontSize": 11, "color": "#263f43"}
   },
   "table": {
     "source": "items",
-    "left": 32,
-    "top": 162,
+    "left": 28,
+    "top": 166,
     "continuationTop": 28,
-    "bottom": 814,
-    "width": 531,
-    "headerHeight": 26,
+    "bottom": 774,
+    "width": 539,
+    "headerHeight": 28,
     "repeatHeaderPerSourceGroup": true,
     "repeatGroupContextOnContinuation": false,
     "detailHeaderPlacement": "afterProjectHeader",
     "sourceGroupGap": 8,
     "rowHeight": 23,
     "maxRowsPerPage": 16,
-    "headerFillColor": "#ffffff",
-    "borderColor": "#000000",
-    "headerTextColor": "#000000",
-    "textColor": "#000000",
-    "emptyFillColor": "#ffffff",
-    "emptyTextColor": "#000000",
-    "lineWidth": 1,
+    "headerFillColor": "#e8f1f2",
+    "borderColor": "#c9d8da",
+    "headerTextColor": "#173f46",
+    "textColor": "#26383b",
+    "emptyFillColor": "#f7fafa",
+    "emptyTextColor": "#71878a",
+    "emptyText": "暂无对账明细",
+    "lineWidth": 0.6,
     "groupHeader": {
-      "fillColor": "#ffffff",
-      "textColor": "#000000",
+      "fillColor": "#f3f8f8",
+      "textColor": "#35565b",
       "fontSize": 8.5,
-      "paddingLeft": 4,
-      "paddingTop": 2,
+      "paddingLeft": 8,
+      "paddingRight": 8,
+      "paddingTop": 3,
       "align": "left",
       "source": {
-        "height": 34,
+        "height": 36,
+        "fillColor": "#dcebed",
+        "textColor": "#173f46",
+        "lineAligns": ["left", "right"],
         "lines": [
-          "单据日期：${billTime}    来源物流单：${sourceNo}    车号：${vehiclePlate}",
-          "合计：数量 ${totalQuantity}，重量 ${totalWeightTon} 吨，运费单价 ${unitPrice} 元/吨，运费总价 ${totalFreight} 元"
+          "来源物流单：${sourceNo}    单据日期：${billTime}    车号：${vehiclePlate}",
+          "本单合计：数量 ${totalQuantity}，重量 ${totalWeightTon} 吨，运费单价 ${unitPrice} 元/吨，运费 ${totalFreight} 元"
         ],
         "formats": {
           "billTime": "chineseDate"
@@ -55,13 +64,16 @@
           "billTime": "-",
           "vehiclePlate": "-",
           "totalQuantity": "0",
-          "totalWeightTon": "0",
+          "totalWeightTon": "0.00",
           "unitPrice": "0.00",
           "totalFreight": "0.00"
         }
       },
       "project": {
-        "height": 26,
+        "height": 28,
+        "fillColor": "#f3f8f8",
+        "textColor": "#49676b",
+        "lineAligns": ["left", "left"],
         "lines": [
           "客户：${customerName}",
           "项目：${projectName}"
@@ -83,15 +95,20 @@
       {"key": "quantity", "label": "件数", "width": 38, "headerFontSize": 9, "fontSize": 9},
       {"key": "pieceWeightTon", "label": "件重", "width": 46, "headerFontSize": 9, "fontSize": 9},
       {"key": "weightTon", "label": "重量", "width": 46, "headerFontSize": 9, "fontSize": 9},
-      {"key": "warehouseName", "label": "仓库", "width": 59, "headerFontSize": 9, "fontSize": 9}
+      {"key": "warehouseName", "label": "仓库", "width": 67, "headerFontSize": 9, "fontSize": 9}
     ]
   },
   "summary": {
-    "height": 32,
-    "template": "合计件数：${totalQuantity}件    合计吨位：${totalWeight}吨    合计运费：${totalFreight}元",
-    "fontSize": 12,
-    "border": false,
-    "fillColor": "#ffffff",
-    "textColor": "#000000"
+    "height": 36,
+    "template": "合计件数：${totalQuantity} 件    合计吨位：${totalWeight} 吨    合计运费：${totalFreight} 元",
+    "fontSize": 10.5,
+    "align": "right",
+    "paddingLeft": 10,
+    "paddingTop": 8,
+    "border": true,
+    "fillColor": "#e8f1f2",
+    "borderColor": "#b8cdd0",
+    "textColor": "#173f46",
+    "lineWidth": 0.8
   }
 }
