@@ -16,6 +16,10 @@ import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.repository.PurchaseOrderInboundCandidateQueryRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
+import com.leo.erp.purchase.order.repository.PurchaseOrderReferenceQueryRepository;
+import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
+import com.leo.erp.sales.order.domain.entity.SalesOrder;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
@@ -50,6 +54,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
     private final PurchaseOrderAuditPublisher purchaseOrderAuditPublisher;
     private final PurchaseOrderInboundCandidateQueryRepository inboundCandidateQueryRepository;
     private final DocumentChargeItemService documentChargeItemService;
+    private final PurchaseOrderReferenceQueryRepository referenceQueryRepository;
 
     private static final String MODULE_KEY = "purchase-order";
 
@@ -65,7 +70,8 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                                 PurchaseOrderDownstreamMutationGuard downstreamMutationGuard,
                                 PurchaseOrderAuditPublisher purchaseOrderAuditPublisher,
                                 PurchaseOrderInboundCandidateQueryRepository inboundCandidateQueryRepository,
-                                DocumentChargeItemService documentChargeItemService) {
+                                DocumentChargeItemService documentChargeItemService,
+                                PurchaseOrderReferenceQueryRepository referenceQueryRepository) {
         super(snowflakeIdGenerator);
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.availabilityService = availabilityService;
@@ -78,6 +84,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         this.purchaseOrderAuditPublisher = purchaseOrderAuditPublisher;
         this.inboundCandidateQueryRepository = inboundCandidateQueryRepository;
         this.documentChargeItemService = documentChargeItemService;
+        this.referenceQueryRepository = referenceQueryRepository;
     }
 
     private static final String[] PURCHASE_ORDER_SEARCH_FIELDS = {"orderNo", "supplierName"};
@@ -85,13 +92,54 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
 
     @Transactional(readOnly = true)
     public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter) {
+        return page(query, filter, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter, Boolean pendingOnly) {
         Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS)
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
                 .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
-        return page(query, spec, purchaseOrderRepository);
+        if (Boolean.TRUE.equals(pendingOnly)) {
+            spec = spec.and(pendingOnlySpecification());
+        }
+        Page<PurchaseOrder> entities = pageEntities(query, spec, purchaseOrderRepository);
+        Map<Long, PurchaseOrderReferenceQueryRepository.ReferenceStatus> statuses =
+                referenceQueryRepository == null
+                        ? Map.of()
+                        : referenceQueryRepository.findByOrderIds(
+                                entities.getContent().stream().map(PurchaseOrder::getId).toList());
+        return entities.map(order -> {
+            PurchaseOrderResponse response = toResponse(order);
+            PurchaseOrderReferenceQueryRepository.ReferenceStatus status = statuses.get(order.getId());
+            return status == null
+                    ? response
+                    : response.withReferenceFlags(
+                            status.referencedBySalesOrder(),
+                            status.referencedByPurchaseInbound());
+        });
+    }
+
+    private Specification<PurchaseOrder> pendingOnlySpecification() {
+        return (root, query, cb) -> {
+            var salesReference = query.subquery(Long.class);
+            var purchaseItem = salesReference.from(PurchaseOrderItem.class);
+            var salesItem = salesReference.from(SalesOrderItem.class);
+            var salesOrder = salesReference.from(SalesOrder.class);
+            salesReference.select(cb.literal(1L)).where(
+                    cb.equal(purchaseItem.get("purchaseOrder"), root),
+                    cb.equal(salesItem.get("sourcePurchaseOrderItemId"), purchaseItem.get("id")),
+                    cb.equal(salesItem.get("salesOrder"), salesOrder),
+                    cb.isFalse(salesOrder.get("deletedFlag"))
+            );
+            return cb.and(
+                    cb.notEqual(root.get("status"), StatusConstants.PURCHASE_COMPLETED),
+                    cb.not(cb.exists(salesReference))
+            );
+        };
     }
 
     @Transactional(readOnly = true)
@@ -161,7 +209,15 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
 
     @Override
     protected PurchaseOrderResponse toDetailResponse(PurchaseOrder order) {
-        return responseAssembler.toDetailResponse(order);
+        PurchaseOrderResponse response = responseAssembler.toDetailResponse(order);
+        PurchaseOrderReferenceQueryRepository.ReferenceStatus status = referenceQueryRepository == null
+                ? null
+                : referenceQueryRepository.findByOrderIds(List.of(order.getId())).get(order.getId());
+        return status == null
+                ? response
+                : response.withReferenceFlags(
+                        status.referencedBySalesOrder(),
+                        status.referencedByPurchaseInbound());
     }
 
     private PurchaseOrderImportCandidateResponse toImportCandidateResponse(PurchaseOrder order, Integer importableQuantity) {

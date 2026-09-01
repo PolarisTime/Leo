@@ -77,7 +77,21 @@ public class V2SalesOrderController {
 
     @Operation(summary = "分页查询销售订单")
     @GetMapping
-    public PageResponse<SalesOrderResponse> page(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String productKeyword, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+    public PageResponse<SalesOrderResponse> page(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String productKeyword, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Boolean pendingOnly) {
+        return PageResponse.from(service.page(
+                query,
+                PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, startDate, endDate)
+                        .withIdentity(customerId, projectId, null, null, null),
+                productKeyword,
+                pendingOnly
+        ));
+    }
+
+    /** 兼容旧调用方，默认查询全部销售订单。 */
+    public PageResponse<SalesOrderResponse> page(PageQuery query, String keyword, Long customerId,
+                                                  String customerName, Long projectId, String projectName,
+                                                  Long settlementCompanyId, String productKeyword, String status,
+                                                  LocalDate startDate, LocalDate endDate) {
         return PageResponse.from(service.page(
                 query,
                 PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, startDate, endDate)

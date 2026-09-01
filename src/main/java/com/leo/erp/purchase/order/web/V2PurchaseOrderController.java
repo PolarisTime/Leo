@@ -75,11 +75,12 @@ public class V2PurchaseOrderController {
 
     @Operation(summary = "分页查询采购订单")
     @GetMapping
-    public PageResponse<PurchaseOrderResponse> page(@BindPageQuery(sortFieldKey = "purchase-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long supplierId, @RequestParam(required = false) String supplierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+    public PageResponse<PurchaseOrderResponse> page(@BindPageQuery(sortFieldKey = "purchase-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long supplierId, @RequestParam(required = false) String supplierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Boolean pendingOnly) {
         return PageResponse.from(purchaseOrderService.page(
                 query,
                 PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)
-                        .withIdentity(null, null, supplierId, null, null)
+                        .withIdentity(null, null, supplierId, null, null),
+                pendingOnly
         ));
     }
 

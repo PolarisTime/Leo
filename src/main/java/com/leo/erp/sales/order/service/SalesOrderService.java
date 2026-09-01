@@ -15,6 +15,11 @@ import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderOutboundCandidateQueryRepository;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.sales.order.repository.SalesOrderReferenceQueryRepository;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
+import com.leo.erp.logistics.bill.domain.entity.FreightBill;
+import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceOrder;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
@@ -31,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -55,6 +61,7 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
     private final SalesOrderDownstreamMutationGuard downstreamMutationGuard;
     private final SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository;
     private final BusinessOperationEventPublisher businessOperationEventPublisher;
+    private final SalesOrderReferenceQueryRepository referenceQueryRepository;
 
     @Autowired
     public SalesOrderService(SalesOrderRepository repository,
@@ -69,7 +76,8 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
                              SalesOrderDownstreamMutationGuard downstreamMutationGuard,
                              SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository,
                              BusinessOperationEventPublisher businessOperationEventPublisher,
-                             DocumentChargeItemService documentChargeItemService) {
+                             DocumentChargeItemService documentChargeItemService,
+                             SalesOrderReferenceQueryRepository referenceQueryRepository) {
         super(idGenerator);
         this.documentChargeItemService = documentChargeItemService;
         this.repository = repository;
@@ -83,10 +91,16 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
         this.downstreamMutationGuard = downstreamMutationGuard;
         this.outboundCandidateQueryRepository = outboundCandidateQueryRepository;
         this.businessOperationEventPublisher = businessOperationEventPublisher;
+        this.referenceQueryRepository = referenceQueryRepository;
     }
 
     @Transactional(readOnly = true)
     public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter, String productKeyword) {
+        return page(query, filter, productKeyword, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter, String productKeyword, Boolean pendingOnly) {
         Specification<SalesOrder> spec = Specs.<SalesOrder>keywordLike(filter.keyword(), SALES_ORDER_SEARCH_FIELDS)
                 .and(Specs.collectionKeywordLike(productKeyword, "items", PRODUCT_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("customerName", filter.name()))
@@ -96,7 +110,56 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()));
-        return page(query, spec, repository);
+        if (Boolean.TRUE.equals(pendingOnly)) {
+            spec = spec.and(pendingOnlySpecification());
+        }
+        Page<SalesOrder> entities = pageEntities(query, spec, repository);
+        Map<Long, SalesOrderReferenceQueryRepository.ReferenceStatus> statuses =
+                referenceQueryRepository == null
+                        ? Map.of()
+                        : referenceQueryRepository.findByOrderIds(
+                                entities.getContent().stream().map(SalesOrder::getId).toList());
+        return entities.map(order -> {
+            SalesOrderResponse response = toResponse(order);
+            SalesOrderReferenceQueryRepository.ReferenceStatus status = statuses.get(order.getId());
+            return status == null
+                    ? response
+                    : response.withReferenceFlags(
+                            status.referencedByFreightBill(),
+                            status.referencedBySalesOutbound());
+        });
+    }
+
+    private Specification<SalesOrder> pendingOnlySpecification() {
+        return (root, query, cb) -> {
+            var freightReference = query.subquery(Long.class);
+            var relation = freightReference.from(FreightBillSourceOrder.class);
+            var freightBill = freightReference.from(FreightBill.class);
+            freightReference.select(cb.literal(1L)).where(
+                    cb.equal(relation.get("sourceSalesOrderId"), root.get("id")),
+                    cb.equal(relation.get("freightBill"), freightBill),
+                    cb.isTrue(relation.get("activeFlag")),
+                    cb.isFalse(relation.get("deletedFlag")),
+                    cb.isFalse(freightBill.get("deletedFlag"))
+            );
+
+            var outboundReference = query.subquery(Long.class);
+            var salesItem = outboundReference.from(SalesOrderItem.class);
+            var outboundItem = outboundReference.from(SalesOutboundItem.class);
+            var outbound = outboundReference.from(SalesOutbound.class);
+            outboundReference.select(cb.literal(1L)).where(
+                    cb.equal(salesItem.get("salesOrder"), root),
+                    cb.equal(outboundItem.get("sourceSalesOrderItemId"), salesItem.get("id")),
+                    cb.equal(outboundItem.get("salesOutbound"), outbound),
+                    cb.isFalse(outbound.get("deletedFlag"))
+            );
+
+            return cb.and(
+                    cb.notEqual(root.get("status"), StatusConstants.SALES_COMPLETED),
+                    cb.not(cb.exists(freightReference)),
+                    cb.not(cb.exists(outboundReference))
+            );
+        };
     }
 
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
@@ -161,7 +224,15 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
 
     @Override
     protected SalesOrderResponse toDetailResponse(SalesOrder entity) {
-        return responseAssembler.toDetailResponse(entity);
+        SalesOrderResponse response = responseAssembler.toDetailResponse(entity);
+        SalesOrderReferenceQueryRepository.ReferenceStatus status = referenceQueryRepository == null
+                ? null
+                : referenceQueryRepository.findByOrderIds(List.of(entity.getId())).get(entity.getId());
+        return status == null
+                ? response
+                : response.withReferenceFlags(
+                        status.referencedByFreightBill(),
+                        status.referencedBySalesOutbound());
     }
 
     @Override

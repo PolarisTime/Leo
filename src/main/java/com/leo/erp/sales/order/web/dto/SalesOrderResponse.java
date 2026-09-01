@@ -28,8 +28,45 @@ public record SalesOrderResponse(
         boolean deletedFlag,
         String remark,
         List<SalesOrderItemResponse> items,
-        List<DocumentChargeItemResponse> chargeItems
+        List<DocumentChargeItemResponse> chargeItems,
+        boolean referencedByFreightBill,
+        boolean referencedBySalesOutbound
 ) {
+
+    public SalesOrderResponse(Long id,
+                              String orderNo,
+                              String purchaseInboundNo,
+                              String purchaseOrderNo,
+                              String customerCode,
+                              Long customerId,
+                              String customerName,
+                              Long projectId,
+                              String projectName,
+                              Long settlementCompanyId,
+                              String settlementCompanyName,
+                              LocalDate deliveryDate,
+                              String salesName,
+                              BigDecimal totalWeight,
+                              BigDecimal totalAmount,
+                              String status,
+                              boolean deletedFlag,
+                              String remark,
+                              List<SalesOrderItemResponse> items,
+                              List<DocumentChargeItemResponse> chargeItems) {
+        this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
+                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
+                totalAmount, status, deletedFlag, remark, items, chargeItems, false, false);
+    }
+
+    public SalesOrderResponse withReferenceFlags(boolean referencedByFreightBill,
+                                                  boolean referencedBySalesOutbound) {
+        return new SalesOrderResponse(
+                id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
+                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
+                totalAmount, status, deletedFlag, remark, items, chargeItems, referencedByFreightBill,
+                referencedBySalesOutbound
+        );
+    }
 
     public SalesOrderResponse(Long id,
                               String orderNo,
@@ -52,7 +89,7 @@ public record SalesOrderResponse(
                               List<SalesOrderItemResponse> items) {
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
-                totalAmount, status, deletedFlag, remark, items, List.of());
+                totalAmount, status, deletedFlag, remark, items, List.of(), false, false);
     }
     public SalesOrderResponse(Long id,
                               String orderNo,

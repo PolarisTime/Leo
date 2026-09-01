@@ -51,7 +51,9 @@ public class PurchaseOrderResponseAssembler {
                                 salesAllocatedQuantityMap
                         ))
                         .toList(),
-                documentChargeItemService.list("purchase-order", order.getId())
+                documentChargeItemService.list("purchase-order", order.getId()),
+                response.referencedBySalesOrder(),
+                response.referencedByPurchaseInbound()
         );
     }
 

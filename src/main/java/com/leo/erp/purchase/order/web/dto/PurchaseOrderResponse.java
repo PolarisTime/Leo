@@ -22,8 +22,40 @@ public record PurchaseOrderResponse(
         boolean deletedFlag,
         String remark,
         List<PurchaseOrderItemResponse> items,
-        List<DocumentChargeItemResponse> chargeItems
+        List<DocumentChargeItemResponse> chargeItems,
+        boolean referencedBySalesOrder,
+        boolean referencedByPurchaseInbound
 ) {
+
+    public PurchaseOrderResponse(Long id,
+                                 String orderNo,
+                                 Long supplierId,
+                                 String supplierCode,
+                                 String supplierName,
+                                 LocalDateTime orderDate,
+                                 String buyerName,
+                                 Long settlementCompanyId,
+                                 String settlementCompanyName,
+                                 BigDecimal totalWeight,
+                                 BigDecimal totalAmount,
+                                 String status,
+                                 boolean deletedFlag,
+                                 String remark,
+                                 List<PurchaseOrderItemResponse> items,
+                                 List<DocumentChargeItemResponse> chargeItems) {
+        this(id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
+                settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
+                false, false);
+    }
+
+    public PurchaseOrderResponse withReferenceFlags(boolean referencedBySalesOrder,
+                                                     boolean referencedByPurchaseInbound) {
+        return new PurchaseOrderResponse(
+                id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
+                settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
+                referencedBySalesOrder, referencedByPurchaseInbound
+        );
+    }
 
     public PurchaseOrderResponse(Long id,
                                  String orderNo,
@@ -41,7 +73,8 @@ public record PurchaseOrderResponse(
                                  String remark,
                                  List<PurchaseOrderItemResponse> items) {
         this(id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
-                settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, List.of());
+                settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, List.of(),
+                false, false);
     }
     public PurchaseOrderResponse(Long id,
                                  String orderNo,

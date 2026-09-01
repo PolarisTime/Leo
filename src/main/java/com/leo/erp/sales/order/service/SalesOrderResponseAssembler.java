@@ -51,7 +51,9 @@ public class SalesOrderResponseAssembler {
                 response.deletedFlag(),
                 response.remark(),
                 entity.getItems().stream().filter(itemFilter).map(this::toItemResponse).toList(),
-                documentChargeItemService.list("sales-order", entity.getId())
+                documentChargeItemService.list("sales-order", entity.getId()),
+                response.referencedByFreightBill(),
+                response.referencedBySalesOutbound()
         );
     }
 
