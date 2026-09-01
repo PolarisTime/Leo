@@ -1,3 +1,10 @@
+## [10.3.2](https://github.com/PolarisTime/Leo/compare/v10.3.1...v10.3.2) (2026-09-01)
+
+
+### Bug Fixes
+
+* **print:** 优化物流对账单默认PDF模板 ([8c00060](https://github.com/PolarisTime/Leo/commit/8c00060928f8c88d2a224115846c5c5253a23c32))
+
 ## [10.3.1](https://github.com/PolarisTime/Leo/compare/v10.3.0...v10.3.1) (2026-09-01)
 
 
