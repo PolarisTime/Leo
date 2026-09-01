@@ -134,7 +134,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
     }
 
     private static String normalizeContains(String value) {
-        return value == null || value.isBlank() ? null : value.trim().toLowerCase(Locale.ROOT);
+        return value == null || value.isBlank() ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     private static String normalizeExact(String value) {
