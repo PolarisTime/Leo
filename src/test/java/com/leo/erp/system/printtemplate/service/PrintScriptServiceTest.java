@@ -16,7 +16,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * PrintScriptService.groupItemsForPdf 分组小计行构建测试。
+ * PrintScriptService.groupItemsForPdf 分组行构建测试。
  */
 @ExtendWith(MockitoExtension.class)
 class PrintScriptServiceTest {
@@ -57,7 +57,7 @@ class PrintScriptServiceTest {
     }
 
     @Test
-    void groupItemsForPdf_shouldBuildSourceProjectAndSubtotalRows() {
+    void groupItemsForPdf_shouldBuildSourceAndProjectRowsWithoutSubtotals() {
         List<Map<String, String>> items = new ArrayList<>();
         // 来源单 A：两个项目分组
         items.add(detail("BIL-A", "客户甲", "项目一", "10", "1.5", "浙F12345"));
@@ -68,9 +68,9 @@ class PrintScriptServiceTest {
 
         List<Map<String, String>> rows = service.groupItemsForPdf(items);
 
-        assertThat(rows).hasSize(13);
+        assertThat(rows).hasSize(10);
 
-        // 来源单 A：source 头（车号去重）、project 头一、明细、小计、project 头二、明细、小计
+        // 来源单 A：source 头（车号去重）、project 头一、明细、project 头二、明细
         assertThat(rows.get(0)).containsEntry("isGroupHeader", "source")
                 .containsEntry("sourceNo", "BIL-A")
                 .containsEntry("vehiclePlate", "浙F12345")
@@ -84,30 +84,20 @@ class PrintScriptServiceTest {
         assertThat(rows.get(2)).containsEntry("index", "1");
         assertThat(rows.get(3)).containsEntry("index", "2");
 
-        assertThat(rows.get(4)).containsEntry("isGroupHeader", "subtotal")
-                .containsEntry("totalQuantity", "15")
-                .containsEntry("totalWeightTon", "2.3");
-
-        assertThat(rows.get(5)).containsEntry("isGroupHeader", "project")
+        assertThat(rows.get(4)).containsEntry("isGroupHeader", "project")
                 .containsEntry("projectName", "项目二");
-        assertThat(rows.get(6)).containsEntry("index", "3");
-        assertThat(rows.get(7)).containsEntry("isGroupHeader", "subtotal")
-                .containsEntry("totalQuantity", "7")
-                .containsEntry("totalWeightTon", "2.2");
+        assertThat(rows.get(5)).containsEntry("index", "3");
 
         // 组间分隔行 + 来源单 B
-        assertThat(rows.get(8)).containsEntry("isBlankRow", "true");
-        assertThat(rows.get(9)).containsEntry("isGroupHeader", "source")
+        assertThat(rows.get(6)).containsEntry("isBlankRow", "true");
+        assertThat(rows.get(7)).containsEntry("isGroupHeader", "source")
                 .containsEntry("sourceNo", "BIL-B")
                 .containsEntry("vehiclePlate", "浙F67890")
                 .containsEntry("totalQuantity", "3");
-        assertThat(rows.get(10)).containsEntry("isGroupHeader", "project")
+        assertThat(rows.get(8)).containsEntry("isGroupHeader", "project")
                 .containsEntry("customerName", "客户乙")
                 .containsEntry("projectName", "项目三");
-        assertThat(rows.get(11)).containsEntry("index", "1");
-        assertThat(rows.get(12)).containsEntry("isGroupHeader", "subtotal")
-                .containsEntry("totalQuantity", "3")
-                .containsEntry("totalWeightTon", "2");
+        assertThat(rows.get(9)).containsEntry("index", "1");
     }
 
     @Test
@@ -125,7 +115,7 @@ class PrintScriptServiceTest {
 
         List<Map<String, String>> rows = service.groupItemsForPdf(items);
 
-        assertThat(rows).hasSize(4);
+        assertThat(rows).hasSize(3);
         assertThat(rows.get(0)).containsEntry("isGroupHeader", "source")
                 .containsEntry("vehiclePlate", "")
                 .containsEntry("totalQuantity", "0")
@@ -133,9 +123,6 @@ class PrintScriptServiceTest {
         assertThat(rows.get(1)).containsEntry("isGroupHeader", "project")
                 .containsEntry("customerName", "");
         assertThat(rows.get(2)).containsEntry("index", "1");
-        assertThat(rows.get(3)).containsEntry("isGroupHeader", "subtotal")
-                .containsEntry("totalQuantity", "0")
-                .containsEntry("totalWeightTon", "0");
     }
 
     @Test
@@ -147,13 +134,11 @@ class PrintScriptServiceTest {
         List<Map<String, String>> rows = service.groupItemsForPdf(items);
 
         // 空 sourceNo 归入同一 unassigned 组，不再重复组间分隔
-        assertThat(rows).hasSize(5);
+        assertThat(rows).hasSize(4);
         assertThat(rows.get(0)).containsEntry("isGroupHeader", "source");
         assertThat(rows.get(1)).containsEntry("isGroupHeader", "project");
         assertThat(rows.get(2)).containsEntry("index", "1");
         assertThat(rows.get(3)).containsEntry("index", "2");
-        assertThat(rows.get(4)).containsEntry("isGroupHeader", "subtotal")
-                .containsEntry("totalQuantity", "5")
-                .containsEntry("totalWeightTon", "2.4");
+        assertThat(rows).noneMatch(row -> "subtotal".equals(row.get("isGroupHeader")));
     }
 }

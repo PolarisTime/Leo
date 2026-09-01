@@ -25,7 +25,6 @@ public class PrintScriptService {
     private static final String PDF_FORM_TEMPLATE_TYPE = "PDF_FORM";
     private static final String GROUP_HEADER_SOURCE = "source";
     private static final String GROUP_HEADER_PROJECT = "project";
-    private static final String GROUP_HEADER_SUBTOTAL = "subtotal";
 
     private final PrintTemplateRepository templateRepository;
     private final PrintRecordDataProvider dataProvider;
@@ -143,7 +142,6 @@ public class PrintScriptService {
                     item.put("index", String.valueOf(++lineIndex));
                     rows.add(item);
                 }
-                rows.add(projectSubtotal(projectItems));
             }
         }
         return rows;
@@ -181,15 +179,6 @@ public class PrintScriptService {
         header.put("totalQuantity", String.valueOf(sumInteger(projectItems, "quantity")));
         header.put("totalWeightTon", plainNumber(sumDecimal(projectItems, "weightTon")));
         return header;
-    }
-
-    /** 项目组明细末尾的小计行：承载数量、重量汇总，渲染为独立的浅色小计行。 */
-    private Map<String, String> projectSubtotal(List<Map<String, String>> projectItems) {
-        Map<String, String> row = new LinkedHashMap<>();
-        row.put("isGroupHeader", GROUP_HEADER_SUBTOTAL);
-        row.put("totalQuantity", String.valueOf(sumInteger(projectItems, "quantity")));
-        row.put("totalWeightTon", plainNumber(sumDecimal(projectItems, "weightTon")));
-        return row;
     }
 
     private String distinctText(List<Map<String, String>> items, String key) {

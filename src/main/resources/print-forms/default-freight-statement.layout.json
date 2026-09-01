@@ -44,7 +44,7 @@
       "source": {
         "height": 34,
         "lines": [
-          "来源物流单：${sourceNo}    日期：${billTime}    车号：${vehiclePlate}",
+          "单据日期：${billTime}    来源物流单：${sourceNo}    车号：${vehiclePlate}",
           "合计：数量 ${totalQuantity}，重量 ${totalWeightTon} 吨，运费单价 ${unitPrice} 元/吨，运费总价 ${totalFreight} 元"
         ],
         "formats": {
@@ -70,18 +70,6 @@
           "customerName": "-",
           "projectName": "-"
         }
-      },
-      "subtotal": {
-        "height": 22,
-        "fillColor": "#f5f7fa",
-        "textColor": "#000000",
-        "fontSize": 9,
-        "paddingLeft": 6,
-        "paddingTop": 4,
-        "align": "right",
-        "lines": [
-          "小计：数量 ${totalQuantity} 件，重量 ${totalWeightTon} 吨"
-        ]
       }
     },
     "columns": [
