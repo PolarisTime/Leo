@@ -16,10 +16,6 @@ import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderOutboundCandidateQueryRepository;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.repository.SalesOrderReferenceQueryRepository;
-import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
-import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
-import com.leo.erp.logistics.bill.domain.entity.FreightBill;
-import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceOrder;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
@@ -39,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Locale;
 import java.util.stream.Stream;
 
 @Service
@@ -101,19 +98,34 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
 
     @Transactional(readOnly = true)
     public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter, String productKeyword, Boolean pendingOnly) {
-        Specification<SalesOrder> spec = Specs.<SalesOrder>keywordLike(filter.keyword(), SALES_ORDER_SEARCH_FIELDS)
-                .and(Specs.collectionKeywordLike(productKeyword, "items", PRODUCT_SEARCH_FIELDS))
-                .and(Specs.equalIfPresent("customerName", filter.name()))
-                .and(Specs.equalIfPresent("projectName", filter.projectName()))
-                .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
-                .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
-                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.documentStatus(filter.status()))
-                .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()));
+        Page<SalesOrder> entities;
         if (Boolean.TRUE.equals(pendingOnly)) {
-            spec = spec.and(pendingOnlySpecification());
+            entities = repository.findPending(
+                    normalizeContains(filter.keyword()),
+                    filter.customerId(),
+                    normalizeExact(filter.name()),
+                    filter.projectId(),
+                    normalizeExact(filter.projectName()),
+                    filter.settlementCompanyId(),
+                    normalizeContains(productKeyword),
+                    normalizeExact(filter.status()),
+                    filter.startDate(),
+                    filter.endDate(),
+                    StatusConstants.SALES_COMPLETED,
+                    query.toPageable("id")
+            );
+        } else {
+            Specification<SalesOrder> spec = Specs.<SalesOrder>keywordLike(filter.keyword(), SALES_ORDER_SEARCH_FIELDS)
+                    .and(Specs.collectionKeywordLike(productKeyword, "items", PRODUCT_SEARCH_FIELDS))
+                    .and(Specs.equalIfPresent("customerName", filter.name()))
+                    .and(Specs.equalIfPresent("projectName", filter.projectName()))
+                    .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
+                    .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
+                    .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
+                    .and(Specs.documentStatus(filter.status()))
+                    .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()));
+            entities = pageEntities(query, spec, repository);
         }
-        Page<SalesOrder> entities = pageEntities(query, spec, repository);
         Map<Long, SalesOrderReferenceQueryRepository.ReferenceStatus> statuses =
                 referenceQueryRepository == null
                         ? Map.of()
@@ -130,36 +142,12 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
         });
     }
 
-    private Specification<SalesOrder> pendingOnlySpecification() {
-        return (root, query, cb) -> {
-            var freightReference = query.subquery(Long.class);
-            var relation = freightReference.from(FreightBillSourceOrder.class);
-            var freightBill = freightReference.from(FreightBill.class);
-            freightReference.select(cb.literal(1L)).where(
-                    cb.equal(relation.get("sourceSalesOrderId"), root.get("id")),
-                    cb.equal(relation.get("freightBill"), freightBill),
-                    cb.isTrue(relation.get("activeFlag")),
-                    cb.isFalse(relation.get("deletedFlag")),
-                    cb.isFalse(freightBill.get("deletedFlag"))
-            );
+    private static String normalizeContains(String value) {
+        return value == null || value.isBlank() ? null : value.trim().toLowerCase(Locale.ROOT);
+    }
 
-            var outboundReference = query.subquery(Long.class);
-            var salesItem = outboundReference.from(SalesOrderItem.class);
-            var outboundItem = outboundReference.from(SalesOutboundItem.class);
-            var outbound = outboundReference.from(SalesOutbound.class);
-            outboundReference.select(cb.literal(1L)).where(
-                    cb.equal(salesItem.get("salesOrder"), root),
-                    cb.equal(outboundItem.get("sourceSalesOrderItemId"), salesItem.get("id")),
-                    cb.equal(outboundItem.get("salesOutbound"), outbound),
-                    cb.isFalse(outbound.get("deletedFlag"))
-            );
-
-            return cb.and(
-                    cb.notEqual(root.get("status"), StatusConstants.SALES_COMPLETED),
-                    cb.not(cb.exists(freightReference)),
-                    cb.not(cb.exists(outboundReference))
-            );
-        };
+    private static String normalizeExact(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)

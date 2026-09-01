@@ -17,9 +17,6 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.repository.PurchaseOrderInboundCandidateQueryRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderReferenceQueryRepository;
-import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
-import com.leo.erp.sales.order.domain.entity.SalesOrder;
-import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
@@ -37,6 +34,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Service
@@ -97,16 +95,28 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
 
     @Transactional(readOnly = true)
     public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter, Boolean pendingOnly) {
-        Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS)
-                .and(Specs.equalIfPresent("supplierName", filter.name()))
-                .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
-                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.documentStatus(filter.status()))
-                .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
+        Page<PurchaseOrder> entities;
         if (Boolean.TRUE.equals(pendingOnly)) {
-            spec = spec.and(pendingOnlySpecification());
+            entities = purchaseOrderRepository.findPending(
+                    normalizeContains(filter.keyword()),
+                    filter.supplierId(),
+                    normalizeExact(filter.name()),
+                    filter.settlementCompanyId(),
+                    normalizeExact(filter.status()),
+                    filter.startDate() == null ? null : filter.startDate().atStartOfDay(),
+                    filter.endDate() == null ? null : filter.endDate().plusDays(1).atStartOfDay(),
+                    StatusConstants.PURCHASE_COMPLETED,
+                    query.toPageable("id")
+            );
+        } else {
+            Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS)
+                    .and(Specs.equalIfPresent("supplierName", filter.name()))
+                    .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
+                    .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
+                    .and(Specs.documentStatus(filter.status()))
+                    .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
+            entities = pageEntities(query, spec, purchaseOrderRepository);
         }
-        Page<PurchaseOrder> entities = pageEntities(query, spec, purchaseOrderRepository);
         Map<Long, PurchaseOrderReferenceQueryRepository.ReferenceStatus> statuses =
                 referenceQueryRepository == null
                         ? Map.of()
@@ -123,23 +133,12 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         });
     }
 
-    private Specification<PurchaseOrder> pendingOnlySpecification() {
-        return (root, query, cb) -> {
-            var salesReference = query.subquery(Long.class);
-            var purchaseItem = salesReference.from(PurchaseOrderItem.class);
-            var salesItem = salesReference.from(SalesOrderItem.class);
-            var salesOrder = salesReference.from(SalesOrder.class);
-            salesReference.select(cb.literal(1L)).where(
-                    cb.equal(purchaseItem.get("purchaseOrder"), root),
-                    cb.equal(salesItem.get("sourcePurchaseOrderItemId"), purchaseItem.get("id")),
-                    cb.equal(salesItem.get("salesOrder"), salesOrder),
-                    cb.isFalse(salesOrder.get("deletedFlag"))
-            );
-            return cb.and(
-                    cb.notEqual(root.get("status"), StatusConstants.PURCHASE_COMPLETED),
-                    cb.not(cb.exists(salesReference))
-            );
-        };
+    private static String normalizeContains(String value) {
+        return value == null || value.isBlank() ? null : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static String normalizeExact(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     @Transactional(readOnly = true)

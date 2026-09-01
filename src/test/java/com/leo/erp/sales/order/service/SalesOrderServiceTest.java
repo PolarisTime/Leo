@@ -2,11 +2,14 @@ package com.leo.erp.sales.order.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.charge.service.DocumentChargeItemService;
+import com.leo.erp.common.api.PageFilter;
+import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.repository.SalesOrderOutboundCandidateQueryRepository;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.sales.order.repository.SalesOrderReferenceQueryRepository;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.security.support.SecurityPrincipal;
@@ -78,12 +81,32 @@ class SalesOrderServiceTest {
     private SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository;
 
     @Mock
+    private SalesOrderReferenceQueryRepository referenceQueryRepository;
+
+    @Mock
     private BusinessOperationEventPublisher businessOperationEventPublisher;
 
     @Mock
     private DocumentChargeItemService documentChargeItemService;
     @InjectMocks
     private SalesOrderService service;
+
+    @Test
+    void page_pendingOnly_shouldUseRepositoryQueryWithoutCrossModuleEntities() {
+        PageQuery query = new PageQuery(0, 30, null, null);
+        PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
+        when(repository.findPending(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
+
+        Page<SalesOrderResponse> result = service.page(query, filter, null, true);
+
+        assertThat(result.getTotalElements()).isZero();
+        verify(repository).findPending(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(Pageable.class));
+    }
 
     private SalesOrderRequest request(String orderNo, String status) {
         return new SalesOrderRequest(
