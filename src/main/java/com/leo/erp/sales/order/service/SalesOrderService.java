@@ -31,6 +31,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -43,6 +44,8 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
     private final DocumentChargeItemService documentChargeItemService;
 
     private static final String MODULE_KEY = "sales-order";
+    private static final LocalDate MIN_PENDING_DELIVERY_DATE = LocalDate.of(1, 1, 1);
+    private static final LocalDate MAX_PENDING_DELIVERY_DATE = LocalDate.of(9999, 12, 31);
 
 
     private static final String[] PRODUCT_SEARCH_FIELDS = {"materialCode", "brand", "material", "spec"};
@@ -109,8 +112,8 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
                     filter.settlementCompanyId(),
                     normalizeContains(productKeyword),
                     normalizeExact(filter.status()),
-                    filter.startDate(),
-                    filter.endDate(),
+                    filter.startDate() == null ? MIN_PENDING_DELIVERY_DATE : filter.startDate(),
+                    filter.endDate() == null ? MAX_PENDING_DELIVERY_DATE : filter.endDate(),
                     StatusConstants.SALES_COMPLETED,
                     query.toPageable("id")
             );

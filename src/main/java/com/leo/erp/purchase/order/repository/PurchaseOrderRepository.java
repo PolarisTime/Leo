@@ -74,8 +74,8 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
               and (:supplierName is null or purchaseOrder.supplierName = :supplierName)
               and (:settlementCompanyId is null
                    or purchaseOrder.settlementCompanyId = :settlementCompanyId)
-              and (:startDate is null or purchaseOrder.orderDate >= :startDate)
-              and (:endDateExclusive is null or purchaseOrder.orderDate < :endDateExclusive)
+              and purchaseOrder.orderDate >= :startDate
+              and purchaseOrder.orderDate < :endDateExclusive
               and (
                     :keyword = ''
                     or position(:keyword in lower(purchaseOrder.orderNo)) > 0

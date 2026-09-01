@@ -90,8 +90,8 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
               and (:projectName is null or salesOrder.projectName = :projectName)
               and (:settlementCompanyId is null
                    or salesOrder.settlementCompanyId = :settlementCompanyId)
-              and (:startDate is null or salesOrder.deliveryDate >= :startDate)
-              and (:endDate is null or salesOrder.deliveryDate <= :endDate)
+              and salesOrder.deliveryDate >= :startDate
+              and salesOrder.deliveryDate <= :endDate
               and (
                     :keyword = ''
                     or position(:keyword in lower(salesOrder.orderNo)) > 0

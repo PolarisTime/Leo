@@ -16,6 +16,7 @@ import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -106,6 +107,26 @@ class SalesOrderServiceTest {
         verify(repository).findPending(
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(Pageable.class));
+    }
+
+    @Test
+    void page_pendingOnly_shouldPassTypedDateBoundsWhenDatesMissing() {
+        PageQuery query = new PageQuery(0, 30, null, null);
+        PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
+        when(repository.findPending(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
+
+        service.page(query, filter, null, true);
+
+        ArgumentCaptor<LocalDate> startDate = ArgumentCaptor.forClass(LocalDate.class);
+        ArgumentCaptor<LocalDate> endDate = ArgumentCaptor.forClass(LocalDate.class);
+        verify(repository).findPending(
+                any(), any(), any(), any(), any(), any(), any(), any(), startDate.capture(), endDate.capture(),
+                any(), any(Pageable.class));
+        assertThat(startDate.getValue()).isEqualTo(LocalDate.of(1, 1, 1));
+        assertThat(endDate.getValue()).isEqualTo(LocalDate.of(9999, 12, 31));
     }
 
     private SalesOrderRequest request(String orderNo, String status) {

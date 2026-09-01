@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Locale;
 import java.util.stream.Collectors;
+import java.time.LocalDateTime;
 
 @Service
 public class PurchaseOrderService extends AbstractStatusCrudService<
@@ -55,6 +56,8 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
     private final PurchaseOrderReferenceQueryRepository referenceQueryRepository;
 
     private static final String MODULE_KEY = "purchase-order";
+    private static final LocalDateTime MIN_PENDING_ORDER_DATE = LocalDateTime.of(1, 1, 1, 0, 0);
+    private static final LocalDateTime MAX_PENDING_ORDER_DATE_EXCLUSIVE = LocalDateTime.of(10000, 1, 1, 0, 0);
 
     @Autowired
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
@@ -103,8 +106,10 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                     normalizeExact(filter.name()),
                     filter.settlementCompanyId(),
                     normalizeExact(filter.status()),
-                    filter.startDate() == null ? null : filter.startDate().atStartOfDay(),
-                    filter.endDate() == null ? null : filter.endDate().plusDays(1).atStartOfDay(),
+                    filter.startDate() == null ? MIN_PENDING_ORDER_DATE : filter.startDate().atStartOfDay(),
+                    filter.endDate() == null
+                            ? MAX_PENDING_ORDER_DATE_EXCLUSIVE
+                            : filter.endDate().plusDays(1).atStartOfDay(),
                     StatusConstants.PURCHASE_COMPLETED,
                     query.toPageable("id")
             );
