@@ -1,3 +1,10 @@
+# [10.5.0](https://github.com/PolarisTime/Leo/compare/v10.4.3...v10.5.0) (2026-09-02)
+
+
+### Features
+
+* **orders:** 增加订单关联状态筛选 ([0094122](https://github.com/PolarisTime/Leo/commit/0094122c7e7fde9ed12744b6e41f3a1e5ed22448))
+
 ## [10.4.3](https://github.com/PolarisTime/Leo/compare/v10.4.2...v10.4.3) (2026-09-01)
 
 
