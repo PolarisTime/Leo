@@ -188,6 +188,58 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
                         )
                     )
               )
+              and (
+                    :referencedBy is null
+                    or (
+                        :referencedBy = 'none'
+                        and not exists (
+                            select salesItem.id
+                            from SalesOrderItem salesItem
+                            where salesItem.sourcePurchaseOrderItemId in (
+                                select purchaseItem.id
+                                from PurchaseOrderItem purchaseItem
+                                where purchaseItem.purchaseOrder = purchaseOrder
+                            )
+                            and salesItem.salesOrder.deletedFlag = false
+                        )
+                        and not exists (
+                            select inboundItem.id
+                            from PurchaseInboundItem inboundItem
+                            where inboundItem.sourcePurchaseOrderItemId in (
+                                select purchaseItem.id
+                                from PurchaseOrderItem purchaseItem
+                                where purchaseItem.purchaseOrder = purchaseOrder
+                            )
+                            and inboundItem.purchaseInbound.deletedFlag = false
+                        )
+                    )
+                    or (
+                        :referencedBy = 'sales-order'
+                        and exists (
+                            select salesItem.id
+                            from SalesOrderItem salesItem
+                            where salesItem.sourcePurchaseOrderItemId in (
+                                select purchaseItem.id
+                                from PurchaseOrderItem purchaseItem
+                                where purchaseItem.purchaseOrder = purchaseOrder
+                            )
+                            and salesItem.salesOrder.deletedFlag = false
+                        )
+                    )
+                    or (
+                        :referencedBy = 'purchase-inbound'
+                        and exists (
+                            select inboundItem.id
+                            from PurchaseInboundItem inboundItem
+                            where inboundItem.sourcePurchaseOrderItemId in (
+                                select purchaseItem.id
+                                from PurchaseOrderItem purchaseItem
+                                where purchaseItem.purchaseOrder = purchaseOrder
+                            )
+                            and inboundItem.purchaseInbound.deletedFlag = false
+                        )
+                    )
+              )
             """)
     Page<PurchaseOrder> findByReferenceFilter(
             @Param("keyword") String keyword,
@@ -200,6 +252,7 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
             @Param("completedStatus") String completedStatus,
             @Param("pendingOnly") Boolean pendingOnly,
             @Param("referenced") Boolean referenced,
+            @Param("referencedBy") String referencedBy,
             Pageable pageable
     );
 }

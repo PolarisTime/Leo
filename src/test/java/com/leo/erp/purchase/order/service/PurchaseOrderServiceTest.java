@@ -3,6 +3,7 @@ package com.leo.erp.purchase.order.service;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.charge.service.DocumentChargeItemService;
+import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.purchase.api.PurchaseOrderPrepaymentReferenceGuard;
 import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
@@ -23,8 +24,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -97,12 +100,36 @@ class PurchaseOrderServiceTest {
         PageQuery query = new PageQuery(0, 30, null, null);
         PageFilter filter = PageFilter.of(null, null, null, null, null, null);
         when(purchaseOrderRepository.findByReferenceFilter(
-                any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), any(Pageable.class)))
+                any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
 
         service.page(query, filter, false, true);
 
         verify(purchaseOrderRepository).findByReferenceFilter(
-                any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), any(Pageable.class));
+                any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), isNull(), any(Pageable.class));
+    }
+
+    @Test
+    void page_withReferencedByFilter_shouldDelegateToReferenceAwareQuery() {
+        PageQuery query = new PageQuery(0, 30, null, null);
+        PageFilter filter = PageFilter.of(null, null, null, null, null, null);
+        when(purchaseOrderRepository.findByReferenceFilter(
+                any(), any(), any(), any(), any(), any(), any(), any(), isNull(), isNull(), eq("purchase-inbound"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
+
+        service.page(query, filter, null, null, "purchase-inbound");
+
+        verify(purchaseOrderRepository).findByReferenceFilter(
+                any(), any(), any(), any(), any(), any(), any(), any(), isNull(), isNull(), eq("purchase-inbound"), any(Pageable.class));
+    }
+
+    @Test
+    void page_withUnknownReferencedBy_shouldRejectRequest() {
+        PageQuery query = new PageQuery(0, 30, null, null);
+        PageFilter filter = PageFilter.of(null, null, null, null, null, null);
+
+        assertThatThrownBy(() -> service.page(query, filter, null, null, "unknown"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("下游模块关联筛选值");
     }
 }

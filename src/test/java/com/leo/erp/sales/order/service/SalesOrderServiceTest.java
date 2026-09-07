@@ -37,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -134,13 +135,37 @@ class SalesOrderServiceTest {
         PageQuery query = new PageQuery(0, 30, null, null);
         PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
         when(repository.findByReferenceFilter(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), any(Pageable.class)))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
 
         service.page(query, filter, null, false, true);
 
         verify(repository).findByReferenceFilter(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), any(Pageable.class));
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), isNull(), any(Pageable.class));
+    }
+
+    @Test
+    void page_withReferencedByFilter_shouldDelegateToReferenceAwareQuery() {
+        PageQuery query = new PageQuery(0, 30, null, null);
+        PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
+        when(repository.findByReferenceFilter(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), isNull(), eq("freight-bill"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
+
+        service.page(query, filter, null, null, null, "freight-bill");
+
+        verify(repository).findByReferenceFilter(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), isNull(), eq("freight-bill"), any(Pageable.class));
+    }
+
+    @Test
+    void page_withUnknownReferencedBy_shouldRejectRequest() {
+        PageQuery query = new PageQuery(0, 30, null, null);
+        PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
+
+        assertThatThrownBy(() -> service.page(query, filter, null, null, null, "unknown"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("下游模块关联筛选值");
     }
 
     private SalesOrderRequest request(String orderNo, String status) {

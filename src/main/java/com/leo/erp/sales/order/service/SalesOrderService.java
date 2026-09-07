@@ -37,6 +37,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Locale;
+import java.util.Set;
 import java.util.stream.Stream;
 
 @Service
@@ -96,12 +97,17 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
 
     @Transactional(readOnly = true)
     public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter, String productKeyword) {
-        return page(query, filter, productKeyword, null, null);
+        return page(query, filter, productKeyword, null, null, null);
     }
 
     @Transactional(readOnly = true)
     public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter, String productKeyword, Boolean pendingOnly) {
-        return page(query, filter, productKeyword, pendingOnly, null);
+        return page(query, filter, productKeyword, pendingOnly, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter, String productKeyword, Boolean pendingOnly, Boolean referenced) {
+        return page(query, filter, productKeyword, pendingOnly, referenced, null);
     }
 
     @Transactional(readOnly = true)
@@ -109,7 +115,8 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
                                          PageFilter filter,
                                          String productKeyword,
                                          Boolean pendingOnly,
-                                         Boolean referenced) {
+                                         Boolean referenced,
+                                         String referencedBy) {
         Page<SalesOrder> entities;
         LocalDate startDate = filter.startDate() == null
                 ? MIN_PENDING_DELIVERY_DATE
@@ -117,7 +124,7 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
         LocalDate endDate = filter.endDate() == null
                 ? MAX_PENDING_DELIVERY_DATE
                 : filter.endDate();
-        if (referenced != null) {
+        if (referenced != null || referencedBy != null) {
             entities = repository.findByReferenceFilter(
                     normalizeContains(filter.keyword()),
                     filter.customerId(),
@@ -132,6 +139,7 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
                     StatusConstants.SALES_COMPLETED,
                     pendingOnly,
                     referenced,
+                    validateReferencedBy(referencedBy),
                     query.toPageable("id")
             );
         } else if (Boolean.TRUE.equals(pendingOnly)) {
@@ -175,6 +183,17 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
                             status.referencedByFreightBill(),
                             status.referencedBySalesOutbound());
         });
+    }
+
+    private static final Set<String> REFERENCED_BY_VALUES =
+            Set.of("freight-bill", "sales-outbound", "none");
+
+    /** 校验下游模块引用筛选取值，非法取值直接拒绝请求。 */
+    private static String validateReferencedBy(String referencedBy) {
+        if (referencedBy == null || REFERENCED_BY_VALUES.contains(referencedBy)) {
+            return referencedBy;
+        }
+        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的下游模块关联筛选值: " + referencedBy);
     }
 
     private static String normalizeContains(String value) {

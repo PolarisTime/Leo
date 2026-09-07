@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Locale;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.time.LocalDateTime;
 
@@ -93,19 +94,25 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
 
     @Transactional(readOnly = true)
     public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter) {
-        return page(query, filter, null, null);
+        return page(query, filter, null, null, null);
     }
 
     @Transactional(readOnly = true)
     public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter, Boolean pendingOnly) {
-        return page(query, filter, pendingOnly, null);
+        return page(query, filter, pendingOnly, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter, Boolean pendingOnly, Boolean referenced) {
+        return page(query, filter, pendingOnly, referenced, null);
     }
 
     @Transactional(readOnly = true)
     public Page<PurchaseOrderResponse> page(PageQuery query,
                                             PageFilter filter,
                                             Boolean pendingOnly,
-                                            Boolean referenced) {
+                                            Boolean referenced,
+                                            String referencedBy) {
         Page<PurchaseOrder> entities;
         LocalDateTime startDate = filter.startDate() == null
                 ? MIN_PENDING_ORDER_DATE
@@ -113,7 +120,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         LocalDateTime endDateExclusive = filter.endDate() == null
                 ? MAX_PENDING_ORDER_DATE_EXCLUSIVE
                 : filter.endDate().plusDays(1).atStartOfDay();
-        if (referenced != null) {
+        if (referenced != null || referencedBy != null) {
             entities = purchaseOrderRepository.findByReferenceFilter(
                     normalizeContains(filter.keyword()),
                     filter.supplierId(),
@@ -125,6 +132,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                     StatusConstants.PURCHASE_COMPLETED,
                     pendingOnly,
                     referenced,
+                    validateReferencedBy(referencedBy),
                     query.toPageable("id")
             );
         } else if (Boolean.TRUE.equals(pendingOnly)) {
@@ -162,6 +170,17 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                             status.referencedBySalesOrder(),
                             status.referencedByPurchaseInbound());
         });
+    }
+
+    private static final Set<String> REFERENCED_BY_VALUES =
+            Set.of("sales-order", "purchase-inbound", "none");
+
+    /** 校验下游模块引用筛选取值，非法取值直接拒绝请求。 */
+    private static String validateReferencedBy(String referencedBy) {
+        if (referencedBy == null || REFERENCED_BY_VALUES.contains(referencedBy)) {
+            return referencedBy;
+        }
+        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的下游模块关联筛选值: " + referencedBy);
     }
 
     private static String normalizeContains(String value) {

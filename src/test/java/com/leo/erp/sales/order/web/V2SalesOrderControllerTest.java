@@ -35,6 +35,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -97,14 +98,26 @@ class V2SalesOrderControllerTest {
 
     @Test
     void page_shouldForwardReferenceFilter() {
-        when(service.page(any(PageQuery.class), any(PageFilter.class), anyString(), any(), any()))
+        when(service.page(any(PageQuery.class), any(PageFilter.class), anyString(), any(), any(), any()))
                 .thenReturn(mock(org.springframework.data.domain.Page.class));
 
         var result = controller.page(mock(PageQuery.class), "kw", 10L, "客户A", 20L, "项目A", 30L,
-                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), false, true);
+                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), false, true, null);
 
         assertThat(result).isNotNull();
-        verify(service).page(any(PageQuery.class), any(PageFilter.class), anyString(), eq(false), eq(true));
+        verify(service).page(any(PageQuery.class), any(PageFilter.class), anyString(), eq(false), eq(true), isNull());
+    }
+
+    @Test
+    void page_shouldForwardReferencedByFilter() {
+        when(service.page(any(PageQuery.class), any(PageFilter.class), anyString(), any(), any(), any()))
+                .thenReturn(mock(org.springframework.data.domain.Page.class));
+
+        var result = controller.page(mock(PageQuery.class), "kw", 10L, "客户A", 20L, "项目A", 30L,
+                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), null, null, "sales-outbound");
+
+        assertThat(result).isNotNull();
+        verify(service).page(any(PageQuery.class), any(PageFilter.class), anyString(), isNull(), isNull(), eq("sales-outbound"));
     }
 
     @Test
