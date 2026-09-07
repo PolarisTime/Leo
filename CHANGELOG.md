@@ -1,3 +1,10 @@
+# [10.6.0](https://github.com/PolarisTime/Leo/compare/v10.5.0...v10.6.0) (2026-09-07)
+
+
+### Features
+
+* **api:** 订单分页查询新增下游模块关联筛选参数 ([9a56e12](https://github.com/PolarisTime/Leo/commit/9a56e12d22a622220049d1e63249382839d1fba1))
+
 # [10.5.0](https://github.com/PolarisTime/Leo/compare/v10.4.3...v10.5.0) (2026-09-02)
 
 
