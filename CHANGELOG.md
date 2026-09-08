@@ -1,3 +1,10 @@
+## [10.6.1](https://github.com/PolarisTime/Leo/compare/v10.6.0...v10.6.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* **api:** 修复仅按下游模块关联筛选时订单列表为空的问题 ([9bd28b3](https://github.com/PolarisTime/Leo/commit/9bd28b3864f6c1545ea59b367f8fc77ea4a500f6))
+
 # [10.6.0](https://github.com/PolarisTime/Leo/compare/v10.5.0...v10.6.0) (2026-09-07)
 
 
