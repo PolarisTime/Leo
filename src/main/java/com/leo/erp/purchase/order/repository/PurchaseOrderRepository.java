@@ -139,7 +139,8 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
                     )
               )
               and (
-                    (
+                    :referenced is null
+                    or (
                         :referenced = true
                         and (
                             exists (

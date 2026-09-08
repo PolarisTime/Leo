@@ -208,7 +208,8 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
                     )
               )
               and (
-                    (
+                    :referenced is null
+                    or (
                         :referenced = true
                         and (
                             exists (
