@@ -163,6 +163,21 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
                                 )
                                 and inboundItem.purchaseInbound.deletedFlag = false
                             )
+                            or exists (
+                                select salesItem.id
+                                from SalesOrderItem salesItem
+                                where salesItem.salesOrder.deletedFlag = false
+                                  and salesItem.sourceInboundItemId in (
+                                      select inboundItem.id
+                                      from PurchaseInboundItem inboundItem
+                                      where inboundItem.purchaseInbound.deletedFlag = false
+                                        and inboundItem.sourcePurchaseOrderItemId in (
+                                            select purchaseItem.id
+                                            from PurchaseOrderItem purchaseItem
+                                            where purchaseItem.purchaseOrder = purchaseOrder
+                                        )
+                                  )
+                            )
                         )
                     )
                     or (
@@ -186,6 +201,21 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
                                 where purchaseItem.purchaseOrder = purchaseOrder
                             )
                             and inboundItem.purchaseInbound.deletedFlag = false
+                        )
+                        and not exists (
+                            select salesItem.id
+                            from SalesOrderItem salesItem
+                            where salesItem.salesOrder.deletedFlag = false
+                              and salesItem.sourceInboundItemId in (
+                                  select inboundItem.id
+                                  from PurchaseInboundItem inboundItem
+                                  where inboundItem.purchaseInbound.deletedFlag = false
+                                    and inboundItem.sourcePurchaseOrderItemId in (
+                                        select purchaseItem.id
+                                        from PurchaseOrderItem purchaseItem
+                                        where purchaseItem.purchaseOrder = purchaseOrder
+                                    )
+                              )
                         )
                     )
               )
@@ -213,18 +243,50 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
                             )
                             and inboundItem.purchaseInbound.deletedFlag = false
                         )
+                        and not exists (
+                            select salesItem.id
+                            from SalesOrderItem salesItem
+                            where salesItem.salesOrder.deletedFlag = false
+                              and salesItem.sourceInboundItemId in (
+                                  select inboundItem.id
+                                  from PurchaseInboundItem inboundItem
+                                  where inboundItem.purchaseInbound.deletedFlag = false
+                                    and inboundItem.sourcePurchaseOrderItemId in (
+                                        select purchaseItem.id
+                                        from PurchaseOrderItem purchaseItem
+                                        where purchaseItem.purchaseOrder = purchaseOrder
+                                    )
+                              )
+                        )
                     )
                     or (
                         :referencedBy = 'sales-order'
-                        and exists (
-                            select salesItem.id
-                            from SalesOrderItem salesItem
-                            where salesItem.sourcePurchaseOrderItemId in (
-                                select purchaseItem.id
-                                from PurchaseOrderItem purchaseItem
-                                where purchaseItem.purchaseOrder = purchaseOrder
+                        and (
+                            exists (
+                                select salesItem.id
+                                from SalesOrderItem salesItem
+                                where salesItem.sourcePurchaseOrderItemId in (
+                                    select purchaseItem.id
+                                    from PurchaseOrderItem purchaseItem
+                                    where purchaseItem.purchaseOrder = purchaseOrder
+                                )
+                                and salesItem.salesOrder.deletedFlag = false
                             )
-                            and salesItem.salesOrder.deletedFlag = false
+                            or exists (
+                                select salesItem.id
+                                from SalesOrderItem salesItem
+                                where salesItem.salesOrder.deletedFlag = false
+                                  and salesItem.sourceInboundItemId in (
+                                      select inboundItem.id
+                                      from PurchaseInboundItem inboundItem
+                                      where inboundItem.purchaseInbound.deletedFlag = false
+                                        and inboundItem.sourcePurchaseOrderItemId in (
+                                            select purchaseItem.id
+                                            from PurchaseOrderItem purchaseItem
+                                            where purchaseItem.purchaseOrder = purchaseOrder
+                                        )
+                                  )
+                            )
                         )
                     )
                     or (

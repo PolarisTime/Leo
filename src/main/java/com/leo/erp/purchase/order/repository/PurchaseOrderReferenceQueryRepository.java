@@ -26,6 +26,18 @@ public class PurchaseOrderReferenceQueryRepository {
                            ON so.id = soi.order_id
                           AND so.deleted_flag = FALSE
                         WHERE poi.order_id = po.id
+                   )
+                   OR EXISTS (
+                       SELECT 1
+                         FROM so_sales_order_item soi
+                         JOIN so_sales_order so
+                           ON so.id = soi.order_id
+                          AND so.deleted_flag = FALSE
+                         JOIN po_purchase_inbound_item pii
+                           ON pii.id = soi.source_inbound_item_id
+                         JOIN po_purchase_order_item poi
+                           ON poi.id = pii.source_purchase_order_item_id
+                        WHERE poi.order_id = po.id
                    ) AS referenced_by_sales_order,
                    EXISTS (
                        SELECT 1
