@@ -1,3 +1,10 @@
+## [10.6.2](https://github.com/PolarisTime/Leo/compare/v10.6.1...v10.6.2) (2026-09-08)
+
+
+### Bug Fixes
+
+* **api:** 采购订单被销售订单关联纳入经采购入库的间接引用链路 ([9846575](https://github.com/PolarisTime/Leo/commit/9846575cf8c2dc2fcbddcf82e917debed3eb1bf5))
+
 ## [10.6.1](https://github.com/PolarisTime/Leo/compare/v10.6.0...v10.6.1) (2026-09-08)
 
 
