@@ -18,6 +18,7 @@ import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
 import com.leo.erp.statement.service.StatementSettlementMutationGuard;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -35,8 +36,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -240,5 +244,110 @@ class CustomerStatementServiceTest {
         assertThatThrownBy(() -> service.detail(1L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("客户对账单不存在");
+    }
+
+    // ---------- 显式状态断言序列（原基类内联） ----------
+
+    @Test
+    void update_shouldRejectIllegalStatusTransitionAfterApply() {
+        CustomerStatement entity = new CustomerStatement();
+        entity.setId(5L);
+        entity.setStatementNo("CS001");
+        entity.setStatus(StatusConstants.PENDING_CONFIRM);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(entity));
+        doAnswer(invocation -> {
+            entity.setStatus(StatusConstants.COMPLETED);
+            return null;
+        }).when(applyService).apply(any(), any(), any());
+
+        assertThatThrownBy(() -> service.update(5L, request()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能从「待确认」变更为「已完成」");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void update_shouldRejectWritingFinalStatusThroughSave() {
+        CustomerStatement entity = new CustomerStatement();
+        entity.setId(5L);
+        entity.setStatementNo("CS001");
+        entity.setStatus(StatusConstants.PENDING_CONFIRM);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(entity));
+        doAnswer(invocation -> {
+            entity.setStatus(StatusConstants.CONFIRMED);
+            return null;
+        }).when(applyService).apply(any(), any(), any());
+
+        assertThatThrownBy(() -> service.update(5L, request()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("完成态状态必须通过专用状态接口变更");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void update_shouldRejectEditInProtectedStatus() {
+        CustomerStatement entity = new CustomerStatement();
+        entity.setId(5L);
+        entity.setStatementNo("CS001");
+        entity.setStatus(StatusConstants.CONFIRMED);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(entity));
+
+        assertThatThrownBy(() -> service.update(5L, request()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能编辑");
+
+        verify(applyService, never()).apply(any(), any(), any());
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_shouldRejectBlankStatus() {
+        CustomerStatement entity = new CustomerStatement();
+        entity.setId(5L);
+        entity.setStatus(StatusConstants.PENDING_CONFIRM);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(entity));
+
+        assertThatThrownBy(() -> service.updateStatus(5L, " "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("状态不能为空");
+
+        verify(sourceAllocationLockService, never()).lockDocumentSources(any(), any(), any(), any());
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_shouldRejectIllegalTransitionOutsideTable() {
+        CustomerStatement entity = new CustomerStatement();
+        entity.setId(5L);
+        entity.setStatus(StatusConstants.PENDING_CONFIRM);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(entity));
+
+        assertThatThrownBy(() -> service.updateStatus(5L, StatusConstants.AUDITED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能从「待确认」变更为「已审核」");
+
+        verify(sourceAllocationLockService, never()).lockDocumentSources(any(), any(), any(), any());
+        verify(settlementMutationGuard, never()).assertNoSettledAllocations(any(), any(), any());
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_shouldLockThenSaveInOrder() {
+        CustomerStatement entity = new CustomerStatement();
+        entity.setId(5L);
+        entity.setStatementNo("CS001");
+        entity.setStatus(StatusConstants.PENDING_CONFIRM);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(entity));
+        when(repository.save(entity)).thenReturn(entity);
+        CustomerStatementResponse response = mock(CustomerStatementResponse.class);
+        when(responseAssembler.toDetailResponse(entity)).thenReturn(response);
+
+        service.updateStatus(5L, StatusConstants.CONFIRMED);
+
+        InOrder inOrder = inOrder(sourceAllocationLockService, repository);
+        inOrder.verify(sourceAllocationLockService).lockDocumentSources(any(), any(), any(), any());
+        inOrder.verify(repository).save(entity);
     }
 }

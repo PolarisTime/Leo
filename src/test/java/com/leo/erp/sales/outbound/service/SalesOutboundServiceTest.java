@@ -13,6 +13,7 @@ import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -24,7 +25,11 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -226,6 +231,99 @@ class SalesOutboundServiceTest {
         assertThat(normalized.items().get(0).weightTon()).isEqualByComparingTo("12.500"); // 保留实体重量
         assertThat(normalized.customerId()).isEqualTo(10L); // 保留导入时的客户
         assertThat(normalized.salesOrderNo()).isEqualTo("SO001");
+    }
+
+    // ---------- 显式状态断言序列（原基类内联） ----------
+
+    @Test
+    void update_shouldRejectIllegalStatusTransitionAfterApply() {
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(outbound));
+        doAnswer(invocation -> {
+            outbound.setStatus(StatusConstants.PENDING_CONFIRM);
+            return null;
+        }).when(workflowService).apply(any(), any(), any());
+
+        assertThatThrownBy(() -> service.update(5L, request("OB001", "SO001", null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能从「草稿」变更为「待确认」");
+
+        verify(workflowService, never()).saveUpdated(any(), any());
+    }
+
+    @Test
+    void update_shouldRejectEditInProtectedStatus() {
+        SalesOutbound outbound = entity(StatusConstants.AUDITED);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(outbound));
+
+        assertThatThrownBy(() -> service.update(5L, request("OB001", "SO001", null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能编辑");
+
+        verify(workflowService, never()).saveUpdated(any(), any());
+        verify(workflowService, never()).save(any());
+    }
+
+    @Test
+    void update_shouldAllowLegalTransitionAndPassFinalStatusGuard() {
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(outbound));
+        doAnswer(invocation -> {
+            outbound.setStatus(StatusConstants.AUDITED);
+            return null;
+        }).when(workflowService).apply(any(), any(), any());
+        when(workflowService.saveUpdated(eq(outbound), any())).thenReturn(outbound);
+        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
+        when(responseAssembler.toDetailResponse(outbound)).thenReturn(response);
+
+        SalesOutboundResponse result = service.update(5L, request("OB001", "SO001", null));
+
+        assertThat(result).isSameAs(response);
+        verify(workflowService).saveUpdated(eq(outbound), any());
+    }
+
+    @Test
+    void updateStatus_shouldRejectBlankStatus() {
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(outbound));
+
+        assertThatThrownBy(() -> service.updateStatus(5L, " "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("状态不能为空");
+
+        verify(workflowService, never()).beforeStatusUpdate(any(), any(), any());
+        verify(workflowService, never()).save(any());
+        verify(workflowService, never()).publishStatusChanged(any(), any(), any());
+    }
+
+    @Test
+    void updateStatus_shouldRejectFinalStatusOutsideTransitionTable() {
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(outbound));
+
+        assertThatThrownBy(() -> service.updateStatus(5L, StatusConstants.COMPLETED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能从「草稿」变更为「已完成」");
+
+        verify(workflowService, never()).beforeStatusUpdate(any(), any(), any());
+        verify(workflowService, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_shouldGuardThenSaveThenPublishInOrder() {
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(outbound));
+        when(workflowService.save(outbound)).thenReturn(outbound);
+        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
+        when(response.status()).thenReturn(StatusConstants.AUDITED);
+        when(responseAssembler.toDetailResponse(outbound)).thenReturn(response);
+
+        service.updateStatus(5L, StatusConstants.AUDITED);
+
+        InOrder inOrder = inOrder(workflowService);
+        inOrder.verify(workflowService).beforeStatusUpdate(outbound, StatusConstants.DRAFT, StatusConstants.AUDITED);
+        inOrder.verify(workflowService).save(outbound);
+        inOrder.verify(workflowService).publishStatusChanged(outbound, StatusConstants.DRAFT, StatusConstants.AUDITED);
     }
 
     // ---------- 查询 ----------

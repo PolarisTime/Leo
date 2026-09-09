@@ -6,7 +6,8 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractStatusCrudService;
+import com.leo.erp.common.service.CrudStatusGuard;
+import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
@@ -23,11 +24,14 @@ import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementSummaryResponse;
 import com.leo.erp.statement.service.StatementSettlementMutationGuard;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 import java.util.Objects;
@@ -36,9 +40,18 @@ import java.util.Set;
 import java.util.TreeSet;
 
 @Service
-public class CustomerStatementService extends AbstractStatusCrudService<
-        CustomerStatement, CustomerStatementRequest, CustomerStatementResponse> {
+public class CustomerStatementService {
 
+    private static final String[] CUSTOMER_STATEMENT_SEARCH_FIELDS = {
+            "statementNo",
+            "customerName",
+            "projectName"
+    };
+    private static final CrudStatusGuard<CustomerStatement> STATUS_GUARD = CrudStatusGuard.forStatusAwareEntities();
+    private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
+    private static final Logger log = LoggerFactory.getLogger(CustomerStatementService.class);
+
+    private final SnowflakeIdGenerator idGenerator;
     private final CustomerStatementRepository repository;
     private final CustomerStatementSummaryQueryRepository summaryQueryRepository;
     private final CustomerStatementResponseAssembler responseAssembler;
@@ -58,7 +71,7 @@ public class CustomerStatementService extends AbstractStatusCrudService<
                                     SalesOrderLogisticsSourceQuery salesOrderSourceQuery,
                                     SourceAllocationLockService sourceAllocationLockService,
                                     StatementSettlementMutationGuard settlementMutationGuard) {
-        super(idGenerator);
+        this.idGenerator = idGenerator;
         this.repository = repository;
         this.summaryQueryRepository = summaryQueryRepository;
         this.responseAssembler = responseAssembler;
@@ -71,7 +84,7 @@ public class CustomerStatementService extends AbstractStatusCrudService<
 
     @Transactional(readOnly = true)
     public Page<CustomerStatementResponse> page(PageQuery query, PageFilter filter) {
-        return page(query, pageSpecification(filter), repository);
+        return pageEntities(query, pageSpecification(filter)).map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -98,15 +111,15 @@ public class CustomerStatementService extends AbstractStatusCrudService<
                 .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()));
     }
 
-    private static final String[] CUSTOMER_STATEMENT_SEARCH_FIELDS = {
-            "statementNo",
-            "customerName",
-            "projectName"
-    };
-
     @Transactional(readOnly = true)
     public List<CustomerStatementResponse> search(String keyword, int maxSize) {
-        return search(keyword, CUSTOMER_STATEMENT_SEARCH_FIELDS, maxSize, null, repository);
+        Specification<CustomerStatement> spec = combineSpecifications(
+                VISIBILITY_POLICY.applyDeletedVisibility(null, false),
+                Specs.keywordLike(keyword, CUSTOMER_STATEMENT_SEARCH_FIELDS)
+        );
+        return repository.findAll(spec, PageRequest.of(0, maxSize))
+                .map(this::toResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -114,10 +127,14 @@ public class CustomerStatementService extends AbstractStatusCrudService<
         return customerStatementSourceService.candidatePage(query, filter);
     }
 
-    @Override
+    @Transactional(readOnly = true)
+    public CustomerStatementResponse detail(Long id) {
+        return toDetailResponse(requireDetailEntity(id));
+    }
+
     @Transactional
     public CustomerStatementResponse create(CustomerStatementRequest request) {
-        CustomerStatementResponse created = super.create(
+        CustomerStatementResponse created = createStatement(
                 request.audit() ? withStatus(request, StatusConstants.PENDING_CONFIRM) : request);
         if (request.audit()) {
             return updateStatus(created.id(), StatusConstants.CONFIRMED);
@@ -125,10 +142,9 @@ public class CustomerStatementService extends AbstractStatusCrudService<
         return created;
     }
 
-    @Override
     @Transactional
     public CustomerStatementResponse update(Long id, CustomerStatementRequest request) {
-        CustomerStatementResponse updated = super.update(id,
+        CustomerStatementResponse updated = updateStatement(id,
                 request.audit() ? withStatus(request, StatusConstants.PENDING_CONFIRM) : request);
         if (request.audit()) {
             return updateStatus(id, StatusConstants.CONFIRMED);
@@ -136,24 +152,90 @@ public class CustomerStatementService extends AbstractStatusCrudService<
         return updated;
     }
 
-    @Override
+    @Transactional
+    public CustomerStatementResponse updateStatus(Long id, String status) {
+        CustomerStatement entity = requireEntity(id);
+        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
+        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
+        if (currentStatus.equals(nextStatus)) {
+            return toSavedResponse(entity);
+        }
+        STATUS_GUARD.validateStatusTransition(allowedStatusTransitions(), currentStatus, nextStatus);
+        beforeStatusUpdate(entity, currentStatus, nextStatus);
+        STATUS_GUARD.writeStatus(entity, nextStatus);
+        CustomerStatementResponse response = toSavedResponse(saveEntity(entity));
+        log.info(
+                "{} status updated: id={}, {} -> {}",
+                entity.getClass().getSimpleName(),
+                id,
+                currentStatus,
+                nextStatus
+        );
+        return response;
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        CustomerStatement entity = requireEntity(id);
+        STATUS_GUARD.assertDeleteAllowed(entity);
+        beforeDelete(entity);
+        entity.setDeletedFlag(true);
+        saveEntity(entity);
+        afterDelete(entity);
+        log.info("{} deleted: id={}", entity.getClass().getSimpleName(), id);
+    }
+
+    /**
+     * 基类 create 的显式内联：雪花 ID → 归一化 → 校验 → 应用 → 终态双写守卫 → 保存。
+     */
+    private CustomerStatementResponse createStatement(CustomerStatementRequest request) {
+        CustomerStatement entity = newEntity();
+        long entityId = idGenerator.nextId();
+        assignId(entity, entityId);
+        CustomerStatementRequest normalized = normalizeCreateRequest(request, entityId);
+        validateCreate(normalized);
+        apply(entity, normalized);
+        STATUS_GUARD.assertRequestDidNotWriteFinalStatus(entity);
+        CustomerStatementResponse response = toSavedResponse(saveCreatedEntity(entity, normalized));
+        log.info("{} created: id={}", entity.getClass().getSimpleName(), entityId);
+        return response;
+    }
+
+    /**
+     * 基类 update 的显式内联，状态断言序列逐字保持：
+     * 编辑状态守卫 → 更新校验 → 快照当前状态 → 应用请求 →
+     * assertRequestStatusTransitionAllowed → allowRequestToWriteFinalStatus 分支下的
+     * assertRequestDidNotWriteFinalStatus → 保存。
+     */
+    private CustomerStatementResponse updateStatement(Long id, CustomerStatementRequest request) {
+        CustomerStatement entity = requireEntity(id);
+        CustomerStatementRequest normalized = normalizeUpdateRequest(entity, request);
+        STATUS_GUARD.assertEditAllowed(entity, allowProtectedStatusUpdate(entity, normalized));
+        validateUpdate(entity, normalized);
+        Optional<String> currentStatus = STATUS_GUARD.resolveStatus(entity);
+        apply(entity, normalized);
+        STATUS_GUARD.assertRequestStatusTransitionAllowed(entity, currentStatus, allowedStatusTransitions());
+        // 基类 allowRequestToWriteFinalStatus 默认 false：普通保存一律拒绝终态写入。
+        STATUS_GUARD.assertRequestDidNotWriteFinalStatus(entity);
+        CustomerStatementResponse response = toSavedResponse(saveUpdatedEntity(entity, normalized));
+        log.info("{} updated: id={}", entity.getClass().getSimpleName(), id);
+        return response;
+    }
+
     protected CustomerStatementResponse toDetailResponse(CustomerStatement entity) {
         return responseAssembler.toDetailResponse(entity);
     }
 
-    @Override
     protected CustomerStatementResponse toSavedResponse(CustomerStatement entity) {
         return toDetailResponse(entity);
     }
 
-    @Override
     protected void validateCreate(CustomerStatementRequest request) {
         if (repository.existsByStatementNoAndDeletedFlagFalse(request.statementNo())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "客户对账单号已存在");
         }
     }
 
-    @Override
     protected void validateUpdate(CustomerStatement entity, CustomerStatementRequest request) {
         if (!entity.getStatementNo().equals(request.statementNo())
                 && repository.existsByStatementNoAndDeletedFlagFalse(request.statementNo())) {
@@ -161,7 +243,6 @@ public class CustomerStatementService extends AbstractStatusCrudService<
         }
     }
 
-    @Override
     protected CustomerStatementRequest normalizeCreateRequest(CustomerStatementRequest request, long entityId) {
         return new CustomerStatementRequest(
                 resolveCreateBusinessNo(entityId),
@@ -206,7 +287,6 @@ public class CustomerStatementService extends AbstractStatusCrudService<
         );
     }
 
-    @Override
     protected CustomerStatementRequest normalizeUpdateRequest(CustomerStatement entity, CustomerStatementRequest request) {
         return new CustomerStatementRequest(
                 entity.getStatementNo(),
@@ -229,42 +309,39 @@ public class CustomerStatementService extends AbstractStatusCrudService<
         );
     }
 
-    @Override
     protected CustomerStatement newEntity() {
         return new CustomerStatement();
     }
 
-    @Override
     protected void assignId(CustomerStatement entity, Long id) {
         entity.setId(id);
     }
 
-    @Override
     protected Optional<CustomerStatement> findActiveEntity(Long id) {
         return repository.findByIdAndDeletedFlagFalse(id);
     }
 
-    @Override
     protected Optional<CustomerStatement> findVisibleEntity(Long id) {
         return repository.findById(id);
     }
 
-    @Override
     protected String notFoundMessage() {
         return "客户对账单不存在";
     }
 
-    @Override
     protected boolean allowViewingDeletedRecords() {
         return true;
     }
 
-    @Override
     protected Set<StatusTransition> allowedStatusTransitions() {
         return StatusConstants.STATEMENT_CONFIRM_TRANSITIONS;
     }
 
-    @Override
+    private boolean allowProtectedStatusUpdate(CustomerStatement entity, CustomerStatementRequest request) {
+        // 基类 allowProtectedStatusUpdate 默认 false：受保护状态单据不允许普通编辑。
+        return false;
+    }
+
     protected void beforeStatusUpdate(CustomerStatement entity, String currentStatus, String nextStatus) {
         lockSourceSalesOrders(entity, null);
         if (StatusConstants.CONFIRMED.equals(currentStatus)
@@ -277,7 +354,6 @@ public class CustomerStatementService extends AbstractStatusCrudService<
         }
     }
 
-    @Override
     protected void apply(CustomerStatement entity, CustomerStatementRequest request) {
         boolean creating = entity.getStatus() == null;
         lockSourceSalesOrders(entity, request);
@@ -291,7 +367,6 @@ public class CustomerStatementService extends AbstractStatusCrudService<
         applyService.apply(entity, request, this::nextId);
     }
 
-    @Override
     protected void beforeDelete(CustomerStatement entity) {
         lockSourceSalesOrders(entity, null);
         settlementMutationGuard.assertNoSettledAllocations(
@@ -299,6 +374,17 @@ public class CustomerStatementService extends AbstractStatusCrudService<
                 entity.getId(),
                 "删除"
         );
+    }
+
+    protected void afterDelete(CustomerStatement entity) {
+    }
+
+    protected CustomerStatement saveCreatedEntity(CustomerStatement entity, CustomerStatementRequest request) {
+        return saveEntity(entity);
+    }
+
+    protected CustomerStatement saveUpdatedEntity(CustomerStatement entity, CustomerStatementRequest request) {
+        return saveEntity(entity);
     }
 
     private boolean customerFinancialLinkageChanged(CustomerStatement entity, CustomerStatementRequest request) {
@@ -355,14 +441,54 @@ public class CustomerStatementService extends AbstractStatusCrudService<
         );
     }
 
-    @Override
     protected CustomerStatement saveEntity(CustomerStatement entity) {
         return repository.save(entity);
     }
 
-    @Override
     protected CustomerStatementResponse toResponse(CustomerStatement entity) {
         return responseAssembler.toSummaryResponse(entity);
     }
 
+    private CustomerStatement requireEntity(Long id) {
+        return findActiveEntity(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
+    }
+
+    private CustomerStatement requireDetailEntity(Long id) {
+        if (allowViewingDeletedRecords()) {
+            return findVisibleEntity(id)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
+        }
+        return requireEntity(id);
+    }
+
+    private Specification<CustomerStatement> applyDeletedVisibilityPolicy(Specification<CustomerStatement> specification) {
+        return VISIBILITY_POLICY.applyDeletedVisibility(specification, allowViewingDeletedRecords());
+    }
+
+    private Page<CustomerStatement> pageEntities(PageQuery query, Specification<CustomerStatement> specification) {
+        return repository.findAll(applyDeletedVisibilityPolicy(specification), query.toPageable("id"));
+    }
+
+    private Specification<CustomerStatement> combineSpecifications(Specification<CustomerStatement> left,
+                                                                  Specification<CustomerStatement> right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return left.and(right);
+    }
+
+    private long nextId() {
+        return idGenerator.nextId();
+    }
+
+    private String resolveCreateBusinessNo(Long entityId) {
+        if (entityId == null || entityId <= 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "业务单据雪花ID尚未分配");
+        }
+        return String.valueOf(entityId);
+    }
 }

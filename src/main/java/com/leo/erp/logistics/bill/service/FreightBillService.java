@@ -8,7 +8,8 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractStatusCrudService;
+import com.leo.erp.common.service.CrudStatusGuard;
+import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -29,6 +30,7 @@ import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,13 +39,18 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
-public class FreightBillService extends AbstractStatusCrudService<FreightBill, FreightBillRequest, FreightBillResponse> {
+public class FreightBillService {
 
     private static final Logger log = LoggerFactory.getLogger(FreightBillService.class);
     private static final String[] SEARCH_FIELDS = {"billNo", "carrierCode", "carrierName"};
+    private static final String MODULE_KEY = "freight-bill";
+    private static final CrudStatusGuard<FreightBill> STATUS_GUARD = CrudStatusGuard.forStatusAwareEntities();
+    private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
 
+    private final SnowflakeIdGenerator idGenerator;
     private final FreightBillRepository repository;
     private final FreightBillMapper mapper;
     private final FreightBillApplyService applyService;
@@ -54,8 +61,6 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
     private final VehicleQuery vehicleQuery;
     private final BusinessOperationEventPublisher businessOperationEventPublisher;
     private final DocumentChargeItemService documentChargeItemService;
-
-    private static final String MODULE_KEY = "freight-bill";
 
     public FreightBillService(FreightBillRepository repository,
                               SnowflakeIdGenerator idGenerator,
@@ -68,8 +73,7 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
                               VehicleQuery vehicleQuery,
                               BusinessOperationEventPublisher businessOperationEventPublisher,
                               DocumentChargeItemService documentChargeItemService) {
-        super(idGenerator);
-        this.documentChargeItemService = documentChargeItemService;
+        this.idGenerator = idGenerator;
         this.repository = repository;
         this.mapper = mapper;
         this.applyService = applyService;
@@ -79,6 +83,7 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
         this.downstreamMutationGuard = downstreamMutationGuard;
         this.vehicleQuery = vehicleQuery;
         this.businessOperationEventPublisher = businessOperationEventPublisher;
+        this.documentChargeItemService = documentChargeItemService;
     }
 
     @Transactional(readOnly = true)
@@ -95,13 +100,28 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("billTime", filter.startDate(), filter.endDate()));
-        return super.page(query, spec, repository);
+        return pageEntities(query, spec).map(this::toResponse);
     }
 
-    @Override
+    @Transactional(readOnly = true)
+    public List<FreightBillResponse> search(String keyword, int maxSize) {
+        Specification<FreightBill> spec = combineSpecifications(
+                VISIBILITY_POLICY.applyDeletedVisibility(null, false),
+                Specs.keywordLike(keyword, SEARCH_FIELDS)
+        );
+        return repository.findAll(spec, PageRequest.of(0, maxSize))
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public FreightBillResponse detail(Long id) {
+        return toDetailResponse(requireDetailEntity(id));
+    }
+
     @Transactional
     public FreightBillResponse create(FreightBillRequest request) {
-        FreightBillResponse created = super.create(
+        FreightBillResponse created = createBill(
                 request.audit() ? copyRequestWithStatus(request, StatusConstants.DRAFT) : request);
         documentChargeItemService.sync(MODULE_KEY, created.id(), request.chargeItems());
         if (request.audit()) {
@@ -110,10 +130,9 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
         return created;
     }
 
-    @Override
     @Transactional
     public FreightBillResponse update(Long id, FreightBillRequest request) {
-        FreightBillResponse updated = super.update(id,
+        FreightBillResponse updated = updateBill(id,
                 request.audit() ? copyRequestWithStatus(request, StatusConstants.DRAFT) : request);
         documentChargeItemService.sync(MODULE_KEY, id, request.chargeItems());
         if (request.audit()) {
@@ -122,12 +141,91 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
         return updated;
     }
 
-    @Transactional(readOnly = true)
-    public List<FreightBillResponse> search(String keyword, int maxSize) {
-        return super.search(keyword, SEARCH_FIELDS, maxSize, null, repository);
+    @Transactional
+    public FreightBillResponse updateStatus(Long id, String status) {
+        FreightBill bill = requireEntity(id);
+        String currentStatus = bill.getStatus();
+        FreightBillResponse response = doUpdateStatus(id, status);
+        if (!Objects.equals(currentStatus, response.status())) {
+            String actionType = StatusConstants.DRAFT.equals(response.status()) ? "反审核" : "审核";
+            publishEvent(bill, "FREIGHT_BILL_STATUS_CHANGED", actionType,
+                    "物流单状态 " + currentStatus + " -> " + response.status());
+        }
+        return response;
     }
 
-    @Override
+    @Transactional
+    public void delete(Long id) {
+        FreightBill entity = requireEntity(id);
+        STATUS_GUARD.assertDeleteAllowed(entity);
+        beforeDelete(entity);
+        entity.setDeletedFlag(true);
+        saveEntity(entity);
+        afterDelete(entity);
+        log.info("{} deleted: id={}", entity.getClass().getSimpleName(), id);
+    }
+
+    /**
+     * 基类 create 的显式内联：雪花 ID → 归一化 → 校验 → 应用 → 终态双写守卫 → 保存。
+     */
+    private FreightBillResponse createBill(FreightBillRequest request) {
+        FreightBill entity = newEntity();
+        long entityId = idGenerator.nextId();
+        assignId(entity, entityId);
+        FreightBillRequest normalized = normalizeCreateRequest(request, entityId);
+        validateCreate(normalized);
+        apply(entity, normalized);
+        STATUS_GUARD.assertRequestDidNotWriteFinalStatus(entity);
+        FreightBillResponse response = toSavedResponse(saveCreatedEntity(entity, normalized));
+        log.info("{} created: id={}", entity.getClass().getSimpleName(), entityId);
+        return response;
+    }
+
+    /**
+     * 基类 update 的显式内联，状态断言序列逐字保持：
+     * 编辑状态守卫 → 更新校验 → 快照当前状态 → 应用请求 →
+     * assertRequestStatusTransitionAllowed → allowRequestToWriteFinalStatus 分支下的
+     * assertRequestDidNotWriteFinalStatus → 保存。
+     */
+    private FreightBillResponse updateBill(Long id, FreightBillRequest request) {
+        FreightBill entity = requireEntity(id);
+        FreightBillRequest normalized = normalizeUpdateRequest(entity, request);
+        STATUS_GUARD.assertEditAllowed(entity, allowProtectedStatusUpdate(entity, normalized));
+        validateUpdate(entity, normalized);
+        Optional<String> currentStatus = STATUS_GUARD.resolveStatus(entity);
+        apply(entity, normalized);
+        STATUS_GUARD.assertRequestStatusTransitionAllowed(entity, currentStatus, allowedStatusTransitions());
+        // 基类 allowRequestToWriteFinalStatus 默认 false：普通保存一律拒绝终态写入。
+        STATUS_GUARD.assertRequestDidNotWriteFinalStatus(entity);
+        FreightBillResponse response = toSavedResponse(saveUpdatedEntity(entity, normalized));
+        log.info("{} updated: id={}", entity.getClass().getSimpleName(), id);
+        return response;
+    }
+
+    /**
+     * 基类 updateStatus 的显式内联：等值短路 → 迁移表校验 → beforeStatusUpdate → 写状态 → 状态保存。
+     */
+    private FreightBillResponse doUpdateStatus(Long id, String status) {
+        FreightBill entity = requireEntity(id);
+        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
+        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
+        if (currentStatus.equals(nextStatus)) {
+            return toSavedResponse(entity);
+        }
+        STATUS_GUARD.validateStatusTransition(allowedStatusTransitions(), currentStatus, nextStatus);
+        beforeStatusUpdate(entity, currentStatus, nextStatus);
+        STATUS_GUARD.writeStatus(entity, nextStatus);
+        FreightBillResponse response = toSavedResponse(saveEntity(entity));
+        log.info(
+                "{} status updated: id={}, {} -> {}",
+                entity.getClass().getSimpleName(),
+                id,
+                currentStatus,
+                nextStatus
+        );
+        return response;
+    }
+
     protected FreightBillResponse toDetailResponse(FreightBill entity) {
         FreightBillResponse response = mapper.toResponse(entity);
         List<DocumentChargeItemResponse> chargeItems =
@@ -155,7 +253,6 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
         );
     }
 
-    @Override
     protected void validateCreate(FreightBillRequest request) {
         if (repository.existsByBillNoAndDeletedFlagFalse(request.billNo())) {
             throw business("物流单号已存在");
@@ -166,7 +263,6 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
         }
     }
 
-    @Override
     protected void validateUpdate(FreightBill entity, FreightBillRequest request) {
         if (!entity.getBillNo().equals(request.billNo())
                 && repository.existsByBillNoAndDeletedFlagFalse(request.billNo())) {
@@ -174,12 +270,10 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
         }
     }
 
-    @Override
     protected FreightBillRequest normalizeCreateRequest(FreightBillRequest request, long entityId) {
         return copyRequest(request, resolveCreateBusinessNo(entityId));
     }
 
-    @Override
     protected FreightBillRequest normalizeUpdateRequest(FreightBill entity, FreightBillRequest request) {
         assertOrdinaryUpdateKeepsStatus(entity.getStatus(), request.status());
         return copyRequest(request, entity.getBillNo());
@@ -210,12 +304,15 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
         }
     }
 
-    @Override
-    protected java.util.Set<StatusTransition> allowedStatusTransitions() {
+    protected Set<StatusTransition> allowedStatusTransitions() {
         return StatusConstants.FREIGHT_BILL_AUDIT_TRANSITIONS;
     }
 
-    @Override
+    private boolean allowProtectedStatusUpdate(FreightBill entity, FreightBillRequest request) {
+        // 基类 allowProtectedStatusUpdate 默认 false：受保护状态单据不允许普通编辑。
+        return false;
+    }
+
     protected void apply(FreightBill entity, FreightBillRequest request) {
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(), StatusConstants.DRAFT, "物流单状态", StatusConstants.ALLOWED_FREIGHT_BILL_STATUS
@@ -243,7 +340,6 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
         applyService.applyItems(entity, request, this::nextId);
     }
 
-    @Override
     protected void beforeStatusUpdate(FreightBill entity, String currentStatus, String nextStatus) {
         lockCurrent(entity);
         if (StatusConstants.AUDITED.equals(currentStatus) && StatusConstants.DRAFT.equals(nextStatus)) {
@@ -251,27 +347,11 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
         }
     }
 
-    @Override
-    @Transactional
-    public FreightBillResponse updateStatus(Long id, String status) {
-        FreightBill bill = requireEntity(id);
-        String currentStatus = bill.getStatus();
-        FreightBillResponse response = super.updateStatus(id, status);
-        if (!Objects.equals(currentStatus, response.status())) {
-            String actionType = StatusConstants.DRAFT.equals(response.status()) ? "反审核" : "审核";
-            publishEvent(bill, "FREIGHT_BILL_STATUS_CHANGED", actionType,
-                    "物流单状态 " + currentStatus + " -> " + response.status());
-        }
-        return response;
-    }
-
-    @Override
     protected void beforeDelete(FreightBill entity) {
         lockCurrent(entity);
         downstreamMutationGuard.assertDeleteAllowed(entity);
     }
 
-    @Override
     protected void afterDelete(FreightBill entity) {
         documentChargeItemService.removeAll(MODULE_KEY, entity.getId());
         entity.getSourceOrders().forEach(source -> source.setActiveFlag(false));
@@ -337,49 +417,40 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
         return name != null ? name : BusinessDocumentValidator.trimToNull(item.getBrand());
     }
 
-    @Override
     protected FreightBill newEntity() {
         return new FreightBill();
     }
 
-    @Override
     protected void assignId(FreightBill entity, Long id) {
         entity.setId(id);
     }
 
-    @Override
     protected Optional<FreightBill> findActiveEntity(Long id) {
         return repository.findByIdAndDeletedFlagFalse(id);
     }
 
-    @Override
     protected Optional<FreightBill> findVisibleEntity(Long id) {
         return repository.findById(id);
     }
 
-    @Override
     protected String notFoundMessage() {
         return "物流单不存在";
     }
 
-    @Override
     protected boolean allowViewingDeletedRecords() {
         return true;
     }
 
-    @Override
     protected FreightBill saveEntity(FreightBill entity) {
         return repository.save(entity);
     }
 
-    @Override
     protected FreightBill saveCreatedEntity(FreightBill entity, FreightBillRequest request) {
         FreightBill saved = saveEntity(entity);
         publishEvent(saved, "FREIGHT_BILL_CREATED", "新增", "新增物流单 " + saved.getBillNo());
         return saved;
     }
 
-    @Override
     protected FreightBill saveUpdatedEntity(FreightBill entity, FreightBillRequest request) {
         lockCurrent(entity);
         FreightBill saved = saveEntity(entity);
@@ -400,14 +471,53 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
         );
     }
 
-    @Override
     protected FreightBillResponse toResponse(FreightBill entity) {
         return mapper.toResponse(entity);
     }
 
-    @Override
     protected FreightBillResponse toSavedResponse(FreightBill entity) {
         return toDetailResponse(entity);
+    }
+
+    private FreightBill requireEntity(Long id) {
+        return findActiveEntity(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
+    }
+
+    private FreightBill requireDetailEntity(Long id) {
+        if (allowViewingDeletedRecords()) {
+            return findVisibleEntity(id)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
+        }
+        return requireEntity(id);
+    }
+
+    private Page<FreightBill> pageEntities(PageQuery query, Specification<FreightBill> specification) {
+        Specification<FreightBill> effectiveSpec =
+                VISIBILITY_POLICY.applyDeletedVisibility(specification, allowViewingDeletedRecords());
+        return repository.findAll(effectiveSpec, query.toPageable("id"));
+    }
+
+    private Specification<FreightBill> combineSpecifications(Specification<FreightBill> left,
+                                                            Specification<FreightBill> right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return left.and(right);
+    }
+
+    private long nextId() {
+        return idGenerator.nextId();
+    }
+
+    private String resolveCreateBusinessNo(Long entityId) {
+        if (entityId == null || entityId <= 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "业务单据雪花ID尚未分配");
+        }
+        return String.valueOf(entityId);
     }
 
     private BusinessException business(String message) {

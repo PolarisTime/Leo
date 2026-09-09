@@ -20,6 +20,7 @@ import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -40,7 +41,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -314,5 +317,108 @@ class FreightBillServiceTest {
         assertThatThrownBy(() -> service.normalizeUpdateRequest(entity, request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("只能通过审核或反审核操作变更");
+    }
+
+    // ---------- 显式状态断言序列（原基类内联） ----------
+
+    @Test
+    void update_shouldRejectEditInProtectedStatus() {
+        FreightBill entity = new FreightBill();
+        entity.setId(5L);
+        entity.setBillNo("FB001");
+        entity.setStatus(StatusConstants.AUDITED);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> service.update(5L, request("FB001", 1L, null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能编辑");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void update_shouldRejectRequestedStatusChange() {
+        FreightBill entity = new FreightBill();
+        entity.setId(5L);
+        entity.setBillNo("FB001");
+        entity.setStatus(StatusConstants.AUDITED);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> service.update(5L, request("FB001", 1L, StatusConstants.DRAFT)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("只能通过审核或反审核操作变更");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_shouldRejectBlankStatus() {
+        FreightBill entity = new FreightBill();
+        entity.setId(5L);
+        entity.setStatus(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> service.updateStatus(5L, " "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("状态不能为空");
+
+        verify(sourceAllocationLockService, never()).lockDocumentSources(any(), any(), any(), any());
+        verify(repository, never()).save(any());
+        verify(businessOperationEventPublisher, never()).publish(any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void updateStatus_shouldRejectFinalStatusOutsideTransitionTable() {
+        FreightBill entity = new FreightBill();
+        entity.setId(5L);
+        entity.setStatus(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> service.updateStatus(5L, StatusConstants.COMPLETED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能从「草稿」变更为「已完成」");
+
+        verify(sourceAllocationLockService, never()).lockDocumentSources(any(), any(), any(), any());
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_shouldShortCircuitWhenStatusUnchanged() {
+        FreightBill entity = new FreightBill();
+        entity.setId(5L);
+        entity.setBillNo("FB001");
+        entity.setStatus(StatusConstants.AUDITED);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        FreightBillResponse response = mock(FreightBillResponse.class);
+        when(response.status()).thenReturn(StatusConstants.AUDITED);
+        when(mapper.toResponse(entity)).thenReturn(response);
+
+        FreightBillResponse result = service.updateStatus(5L, StatusConstants.AUDITED);
+
+        assertThat(result.status()).isEqualTo(StatusConstants.AUDITED);
+        verify(repository, never()).save(any());
+        verify(businessOperationEventPublisher, never()).publish(any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void updateStatus_shouldLockGuardSavePublishInOrder() {
+        FreightBill entity = new FreightBill();
+        entity.setId(5L);
+        entity.setBillNo("FB001");
+        entity.setStatus(StatusConstants.AUDITED);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(repository.save(entity)).thenReturn(entity);
+        FreightBillResponse response = mock(FreightBillResponse.class);
+        when(response.status()).thenReturn(StatusConstants.DRAFT);
+        when(mapper.toResponse(entity)).thenReturn(response);
+
+        service.updateStatus(5L, StatusConstants.DRAFT);
+
+        InOrder inOrder = inOrder(sourceAllocationLockService, downstreamMutationGuard, repository,
+                businessOperationEventPublisher);
+        inOrder.verify(sourceAllocationLockService).lockDocumentSources(any(), any(), any(), any());
+        inOrder.verify(downstreamMutationGuard).assertReverseAuditAllowed(entity);
+        inOrder.verify(repository).save(entity);
+        inOrder.verify(businessOperationEventPublisher).publish(any(), any(), any(), any(), any(), any(), any(), any());
     }
 }

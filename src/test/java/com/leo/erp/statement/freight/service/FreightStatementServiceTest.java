@@ -13,6 +13,7 @@ import com.leo.erp.statement.freight.repository.FreightStatementSummaryQueryRepo
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -28,7 +29,10 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -250,5 +254,110 @@ class FreightStatementServiceTest {
         FreightStatementCommand normalized = service.normalizeUpdateRequest(entity, cmd);
 
         assertThat(normalized.statementNo()).isEqualTo("FS001"); // 保留实体单号
+    }
+
+    // ---------- 显式状态断言序列（原基类内联） ----------
+
+    @Test
+    void update_shouldRejectIllegalStatusTransitionAfterApply() {
+        FreightStatement entity = new FreightStatement();
+        entity.setId(5L);
+        entity.setStatementNo("FS001");
+        entity.setStatus(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(entity));
+        doAnswer(invocation -> {
+            entity.setStatus(StatusConstants.PENDING_CONFIRM);
+            return null;
+        }).when(workflowService).apply(any(), any(), any());
+
+        assertThatThrownBy(() -> service.update(5L, command("FS001", null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能从「草稿」变更为「待确认」");
+
+        verify(workflowService, never()).saveUpdated(any(), any());
+    }
+
+    @Test
+    void update_shouldRejectEditInProtectedStatus() {
+        FreightStatement entity = new FreightStatement();
+        entity.setId(5L);
+        entity.setStatementNo("FS001");
+        entity.setStatus(StatusConstants.AUDITED);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(entity));
+
+        assertThatThrownBy(() -> service.update(5L, command("FS001", null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能编辑");
+
+        verify(workflowService, never()).saveUpdated(any(), any());
+    }
+
+    @Test
+    void updateStatus_shouldRejectBlankStatus() {
+        FreightStatement entity = new FreightStatement();
+        entity.setId(5L);
+        entity.setStatus(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(entity));
+
+        assertThatThrownBy(() -> service.updateStatus(5L, " "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("状态不能为空");
+
+        verify(workflowService, never()).beforeStatusUpdate(any(), any(), any());
+        verify(workflowService, never()).save(any());
+        verify(workflowService, never()).publishStatusChanged(any(), any(), any());
+    }
+
+    @Test
+    void updateStatus_shouldRejectFinalStatusOutsideTransitionTable() {
+        FreightStatement entity = new FreightStatement();
+        entity.setId(5L);
+        entity.setStatus(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(entity));
+
+        assertThatThrownBy(() -> service.updateStatus(5L, StatusConstants.COMPLETED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能从「草稿」变更为「已完成」");
+
+        verify(workflowService, never()).beforeStatusUpdate(any(), any(), any());
+        verify(workflowService, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_shouldShortCircuitWhenStatusUnchanged() {
+        FreightStatement entity = new FreightStatement();
+        entity.setId(5L);
+        entity.setStatementNo("FS001");
+        entity.setStatus(StatusConstants.AUDITED);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(entity));
+        FreightStatementView view = mock(FreightStatementView.class);
+        when(view.status()).thenReturn(StatusConstants.AUDITED);
+        when(viewAssembler.toDetailView(entity)).thenReturn(view);
+
+        FreightStatementView result = service.updateStatus(5L, StatusConstants.AUDITED);
+
+        assertThat(result.status()).isEqualTo(StatusConstants.AUDITED);
+        verify(workflowService, never()).save(any());
+        verify(workflowService, never()).publishStatusChanged(any(), any(), any());
+    }
+
+    @Test
+    void updateStatus_shouldGuardThenSaveThenPublishInOrder() {
+        FreightStatement entity = new FreightStatement();
+        entity.setId(5L);
+        entity.setStatementNo("FS001");
+        entity.setStatus(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(entity));
+        when(workflowService.save(entity)).thenReturn(entity);
+        FreightStatementView view = mock(FreightStatementView.class);
+        when(view.status()).thenReturn(StatusConstants.AUDITED);
+        when(viewAssembler.toDetailView(entity)).thenReturn(view);
+
+        service.updateStatus(5L, StatusConstants.AUDITED);
+
+        InOrder inOrder = inOrder(workflowService);
+        inOrder.verify(workflowService).beforeStatusUpdate(entity, StatusConstants.DRAFT, StatusConstants.AUDITED);
+        inOrder.verify(workflowService).save(entity);
+        inOrder.verify(workflowService).publishStatusChanged(entity, StatusConstants.DRAFT, StatusConstants.AUDITED);
     }
 }
