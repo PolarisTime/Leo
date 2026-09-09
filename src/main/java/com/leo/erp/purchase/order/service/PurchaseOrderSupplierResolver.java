@@ -4,6 +4,8 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.master.api.SupplierQuery;
 import com.leo.erp.master.api.SupplierQuery.SupplierSnapshot;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -17,9 +19,23 @@ public class PurchaseOrderSupplierResolver {
     private static final Logger log = LoggerFactory.getLogger(PurchaseOrderSupplierResolver.class);
 
     private final SupplierQuery supplierQuery;
+    private final CompanySettingService companySettingService;
 
-    public PurchaseOrderSupplierResolver(SupplierQuery supplierQuery) {
+    public PurchaseOrderSupplierResolver(SupplierQuery supplierQuery,
+                                         CompanySettingService companySettingService) {
         this.supplierQuery = supplierQuery;
+        this.companySettingService = companySettingService;
+    }
+
+    SettlementCompanySnapshot requireSettlementCompany(Long settlementCompanyId) {
+        if (companySettingService == null) {
+            return new SettlementCompanySnapshot(settlementCompanyId, null);
+        }
+        CompanySetting company = companySettingService.requireActiveSettlementCompany(settlementCompanyId);
+        return new SettlementCompanySnapshot(company.getId(), company.getCompanyName());
+    }
+
+    record SettlementCompanySnapshot(Long id, String name) {
     }
 
     String requireMasterSupplierName(String supplierName) {

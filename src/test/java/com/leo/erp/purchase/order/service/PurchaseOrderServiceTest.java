@@ -2,30 +2,24 @@ package com.leo.erp.purchase.order.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.charge.service.DocumentChargeItemService;
-import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.purchase.api.PurchaseOrderPrepaymentReferenceGuard;
 import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
-import com.leo.erp.purchase.order.repository.PurchaseOrderInboundCandidateQueryRepository;
-import com.leo.erp.purchase.order.repository.PurchaseOrderReferenceQueryRepository;
+import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
-import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
-import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import org.mockito.ArgumentMatchers;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
@@ -41,7 +35,10 @@ class PurchaseOrderServiceTest {
     private SnowflakeIdGenerator snowflakeIdGenerator;
 
     @Mock
-    private PurchaseOrderAvailabilityService availabilityService;
+    private PurchaseOrderQueryService queryService;
+
+    @Mock
+    private PurchaseOrderMutationGuardService mutationGuardService;
 
     @Mock
     private PurchaseOrderResponseAssembler responseAssembler;
@@ -53,83 +50,63 @@ class PurchaseOrderServiceTest {
     private PurchaseOrderApplyService purchaseOrderApplyService;
 
     @Mock
-    private CompanySettingService companySettingService;
-
-    @Mock
-    private PurchaseOrderPrepaymentReferenceGuard purchasePrepaymentReferenceGuard;
-
-    @Mock
-    private PurchaseOrderDownstreamMutationGuard downstreamMutationGuard;
-
-    @Mock
     private PurchaseOrderAuditPublisher purchaseOrderAuditPublisher;
-
-    @Mock
-    private PurchaseOrderInboundCandidateQueryRepository inboundCandidateQueryRepository;
-
-    @Mock
-    private DocumentChargeItemService documentChargeItemService;
-
-    @Mock
-    private PurchaseOrderReferenceQueryRepository referenceQueryRepository;
 
     @InjectMocks
     private PurchaseOrderService service;
 
     @Test
-    void page_pendingOnly_shouldPassTypedDateBoundsWhenDatesMissing() {
+    void page_pendingOnly_shouldDelegateToQueryService() {
         PageQuery query = new PageQuery(0, 30, null, null);
         PageFilter filter = PageFilter.of(null, null, null, null, null, null);
-        when(purchaseOrderRepository.findPending(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(queryService.findPending(eq(query), eq(filter)))
                 .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
+        when(queryService.findReferenceStatusByOrderIds(any())).thenReturn(Map.of());
 
         service.page(query, filter, true);
 
-        ArgumentCaptor<LocalDateTime> startDate = ArgumentCaptor.forClass(LocalDateTime.class);
-        ArgumentCaptor<LocalDateTime> endDateExclusive = ArgumentCaptor.forClass(LocalDateTime.class);
-        verify(purchaseOrderRepository).findPending(
-                any(), any(), any(), any(), any(), startDate.capture(), endDateExclusive.capture(), any(),
-                any(Pageable.class));
-        assertThat(startDate.getValue()).isEqualTo(LocalDateTime.of(1, 1, 1, 0, 0));
-        assertThat(endDateExclusive.getValue()).isEqualTo(LocalDateTime.of(10000, 1, 1, 0, 0));
+        verify(queryService).findPending(eq(query), eq(filter));
     }
 
     @Test
-    void page_withReferenceFilter_shouldDelegateToReferenceAwareQuery() {
+    void page_withReferenceFilter_shouldDelegateToQueryService() {
         PageQuery query = new PageQuery(0, 30, null, null);
         PageFilter filter = PageFilter.of(null, null, null, null, null, null);
-        when(purchaseOrderRepository.findByReferenceFilter(
-                any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), isNull(), any(Pageable.class)))
+        when(queryService.findByReferenceFilter(eq(query), eq(filter), eq(false), eq(true), isNull()))
                 .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
+        when(queryService.findReferenceStatusByOrderIds(any())).thenReturn(Map.of());
 
         service.page(query, filter, false, true);
 
-        verify(purchaseOrderRepository).findByReferenceFilter(
-                any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), isNull(), any(Pageable.class));
+        verify(queryService).findByReferenceFilter(eq(query), eq(filter), eq(false), eq(true), isNull());
     }
 
     @Test
-    void page_withReferencedByFilter_shouldDelegateToReferenceAwareQuery() {
+    void page_withReferencedByFilter_shouldDelegateToQueryService() {
         PageQuery query = new PageQuery(0, 30, null, null);
         PageFilter filter = PageFilter.of(null, null, null, null, null, null);
-        when(purchaseOrderRepository.findByReferenceFilter(
-                any(), any(), any(), any(), any(), any(), any(), any(), isNull(), isNull(), eq("purchase-inbound"), any(Pageable.class)))
+        when(queryService.findByReferenceFilter(eq(query), eq(filter), isNull(), isNull(), eq("purchase-inbound")))
                 .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
+        when(queryService.findReferenceStatusByOrderIds(any())).thenReturn(Map.of());
 
         service.page(query, filter, null, null, "purchase-inbound");
 
-        verify(purchaseOrderRepository).findByReferenceFilter(
-                any(), any(), any(), any(), any(), any(), any(), any(), isNull(), isNull(), eq("purchase-inbound"), any(Pageable.class));
+        verify(queryService).findByReferenceFilter(eq(query), eq(filter), isNull(), isNull(), eq("purchase-inbound"));
     }
 
     @Test
-    void page_withUnknownReferencedBy_shouldRejectRequest() {
+    void page_default_shouldUseSummarySpecificationAndPageEntities() {
         PageQuery query = new PageQuery(0, 30, null, null);
         PageFilter filter = PageFilter.of(null, null, null, null, null, null);
+        when(queryService.summarySpecification(eq(filter))).thenReturn(null);
+        when(purchaseOrderRepository.findAll(ArgumentMatchers.<Specification<PurchaseOrder>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
+        when(queryService.findReferenceStatusByOrderIds(any())).thenReturn(Map.of());
 
-        assertThatThrownBy(() -> service.page(query, filter, null, null, "unknown"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("下游模块关联筛选值");
+        service.page(query, filter);
+
+        verify(queryService).summarySpecification(eq(filter));
+        verify(purchaseOrderRepository).findAll(ArgumentMatchers.<Specification<PurchaseOrder>>any(), any(Pageable.class));
+        verify(queryService).findReferenceStatusByOrderIds(any());
     }
 }

@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.service;
 
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
@@ -44,6 +45,9 @@ class PurchaseOrderApplyServiceTest {
 
     @Mock
     private PurchaseInboundItemQueryService purchaseInboundItemQueryService;
+
+    @Mock
+    private DocumentChargeItemService documentChargeItemService;
 
     @InjectMocks
     private PurchaseOrderApplyService service;

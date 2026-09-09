@@ -1,5 +1,7 @@
 package com.leo.erp.purchase.order.service;
 
+import com.leo.erp.common.charge.api.DocumentChargeItemRequest;
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
@@ -21,16 +23,46 @@ import java.util.function.LongSupplier;
 @Service
 public class PurchaseOrderApplyService {
 
+    private static final String MODULE_KEY = "purchase-order";
+
     private final TradeItemMaterialSupport tradeItemMaterialSupport;
     private final WarehouseSelectionSupport warehouseSelectionSupport;
     private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
+    private final DocumentChargeItemService documentChargeItemService;
 
     public PurchaseOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
                                      WarehouseSelectionSupport warehouseSelectionSupport,
-                                     PurchaseInboundItemQueryService purchaseInboundItemQueryService) {
+                                     PurchaseInboundItemQueryService purchaseInboundItemQueryService,
+                                     DocumentChargeItemService documentChargeItemService) {
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
         this.warehouseSelectionSupport = warehouseSelectionSupport;
         this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
+        this.documentChargeItemService = documentChargeItemService;
+    }
+
+    void syncChargeItems(Long orderId, List<DocumentChargeItemRequest> chargeItems) {
+        documentChargeItemService.sync(MODULE_KEY, orderId, chargeItems);
+    }
+
+    void removeChargeItems(Long orderId) {
+        documentChargeItemService.removeAll(MODULE_KEY, orderId);
+    }
+
+    BigDecimal chargeTotal(Long orderId) {
+        return documentChargeItemService.sumAmount(documentChargeItemService.list(MODULE_KEY, orderId));
+    }
+
+    /**
+     * 单据总金额 = 货物明细小计 + 附加费用小计；totalWeight 永远仅货物。
+     * 以「sync 前已落库的费用合计」做差额校正，避免二次保存重复计费：
+     * totalAmount(新) = totalAmount(当前) - 旧费用合计 + 新费用合计。
+     */
+    void adjustTotalAmount(PurchaseOrder order, BigDecimal previousExpenseTotal) {
+        BigDecimal currentExpense = chargeTotal(order.getId());
+        BigDecimal adjusted = order.getTotalAmount()
+                .subtract(previousExpenseTotal)
+                .add(currentExpense);
+        order.setTotalAmount(adjusted);
     }
 
     void applyItems(PurchaseOrder purchaseOrder,

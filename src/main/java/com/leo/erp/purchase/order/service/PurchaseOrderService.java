@@ -1,96 +1,61 @@
 package com.leo.erp.purchase.order.service;
 
-import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
-import com.leo.erp.purchase.api.PurchaseOrderPrepaymentReferenceGuard;
 import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
-import com.leo.erp.purchase.order.repository.PurchaseOrderInboundCandidateQueryRepository;
-import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderReferenceQueryRepository;
+import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
-import com.leo.erp.system.company.service.CompanySettingService;
 import java.math.BigDecimal;
-import java.util.function.Function;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.jpa.domain.Specification;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.beans.factory.annotation.Autowired;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Locale;
 import java.util.Set;
-import java.util.stream.Collectors;
-import java.time.LocalDateTime;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PurchaseOrderService extends AbstractStatusCrudService<
         PurchaseOrder, PurchaseOrderRequest, PurchaseOrderResponse> {
 
     private final PurchaseOrderRepository purchaseOrderRepository;
-    private final PurchaseOrderAvailabilityService availabilityService;
+    private final PurchaseOrderQueryService queryService;
+    private final PurchaseOrderMutationGuardService mutationGuardService;
     private final PurchaseOrderResponseAssembler responseAssembler;
     private final PurchaseOrderSupplierResolver supplierResolver;
     private final PurchaseOrderApplyService purchaseOrderApplyService;
-    private final CompanySettingService companySettingService;
-    private final PurchaseOrderPrepaymentReferenceGuard purchasePrepaymentReferenceGuard;
-    private final PurchaseOrderDownstreamMutationGuard downstreamMutationGuard;
     private final PurchaseOrderAuditPublisher purchaseOrderAuditPublisher;
-    private final PurchaseOrderInboundCandidateQueryRepository inboundCandidateQueryRepository;
-    private final DocumentChargeItemService documentChargeItemService;
-    private final PurchaseOrderReferenceQueryRepository referenceQueryRepository;
-
-    private static final String MODULE_KEY = "purchase-order";
-    private static final LocalDateTime MIN_PENDING_ORDER_DATE = LocalDateTime.of(1, 1, 1, 0, 0);
-    private static final LocalDateTime MAX_PENDING_ORDER_DATE_EXCLUSIVE = LocalDateTime.of(10000, 1, 1, 0, 0);
 
     @Autowired
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
                                 SnowflakeIdGenerator snowflakeIdGenerator,
-                                PurchaseOrderAvailabilityService availabilityService,
+                                PurchaseOrderQueryService queryService,
+                                PurchaseOrderMutationGuardService mutationGuardService,
                                 PurchaseOrderResponseAssembler responseAssembler,
                                 PurchaseOrderSupplierResolver supplierResolver,
                                 PurchaseOrderApplyService purchaseOrderApplyService,
-                                CompanySettingService companySettingService,
-                                PurchaseOrderPrepaymentReferenceGuard purchasePrepaymentReferenceGuard,
-                                PurchaseOrderDownstreamMutationGuard downstreamMutationGuard,
-                                PurchaseOrderAuditPublisher purchaseOrderAuditPublisher,
-                                PurchaseOrderInboundCandidateQueryRepository inboundCandidateQueryRepository,
-                                DocumentChargeItemService documentChargeItemService,
-                                PurchaseOrderReferenceQueryRepository referenceQueryRepository) {
+                                PurchaseOrderAuditPublisher purchaseOrderAuditPublisher) {
         super(snowflakeIdGenerator);
         this.purchaseOrderRepository = purchaseOrderRepository;
-        this.availabilityService = availabilityService;
+        this.queryService = queryService;
+        this.mutationGuardService = mutationGuardService;
         this.responseAssembler = responseAssembler;
         this.supplierResolver = supplierResolver;
         this.purchaseOrderApplyService = purchaseOrderApplyService;
-        this.companySettingService = companySettingService;
-        this.purchasePrepaymentReferenceGuard = purchasePrepaymentReferenceGuard;
-        this.downstreamMutationGuard = downstreamMutationGuard;
         this.purchaseOrderAuditPublisher = purchaseOrderAuditPublisher;
-        this.inboundCandidateQueryRepository = inboundCandidateQueryRepository;
-        this.documentChargeItemService = documentChargeItemService;
-        this.referenceQueryRepository = referenceQueryRepository;
     }
-
-    private static final String[] PURCHASE_ORDER_SEARCH_FIELDS = {"orderNo", "supplierName"};
-
 
     @Transactional(readOnly = true)
     public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter) {
@@ -114,87 +79,31 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                                             Boolean referenced,
                                             String referencedBy) {
         Page<PurchaseOrder> entities;
-        LocalDateTime startDate = filter.startDate() == null
-                ? MIN_PENDING_ORDER_DATE
-                : filter.startDate().atStartOfDay();
-        LocalDateTime endDateExclusive = filter.endDate() == null
-                ? MAX_PENDING_ORDER_DATE_EXCLUSIVE
-                : filter.endDate().plusDays(1).atStartOfDay();
         if (referenced != null || referencedBy != null) {
-            entities = purchaseOrderRepository.findByReferenceFilter(
-                    normalizeContains(filter.keyword()),
-                    filter.supplierId(),
-                    normalizeExact(filter.name()),
-                    filter.settlementCompanyId(),
-                    normalizeExact(filter.status()),
-                    startDate,
-                    endDateExclusive,
-                    StatusConstants.PURCHASE_COMPLETED,
-                    pendingOnly,
-                    referenced,
-                    validateReferencedBy(referencedBy),
-                    query.toPageable("id")
-            );
+            entities = queryService.findByReferenceFilter(query, filter, pendingOnly, referenced, referencedBy);
         } else if (Boolean.TRUE.equals(pendingOnly)) {
-            entities = purchaseOrderRepository.findPending(
-                    normalizeContains(filter.keyword()),
-                    filter.supplierId(),
-                    normalizeExact(filter.name()),
-                    filter.settlementCompanyId(),
-                    normalizeExact(filter.status()),
-                    startDate,
-                    endDateExclusive,
-                    StatusConstants.PURCHASE_COMPLETED,
-                    query.toPageable("id")
-            );
+            entities = queryService.findPending(query, filter);
         } else {
-            Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS)
-                    .and(Specs.equalIfPresent("supplierName", filter.name()))
-                    .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
-                    .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                    .and(Specs.documentStatus(filter.status()))
-                    .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
-            entities = pageEntities(query, spec, purchaseOrderRepository);
+            entities = pageEntities(query, queryService.summarySpecification(filter), purchaseOrderRepository);
         }
         Map<Long, PurchaseOrderReferenceQueryRepository.ReferenceStatus> statuses =
-                referenceQueryRepository == null
-                        ? Map.of()
-                        : referenceQueryRepository.findByOrderIds(
-                                entities.getContent().stream().map(PurchaseOrder::getId).toList());
-        return entities.map(order -> {
-            PurchaseOrderResponse response = toResponse(order);
-            PurchaseOrderReferenceQueryRepository.ReferenceStatus status = statuses.get(order.getId());
-            return status == null
-                    ? response
-                    : response.withReferenceFlags(
-                            status.referencedBySalesOrder(),
-                            status.referencedByPurchaseInbound());
-        });
-    }
-
-    private static final Set<String> REFERENCED_BY_VALUES =
-            Set.of("sales-order", "purchase-inbound", "none");
-
-    /** 校验下游模块引用筛选取值，非法取值直接拒绝请求。 */
-    private static String validateReferencedBy(String referencedBy) {
-        if (referencedBy == null || REFERENCED_BY_VALUES.contains(referencedBy)) {
-            return referencedBy;
-        }
-        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的下游模块关联筛选值: " + referencedBy);
-    }
-
-    private static String normalizeContains(String value) {
-        return value == null || value.isBlank() ? "" : value.trim().toLowerCase(Locale.ROOT);
-    }
-
-    private static String normalizeExact(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
+                queryService.findReferenceStatusByOrderIds(
+                        entities.getContent().stream().map(PurchaseOrder::getId).toList());
+        return entities.map(order -> queryService.applyReferenceFlags(
+                toResponse(order),
+                statuses.get(order.getId())
+        ));
     }
 
     @Transactional(readOnly = true)
-    public java.util.List<PurchaseOrderResponse> search(String keyword, int maxSize) {
-        return search(keyword, PURCHASE_ORDER_SEARCH_FIELDS, maxSize,
+    public List<PurchaseOrderResponse> search(String keyword, int maxSize) {
+        return search(keyword, PurchaseOrderQueryService.PURCHASE_ORDER_SEARCH_FIELDS, maxSize,
                 null, purchaseOrderRepository);
+    }
+
+    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public Page<PurchaseOrderImportCandidateResponse> inboundImportCandidates(PageQuery query, PageFilter filter) {
+        return queryService.inboundImportCandidates(query, filter);
     }
 
     @Override
@@ -202,8 +111,8 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
     public PurchaseOrderResponse create(PurchaseOrderRequest request) {
         PurchaseOrderResponse created = super.create(
                 request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
-        documentChargeItemService.sync(MODULE_KEY, created.id(), request.chargeItems());
-        applyChargeTotal(created.id(), BigDecimal.ZERO);
+        purchaseOrderApplyService.syncChargeItems(created.id(), request.chargeItems());
+        purchaseOrderApplyService.adjustTotalAmount(requireEntity(created.id()), BigDecimal.ZERO);
         if (request.audit()) {
             return updateStatus(created.id(), StatusConstants.AUDITED);
         }
@@ -213,78 +122,20 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
     @Override
     @Transactional
     public PurchaseOrderResponse update(Long id, PurchaseOrderRequest request) {
-        BigDecimal previousExpenseTotal = documentChargeItemService
-                .sumAmount(documentChargeItemService.list(MODULE_KEY, id));
+        BigDecimal previousExpenseTotal = purchaseOrderApplyService.chargeTotal(id);
         PurchaseOrderResponse updated = super.update(id,
                 request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
-        documentChargeItemService.sync(MODULE_KEY, id, request.chargeItems());
-        applyChargeTotal(id, previousExpenseTotal);
+        purchaseOrderApplyService.syncChargeItems(id, request.chargeItems());
+        purchaseOrderApplyService.adjustTotalAmount(requireEntity(id), previousExpenseTotal);
         if (request.audit()) {
             return updateStatus(id, StatusConstants.AUDITED);
         }
         return updated;
     }
 
-    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
-    public Page<PurchaseOrderImportCandidateResponse> inboundImportCandidates(PageQuery query, PageFilter filter) {
-        Page<Long> candidateIds = inboundCandidateQueryRepository.pageIds(query, filter);
-        List<PurchaseOrder> orders = candidateIds.isEmpty()
-                ? List.of()
-                : purchaseOrderRepository.findByIdInAndDeletedFlagFalse(candidateIds.getContent());
-        Map<Long, PurchaseOrder> orderById = orders.stream()
-                .collect(Collectors.toMap(PurchaseOrder::getId, Function.identity()));
-        List<PurchaseOrder> orderedOrders = candidateIds.getContent().stream()
-                .map(orderById::get)
-                .filter(java.util.Objects::nonNull)
-                .toList();
-        Map<Long, Integer> importableQuantityMap =
-                availabilityService.buildInboundImportableQuantityMap(
-                        orderedOrders,
-                        filter.currentRecordId()
-                );
-        List<PurchaseOrderImportCandidateResponse> candidates = orderedOrders.stream()
-                .map(order -> toImportCandidateResponse(
-                        order,
-                        importableQuantityMap.getOrDefault(order.getId(), 0)
-                ))
-                .filter(candidate -> candidate.importableQuantity() > 0)
-                .toList();
-        return new PageImpl<>(
-                candidates,
-                candidateIds.getPageable(),
-                candidateIds.getTotalElements()
-        );
-    }
-
     @Override
     protected PurchaseOrderResponse toDetailResponse(PurchaseOrder order) {
-        PurchaseOrderResponse response = responseAssembler.toDetailResponse(order);
-        PurchaseOrderReferenceQueryRepository.ReferenceStatus status = referenceQueryRepository == null
-                ? null
-                : referenceQueryRepository.findByOrderIds(List.of(order.getId())).get(order.getId());
-        return status == null
-                ? response
-                : response.withReferenceFlags(
-                        status.referencedBySalesOrder(),
-                        status.referencedByPurchaseInbound());
-    }
-
-    private PurchaseOrderImportCandidateResponse toImportCandidateResponse(PurchaseOrder order, Integer importableQuantity) {
-        return new PurchaseOrderImportCandidateResponse(
-                order.getId(),
-                order.getOrderNo(),
-                order.getSupplierId(),
-                order.getSupplierCode(),
-                order.getSupplierName(),
-                order.getSettlementCompanyId(),
-                order.getSettlementCompanyName(),
-                order.getBuyerName(),
-                order.getOrderDate(),
-                order.getTotalWeight(),
-                order.getTotalAmount(),
-                order.getStatus(),
-                importableQuantity
-        );
+        return queryService.toDetailResponse(order);
     }
 
     @Override
@@ -317,21 +168,6 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                 request.items(),
                 request.audit()
         );
-    }
-
-    /**
-     * 单据总金额 = 货物明细小计 + 附加费用小计；totalWeight 永远仅货物。
-     * 以「sync 前已落库的费用合计」做差额校正，避免二次保存重复计费：
-     * totalAmount(新) = totalAmount(当前) - 旧费用合计 + 新费用合计。
-     */
-    private void applyChargeTotal(Long orderId, BigDecimal previousExpenseTotal) {
-        PurchaseOrder order = requireEntity(orderId);
-        BigDecimal currentExpense = documentChargeItemService
-                .sumAmount(documentChargeItemService.list(MODULE_KEY, orderId));
-        BigDecimal adjusted = order.getTotalAmount()
-                .subtract(previousExpenseTotal)
-                .add(currentExpense);
-        order.setTotalAmount(adjusted);
     }
 
     private PurchaseOrderRequest withStatus(PurchaseOrderRequest request, String status) {
@@ -402,7 +238,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
     }
 
     @Override
-    protected java.util.Set<StatusTransition> allowedStatusTransitions() {
+    protected Set<StatusTransition> allowedStatusTransitions() {
         return StatusConstants.PURCHASE_ORDER_TRANSITIONS;
     }
 
@@ -441,22 +277,16 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
 
     @Override
     protected void apply(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
-        assertLineQuantities(request);
-        if (purchaseOrder.getId() != null) {
-            if (downstreamMutationGuard != null
-                    && purchaseOrder.getItems().stream().anyMatch(item -> item.getId() != null)) {
-                downstreamMutationGuard.assertSourceLineMutationAllowed(purchaseOrder, request.items(), "修改");
-            }
-            assertNoActivePurchasePrepayment(purchaseOrder, "修改");
-        }
-        assertSettlementCompanyMutable(purchaseOrder, request.settlementCompanyId());
+        PurchaseOrderSaveValidations.assertLineQuantities(request);
+        mutationGuardService.assertUpdateAllowed(purchaseOrder, request.items());
+        PurchaseOrderSaveValidations.assertSettlementCompanyMutable(purchaseOrder, request.settlementCompanyId());
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
                 purchaseOrder.getStatus() != null ? purchaseOrder.getStatus() : StatusConstants.DRAFT,
                 "采购订单状态",
                 StatusConstants.ALLOWED_PURCHASE_ORDER_STATUS
         );
-        assertStatusNotChangedBySave(purchaseOrder, nextStatus);
+        PurchaseOrderSaveValidations.assertStatusNotChangedBySave(purchaseOrder, nextStatus);
         purchaseOrder.setOrderNo(request.orderNo());
         PurchaseOrderSupplierResolver.SupplierIdentity supplierIdentity =
                 supplierResolver.requireMasterSupplier(
@@ -469,7 +299,8 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         purchaseOrder.setSupplierName(supplierIdentity.supplierName());
         purchaseOrder.setOrderDate(request.orderDate());
         purchaseOrder.setBuyerName(request.buyerName());
-        SettlementCompanySnapshot settlementCompany = resolveSettlementCompany(request.settlementCompanyId());
+        PurchaseOrderSupplierResolver.SettlementCompanySnapshot settlementCompany =
+                supplierResolver.requireSettlementCompany(request.settlementCompanyId());
         purchaseOrder.setSettlementCompanyId(settlementCompany.id());
         purchaseOrder.setSettlementCompanyName(settlementCompany.name());
         purchaseOrder.setStatus(nextStatus);
@@ -477,29 +308,10 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         purchaseOrderApplyService.applyItems(purchaseOrder, request, this::nextId);
     }
 
-    private void assertStatusNotChangedBySave(PurchaseOrder purchaseOrder, String requestedStatus) {
-        String currentStatus = purchaseOrder.getStatus();
-        if (currentStatus == null) {
-            if (!StatusConstants.DRAFT.equals(requestedStatus)) {
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_ERROR,
-                        "新建采购订单只能保存为草稿，审核请使用审核命令"
-                );
-            }
-            return;
-        }
-        if (!currentStatus.equals(requestedStatus)) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "普通保存不能修改采购订单状态，请使用审核或反审核操作"
-            );
-        }
-    }
-
     @Override
     protected void beforeStatusUpdate(PurchaseOrder entity, String currentStatus, String nextStatus) {
         if (StatusConstants.DRAFT.equals(currentStatus) && StatusConstants.AUDITED.equals(nextStatus)) {
-            assertAuditableLineQuantities(entity);
+            PurchaseOrderSaveValidations.assertAuditableLineQuantities(entity);
         }
         if (StatusConstants.PURCHASE_COMPLETED.equals(nextStatus)
                 && !StatusConstants.PURCHASE_COMPLETED.equals(currentStatus)) {
@@ -517,24 +329,18 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         }
         if (StatusConstants.DRAFT.equals(nextStatus)
                 && !StatusConstants.DRAFT.equals(currentStatus)) {
-            if (downstreamMutationGuard != null) {
-                downstreamMutationGuard.assertMutable(entity, "反审核");
-            }
-            assertNoActivePurchasePrepayment(entity, "反审核");
+            mutationGuardService.assertMutable(entity, "反审核");
         }
     }
 
     @Override
     protected void beforeDelete(PurchaseOrder entity) {
-        if (downstreamMutationGuard != null) {
-            downstreamMutationGuard.assertMutable(entity, "删除");
-        }
-        assertNoActivePurchasePrepayment(entity, "删除");
+        mutationGuardService.assertMutable(entity, "删除");
     }
 
     @Override
     protected void afterDelete(PurchaseOrder entity) {
-        documentChargeItemService.removeAll(MODULE_KEY, entity.getId());
+        purchaseOrderApplyService.removeChargeItems(entity.getId());
         publishMutationEvent(entity, "PURCHASE_ORDER_DELETED", "删除");
     }
 
@@ -574,65 +380,5 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
     @Override
     protected PurchaseOrderResponse toSavedResponse(PurchaseOrder entity) {
         return toDetailResponse(entity);
-    }
-
-    private void assertSettlementCompanyMutable(PurchaseOrder purchaseOrder, Long requestedSettlementCompanyId) {
-        if (purchaseOrder.getId() == null || purchaseOrder.getSettlementCompanyId() == null) {
-            return;
-        }
-        if (StatusConstants.AUDITED.equals(purchaseOrder.getStatus())
-                && !purchaseOrder.getSettlementCompanyId().equals(requestedSettlementCompanyId)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核采购订单不允许修改采购结算主体");
-        }
-    }
-
-    private void assertNoActivePurchasePrepayment(PurchaseOrder purchaseOrder, String action) {
-        if (purchasePrepaymentReferenceGuard != null) {
-            List<Long> sourceItemIds = purchaseOrder.getItems().stream()
-                    .map(item -> item.getId())
-                    .filter(java.util.Objects::nonNull)
-                    .distinct()
-                    .sorted()
-                    .toList();
-            purchasePrepaymentReferenceGuard.assertNoActivePrepayment(
-                    purchaseOrder.getId(),
-                    sourceItemIds,
-                    action
-            );
-        }
-    }
-
-    private void assertLineQuantities(PurchaseOrderRequest request) {
-        for (int index = 0; index < request.items().size(); index++) {
-            Integer quantity = request.items().get(index).quantity();
-            if (quantity == null || quantity < 1) {
-                throw new BusinessException(
-                        ErrorCode.VALIDATION_ERROR,
-                        "第" + (index + 1) + "行数量必须至少为1个数量单位"
-                );
-            }
-        }
-    }
-
-    private void assertAuditableLineQuantities(PurchaseOrder purchaseOrder) {
-        for (var item : purchaseOrder.getItems()) {
-            if (item.getQuantity() == null || item.getQuantity() < 1) {
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_ERROR,
-                        "第" + item.getLineNo() + "行数量必须至少为1个数量单位"
-                );
-            }
-        }
-    }
-
-    private SettlementCompanySnapshot resolveSettlementCompany(Long id) {
-        if (companySettingService == null) {
-            return new SettlementCompanySnapshot(id, null);
-        }
-        CompanySetting company = companySettingService.requireActiveSettlementCompany(id);
-        return new SettlementCompanySnapshot(company.getId(), company.getCompanyName());
-    }
-
-    private record SettlementCompanySnapshot(Long id, String name) {
     }
 }
