@@ -14,6 +14,8 @@ import com.leo.erp.system.operationlog.support.OperationLogResultCollector;
 import com.leo.erp.sales.order.web.dto.SalesOrderPrintXlsxRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
+import com.leo.erp.sales.order.web.dto.SalesOrderOutboundImportCandidatesCriteria;
+import com.leo.erp.sales.order.web.dto.SalesOrderPageCriteria;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.sales.order.web.dto.SalesOrderSourceCandidateResponse;
@@ -26,6 +28,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -77,15 +80,15 @@ public class V2SalesOrderController {
 
     @Operation(summary = "分页查询销售订单")
     @GetMapping
-    public PageResponse<SalesOrderResponse> page(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String productKeyword, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Boolean pendingOnly, @RequestParam(required = false) Boolean referenced, @RequestParam(required = false) String referencedBy) {
+    public PageResponse<SalesOrderResponse> page(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @ModelAttribute SalesOrderPageCriteria criteria) {
         return PageResponse.from(service.page(
                 query,
-                PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, startDate, endDate)
-                        .withIdentity(customerId, projectId, null, null, null),
-                productKeyword,
-                pendingOnly,
-                referenced,
-                referencedBy
+                PageFilter.of(criteria.getKeyword(), criteria.getCustomerName(), criteria.getProjectName(), criteria.getSettlementCompanyId(), criteria.getStatus(), criteria.getStartDate(), criteria.getEndDate())
+                        .withIdentity(criteria.getCustomerId(), criteria.getProjectId(), null, null, null),
+                criteria.getProductKeyword(),
+                criteria.getPendingOnly(),
+                criteria.getReferenced(),
+                criteria.getReferencedBy()
         ));
     }
 
@@ -104,11 +107,11 @@ public class V2SalesOrderController {
 
     @Operation(summary = "分页查询销售订单出库导入候选")
     @GetMapping("/outbound-import-candidates")
-    public PageResponse<SalesOrderResponse> outboundImportCandidates(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Long currentRecordId) {
+    public PageResponse<SalesOrderResponse> outboundImportCandidates(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @ModelAttribute SalesOrderOutboundImportCandidatesCriteria criteria) {
         return PageResponse.from(service.outboundImportCandidates(
                 query,
-                PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, startDate, endDate)
-                        .withIdentity(customerId, projectId, null, null, currentRecordId)
+                PageFilter.of(criteria.getKeyword(), criteria.getCustomerName(), criteria.getProjectName(), criteria.getSettlementCompanyId(), criteria.getStatus(), criteria.getStartDate(), criteria.getEndDate())
+                        .withIdentity(criteria.getCustomerId(), criteria.getProjectId(), null, null, criteria.getCurrentRecordId())
         ));
     }
 

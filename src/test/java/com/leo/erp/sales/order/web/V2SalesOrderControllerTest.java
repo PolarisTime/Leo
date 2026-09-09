@@ -10,6 +10,8 @@ import com.leo.erp.sales.order.service.SalesOrderService;
 import com.leo.erp.sales.order.service.SalesOrderSourceCandidateService;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
+import com.leo.erp.sales.order.web.dto.SalesOrderOutboundImportCandidatesCriteria;
+import com.leo.erp.sales.order.web.dto.SalesOrderPageCriteria;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.sales.order.web.dto.SalesOrderSourceCandidateResponse;
 import org.junit.jupiter.api.AfterEach;
@@ -87,11 +89,11 @@ class V2SalesOrderControllerTest {
 
     @Test
     void page_shouldDelegate() {
-        when(service.page(any(PageQuery.class), any(PageFilter.class), anyString()))
+        when(service.page(any(PageQuery.class), any(PageFilter.class), any(), isNull(), isNull(), isNull()))
                 .thenReturn(mock(org.springframework.data.domain.Page.class));
 
-        var result = controller.page(mock(PageQuery.class), "kw", 10L, "客户A", 20L, "项目A", 30L,
-                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+        var result = controller.page(mock(PageQuery.class), criteria("kw", 10L, "客户A", 20L, "项目A", 30L,
+                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), null, null, null));
 
         assertThat(result).isNotNull();
     }
@@ -101,8 +103,8 @@ class V2SalesOrderControllerTest {
         when(service.page(any(PageQuery.class), any(PageFilter.class), anyString(), any(), any(), any()))
                 .thenReturn(mock(org.springframework.data.domain.Page.class));
 
-        var result = controller.page(mock(PageQuery.class), "kw", 10L, "客户A", 20L, "项目A", 30L,
-                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), false, true, null);
+        var result = controller.page(mock(PageQuery.class), criteria("kw", 10L, "客户A", 20L, "项目A", 30L,
+                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), false, true, null));
 
         assertThat(result).isNotNull();
         verify(service).page(any(PageQuery.class), any(PageFilter.class), anyString(), eq(false), eq(true), isNull());
@@ -113,11 +115,32 @@ class V2SalesOrderControllerTest {
         when(service.page(any(PageQuery.class), any(PageFilter.class), anyString(), any(), any(), any()))
                 .thenReturn(mock(org.springframework.data.domain.Page.class));
 
-        var result = controller.page(mock(PageQuery.class), "kw", 10L, "客户A", 20L, "项目A", 30L,
-                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), null, null, "sales-outbound");
+        var result = controller.page(mock(PageQuery.class), criteria("kw", 10L, "客户A", 20L, "项目A", 30L,
+                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), null, null, "sales-outbound"));
 
         assertThat(result).isNotNull();
         verify(service).page(any(PageQuery.class), any(PageFilter.class), anyString(), isNull(), isNull(), eq("sales-outbound"));
+    }
+
+    private SalesOrderPageCriteria criteria(String keyword, Long customerId, String customerName,
+                                            Long projectId, String projectName, Long settlementCompanyId,
+                                            String productKeyword, String status, LocalDate startDate, LocalDate endDate,
+                                            Boolean pendingOnly, Boolean referenced, String referencedBy) {
+        SalesOrderPageCriteria criteria = new SalesOrderPageCriteria();
+        criteria.setKeyword(keyword);
+        criteria.setCustomerId(customerId);
+        criteria.setCustomerName(customerName);
+        criteria.setProjectId(projectId);
+        criteria.setProjectName(projectName);
+        criteria.setSettlementCompanyId(settlementCompanyId);
+        criteria.setProductKeyword(productKeyword);
+        criteria.setStatus(status);
+        criteria.setStartDate(startDate);
+        criteria.setEndDate(endDate);
+        criteria.setPendingOnly(pendingOnly);
+        criteria.setReferenced(referenced);
+        criteria.setReferencedBy(referencedBy);
+        return criteria;
     }
 
     @Test
@@ -125,8 +148,19 @@ class V2SalesOrderControllerTest {
         when(service.outboundImportCandidates(any(PageQuery.class), any(PageFilter.class)))
                 .thenReturn(mock(org.springframework.data.domain.Page.class));
 
-        var result = controller.outboundImportCandidates(mock(PageQuery.class), "kw", 10L, "客户A", 20L,
-                "项目A", 30L, "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), 5L);
+        SalesOrderOutboundImportCandidatesCriteria criteria = new SalesOrderOutboundImportCandidatesCriteria();
+        criteria.setKeyword("kw");
+        criteria.setCustomerId(10L);
+        criteria.setCustomerName("客户A");
+        criteria.setProjectId(20L);
+        criteria.setProjectName("项目A");
+        criteria.setSettlementCompanyId(30L);
+        criteria.setStatus("DRAFT");
+        criteria.setStartDate(LocalDate.of(2026, 8, 1));
+        criteria.setEndDate(LocalDate.of(2026, 8, 31));
+        criteria.setCurrentRecordId(5L);
+
+        var result = controller.outboundImportCandidates(mock(PageQuery.class), criteria);
 
         assertThat(result).isNotNull();
     }

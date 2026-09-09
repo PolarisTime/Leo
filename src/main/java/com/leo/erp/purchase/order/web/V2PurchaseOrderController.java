@@ -10,6 +10,7 @@ import com.leo.erp.purchase.order.service.PurchaseOrderPickupListService;
 import com.leo.erp.purchase.order.service.PurchaseOrderService;
 import com.leo.erp.purchase.order.service.PurchaseOrderWarehouseRecommendationService;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
+import com.leo.erp.purchase.order.web.dto.PurchaseOrderPageCriteria;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderPickupListResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -75,14 +77,14 @@ public class V2PurchaseOrderController {
 
     @Operation(summary = "分页查询采购订单")
     @GetMapping
-    public PageResponse<PurchaseOrderResponse> page(@BindPageQuery(sortFieldKey = "purchase-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long supplierId, @RequestParam(required = false) String supplierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Boolean pendingOnly, @RequestParam(required = false) Boolean referenced, @RequestParam(required = false) String referencedBy) {
+    public PageResponse<PurchaseOrderResponse> page(@BindPageQuery(sortFieldKey = "purchase-order") PageQuery query, @ModelAttribute PurchaseOrderPageCriteria criteria) {
         return PageResponse.from(purchaseOrderService.page(
                 query,
-                PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)
-                        .withIdentity(null, null, supplierId, null, null),
-                pendingOnly,
-                referenced,
-                referencedBy
+                PageFilter.of(criteria.getKeyword(), criteria.getSupplierName(), criteria.getSettlementCompanyId(), criteria.getStatus(), criteria.getStartDate(), criteria.getEndDate())
+                        .withIdentity(null, null, criteria.getSupplierId(), null, null),
+                criteria.getPendingOnly(),
+                criteria.getReferenced(),
+                criteria.getReferencedBy()
         ));
     }
 

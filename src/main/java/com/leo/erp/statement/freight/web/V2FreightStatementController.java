@@ -7,6 +7,7 @@ import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.statement.freight.service.FreightStatementService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
+import com.leo.erp.statement.freight.web.dto.FreightStatementCandidatesCriteria;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -73,12 +75,12 @@ public class V2FreightStatementController {
 
     @Operation(summary = "分页查询物流对账单候选物流单")
     @GetMapping("/candidates")
-    public PageResponse<FreightStatementCandidateResponse> candidates(@BindPageQuery(sortFieldKey = "freight-bill") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long carrierId, @RequestParam(required = false) String carrierCode, @RequestParam(required = false) String carrierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Long currentStatementId) {
+    public PageResponse<FreightStatementCandidateResponse> candidates(@BindPageQuery(sortFieldKey = "freight-bill") PageQuery query, @ModelAttribute FreightStatementCandidatesCriteria criteria) {
         return PageResponse.from(freightStatementService.candidatePage(
                 query,
-                PageFilter.of(keyword, carrierName, settlementCompanyId, null, startDate, endDate)
-                        .withIdentity(null, null, null, carrierId, currentStatementId),
-                carrierCode
+                PageFilter.of(criteria.getKeyword(), criteria.getCarrierName(), criteria.getSettlementCompanyId(), null, criteria.getStartDate(), criteria.getEndDate())
+                        .withIdentity(null, null, null, criteria.getCarrierId(), criteria.getCurrentStatementId()),
+                criteria.getCarrierCode()
         ));
     }
 

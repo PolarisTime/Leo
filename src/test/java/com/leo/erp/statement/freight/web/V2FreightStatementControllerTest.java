@@ -6,6 +6,7 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.statement.freight.service.FreightStatementService;
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
+import com.leo.erp.statement.freight.web.dto.FreightStatementCandidatesCriteria;
 import com.leo.erp.statement.freight.web.dto.FreightStatementItemRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
@@ -99,8 +100,17 @@ class V2FreightStatementControllerTest {
         when(freightStatementService.candidatePage(any(PageQuery.class), any(PageFilter.class), anyString()))
                 .thenReturn(mock(org.springframework.data.domain.Page.class));
 
-        var result = controller.candidates(mock(PageQuery.class), "kw", 100L, "C001", "承运商A", 30L,
-                LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), 5L);
+        FreightStatementCandidatesCriteria criteria = new FreightStatementCandidatesCriteria();
+        criteria.setKeyword("kw");
+        criteria.setCarrierId(100L);
+        criteria.setCarrierCode("C001");
+        criteria.setCarrierName("承运商A");
+        criteria.setSettlementCompanyId(30L);
+        criteria.setStartDate(LocalDate.of(2026, 8, 1));
+        criteria.setEndDate(LocalDate.of(2026, 8, 31));
+        criteria.setCurrentStatementId(5L);
+
+        var result = controller.candidates(mock(PageQuery.class), criteria);
 
         assertThat(result).isNotNull();
     }
