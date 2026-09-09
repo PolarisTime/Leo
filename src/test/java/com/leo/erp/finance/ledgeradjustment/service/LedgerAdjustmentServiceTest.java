@@ -117,6 +117,60 @@ class LedgerAdjustmentServiceTest {
         verify(repository, never()).existsByAdjustmentNoAndDeletedFlagFalse(anyString());
     }
 
+    // ---------- 停用态下的状态守卫边界：所有写路径统一拒绝且不落库 ----------
+
+    @Test
+    void updateStatus_shouldRejectDisabledWriteWithBlankStatus() {
+        assertThatThrownBy(() -> service().updateStatus(1L, "   "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("台账调整单已停用");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_shouldRejectDisabledWriteWithNullStatus() {
+        assertThatThrownBy(() -> service().updateStatus(1L, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("台账调整单已停用");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_shouldRejectDisabledWriteWithInvalidTransitionStatus() {
+        assertThatThrownBy(() -> service().updateStatus(1L, "已完成"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("台账调整单已停用");
+        verify(repository, never()).findByIdAndDeletedFlagFalse(anyLong());
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_shouldRejectDisabledWriteWithoutEqualStatusShortCircuit() {
+        assertThatThrownBy(() -> service().updateStatus(1L, "草稿"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("台账调整单已停用");
+        verify(repository, never()).save(any());
+        verify(applyService, never()).apply(any(), any());
+    }
+
+    @Test
+    void updateStatus_shouldRejectDisabledWriteWithTerminalStatus() {
+        assertThatThrownBy(() -> service().updateStatus(1L, "已审核"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("台账调整单已停用");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void detail_shouldRejectMissingEntity() {
+        org.mockito.Mockito.when(repository.findById(1L)).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> service().detail(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("台账调整单不存在");
+        verify(mapper, never()).toResponse(any());
+    }
+
     private LedgerAdjustmentService service() {
         return new LedgerAdjustmentService(repository, mapper, idGenerator, applyService);
     }
