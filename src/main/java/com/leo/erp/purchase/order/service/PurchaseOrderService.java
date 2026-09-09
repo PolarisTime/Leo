@@ -4,7 +4,9 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.service.AbstractStatusCrudService;
+import com.leo.erp.common.persistence.Specs;
+import com.leo.erp.common.service.CrudStatusGuard;
+import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
@@ -21,15 +23,23 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class PurchaseOrderService extends AbstractStatusCrudService<
-        PurchaseOrder, PurchaseOrderRequest, PurchaseOrderResponse> {
+public class PurchaseOrderService {
 
+    private static final CrudStatusGuard<PurchaseOrder> STATUS_GUARD = CrudStatusGuard.forStatusAwareEntities();
+    private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
+    private static final Logger log = LoggerFactory.getLogger(PurchaseOrderService.class);
+
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderQueryService queryService;
     private final PurchaseOrderMutationGuardService mutationGuardService;
@@ -47,7 +57,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
                                 PurchaseOrderSupplierResolver supplierResolver,
                                 PurchaseOrderApplyService purchaseOrderApplyService,
                                 PurchaseOrderAuditPublisher purchaseOrderAuditPublisher) {
-        super(snowflakeIdGenerator);
+        this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.queryService = queryService;
         this.mutationGuardService = mutationGuardService;
@@ -55,6 +65,11 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         this.supplierResolver = supplierResolver;
         this.purchaseOrderApplyService = purchaseOrderApplyService;
         this.purchaseOrderAuditPublisher = purchaseOrderAuditPublisher;
+    }
+
+    @Transactional(readOnly = true)
+    public PurchaseOrderResponse detail(Long id) {
+        return toDetailResponse(requireDetailEntity(id));
     }
 
     @Transactional(readOnly = true)
@@ -97,8 +112,13 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
 
     @Transactional(readOnly = true)
     public List<PurchaseOrderResponse> search(String keyword, int maxSize) {
-        return search(keyword, PurchaseOrderQueryService.PURCHASE_ORDER_SEARCH_FIELDS, maxSize,
-                null, purchaseOrderRepository);
+        Specification<PurchaseOrder> spec = combineSpecifications(
+                VISIBILITY_POLICY.applyDeletedVisibility(null, false),
+                Specs.keywordLike(keyword, PurchaseOrderQueryService.PURCHASE_ORDER_SEARCH_FIELDS)
+        );
+        return purchaseOrderRepository.findAll(spec, PageRequest.of(0, maxSize))
+                .map(this::toResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
@@ -106,10 +126,9 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         return queryService.inboundImportCandidates(query, filter);
     }
 
-    @Override
     @Transactional
     public PurchaseOrderResponse create(PurchaseOrderRequest request) {
-        PurchaseOrderResponse created = super.create(
+        PurchaseOrderResponse created = createOrder(
                 request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
         purchaseOrderApplyService.syncChargeItems(created.id(), request.chargeItems());
         purchaseOrderApplyService.adjustTotalAmount(requireEntity(created.id()), BigDecimal.ZERO);
@@ -119,11 +138,10 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         return created;
     }
 
-    @Override
     @Transactional
     public PurchaseOrderResponse update(Long id, PurchaseOrderRequest request) {
         BigDecimal previousExpenseTotal = purchaseOrderApplyService.chargeTotal(id);
-        PurchaseOrderResponse updated = super.update(id,
+        PurchaseOrderResponse updated = updateOrder(id,
                 request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
         purchaseOrderApplyService.syncChargeItems(id, request.chargeItems());
         purchaseOrderApplyService.adjustTotalAmount(requireEntity(id), previousExpenseTotal);
@@ -133,28 +151,128 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         return updated;
     }
 
-    @Override
-    protected PurchaseOrderResponse toDetailResponse(PurchaseOrder order) {
+    @Transactional
+    public PurchaseOrderResponse updateStatus(Long id, String status) {
+        PurchaseOrder purchaseOrder = requireEntity(id);
+        String currentStatus = purchaseOrder.getStatus();
+        PurchaseOrderResponse response = doUpdateStatus(id, status);
+        if (!currentStatus.equals(response.status())) {
+            publishStatusEvent(purchaseOrder, currentStatus, response.status());
+        }
+        return response;
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        PurchaseOrder entity = requireEntity(id);
+        STATUS_GUARD.assertDeleteAllowed(entity);
+        beforeDelete(entity);
+        entity.setDeletedFlag(true);
+        saveEntity(entity);
+        afterDelete(entity);
+        log.info("{} deleted: id={}", entity.getClass().getSimpleName(), id);
+    }
+
+    /**
+     * 基类 create 的显式内联：雪花 ID → 归一化 → 校验 → 应用 → 终态双写守卫 → 保存。
+     */
+    private PurchaseOrderResponse createOrder(PurchaseOrderRequest request) {
+        PurchaseOrder entity = new PurchaseOrder();
+        long entityId = snowflakeIdGenerator.nextId();
+        entity.setId(entityId);
+        PurchaseOrderRequest normalized = normalizeCreateRequest(request, entityId);
+        validateCreate(normalized);
+        apply(entity, normalized);
+        STATUS_GUARD.assertRequestDidNotWriteFinalStatus(entity);
+        PurchaseOrderResponse response = toDetailResponse(purchaseOrderRepository.saveAndFlush(entity));
+        log.info("{} created: id={}", entity.getClass().getSimpleName(), entityId);
+        return response;
+    }
+
+    /**
+     * 基类 update 的显式内联，状态断言序列逐字保持：
+     * 编辑状态守卫 → 更新校验 → 快照当前状态 → 应用请求 →
+     * assertRequestStatusTransitionAllowed → allowRequestToWriteFinalStatus 分支下的
+     * assertRequestDidNotWriteFinalStatus → 保存。
+     */
+    private PurchaseOrderResponse updateOrder(Long id, PurchaseOrderRequest request) {
+        PurchaseOrder entity = requireEntity(id);
+        PurchaseOrderRequest normalized = normalizeUpdateRequest(entity, request);
+        STATUS_GUARD.assertEditAllowed(entity, false);
+        validateUpdate(entity, normalized);
+        Optional<String> currentStatus = STATUS_GUARD.resolveStatus(entity);
+        apply(entity, normalized);
+        STATUS_GUARD.assertRequestStatusTransitionAllowed(entity, currentStatus, allowedStatusTransitions());
+        // 基类 allowRequestToWriteFinalStatus 默认 false：普通保存一律拒绝终态写入。
+        STATUS_GUARD.assertRequestDidNotWriteFinalStatus(entity);
+        PurchaseOrderResponse response = toDetailResponse(saveUpdatedEntity(entity, normalized));
+        log.info("{} updated: id={}", entity.getClass().getSimpleName(), id);
+        return response;
+    }
+
+    /**
+     * 基类 updateStatus 的显式内联：等值短路 → 迁移表校验 → beforeStatusUpdate → 写状态 → 状态保存。
+     */
+    private PurchaseOrderResponse doUpdateStatus(Long id, String status) {
+        PurchaseOrder entity = requireEntity(id);
+        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
+        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
+        if (currentStatus.equals(nextStatus)) {
+            return toDetailResponse(entity);
+        }
+        STATUS_GUARD.validateStatusTransition(allowedStatusTransitions(), currentStatus, nextStatus);
+        beforeStatusUpdate(entity, currentStatus, nextStatus);
+        STATUS_GUARD.writeStatus(entity, nextStatus);
+        PurchaseOrderResponse response = toDetailResponse(purchaseOrderRepository.save(entity));
+        log.info(
+                "{} status updated: id={}, {} -> {}",
+                entity.getClass().getSimpleName(),
+                id,
+                currentStatus,
+                nextStatus
+        );
+        return response;
+    }
+
+    private void publishStatusEvent(PurchaseOrder purchaseOrder, String currentStatus, String nextStatus) {
+        String eventType;
+        String actionType;
+        if (StatusConstants.DRAFT.equals(currentStatus) && StatusConstants.AUDITED.equals(nextStatus)) {
+            eventType = "PURCHASE_ORDER_AUDITED";
+            actionType = "审核";
+        } else if (StatusConstants.AUDITED.equals(currentStatus) && StatusConstants.DRAFT.equals(nextStatus)) {
+            eventType = "PURCHASE_ORDER_REVERSE_AUDITED";
+            actionType = "反审核";
+        } else {
+            return;
+        }
+
+        purchaseOrderAuditPublisher.publish(
+                purchaseOrder,
+                eventType,
+                actionType,
+                "采购订单状态 " + currentStatus + " -> " + nextStatus
+        );
+    }
+
+    private PurchaseOrderResponse toDetailResponse(PurchaseOrder order) {
         return queryService.toDetailResponse(order);
     }
 
-    @Override
-    protected void validateCreate(PurchaseOrderRequest request) {
+    private void validateCreate(PurchaseOrderRequest request) {
         if (purchaseOrderRepository.existsByOrderNoAndDeletedFlagFalse(request.orderNo())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购订单号已存在");
         }
     }
 
-    @Override
-    protected void validateUpdate(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
+    private void validateUpdate(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
         if (!purchaseOrder.getOrderNo().equals(request.orderNo())
                 && purchaseOrderRepository.existsByOrderNoAndDeletedFlagFalse(request.orderNo())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购订单号已存在");
         }
     }
 
-    @Override
-    protected PurchaseOrderRequest normalizeCreateRequest(PurchaseOrderRequest request, long entityId) {
+    private PurchaseOrderRequest normalizeCreateRequest(PurchaseOrderRequest request, long entityId) {
         return new PurchaseOrderRequest(
                 resolveCreateBusinessNo(entityId),
                 request.supplierId(),
@@ -187,8 +305,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         );
     }
 
-    @Override
-    protected PurchaseOrderRequest normalizeUpdateRequest(PurchaseOrder entity, PurchaseOrderRequest request) {
+    private PurchaseOrderRequest normalizeUpdateRequest(PurchaseOrder entity, PurchaseOrderRequest request) {
         return new PurchaseOrderRequest(
                 entity.getOrderNo(),
                 request.supplierId() == null ? entity.getSupplierId() : request.supplierId(),
@@ -207,76 +324,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         );
     }
 
-    @Override
-    protected PurchaseOrder newEntity() {
-        return new PurchaseOrder();
-    }
-
-    @Override
-    protected void assignId(PurchaseOrder entity, Long id) {
-        entity.setId(id);
-    }
-
-    @Override
-    protected Optional<PurchaseOrder> findActiveEntity(Long id) {
-        return purchaseOrderRepository.findByIdAndDeletedFlagFalse(id);
-    }
-
-    @Override
-    protected Optional<PurchaseOrder> findVisibleEntity(Long id) {
-        return purchaseOrderRepository.findById(id);
-    }
-
-    @Override
-    protected String notFoundMessage() {
-        return "采购订单不存在";
-    }
-
-    @Override
-    protected boolean allowViewingDeletedRecords() {
-        return true;
-    }
-
-    @Override
-    protected Set<StatusTransition> allowedStatusTransitions() {
-        return StatusConstants.PURCHASE_ORDER_TRANSITIONS;
-    }
-
-    @Override
-    @Transactional
-    public PurchaseOrderResponse updateStatus(Long id, String status) {
-        PurchaseOrder purchaseOrder = requireEntity(id);
-        String currentStatus = purchaseOrder.getStatus();
-        PurchaseOrderResponse response = super.updateStatus(id, status);
-        if (!currentStatus.equals(response.status())) {
-            publishStatusEvent(purchaseOrder, currentStatus, response.status());
-        }
-        return response;
-    }
-
-    private void publishStatusEvent(PurchaseOrder purchaseOrder, String currentStatus, String nextStatus) {
-        String eventType;
-        String actionType;
-        if (StatusConstants.DRAFT.equals(currentStatus) && StatusConstants.AUDITED.equals(nextStatus)) {
-            eventType = "PURCHASE_ORDER_AUDITED";
-            actionType = "审核";
-        } else if (StatusConstants.AUDITED.equals(currentStatus) && StatusConstants.DRAFT.equals(nextStatus)) {
-            eventType = "PURCHASE_ORDER_REVERSE_AUDITED";
-            actionType = "反审核";
-        } else {
-            return;
-        }
-
-        purchaseOrderAuditPublisher.publish(
-                purchaseOrder,
-                eventType,
-                actionType,
-                "采购订单状态 " + currentStatus + " -> " + nextStatus
-        );
-    }
-
-    @Override
-    protected void apply(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
+    private void apply(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
         PurchaseOrderSaveValidations.assertLineQuantities(request);
         mutationGuardService.assertUpdateAllowed(purchaseOrder, request.items());
         PurchaseOrderSaveValidations.assertSettlementCompanyMutable(purchaseOrder, request.settlementCompanyId());
@@ -308,8 +356,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         purchaseOrderApplyService.applyItems(purchaseOrder, request, this::nextId);
     }
 
-    @Override
-    protected void beforeStatusUpdate(PurchaseOrder entity, String currentStatus, String nextStatus) {
+    private void beforeStatusUpdate(PurchaseOrder entity, String currentStatus, String nextStatus) {
         if (StatusConstants.DRAFT.equals(currentStatus) && StatusConstants.AUDITED.equals(nextStatus)) {
             PurchaseOrderSaveValidations.assertAuditableLineQuantities(entity);
         }
@@ -333,31 +380,20 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         }
     }
 
-    @Override
-    protected void beforeDelete(PurchaseOrder entity) {
+    private void beforeDelete(PurchaseOrder entity) {
         mutationGuardService.assertMutable(entity, "删除");
     }
 
-    @Override
-    protected void afterDelete(PurchaseOrder entity) {
+    private void afterDelete(PurchaseOrder entity) {
         purchaseOrderApplyService.removeChargeItems(entity.getId());
         publishMutationEvent(entity, "PURCHASE_ORDER_DELETED", "删除");
     }
 
-    @Override
-    protected PurchaseOrder saveEntity(PurchaseOrder entity) {
+    private PurchaseOrder saveEntity(PurchaseOrder entity) {
         return purchaseOrderRepository.save(entity);
     }
 
-    @Override
-    protected PurchaseOrder saveCreatedEntity(PurchaseOrder entity, PurchaseOrderRequest request) {
-        PurchaseOrder saved = purchaseOrderRepository.saveAndFlush(entity);
-        publishMutationEvent(saved, "PURCHASE_ORDER_CREATED", "新增");
-        return saved;
-    }
-
-    @Override
-    protected PurchaseOrder saveUpdatedEntity(PurchaseOrder entity, PurchaseOrderRequest request) {
+    private PurchaseOrder saveUpdatedEntity(PurchaseOrder entity, PurchaseOrderRequest request) {
         PurchaseOrder saved = purchaseOrderRepository.saveAndFlush(entity);
         publishMutationEvent(saved, "PURCHASE_ORDER_UPDATED", "编辑");
         return saved;
@@ -372,13 +408,58 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
         );
     }
 
-    @Override
-    protected PurchaseOrderResponse toResponse(PurchaseOrder entity) {
+    private PurchaseOrderResponse toResponse(PurchaseOrder entity) {
         return responseAssembler.toSummaryResponse(entity);
     }
 
-    @Override
-    protected PurchaseOrderResponse toSavedResponse(PurchaseOrder entity) {
-        return toDetailResponse(entity);
+    private PurchaseOrder requireEntity(Long id) {
+        return purchaseOrderRepository.findByIdAndDeletedFlagFalse(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
+    }
+
+    private PurchaseOrder requireDetailEntity(Long id) {
+        return purchaseOrderRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
+    }
+
+    private String notFoundMessage() {
+        return "采购订单不存在";
+    }
+
+    private Set<StatusTransition> allowedStatusTransitions() {
+        return StatusConstants.PURCHASE_ORDER_TRANSITIONS;
+    }
+
+    private Page<PurchaseOrder> pageEntities(PageQuery query,
+                                             Specification<PurchaseOrder> specification,
+                                             PurchaseOrderRepository repository) {
+        Specification<PurchaseOrder> effectiveSpec =
+                VISIBILITY_POLICY.applyDeletedVisibility(specification, allowViewingDeletedRecords());
+        return repository.findAll(effectiveSpec, query.toPageable("id"));
+    }
+
+    private boolean allowViewingDeletedRecords() {
+        return true;
+    }
+
+    private long nextId() {
+        return snowflakeIdGenerator.nextId();
+    }
+
+    private String resolveCreateBusinessNo(Long entityId) {
+        if (entityId <= 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "业务单据雪花ID尚未分配");
+        }
+        return String.valueOf(entityId);
+    }
+    private Specification<PurchaseOrder> combineSpecifications(Specification<PurchaseOrder> left,
+                                                               Specification<PurchaseOrder> right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return left.and(right);
     }
 }

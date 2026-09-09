@@ -2,7 +2,8 @@ package com.leo.erp.system.printtemplate.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.CrudOperationLogger;
+import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
@@ -15,14 +16,18 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
+import java.util.Set;
 
 @Service
-public class PrintTemplateService extends AbstractCrudService<PrintTemplate, PrintTemplateRequest, PrintTemplateResponse> {
+public class PrintTemplateService {
 
     private static final String SYNC_MODE_MANUAL = "MANUAL";
     private static final String SYNC_MODE_FILE = "FILE";
+    private static final CrudStatusGuard<PrintTemplate> STATUS_GUARD = CrudStatusGuard.withoutStatus();
+    private static final Set<com.leo.erp.common.support.StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
 
+    private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(PrintTemplateService.class);
+    private final SnowflakeIdGenerator idGenerator;
     private final PrintTemplateRepository repository;
     private final PrintTemplateMapper printTemplateMapper;
     private final PrintTemplateRequestNormalizer requestNormalizer;
@@ -33,7 +38,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
                                 PrintTemplateMapper printTemplateMapper,
                                 PrintTemplateRequestNormalizer requestNormalizer,
                                 PrintTemplateJsonUploadReader jsonUploadReader) {
-        super(idGenerator);
+        this.idGenerator = idGenerator;
         this.repository = repository;
         this.printTemplateMapper = printTemplateMapper;
         this.requestNormalizer = requestNormalizer;
@@ -54,6 +59,47 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         return requireEntity(id).getBillType();
     }
 
+    @Transactional(readOnly = true)
+    public PrintTemplateResponse detail(Long id) {
+        return toResponse(requireEntity(id));
+    }
+
+    @Transactional
+    public PrintTemplateResponse create(PrintTemplateRequest request) {
+        PrintTemplate entity = new PrintTemplate();
+        long entityId = idGenerator.nextId();
+        entity.setId(entityId);
+        PrintTemplateRequest normalized = normalizeCreateRequest(request, entityId);
+        validateCreate(normalized);
+        apply(entity, normalized);
+        PrintTemplate saved = repository.save(entity);
+        operationLogger.created(entity, entityId);
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public PrintTemplateResponse update(Long id, PrintTemplateRequest request) {
+        PrintTemplate entity = requireEntity(id);
+        PrintTemplateRequest normalized = normalizeUpdateRequest(entity, request);
+        validateUpdate(entity, normalized);
+        apply(entity, normalized);
+        PrintTemplate saved = repository.save(entity);
+        operationLogger.updated(entity, id);
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public PrintTemplateResponse updateStatus(Long id, String status) {
+        PrintTemplate entity = requireEntity(id);
+        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
+        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
+        if (currentStatus.equals(nextStatus)) {
+            return toResponse(entity);
+        }
+        STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
+    }
+
     @Transactional
     public PrintTemplateResponse uploadJson(Long id, MultipartFile file) {
         PrintTemplate template = requireEntity(id);
@@ -68,11 +114,18 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         template.setSyncMode(SYNC_MODE_MANUAL);
         template.setSourceRef(null);
         template.setSourceChecksum(null);
-        return toSavedResponse(saveEntity(template));
+        return toResponse(repository.save(template));
     }
 
-    @Override
-    protected void validateCreate(PrintTemplateRequest request) {
+    @Transactional
+    public void delete(Long id) {
+        PrintTemplate entity = requireEntity(id);
+        entity.setDeletedFlag(true);
+        repository.save(entity);
+        operationLogger.deleted(entity, id);
+    }
+
+    private void validateCreate(PrintTemplateRequest request) {
         String billType = requestNormalizer.normalizeBillType(request.billType());
         String templateName = requestNormalizer.normalizeTemplateName(request.templateName());
         String templateCode = requestNormalizer.normalizeTemplateCode(request.templateCode());
@@ -93,8 +146,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         }
     }
 
-    @Override
-    protected void validateUpdate(PrintTemplate entity, PrintTemplateRequest request) {
+    private void validateUpdate(PrintTemplate entity, PrintTemplateRequest request) {
         String billType = requestNormalizer.normalizeBillType(request.billType());
         String templateName = requestNormalizer.normalizeTemplateName(request.templateName());
         String templateCode = requestNormalizer.normalizeTemplateCode(request.templateCode());
@@ -125,23 +177,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         }
     }
 
-    @Override
-    protected PrintTemplate newEntity() {
-        return new PrintTemplate();
-    }
-
-    @Override
-    protected void assignId(PrintTemplate entity, Long id) {
-        entity.setId(id);
-    }
-
-    @Override
-    protected Optional<PrintTemplate> findActiveEntity(Long id) {
-        return repository.findByIdAndDeletedFlagFalse(id);
-    }
-
-    @Override
-    protected PrintTemplateRequest normalizeCreateRequest(PrintTemplateRequest request, long entityId) {
+    private PrintTemplateRequest normalizeCreateRequest(PrintTemplateRequest request, long entityId) {
         String templateCode = request.templateCode();
         PrintTemplateRequestNormalizer.SettlementCompanySnapshot settlementCompany =
                 requestNormalizer.normalizeSettlementCompany(request.settlementCompanyId());
@@ -160,8 +196,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         );
     }
 
-    @Override
-    protected PrintTemplateRequest normalizeUpdateRequest(PrintTemplate entity, PrintTemplateRequest request) {
+    private PrintTemplateRequest normalizeUpdateRequest(PrintTemplate entity, PrintTemplateRequest request) {
         if (SYNC_MODE_FILE.equals(entity.getSyncMode())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文件托管模板请通过上传 JSON 或修改源文件后重启同步");
         }
@@ -183,23 +218,16 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         );
     }
 
-    @Override
-    protected String notFoundMessage() {
-        return "打印模板不存在";
-    }
-
-    @Override
-    protected void apply(PrintTemplate entity, PrintTemplateRequest request) {
+    private void apply(PrintTemplate entity, PrintTemplateRequest request) {
         requestNormalizer.apply(entity, request);
     }
 
-    @Override
-    protected PrintTemplate saveEntity(PrintTemplate entity) {
-        return repository.save(entity);
+    private PrintTemplateResponse toResponse(PrintTemplate entity) {
+        return printTemplateMapper.toResponse(entity);
     }
 
-    @Override
-    protected PrintTemplateResponse toResponse(PrintTemplate entity) {
-        return printTemplateMapper.toResponse(entity);
+    private PrintTemplate requireEntity(Long id) {
+        return repository.findByIdAndDeletedFlagFalse(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "打印模板不存在"));
     }
 }

@@ -5,7 +5,8 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractStatusCrudService;
+import com.leo.erp.common.service.CrudStatusGuard;
+import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
@@ -15,8 +16,11 @@ import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.purchase.inbound.mapper.PurchaseInboundMapper;
 import com.leo.erp.purchase.inbound.web.dto.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,13 +28,17 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
-public class PurchaseInboundService extends AbstractStatusCrudService<
-        PurchaseInbound, PurchaseInboundRequest, PurchaseInboundResponse> {
+public class PurchaseInboundService {
 
     private static final String[] INBOUND_SEARCH_FIELDS = {"inboundNo", "purchaseOrderNo", "supplierName"};
+    private static final CrudStatusGuard<PurchaseInbound> STATUS_GUARD = CrudStatusGuard.forStatusAwareEntities();
+    private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
+    private static final Logger log = LoggerFactory.getLogger(PurchaseInboundService.class);
 
+    private final SnowflakeIdGenerator idGenerator;
     private final PurchaseInboundRepository repository;
     private final PurchaseInboundMapper purchaseInboundMapper;
     private final PurchaseInboundApplyService applyService;
@@ -46,13 +54,18 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
                                   PurchaseInboundResponseAssembler responseAssembler,
                                   PurchaseInboundMutationGuardService mutationGuardService,
                                   PurchaseInboundWorkflowService workflowService) {
-        super(idGenerator);
+        this.idGenerator = idGenerator;
         this.repository = repository;
         this.purchaseInboundMapper = purchaseInboundMapper;
         this.applyService = applyService;
         this.responseAssembler = responseAssembler;
         this.mutationGuardService = mutationGuardService;
         this.workflowService = workflowService;
+    }
+
+    @Transactional(readOnly = true)
+    public PurchaseInboundResponse detail(Long id) {
+        return toDetailResponse(requireDetailEntity(id));
     }
 
     @Transactional(readOnly = true)
@@ -68,7 +81,7 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
                 .and(Specs.betweenIfPresent(
                         "inboundDate", filter.startDate(), filter.endDate()
                 ));
-        Page<PurchaseInbound> page = pageEntities(query, spec, repository);
+        Page<PurchaseInbound> page = pageEntities(query, spec);
         Map<Long, PurchaseInboundItemRepository.InboundWeightSummary> weightSummaryMap =
                 responseAssembler.loadInboundWeightSummaryMap(page.getContent());
         return page.map(inbound -> responseAssembler.toListResponse(inbound, weightSummaryMap.get(inbound.getId())));
@@ -76,7 +89,7 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
 
     @Transactional(readOnly = true)
     public java.util.List<PurchaseInboundResponse> search(String keyword, int maxSize) {
-        java.util.List<PurchaseInboundResponse> responses = search(keyword, INBOUND_SEARCH_FIELDS, maxSize, null, repository);
+        java.util.List<PurchaseInboundResponse> responses = search(keyword, INBOUND_SEARCH_FIELDS, maxSize);
         Map<Long, PurchaseInboundItemRepository.InboundWeightSummary> weightSummaryMap =
                 responseAssembler.loadInboundWeightSummaryMapByIds(responses.stream()
                         .map(PurchaseInboundResponse::id)
@@ -87,10 +100,9 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
                 .toList();
     }
 
-    @Override
     @Transactional
     public PurchaseInboundResponse create(PurchaseInboundRequest request) {
-        PurchaseInboundResponse created = super.create(
+        PurchaseInboundResponse created = createOrder(
                 request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
         if (request.audit()) {
             return updateStatus(created.id(), StatusConstants.AUDITED);
@@ -98,10 +110,9 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
         return created;
     }
 
-    @Override
     @Transactional
     public PurchaseInboundResponse update(Long id, PurchaseInboundRequest request) {
-        PurchaseInboundResponse updated = super.update(id,
+        PurchaseInboundResponse updated = updateOrder(id,
                 request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
         if (request.audit()) {
             return updateStatus(id, StatusConstants.AUDITED);
@@ -109,20 +120,100 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
         return updated;
     }
 
-    @Override
-    protected PurchaseInboundResponse toDetailResponse(PurchaseInbound inbound) {
+    @Transactional
+    public PurchaseInboundResponse updateStatus(Long id, String status) {
+        PurchaseInbound inbound = requireEntity(id);
+        String currentStatus = inbound.getStatus();
+        PurchaseInboundResponse response = doUpdateStatus(id, status);
+        if (!Objects.equals(currentStatus, response.status())) {
+            workflowService.publishStatusChanged(inbound, currentStatus, response.status());
+        }
+        return response;
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        PurchaseInbound entity = requireEntity(id);
+        STATUS_GUARD.assertDeleteAllowed(entity);
+        beforeDelete(entity);
+        entity.setDeletedFlag(true);
+        saveEntity(entity);
+        afterDelete(entity);
+        log.info("{} deleted: id={}", entity.getClass().getSimpleName(), id);
+    }
+
+    /**
+     * 基类 create 的显式内联：雪花 ID → 归一化 → 校验 → 应用 → 终态双写守卫 → 保存。
+     */
+    private PurchaseInboundResponse createOrder(PurchaseInboundRequest request) {
+        PurchaseInbound entity = new PurchaseInbound();
+        long entityId = idGenerator.nextId();
+        entity.setId(entityId);
+        PurchaseInboundRequest normalized = normalizeCreateRequest(request, entityId);
+        validateCreate(normalized);
+        apply(entity, normalized);
+        STATUS_GUARD.assertRequestDidNotWriteFinalStatus(entity);
+        PurchaseInboundResponse response = toDetailResponse(saveCreatedEntity(entity, normalized));
+        log.info("{} created: id={}", entity.getClass().getSimpleName(), entityId);
+        return response;
+    }
+
+    /**
+     * 基类 update 的显式内联，状态断言序列逐字保持：
+     * 编辑状态守卫 → 更新校验 → 快照当前状态 → 应用请求 →
+     * assertRequestStatusTransitionAllowed → allowRequestToWriteFinalStatus 分支下的
+     * assertRequestDidNotWriteFinalStatus → 保存。
+     */
+    private PurchaseInboundResponse updateOrder(Long id, PurchaseInboundRequest request) {
+        PurchaseInbound entity = requireEntity(id);
+        PurchaseInboundRequest normalized = normalizeUpdateRequest(entity, request);
+        STATUS_GUARD.assertEditAllowed(entity, false);
+        validateUpdate(entity, normalized);
+        Optional<String> currentStatus = STATUS_GUARD.resolveStatus(entity);
+        apply(entity, normalized);
+        STATUS_GUARD.assertRequestStatusTransitionAllowed(entity, currentStatus, allowedStatusTransitions());
+        // 基类 allowRequestToWriteFinalStatus 默认 false：普通保存一律拒绝终态写入。
+        STATUS_GUARD.assertRequestDidNotWriteFinalStatus(entity);
+        PurchaseInboundResponse response = toDetailResponse(saveUpdatedEntity(entity, normalized));
+        log.info("{} updated: id={}", entity.getClass().getSimpleName(), id);
+        return response;
+    }
+
+    /**
+     * 基类 updateStatus 的显式内联：等值短路 → 迁移表校验 → beforeStatusUpdate → 写状态 → 状态保存。
+     */
+    private PurchaseInboundResponse doUpdateStatus(Long id, String status) {
+        PurchaseInbound entity = requireEntity(id);
+        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
+        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
+        if (currentStatus.equals(nextStatus)) {
+            return toDetailResponse(entity);
+        }
+        STATUS_GUARD.validateStatusTransition(allowedStatusTransitions(), currentStatus, nextStatus);
+        beforeStatusUpdate(entity, currentStatus, nextStatus);
+        STATUS_GUARD.writeStatus(entity, nextStatus);
+        PurchaseInboundResponse response = toDetailResponse(saveStatusEntity(entity));
+        log.info(
+                "{} status updated: id={}, {} -> {}",
+                entity.getClass().getSimpleName(),
+                id,
+                currentStatus,
+                nextStatus
+        );
+        return response;
+    }
+
+    private PurchaseInboundResponse toDetailResponse(PurchaseInbound inbound) {
         return responseAssembler.toDetailResponse(inbound);
     }
 
-    @Override
-    protected void validateCreate(PurchaseInboundRequest request) {
+    private void validateCreate(PurchaseInboundRequest request) {
         if (repository.existsByInboundNoAndDeletedFlagFalse(request.inboundNo())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购入库单号已存在");
         }
     }
 
-    @Override
-    protected void validateUpdate(PurchaseInbound inbound, PurchaseInboundRequest request) {
+    private void validateUpdate(PurchaseInbound inbound, PurchaseInboundRequest request) {
         boolean noChanged = !inbound.getInboundNo().equals(request.inboundNo());
         boolean noExists = repository.existsByInboundNoAndDeletedFlagFalse(
                 request.inboundNo()
@@ -132,8 +223,7 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
         }
     }
 
-    @Override
-    protected PurchaseInboundRequest normalizeCreateRequest(PurchaseInboundRequest request, long entityId) {
+    private PurchaseInboundRequest normalizeCreateRequest(PurchaseInboundRequest request, long entityId) {
         return new PurchaseInboundRequest(
                 resolveCreateBusinessNo(entityId),
                 request.purchaseOrderNo(),
@@ -169,8 +259,7 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
         );
     }
 
-    @Override
-    protected PurchaseInboundRequest normalizeUpdateRequest(PurchaseInbound entity, PurchaseInboundRequest request) {
+    private PurchaseInboundRequest normalizeUpdateRequest(PurchaseInbound entity, PurchaseInboundRequest request) {
         return new PurchaseInboundRequest(
                 entity.getInboundNo(),
                 request.purchaseOrderNo(),
@@ -190,55 +279,7 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
         );
     }
 
-    @Override
-    protected PurchaseInbound newEntity() {
-        return new PurchaseInbound();
-    }
-
-    @Override
-    protected void assignId(PurchaseInbound entity, Long id) {
-        entity.setId(id);
-    }
-
-    @Override
-    protected Optional<PurchaseInbound> findActiveEntity(Long id) {
-        return repository.findByIdAndDeletedFlagFalse(id);
-    }
-
-    @Override
-    protected Optional<PurchaseInbound> findVisibleEntity(Long id) {
-        return repository.findById(id);
-    }
-
-    @Override
-    protected String notFoundMessage() {
-        return "采购入库不存在";
-    }
-
-    @Override
-    protected boolean allowViewingDeletedRecords() {
-        return true;
-    }
-
-    @Override
-    protected java.util.Set<StatusTransition> allowedStatusTransitions() {
-        return StatusConstants.PURCHASE_INBOUND_TRANSITIONS;
-    }
-
-    @Override
-    @Transactional
-    public PurchaseInboundResponse updateStatus(Long id, String status) {
-        PurchaseInbound inbound = requireEntity(id);
-        String currentStatus = inbound.getStatus();
-        PurchaseInboundResponse response = super.updateStatus(id, status);
-        if (!Objects.equals(currentStatus, response.status())) {
-            workflowService.publishStatusChanged(inbound, currentStatus, response.status());
-        }
-        return response;
-    }
-
-    @Override
-    protected void apply(PurchaseInbound inbound, PurchaseInboundRequest request) {
+    private void apply(PurchaseInbound inbound, PurchaseInboundRequest request) {
         mutationGuardService.lockSourcePurchaseOrderItems(inbound, request);
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
@@ -259,18 +300,15 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
         applyService.applyItems(inbound, request, this::nextId);
     }
 
-    @Override
-    protected void beforeDelete(PurchaseInbound inbound) {
+    private void beforeDelete(PurchaseInbound inbound) {
         mutationGuardService.assertDeletionAllowed(inbound);
     }
 
-    @Override
-    protected void afterDelete(PurchaseInbound inbound) {
+    private void afterDelete(PurchaseInbound inbound) {
         workflowService.afterDelete(inbound);
     }
 
-    @Override
-    protected void beforeStatusUpdate(PurchaseInbound inbound, String currentStatus, String nextStatus) {
+    private void beforeStatusUpdate(PurchaseInbound inbound, String currentStatus, String nextStatus) {
         mutationGuardService.prepareStatusTransition(inbound, currentStatus, nextStatus);
         inbound.setSourcePurchaseOrderReopenAllowed(
                 StatusConstants.DRAFT.equals(nextStatus)
@@ -279,33 +317,83 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
         );
     }
 
-    @Override
-    protected PurchaseInbound saveEntity(PurchaseInbound entity) {
+    private PurchaseInbound saveEntity(PurchaseInbound entity) {
         return repository.save(entity);
     }
 
-    @Override
-    protected PurchaseInbound saveCreatedEntity(PurchaseInbound entity, PurchaseInboundRequest request) {
+    private PurchaseInbound saveCreatedEntity(PurchaseInbound entity, PurchaseInboundRequest request) {
         return workflowService.saveCreated(entity, request);
     }
 
-    @Override
-    protected PurchaseInbound saveUpdatedEntity(PurchaseInbound entity, PurchaseInboundRequest request) {
+    private PurchaseInbound saveUpdatedEntity(PurchaseInbound entity, PurchaseInboundRequest request) {
         return workflowService.saveUpdated(entity, request);
     }
 
-    @Override
-    protected PurchaseInbound saveStatusEntity(PurchaseInbound entity) {
+    private PurchaseInbound saveStatusEntity(PurchaseInbound entity) {
         return workflowService.saveStatus(entity);
     }
 
-    @Override
-    protected PurchaseInboundResponse toResponse(PurchaseInbound entity) {
+    private PurchaseInboundResponse toResponse(PurchaseInbound entity) {
         return purchaseInboundMapper.toResponse(entity);
     }
 
-    @Override
-    protected PurchaseInboundResponse toSavedResponse(PurchaseInbound entity) {
-        return toDetailResponse(entity);
+    private PurchaseInbound requireEntity(Long id) {
+        return repository.findByIdAndDeletedFlagFalse(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
+    }
+
+    private PurchaseInbound requireDetailEntity(Long id) {
+        return repository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
+    }
+
+    private String notFoundMessage() {
+        return "采购入库不存在";
+    }
+
+    private Set<StatusTransition> allowedStatusTransitions() {
+        return StatusConstants.PURCHASE_INBOUND_TRANSITIONS;
+    }
+
+    private Page<PurchaseInbound> pageEntities(PageQuery query, Specification<PurchaseInbound> specification) {
+        Specification<PurchaseInbound> effectiveSpec =
+                VISIBILITY_POLICY.applyDeletedVisibility(specification, allowViewingDeletedRecords());
+        return repository.findAll(effectiveSpec, query.toPageable("id"));
+    }
+
+    private java.util.List<PurchaseInboundResponse> search(String keyword, String[] searchFields, int maxSize) {
+        Specification<PurchaseInbound> spec = combineSpecifications(
+                VISIBILITY_POLICY.applyDeletedVisibility(null, false),
+                Specs.keywordLike(keyword, searchFields)
+        );
+        return repository.findAll(spec, PageRequest.of(0, maxSize))
+                .map(this::toResponse)
+                .toList();
+    }
+
+    private Specification<PurchaseInbound> combineSpecifications(Specification<PurchaseInbound> left,
+                                                                 Specification<PurchaseInbound> right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return left.and(right);
+    }
+
+    private long nextId() {
+        return idGenerator.nextId();
+    }
+
+    private String resolveCreateBusinessNo(Long entityId) {
+        if (entityId <= 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "业务单据雪花ID尚未分配");
+        }
+        return String.valueOf(entityId);
+    }
+
+    private boolean allowViewingDeletedRecords() {
+        return true;
     }
 }

@@ -33,10 +33,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -321,5 +323,121 @@ class SalesOrderServiceTest {
         boolean allowed = service.allowRequestToWriteFinalStatus(entity, req, Optional.empty());
 
         assertThat(allowed).isFalse();
+    }
+
+    // ---------- 显式状态断言序列（原基类内联） ----------
+
+    @Test
+    void update_shouldRejectIllegalStatusTransitionAfterApply() {
+        loginAs(1L);
+        SalesOrder entity = entity(1L, StatusConstants.AUDITED);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(documentChargeItemService.list("sales-order", 5L)).thenReturn(List.of());
+        when(mutationGuardService.allowsProtectedUpdate(eq(entity), any())).thenReturn(true);
+        doAnswer(invocation -> {
+            entity.setStatus(StatusConstants.SALES_COMPLETED);
+            return null;
+        }).when(workflowService).apply(eq(entity), any(), any());
+
+        assertThatThrownBy(() -> service.update(5L, request("SO001", null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能从「已审核」变更为「完成销售」");
+
+        verify(workflowService, never()).saveUpdated(any(), any());
+    }
+
+    @Test
+    void update_shouldRejectWritingFinalStatusThroughSave() {
+        loginAs(1L);
+        SalesOrder entity = entity(1L, StatusConstants.SALES_COMPLETED);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(documentChargeItemService.list("sales-order", 5L)).thenReturn(List.of());
+        when(mutationGuardService.allowsProtectedUpdate(eq(entity), any())).thenReturn(true);
+        doAnswer(invocation -> {
+            entity.setStatus(StatusConstants.DELIVERY_VERIFICATION);
+            return null;
+        }).when(workflowService).apply(eq(entity), any(), any());
+
+        assertThatThrownBy(() -> service.update(5L, request("SO001", null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("完成态状态必须通过专用状态接口变更");
+
+        verify(workflowService, never()).saveUpdated(any(), any());
+    }
+
+    @Test
+    void updateAndComplete_shouldBypassFinalStatusGuardForDeliveryVerification() {
+        loginAs(1L);
+        SalesOrder entity = entity(1L, StatusConstants.DELIVERY_VERIFICATION);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(repository.findForUpdateByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(mutationGuardService.allowsProtectedUpdate(eq(entity), any())).thenReturn(true);
+        when(workflowService.saveUpdated(eq(entity), any())).thenReturn(entity);
+        SalesOrderResponse completed = mock(SalesOrderResponse.class);
+        when(workflowService.completeSalesOrder(entity)).thenReturn(completed);
+
+        SalesOrderResponse result =
+                service.updateAndComplete(5L, request("SO001", StatusConstants.DELIVERY_VERIFICATION));
+
+        assertThat(result).isSameAs(completed);
+        verify(workflowService).saveUpdated(eq(entity), any());
+        verify(workflowService).completeSalesOrder(entity);
+    }
+
+    @Test
+    void updateAndComplete_shouldRejectStatusChangeOutsideSpecializedOperation() {
+        loginAs(1L);
+        SalesOrder entity = entity(1L, StatusConstants.AUDITED);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(
+                () -> service.updateAndComplete(5L, request("SO001", StatusConstants.DELIVERY_VERIFICATION)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("销售订单状态只能通过审核、反审核或完成销售操作变更");
+    }
+
+    @Test
+    void updateStatus_shouldRejectBlankStatus() {
+        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> service.updateStatus(5L, " "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("状态不能为空");
+
+        verify(workflowService, never()).saveStatus(any());
+        verify(workflowService, never()).publishStatusChanged(any(), anyString(), anyString());
+    }
+
+    @Test
+    void updateStatus_shouldRejectTransitionOutsideTable() {
+        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> service.updateStatus(5L, StatusConstants.SALES_COMPLETED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能从「草稿」变更为「完成销售」");
+
+        verify(mutationGuardService, never()).assertStatusTransitionAllowed(any(), anyString(), anyString());
+        verify(workflowService, never()).saveStatus(any());
+    }
+
+    @Test
+    void updateStatus_shouldGuardThenSaveThenPublishInOrder() {
+        loginAs(1L);
+        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(workflowService.saveStatus(entity)).thenReturn(entity);
+        SalesOrderResponse response = mock(SalesOrderResponse.class);
+        when(response.status()).thenReturn(StatusConstants.AUDITED);
+        when(queryService.toDetailResponse(entity)).thenReturn(response);
+
+        service.updateStatus(5L, StatusConstants.AUDITED);
+
+        InOrder inOrder = inOrder(mutationGuardService, workflowService);
+        inOrder.verify(mutationGuardService)
+                .assertStatusTransitionAllowed(entity, StatusConstants.DRAFT, StatusConstants.AUDITED);
+        inOrder.verify(workflowService).saveStatus(entity);
+        inOrder.verify(workflowService).publishStatusChanged(entity, StatusConstants.DRAFT, StatusConstants.AUDITED);
     }
 }
