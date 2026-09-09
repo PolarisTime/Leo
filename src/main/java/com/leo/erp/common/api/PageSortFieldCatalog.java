@@ -26,7 +26,8 @@ public final class PageSortFieldCatalog {
             Map.entry("operation-log", Set.of("id", "logNo", "operatorName", "loginName", "moduleName", "actionType", "businessNo", "requestMethod", "requestPath", "clientIp", "resultStatus", "operationTime")),
             Map.entry("cash-ledger", Set.of("businessDate")),
             Map.entry("finance-overview", Set.of("counterpartyName", "recognizedAmount", "settledAmount", "outstandingAmount", "advanceAmount")),
-            Map.entry("project", Set.of("id", "projectCode", "projectName", "projectNameAbbr", "customerCode", "projectManager", "status"))
+            Map.entry("project", Set.of("id", "projectCode", "projectName", "projectNameAbbr", "customerCode", "projectManager", "status")),
+            Map.entry("steel-quote", Set.of("id", "quoteDate", "period", "breed", "spec", "material", "factory", "price", "scrapedAt"))
     );
 
     private PageSortFieldCatalog() {

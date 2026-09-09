@@ -256,6 +256,43 @@ leo:
       # 每天 02:05 导出附件恢复清单到附件存储的隔离前缀
       enabled: ${LEO_MAINTENANCE_ATTACHMENT_MANIFEST_EXPORT_ENABLED:true}
       cron: ${LEO_MAINTENANCE_ATTACHMENT_MANIFEST_EXPORT_CRON:0 5 2 * * *}
+  market:
+    steel-quote:
+      # Mysteel 行情抓取总开关(含定时任务与手动同步接口)
+      enabled: ${LEO_MARKET_STEEL_QUOTE_ENABLED:true}
+      # 行情市场名称
+      market: ${LEO_MARKET_STEEL_QUOTE_MARKET:杭州}
+      # 行情列表页地址
+      list-url: ${LEO_MARKET_STEEL_QUOTE_LIST_URL:https://jiancai.mysteel.com/market/pa228a15472aa0aaaaa1.html}
+      # 单次 HTTP 请求超时(毫秒)
+      request-timeout-ms: ${LEO_MARKET_STEEL_QUOTE_REQUEST_TIMEOUT_MS:20000}
+      # 相邻请求间隔(毫秒), 降低风控概率
+      rate-limit-millis: ${LEO_MARKET_STEEL_QUOTE_RATE_LIMIT_MILLIS:1000}
+      sync:
+        # 定时抓取开关; 默认每日 10:35/13:05/16:35 覆盖上午/中午/下午发布节奏
+        enabled: ${LEO_MARKET_STEEL_QUOTE_SYNC_ENABLED:true}
+        cron: ${LEO_MARKET_STEEL_QUOTE_SYNC_CRON:0 35 10,13,16 * * *}
+        zone: ${LEO_MARKET_STEEL_QUOTE_SYNC_ZONE:Asia/Shanghai}
+      match:
+        # 匹配时忽略的材质(直接返回无网价)
+        ignored-materials: ${LEO_MARKET_STEEL_QUOTE_IGNORED_MATERIALS:HRB500E}
+        # 商品品牌 -> Mysteel 钢厂别名; 未列出的品牌按同名匹配
+        brand-alias:
+          万泰: 浙江万泰
+          中新: 中新钢铁
+          中杭: 今胜中杭
+          圆钢: 今胜中杭
+          新梅鹿: 隆鑫/新梅鹿
+          芜湖富鑫: 安徽富鑫
+          铜陵富鑫: 安徽富鑫
+        # 商品类别 -> Mysteel 品名
+        breed-map:
+          直条: 螺纹钢
+          盘螺: 盘螺
+          圆钢: 圆钢
+        # 商品长度 -> 每吨加价(元)
+        length-premium:
+          12米: 30
   auth:
     login-protection:
       # 是否启用登录失败次数保护

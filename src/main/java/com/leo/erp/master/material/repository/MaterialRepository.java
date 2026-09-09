@@ -88,6 +88,8 @@ public interface MaterialRepository extends JpaRepository<Material, Long>, JpaSp
 
     Optional<Material> findByIdAndDeletedFlagFalse(Long id);
 
+    List<Material> findByDeletedFlagFalseAndMaterialTypeOrderByMaterialCodeAsc(String materialType);
+
     long countByDeletedFlagFalse();
 
     @Query("SELECT DISTINCT m.material FROM Material m WHERE m.deletedFlag = false AND m.material IS NOT NULL ORDER BY m.material")
