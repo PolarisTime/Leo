@@ -2,14 +2,18 @@ package com.leo.erp.master.customer.service;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.CrudOperationLogger;
+import com.leo.erp.common.service.CrudStatusGuard;
+import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
-import com.leo.erp.master.service.ReferenceSnapshotSyncService;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
@@ -19,6 +23,7 @@ import com.leo.erp.master.customer.web.dto.CustomerRequest;
 import com.leo.erp.master.customer.web.dto.CustomerResponse;
 import com.leo.erp.master.project.domain.entity.Project;
 import com.leo.erp.master.project.repository.ProjectRepository;
+import com.leo.erp.master.service.ReferenceSnapshotSyncService;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.data.domain.Page;
@@ -31,24 +36,28 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
-public class CustomerService extends AbstractCrudService<Customer, CustomerRequest, CustomerResponse> implements RedisCacheHealthCheck {
+public class CustomerService implements RedisCacheHealthCheck {
 
     private static final String CUSTOMER_CACHE_KEY = "leo:customer:all";
     private static final String CODE_MODULE_KEY = "customer";
+    private static final CrudStatusGuard<Customer> STATUS_GUARD = CrudStatusGuard.withoutStatus();
+    private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
+    private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
 
+    private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(CustomerService.class);
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final CustomerRepository customerRepository;
     private final CustomerMapper customerMapper;
     private final MasterDataReferenceGuard referenceGuard;
     private final CompanySettingService companySettingService;
     private final MasterDataCodeIssuanceService codeIssuanceService;
     private final ProjectRepository projectRepository;
-    private CacheManager cacheManager;
     private final ReferenceSnapshotSyncService referenceSnapshotSyncService;
+    private CacheManager cacheManager;
 
     @Autowired
     public CustomerService(CustomerRepository customerRepository,
@@ -59,7 +68,7 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
                            MasterDataCodeIssuanceService codeIssuanceService,
                            ProjectRepository projectRepository,
                            ReferenceSnapshotSyncService referenceSnapshotSyncService) {
-        super(snowflakeIdGenerator);
+        this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.customerRepository = customerRepository;
         this.customerMapper = customerMapper;
         this.referenceGuard = referenceGuard;
@@ -69,37 +78,62 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         this.referenceSnapshotSyncService = referenceSnapshotSyncService;
     }
 
-    @Override
+    @Transactional(readOnly = true)
+    public CustomerResponse detail(Long id) {
+        return toResponse(requireActiveCustomer(id));
+    }
+
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CUSTOMER_CACHE_KEY + "'")
     public CustomerResponse create(CustomerRequest request) {
-        return super.create(request);
+        Customer entity = new Customer();
+        long entityId = snowflakeIdGenerator.nextId();
+        entity.setId(entityId);
+        validateCreate(request);
+        apply(entity, request);
+        Customer saved = saveCreatedCustomer(entity);
+        operationLogger.created(entity, entityId);
+        return toResponse(saved);
     }
 
-    @Override
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CUSTOMER_CACHE_KEY + "'")
     public CustomerResponse update(Long id, CustomerRequest request) {
-        String currentName = requireEntity(id).getCustomerName();
-        CustomerResponse response = super.update(id, request);
+        Customer entity = requireActiveCustomer(id);
+        String currentName = entity.getCustomerName();
+        apply(entity, request);
+        Customer saved = saveCustomer(entity);
+        CustomerResponse response = toResponse(saved);
+        operationLogger.updated(entity, id);
         if (!currentName.equals(request.customerName())) {
             referenceSnapshotSyncService.syncCustomerName(id, request.customerName());
         }
         return response;
     }
 
-    @Override
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CUSTOMER_CACHE_KEY + "'")
     public CustomerResponse updateStatus(Long id, String status) {
-        return super.updateStatus(id, status);
+        Customer entity = requireActiveCustomer(id);
+        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
+        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
+        if (currentStatus.equals(nextStatus)) {
+            return toResponse(entity);
+        }
+        STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
     }
 
-    @Override
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CUSTOMER_CACHE_KEY + "'")
     public void delete(Long id) {
-        super.delete(id);
+        Customer entity = requireActiveCustomer(id);
+        if (referenceGuard != null) {
+            referenceGuard.assertNoReferences("该客户", customerReferences(entity));
+        }
+        entity.setDeletedFlag(true);
+        saveCustomer(entity);
+        operationLogger.deleted(entity, id);
     }
 
     @Transactional(readOnly = true)
@@ -150,46 +184,22 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         Specification<Customer> spec = Specs.<Customer>notDeleted()
                 .and(customerKeyword(keyword))
                 .and(Specs.equalIfPresent("status", StatusConstants.normalizeOptionalActiveStatus(status, "客户状态")));
-        Page<Customer> customers = pageEntities(query, spec, customerRepository);
+        Page<Customer> customers = customerRepository.findAll(
+                VISIBILITY_POLICY.applyDeletedVisibility(spec, false), query.toPageable("id"));
         List<Project> projects = findProjects(customers.getContent());
         return customers.map(customer -> withProjectNames(customer, projects));
     }
 
-    @Override
-    protected void beforeDelete(Customer entity) {
-        if (referenceGuard == null) {
-            return;
-        }
-        referenceGuard.assertNoReferences("该客户", customerReferences(entity));
+    private Customer requireActiveCustomer(Long id) {
+        return customerRepository.findByIdAndDeletedFlagFalse(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "客户不存在"));
     }
 
-    @Override
-    protected Customer newEntity() {
-        return new Customer();
-    }
-
-    @Override
-    protected void assignId(Customer entity, Long id) {
-        entity.setId(id);
-    }
-
-    @Override
-    protected Optional<Customer> findActiveEntity(Long id) {
-        return customerRepository.findByIdAndDeletedFlagFalse(id);
-    }
-
-    @Override
-    protected String notFoundMessage() {
-        return "客户不存在";
-    }
-
-    @Override
-    protected void validateCreate(CustomerRequest request) {
+    private void validateCreate(CustomerRequest request) {
         codeIssuanceService.validate(CODE_MODULE_KEY, request.customerCode());
     }
 
-    @Override
-    protected void apply(Customer entity, CustomerRequest request) {
+    private void apply(Customer entity, CustomerRequest request) {
         entity.setCustomerCode(codeIssuanceService.resolve(
                 CODE_MODULE_KEY,
                 entity.getCustomerCode(),
@@ -215,20 +225,17 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         entity.setRemark(request.remark());
     }
 
-    @Override
-    protected Customer saveEntity(Customer entity) {
+    private Customer saveCustomer(Customer entity) {
         return customerRepository.save(entity);
     }
 
-    @Override
-    protected Customer saveCreatedEntity(Customer entity, CustomerRequest request) {
-        Customer saved = saveEntity(entity);
+    private Customer saveCreatedCustomer(Customer entity) {
+        Customer saved = saveCustomer(entity);
         codeIssuanceService.consume(CODE_MODULE_KEY, saved.getCustomerCode());
         return saved;
     }
 
-    @Override
-    protected CustomerResponse toResponse(Customer entity) {
+    private CustomerResponse toResponse(Customer entity) {
         return withProjectNames(
                 entity,
                 projectRepository.findAllByCustomerIdentity(entity.getId(), entity.getCustomerCode())

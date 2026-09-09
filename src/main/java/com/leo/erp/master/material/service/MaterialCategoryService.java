@@ -4,8 +4,10 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.CrudOperationLogger;
+import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.material.domain.entity.MaterialCategory;
 import com.leo.erp.master.material.mapper.MaterialCategoryMapper;
@@ -18,26 +20,76 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Optional;
 import java.util.List;
+import java.util.Set;
 
 @Service
-public class MaterialCategoryService extends AbstractCrudService<MaterialCategory, MaterialCategoryRequest, MaterialCategoryResponse> {
+public class MaterialCategoryService {
 
     private static final String CODE_MODULE_KEY = "material-categories";
+    private static final CrudStatusGuard<MaterialCategory> STATUS_GUARD = CrudStatusGuard.withoutStatus();
+    private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
 
+    private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(MaterialCategoryService.class);
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final MaterialCategoryRepository repository;
     private final MaterialCategoryMapper materialCategoryMapper;
     private final MasterDataCodeIssuanceService codeIssuanceService;
 
-    public MaterialCategoryService(MaterialCategoryRepository repository,
-                                   SnowflakeIdGenerator idGenerator,
+    public MaterialCategoryService(SnowflakeIdGenerator idGenerator,
+                                   MaterialCategoryRepository repository,
                                    MaterialCategoryMapper materialCategoryMapper,
                                    MasterDataCodeIssuanceService codeIssuanceService) {
-        super(idGenerator);
+        this.snowflakeIdGenerator = idGenerator;
         this.repository = repository;
         this.materialCategoryMapper = materialCategoryMapper;
         this.codeIssuanceService = codeIssuanceService;
+    }
+
+    @Transactional(readOnly = true)
+    public MaterialCategoryResponse detail(Long id) {
+        return toResponse(requireActiveCategory(id));
+    }
+
+    @Transactional
+    public MaterialCategoryResponse create(MaterialCategoryRequest request) {
+        MaterialCategory entity = new MaterialCategory();
+        long entityId = snowflakeIdGenerator.nextId();
+        entity.setId(entityId);
+        validateCreate(request);
+        apply(entity, request);
+        MaterialCategory saved = saveCreatedCategory(entity);
+        operationLogger.created(entity, entityId);
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public MaterialCategoryResponse update(Long id, MaterialCategoryRequest request) {
+        MaterialCategory entity = requireActiveCategory(id);
+        apply(entity, request);
+        MaterialCategory saved = repository.save(entity);
+        operationLogger.updated(entity, id);
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public MaterialCategoryResponse updateStatus(Long id, String status) {
+        MaterialCategory entity = requireActiveCategory(id);
+        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
+        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
+        if (currentStatus.equals(nextStatus)) {
+            return toResponse(entity);
+        }
+        STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        MaterialCategory entity = requireActiveCategory(id);
+        entity.setDeletedFlag(true);
+        repository.save(entity);
+        operationLogger.deleted(entity, id);
     }
 
     @Transactional(readOnly = true)
@@ -49,7 +101,6 @@ public class MaterialCategoryService extends AbstractCrudService<MaterialCategor
                 .map(this::toResponse);
     }
 
-    @Override
     public MaterialCategoryResponse toResponse(MaterialCategory entity) {
         return materialCategoryMapper.toResponse(entity);
     }
@@ -62,33 +113,16 @@ public class MaterialCategoryService extends AbstractCrudService<MaterialCategor
                 .toList();
     }
 
-    @Override
-    protected MaterialCategory newEntity() {
-        return new MaterialCategory();
+    private MaterialCategory requireActiveCategory(Long id) {
+        return repository.findByIdAndDeletedFlagFalse(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "商品类别不存在"));
     }
 
-    @Override
-    protected void assignId(MaterialCategory entity, Long id) {
-        entity.setId(id);
-    }
-
-    @Override
-    protected Optional<MaterialCategory> findActiveEntity(Long id) {
-        return repository.findByIdAndDeletedFlagFalse(id);
-    }
-
-    @Override
-    protected String notFoundMessage() {
-        return "商品类别不存在";
-    }
-
-    @Override
-    protected void validateCreate(MaterialCategoryRequest request) {
+    private void validateCreate(MaterialCategoryRequest request) {
         codeIssuanceService.validate(CODE_MODULE_KEY, request.categoryCode());
     }
 
-    @Override
-    protected void apply(MaterialCategory entity, MaterialCategoryRequest request) {
+    private void apply(MaterialCategory entity, MaterialCategoryRequest request) {
         entity.setCategoryCode(codeIssuanceService.resolve(
                 CODE_MODULE_KEY,
                 entity.getCategoryCode(),
@@ -101,14 +135,8 @@ public class MaterialCategoryService extends AbstractCrudService<MaterialCategor
         entity.setRemark(optional(request.remark()));
     }
 
-    @Override
-    protected MaterialCategory saveEntity(MaterialCategory entity) {
-        return repository.save(entity);
-    }
-
-    @Override
-    protected MaterialCategory saveCreatedEntity(MaterialCategory entity, MaterialCategoryRequest request) {
-        MaterialCategory saved = saveEntity(entity);
+    private MaterialCategory saveCreatedCategory(MaterialCategory entity) {
+        MaterialCategory saved = repository.save(entity);
         codeIssuanceService.consume(CODE_MODULE_KEY, saved.getCategoryCode());
         return saved;
     }

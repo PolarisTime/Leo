@@ -5,10 +5,13 @@ import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.CrudOperationLogger;
+import com.leo.erp.common.service.CrudStatusGuard;
+import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.system.company.api.SettlementCompanySnapshot;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.mapper.CompanySettingMapper;
@@ -30,12 +33,19 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
-public class CompanySettingService extends AbstractCrudService<CompanySetting, CompanySettingRequest, CompanySettingResponse> implements RedisCacheHealthCheck {
+public class CompanySettingService implements RedisCacheHealthCheck {
 
     public static final String CURRENT_COMPANY_CACHE_KEY = "leo:company:current:v2";
 
+    private static final CrudStatusGuard<CompanySetting> STATUS_GUARD = CrudStatusGuard.withoutStatus();
+    private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
+    private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
+
+    private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(CompanySettingService.class);
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final CompanySettingRepository companySettingRepository;
     private final CompanySettingMapper companySettingMapper;
     private final DashboardSummaryService dashboardSummaryService;
@@ -52,7 +62,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                                  CompanySettlementAccountCodec settlementAccountCodec,
                                  CompanySettingMutationGuardService mutationGuardService,
                                  CompanySettlementNameSyncService nameSyncService) {
-        super(snowflakeIdGenerator);
+        this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.companySettingRepository = companySettingRepository;
         this.companySettingMapper = companySettingMapper;
         this.dashboardSummaryService = dashboardSummaryService;
@@ -77,7 +87,9 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         Specification<CompanySetting> spec = Specs.<CompanySetting>notDeleted()
                 .and(Specs.keywordLike(keyword, "companyName", "taxNo", "bankName", "bankAccount"))
                 .and(Specs.equalIfPresent("status", status));
-        return page(query, spec, companySettingRepository);
+        return companySettingRepository
+                .findAll(VISIBILITY_POLICY.applyDeletedVisibility(spec, false), query.toPageable("id"))
+                .map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -162,78 +174,79 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         return toResponse(saved);
     }
 
-    @Override
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'")
     public CompanySettingResponse create(CompanySettingRequest request) {
-        return super.create(request);
+        CompanySetting entity = new CompanySetting();
+        long entityId = snowflakeIdGenerator.nextId();
+        entity.setId(entityId);
+        validateCreate(request);
+        apply(entity, request);
+        CompanySetting saved = saveCompanySetting(entity);
+        operationLogger.created(entity, entityId);
+        return toResponse(saved);
     }
 
-    @Override
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'")
     public CompanySettingResponse update(Long id, CompanySettingRequest request) {
-        String currentName = requireEntity(id).getCompanyName();
-        CompanySettingResponse response = super.update(id, request);
+        CompanySetting entity = requireActiveCompanySetting(id);
+        String currentName = entity.getCompanyName();
+        validateUpdate(entity, request);
+        apply(entity, request);
+        CompanySetting saved = saveCompanySetting(entity);
+        CompanySettingResponse response = toResponse(saved);
+        operationLogger.updated(entity, id);
         if (!currentName.equals(request.companyName())) {
             nameSyncService.syncSettlementCompanyName(id, request.companyName());
         }
         return response;
     }
 
-    @Override
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'")
     public CompanySettingResponse updateStatus(Long id, String status) {
-        return super.updateStatus(id, status);
+        CompanySetting entity = requireActiveCompanySetting(id);
+        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
+        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
+        if (currentStatus.equals(nextStatus)) {
+            return toResponse(entity);
+        }
+        STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
     }
 
-    @Override
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'")
     public void delete(Long id) {
-        super.delete(id);
+        CompanySetting entity = requireActiveCompanySetting(id);
+        mutationGuardService.assertDeletable(entity);
+        entity.setDeletedFlag(true);
+        saveCompanySetting(entity);
+        operationLogger.deleted(entity, id);
     }
 
-    @Override
-    protected void validateCreate(CompanySettingRequest request) {
+    @Transactional(readOnly = true)
+    public CompanySettingResponse detail(Long id) {
+        return toResponse(requireActiveCompanySetting(id));
+    }
+
+    private CompanySetting requireActiveCompanySetting(Long id) {
+        return companySettingRepository.findByIdAndDeletedFlagFalse(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "结算主体不存在"));
+    }
+
+    private void validateCreate(CompanySettingRequest request) {
         ensureCompanyNameUnique(request.companyName());
     }
 
-    @Override
-    protected void validateUpdate(CompanySetting entity, CompanySettingRequest request) {
+    private void validateUpdate(CompanySetting entity, CompanySettingRequest request) {
         if (!entity.getCompanyName().equals(request.companyName())) {
             ensureCompanyNameUnique(request.companyName());
         }
     }
 
-    @Override
-    protected CompanySetting newEntity() {
-        return new CompanySetting();
-    }
-
-    @Override
-    protected void assignId(CompanySetting entity, Long id) {
-        entity.setId(id);
-    }
-
-    @Override
-    protected Optional<CompanySetting> findActiveEntity(Long id) {
-        return companySettingRepository.findByIdAndDeletedFlagFalse(id);
-    }
-
-    @Override
-    protected void beforeDelete(CompanySetting entity) {
-        mutationGuardService.assertDeletable(entity);
-    }
-
-    @Override
-    protected String notFoundMessage() {
-        return "结算主体不存在";
-    }
-
-    @Override
-    protected void apply(CompanySetting entity, CompanySettingRequest request) {
+    private void apply(CompanySetting entity, CompanySettingRequest request) {
         List<CompanySettlementAccountResponse> settlementAccounts =
                 settlementAccountCodec.normalize(request.settlementAccounts());
         CompanySettlementAccountResponse primaryAccount = settlementAccounts.isEmpty() ? null : settlementAccounts.getFirst();
@@ -257,15 +270,13 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         }
     }
 
-    @Override
-    protected CompanySetting saveEntity(CompanySetting entity) {
+    private CompanySetting saveCompanySetting(CompanySetting entity) {
         CompanySetting saved = companySettingRepository.save(entity);
         dashboardSummaryService.evictAllCache();
         return saved;
     }
 
-    @Override
-    protected CompanySettingResponse toResponse(CompanySetting entity) {
+    private CompanySettingResponse toResponse(CompanySetting entity) {
         return companySettingMapper.toResponse(entity, settlementAccountCodec.read(entity));
     }
 

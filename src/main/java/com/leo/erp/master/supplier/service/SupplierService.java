@@ -2,13 +2,18 @@ package com.leo.erp.master.supplier.service;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.CrudOperationLogger;
+import com.leo.erp.common.service.CrudStatusGuard;
+import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
@@ -26,14 +31,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
+import java.util.Set;
 
 @Service
-public class SupplierService extends AbstractCrudService<Supplier, SupplierRequest, SupplierResponse> implements RedisCacheHealthCheck {
+public class SupplierService implements RedisCacheHealthCheck {
 
     private static final String SUPPLIER_CACHE_KEY = "leo:supplier:all";
     private static final String CODE_MODULE_KEY = "supplier";
+    private static final CrudStatusGuard<Supplier> STATUS_GUARD = CrudStatusGuard.withoutStatus();
+    private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
+    private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
 
+    private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(SupplierService.class);
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final SupplierRepository supplierRepository;
     private final SupplierMapper supplierMapper;
     private final MasterDataReferenceGuard referenceGuard;
@@ -48,7 +58,7 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
                            MasterDataReferenceGuard referenceGuard,
                            MasterDataCodeIssuanceService codeIssuanceService,
                            com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
-        super(snowflakeIdGenerator);
+        this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.supplierRepository = supplierRepository;
         this.supplierMapper = supplierMapper;
         this.referenceGuard = referenceGuard;
@@ -56,37 +66,62 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
         this.referenceSnapshotSyncService = referenceSnapshotSyncService;
     }
 
-    @Override
+    @Transactional(readOnly = true)
+    public SupplierResponse detail(Long id) {
+        return toResponse(requireActiveSupplier(id));
+    }
+
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + SUPPLIER_CACHE_KEY + "'")
     public SupplierResponse create(SupplierRequest request) {
-        return super.create(request);
+        Supplier entity = new Supplier();
+        long entityId = snowflakeIdGenerator.nextId();
+        entity.setId(entityId);
+        validateCreate(request);
+        apply(entity, request);
+        Supplier saved = saveCreatedSupplier(entity);
+        operationLogger.created(entity, entityId);
+        return toResponse(saved);
     }
 
-    @Override
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + SUPPLIER_CACHE_KEY + "'")
     public SupplierResponse update(Long id, SupplierRequest request) {
-        String currentName = requireEntity(id).getSupplierName();
-        SupplierResponse response = super.update(id, request);
+        Supplier entity = requireActiveSupplier(id);
+        String currentName = entity.getSupplierName();
+        apply(entity, request);
+        Supplier saved = saveSupplier(entity);
+        SupplierResponse response = toResponse(saved);
+        operationLogger.updated(entity, id);
         if (!currentName.equals(request.supplierName())) {
             referenceSnapshotSyncService.syncSupplierName(id, request.supplierName());
         }
         return response;
     }
 
-    @Override
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + SUPPLIER_CACHE_KEY + "'")
     public SupplierResponse updateStatus(Long id, String status) {
-        return super.updateStatus(id, status);
+        Supplier entity = requireActiveSupplier(id);
+        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
+        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
+        if (currentStatus.equals(nextStatus)) {
+            return toResponse(entity);
+        }
+        STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
     }
 
-    @Override
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + SUPPLIER_CACHE_KEY + "'")
     public void delete(Long id) {
-        super.delete(id);
+        Supplier entity = requireActiveSupplier(id);
+        if (referenceGuard != null) {
+            referenceGuard.assertNoReferences("该供应商", supplierReferences(entity));
+        }
+        entity.setDeletedFlag(true);
+        saveSupplier(entity);
+        operationLogger.deleted(entity, id);
     }
 
     @Transactional(readOnly = true)
@@ -133,44 +168,21 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
         Specification<Supplier> spec = Specs.<Supplier>notDeleted()
                 .and(Specs.keywordLike(keyword, "supplierCode", "supplierName", "contactName"))
                 .and(Specs.equalIfPresent("status", StatusConstants.normalizeOptionalActiveStatus(status, "供应商状态")));
-        return page(query, spec, supplierRepository);
+        return supplierRepository
+                .findAll(VISIBILITY_POLICY.applyDeletedVisibility(spec, false), query.toPageable("id"))
+                .map(this::toResponse);
     }
 
-    @Override
-    protected void beforeDelete(Supplier entity) {
-        if (referenceGuard == null) {
-            return;
-        }
-        referenceGuard.assertNoReferences("该供应商", supplierReferences(entity));
+    private Supplier requireActiveSupplier(Long id) {
+        return supplierRepository.findByIdAndDeletedFlagFalse(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "供应商不存在"));
     }
 
-    @Override
-    protected Supplier newEntity() {
-        return new Supplier();
-    }
-
-    @Override
-    protected void assignId(Supplier entity, Long id) {
-        entity.setId(id);
-    }
-
-    @Override
-    protected Optional<Supplier> findActiveEntity(Long id) {
-        return supplierRepository.findByIdAndDeletedFlagFalse(id);
-    }
-
-    @Override
-    protected String notFoundMessage() {
-        return "供应商不存在";
-    }
-
-    @Override
-    protected void validateCreate(SupplierRequest request) {
+    private void validateCreate(SupplierRequest request) {
         codeIssuanceService.validate(CODE_MODULE_KEY, request.supplierCode());
     }
 
-    @Override
-    protected void apply(Supplier entity, SupplierRequest request) {
+    private void apply(Supplier entity, SupplierRequest request) {
         entity.setSupplierCode(codeIssuanceService.resolve(
                 CODE_MODULE_KEY,
                 entity.getSupplierCode(),
@@ -184,20 +196,17 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
         entity.setRemark(request.remark());
     }
 
-    @Override
-    protected Supplier saveEntity(Supplier entity) {
+    private Supplier saveSupplier(Supplier entity) {
         return supplierRepository.save(entity);
     }
 
-    @Override
-    protected Supplier saveCreatedEntity(Supplier entity, SupplierRequest request) {
-        Supplier saved = saveEntity(entity);
+    private Supplier saveCreatedSupplier(Supplier entity) {
+        Supplier saved = saveSupplier(entity);
         codeIssuanceService.consume(CODE_MODULE_KEY, saved.getSupplierCode());
         return saved;
     }
 
-    @Override
-    protected SupplierResponse toResponse(Supplier entity) {
+    private SupplierResponse toResponse(Supplier entity) {
         return supplierMapper.toResponse(entity);
     }
 
