@@ -1,11 +1,16 @@
 package com.leo.erp.master.warehouse.service;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.CrudOperationLogger;
+import com.leo.erp.common.service.CrudStatusGuard;
+import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.warehouse.domain.entity.Warehouse;
 import com.leo.erp.master.warehouse.repository.WarehouseRepository;
@@ -17,14 +22,21 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Optional;
+import java.util.List;
+import java.util.Set;
 
 @Service
-public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRequest, WarehouseResponse> {
+public class WarehouseService {
 
     private static final String CODE_MODULE_KEY = "warehouse";
+    private static final CrudStatusGuard<Warehouse> STATUS_GUARD = CrudStatusGuard.withoutStatus();
+    private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
+    private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
 
+    private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(WarehouseService.class);
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final WarehouseRepository warehouseRepository;
     private final WarehouseMapper warehouseMapper;
     private final WarehouseReferenceGuard warehouseReferenceGuard;
@@ -38,7 +50,7 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
                             MasterDataReferenceGuard referenceGuard,
                             MasterDataCodeIssuanceService codeIssuanceService,
                             com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
-        super(snowflakeIdGenerator);
+        this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.warehouseRepository = warehouseRepository;
         this.warehouseMapper = warehouseMapper;
         this.warehouseReferenceGuard = referenceGuard == null ? null : new WarehouseReferenceGuard(referenceGuard);
@@ -46,19 +58,62 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
         this.referenceSnapshotSyncService = referenceSnapshotSyncService;
     }
 
-    @Override
-    @org.springframework.transaction.annotation.Transactional
+    @Transactional(readOnly = true)
+    public WarehouseResponse detail(Long id) {
+        return toResponse(requireActiveWarehouse(id));
+    }
+
+    @Transactional
+    public WarehouseResponse create(WarehouseRequest request) {
+        codeIssuanceService.validate(CODE_MODULE_KEY, request.warehouseCode());
+        Warehouse entity = new Warehouse();
+        long entityId = snowflakeIdGenerator.nextId();
+        entity.setId(entityId);
+        apply(entity, request);
+        Warehouse saved = saveCreatedWarehouse(entity);
+        operationLogger.created(entity, entityId);
+        return toResponse(saved);
+    }
+
+    @Transactional
     public WarehouseResponse update(Long id, WarehouseRequest request) {
-        String currentName = requireEntity(id).getWarehouseName();
-        WarehouseResponse response = super.update(id, request);
+        Warehouse entity = requireActiveWarehouse(id);
+        String currentName = entity.getWarehouseName();
+        apply(entity, request);
+        Warehouse saved = warehouseRepository.save(entity);
+        WarehouseResponse response = toResponse(saved);
+        operationLogger.updated(entity, id);
         if (!currentName.equals(request.warehouseName())) {
             referenceSnapshotSyncService.syncWarehouseName(id, request.warehouseName());
         }
         return response;
     }
 
-    @org.springframework.transaction.annotation.Transactional(readOnly = true)
-    public java.util.List<WarehouseOptionResponse> listActiveOptions() {
+    @Transactional
+    public WarehouseResponse updateStatus(Long id, String status) {
+        Warehouse entity = requireActiveWarehouse(id);
+        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
+        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
+        if (currentStatus.equals(nextStatus)) {
+            return toResponse(entity);
+        }
+        STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        Warehouse entity = requireActiveWarehouse(id);
+        if (warehouseReferenceGuard != null) {
+            warehouseReferenceGuard.assertNoReferences(entity);
+        }
+        entity.setDeletedFlag(true);
+        warehouseRepository.save(entity);
+        operationLogger.deleted(entity, id);
+    }
+
+    @Transactional(readOnly = true)
+    public List<WarehouseOptionResponse> listActiveOptions() {
         return warehouseRepository.findByDeletedFlagFalseAndStatusOrderByWarehouseNameAsc(StatusConstants.NORMAL).stream()
                 .map(warehouse -> new WarehouseOptionResponse(
                         warehouse.getId(),
@@ -68,50 +123,23 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
                 .toList();
     }
 
-    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    @Transactional(readOnly = true)
     public Page<WarehouseResponse> page(PageQuery query, String keyword, String warehouseType, String status) {
         Specification<Warehouse> spec = Specs.<Warehouse>notDeleted()
                 .and(Specs.keywordLike(keyword, "warehouseCode", "warehouseName", "contactName"))
                 .and(Specs.equalIfPresent("warehouseType", warehouseType))
                 .and(Specs.equalIfPresent("status", StatusConstants.normalizeOptionalActiveStatus(status, "仓库状态")));
-        return page(query, spec, warehouseRepository);
+        return warehouseRepository
+                .findAll(VISIBILITY_POLICY.applyDeletedVisibility(spec, false), query.toPageable("id"))
+                .map(this::toResponse);
     }
 
-    @Override
-    protected void beforeDelete(Warehouse entity) {
-        if (warehouseReferenceGuard == null) {
-            return;
-        }
-        warehouseReferenceGuard.assertNoReferences(entity);
+    private Warehouse requireActiveWarehouse(Long id) {
+        return warehouseRepository.findByIdAndDeletedFlagFalse(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "仓库不存在"));
     }
 
-    @Override
-    protected Warehouse newEntity() {
-        return new Warehouse();
-    }
-
-    @Override
-    protected void assignId(Warehouse entity, Long id) {
-        entity.setId(id);
-    }
-
-    @Override
-    protected Optional<Warehouse> findActiveEntity(Long id) {
-        return warehouseRepository.findByIdAndDeletedFlagFalse(id);
-    }
-
-    @Override
-    protected String notFoundMessage() {
-        return "仓库不存在";
-    }
-
-    @Override
-    protected void validateCreate(WarehouseRequest request) {
-        codeIssuanceService.validate(CODE_MODULE_KEY, request.warehouseCode());
-    }
-
-    @Override
-    protected void apply(Warehouse entity, WarehouseRequest request) {
+    private void apply(Warehouse entity, WarehouseRequest request) {
         entity.setWarehouseCode(codeIssuanceService.resolve(
                 CODE_MODULE_KEY,
                 entity.getWarehouseCode(),
@@ -126,21 +154,13 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
         entity.setRemark(request.remark());
     }
 
-    @Override
-    protected Warehouse saveEntity(Warehouse entity) {
-        return warehouseRepository.save(entity);
-    }
-
-    @Override
-    protected Warehouse saveCreatedEntity(Warehouse entity, WarehouseRequest request) {
-        Warehouse saved = saveEntity(entity);
+    private Warehouse saveCreatedWarehouse(Warehouse entity) {
+        Warehouse saved = warehouseRepository.save(entity);
         codeIssuanceService.consume(CODE_MODULE_KEY, saved.getWarehouseCode());
         return saved;
     }
 
-    @Override
-    protected WarehouseResponse toResponse(Warehouse entity) {
+    private WarehouseResponse toResponse(Warehouse entity) {
         return warehouseMapper.toResponse(entity);
     }
-
 }

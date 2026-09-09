@@ -4,11 +4,14 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.CrudOperationLogger;
+import com.leo.erp.common.service.CrudStatusGuard;
+import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
@@ -29,14 +32,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
+import java.util.Set;
 
 @Service
-public class ProjectService extends AbstractCrudService<Project, ProjectRequest, ProjectResponse> {
+public class ProjectService {
 
     private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
     private static final String CODE_MODULE_KEY = "project";
+    private static final CrudStatusGuard<Project> STATUS_GUARD = CrudStatusGuard.withoutStatus();
+    private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
+    private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
 
+    private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(ProjectService.class);
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final ProjectRepository projectRepository;
     private final ProjectMapper projectMapper;
     private final MasterDataReferenceGuard referenceGuard;
@@ -54,7 +62,7 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
                           CompanySettingService companySettingService,
                           MasterDataCodeIssuanceService codeIssuanceService,
                           com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
-        super(snowflakeIdGenerator);
+        this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.projectRepository = projectRepository;
         this.projectMapper = projectMapper;
         this.referenceGuard = referenceGuard;
@@ -64,15 +72,60 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
         this.referenceSnapshotSyncService = referenceSnapshotSyncService;
     }
 
-    @Override
+    @Transactional(readOnly = true)
+    public ProjectResponse detail(Long id) {
+        return toResponse(requireActiveProject(id));
+    }
+
+    @Transactional
+    public ProjectResponse create(ProjectRequest request) {
+        ProjectRequest normalized = normalizeCreateRequest(request);
+        codeIssuanceService.validate(CODE_MODULE_KEY, normalized.projectCode());
+        Project entity = new Project();
+        long entityId = snowflakeIdGenerator.nextId();
+        entity.setId(entityId);
+        apply(entity, normalized);
+        Project saved = saveCreatedProject(entity);
+        operationLogger.created(entity, entityId);
+        return toResponse(saved);
+    }
+
     @Transactional
     public ProjectResponse update(Long id, ProjectRequest request) {
-        String currentName = requireEntity(id).getProjectName();
-        ProjectResponse response = super.update(id, request);
+        Project entity = requireActiveProject(id);
+        String currentName = entity.getProjectName();
+        ProjectRequest normalized = normalizeUpdateRequest(entity, request);
+        apply(entity, normalized);
+        Project saved = projectRepository.save(entity);
+        ProjectResponse response = toResponse(saved);
+        operationLogger.updated(entity, id);
         if (!currentName.equals(request.projectName())) {
             referenceSnapshotSyncService.syncProjectName(id, request.projectName());
         }
         return response;
+    }
+
+    @Transactional
+    public ProjectResponse updateStatus(Long id, String status) {
+        Project entity = requireActiveProject(id);
+        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
+        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
+        if (currentStatus.equals(nextStatus)) {
+            return toResponse(entity);
+        }
+        STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        Project entity = requireActiveProject(id);
+        if (referenceGuard != null) {
+            referenceGuard.assertNoReferences("该项目", projectReferences(entity));
+        }
+        entity.setDeletedFlag(true);
+        projectRepository.save(entity);
+        operationLogger.deleted(entity, id);
     }
 
     @Transactional(readOnly = true)
@@ -83,7 +136,9 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
                         "customerCode", "projectManager"))
                 .and(Specs.equalIfPresent("status", status))
                 .and(customerIdentity(customerId));
-        return page(query, spec, projectRepository);
+        return projectRepository
+                .findAll(VISIBILITY_POLICY.applyDeletedVisibility(spec, false), query.toPageable("id"))
+                .map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -111,13 +166,16 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
                 .toList();
     }
 
-    @Override
-    protected ProjectRequest normalizeCreateRequest(ProjectRequest request) {
+    private Project requireActiveProject(Long id) {
+        return projectRepository.findByIdAndDeletedFlagFalse(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "项目不存在"));
+    }
+
+    private ProjectRequest normalizeCreateRequest(ProjectRequest request) {
         return normalizeCustomerIdentity(request, null);
     }
 
-    @Override
-    protected ProjectRequest normalizeUpdateRequest(Project entity, ProjectRequest request) {
+    private ProjectRequest normalizeUpdateRequest(Project entity, ProjectRequest request) {
         Long settlementCompanyId = request.settlementCompanyId() == null
                 ? entity.getSettlementCompanyId()
                 : request.settlementCompanyId();
@@ -135,41 +193,7 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
         );
     }
 
-    @Override
-    protected void beforeDelete(Project entity) {
-        if (referenceGuard == null) {
-            return;
-        }
-        referenceGuard.assertNoReferences("该项目", projectReferences(entity));
-    }
-
-    @Override
-    protected Project newEntity() {
-        return new Project();
-    }
-
-    @Override
-    protected void assignId(Project entity, Long id) {
-        entity.setId(id);
-    }
-
-    @Override
-    protected Optional<Project> findActiveEntity(Long id) {
-        return projectRepository.findByIdAndDeletedFlagFalse(id);
-    }
-
-    @Override
-    protected String notFoundMessage() {
-        return "项目不存在";
-    }
-
-    @Override
-    protected void validateCreate(ProjectRequest request) {
-        codeIssuanceService.validate(CODE_MODULE_KEY, request.projectCode());
-    }
-
-    @Override
-    protected void apply(Project entity, ProjectRequest request) {
+    private void apply(Project entity, ProjectRequest request) {
         entity.setProjectCode(codeIssuanceService.resolve(
                 CODE_MODULE_KEY,
                 entity.getProjectCode(),
@@ -187,20 +211,13 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
         entity.setRemark(request.remark());
     }
 
-    @Override
-    protected Project saveEntity(Project entity) {
-        return projectRepository.save(entity);
-    }
-
-    @Override
-    protected Project saveCreatedEntity(Project entity, ProjectRequest request) {
-        Project saved = saveEntity(entity);
+    private Project saveCreatedProject(Project entity) {
+        Project saved = projectRepository.save(entity);
         codeIssuanceService.consume(CODE_MODULE_KEY, saved.getProjectCode());
         return saved;
     }
 
-    @Override
-    protected ProjectResponse toResponse(Project entity) {
+    private ProjectResponse toResponse(Project entity) {
         return projectMapper.toResponse(entity);
     }
 

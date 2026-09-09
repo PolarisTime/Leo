@@ -5,12 +5,15 @@ import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.CrudOperationLogger;
+import com.leo.erp.common.service.CrudStatusGuard;
+import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
-import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.carrier.domain.entity.Carrier;
 import com.leo.erp.master.carrier.repository.CarrierRepository;
@@ -34,16 +37,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
+import java.util.Set;
 
 @Service
-public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest, CarrierResponse> implements RedisCacheHealthCheck {
+public class CarrierService implements RedisCacheHealthCheck {
 
     private static final String CARRIER_CACHE_KEY = "leo:carrier:all";
     private static final String CODE_MODULE_KEY = "carrier";
     private static final String CARRIER_NAME_UNIQUE_INDEX = "uk_md_carrier_carrier_name_active";
     private static final int MAX_CARRIER_NAME_LENGTH = 128;
+    private static final CrudStatusGuard<Carrier> STATUS_GUARD = CrudStatusGuard.withoutStatus();
+    private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
+    private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
 
+    private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(CarrierService.class);
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final CarrierRepository carrierRepository;
     private final VehicleRepository vehicleRepository;
     private final CarrierMapper carrierMapper;
@@ -63,51 +71,77 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
                           CompanySettingService companySettingService,
                           MasterDataCodeIssuanceService codeIssuanceService,
                           com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
-        super(snowflakeIdGenerator);
+        this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.carrierRepository = carrierRepository;
         this.vehicleRepository = vehicleRepository;
         this.carrierMapper = carrierMapper;
         this.referenceGuard = referenceGuard;
         this.companySettingService = companySettingService;
-        this.vehicleSynchronizer = new CarrierVehicleSynchronizer(this::nextId, referenceGuard);
+        this.vehicleSynchronizer = new CarrierVehicleSynchronizer(snowflakeIdGenerator::nextId, referenceGuard);
         this.codeIssuanceService = codeIssuanceService;
         this.referenceSnapshotSyncService = referenceSnapshotSyncService;
     }
 
-    @Override
+    @Transactional(readOnly = true)
+    public CarrierResponse detail(Long id) {
+        return toResponse(requireActiveCarrier(id));
+    }
+
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'")
     public CarrierResponse create(CarrierRequest request) {
-        return super.create(request);
+        validateCreate(request);
+        Carrier entity = new Carrier();
+        long entityId = snowflakeIdGenerator.nextId();
+        entity.setId(entityId);
+        apply(entity, request);
+        Carrier saved = saveCreatedCarrier(entity);
+        operationLogger.created(entity, entityId);
+        return toResponse(saved);
     }
 
-    @Override
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'")
     public CarrierResponse update(Long id, CarrierRequest request) {
-        String currentName = requireEntity(id).getCarrierName();
-        CarrierResponse response = super.update(id, request);
+        Carrier entity = requireActiveCarrier(id);
+        String currentName = entity.getCarrierName();
+        validateUpdate(entity, request);
+        apply(entity, request);
+        Carrier saved = saveCarrier(entity);
+        CarrierResponse response = toResponse(saved);
+        operationLogger.updated(entity, id);
         if (!currentName.equals(request.carrierName())) {
             referenceSnapshotSyncService.syncCarrierName(id, request.carrierName());
         }
         return response;
     }
 
-    @Override
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'")
     public CarrierResponse updateStatus(Long id, String status) {
-        return super.updateStatus(id, status);
+        Carrier entity = requireActiveCarrier(id);
+        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
+        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
+        if (currentStatus.equals(nextStatus)) {
+            return toResponse(entity);
+        }
+        STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
     }
 
-    @Override
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'")
     public void delete(Long id) {
-        super.delete(id);
+        Carrier entity = requireActiveCarrier(id);
+        if (referenceGuard != null) {
+            referenceGuard.assertNoReferences("该物流商", carrierReferences(entity));
+        }
+        entity.setDeletedFlag(true);
+        saveCarrier(entity);
+        operationLogger.deleted(entity, id);
     }
 
-    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    @Transactional(readOnly = true)
     @Cacheable(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'",
             unless = "#result == null || #result.isEmpty()")
     public List<CarrierOptionResponse> listActiveOptions() {
@@ -154,39 +188,17 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         Specification<Carrier> spec = Specs.<Carrier>notDeleted()
                 .and(Specs.keywordLike(keyword, "carrierCode", "carrierName", "contactName"))
                 .and(Specs.equalIfPresent("status", StatusConstants.normalizeOptionalActiveStatus(status, "物流商状态")));
-        return page(query, spec, carrierRepository);
+        return carrierRepository
+                .findAll(VISIBILITY_POLICY.applyDeletedVisibility(spec, false), query.toPageable("id"))
+                .map(this::toResponse);
     }
 
-    @Override
-    protected void beforeDelete(Carrier entity) {
-        if (referenceGuard == null) {
-            return;
-        }
-        referenceGuard.assertNoReferences("该物流商", carrierReferences(entity));
+    private Carrier requireActiveCarrier(Long id) {
+        return carrierRepository.findByIdAndDeletedFlagFalse(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "物流方不存在"));
     }
 
-    @Override
-    protected Carrier newEntity() {
-        return new Carrier();
-    }
-
-    @Override
-    protected void assignId(Carrier entity, Long id) {
-        entity.setId(id);
-    }
-
-    @Override
-    protected Optional<Carrier> findActiveEntity(Long id) {
-        return carrierRepository.findByIdAndDeletedFlagFalse(id);
-    }
-
-    @Override
-    protected String notFoundMessage() {
-        return "物流方不存在";
-    }
-
-    @Override
-    protected void validateCreate(CarrierRequest request) {
+    private void validateCreate(CarrierRequest request) {
         codeIssuanceService.validate(CODE_MODULE_KEY, request.carrierCode());
         String carrierName = normalizedCarrierName(request);
         if (carrierRepository.countActiveByCarrierName(carrierName) > 0) {
@@ -194,8 +206,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         }
     }
 
-    @Override
-    protected void validateUpdate(Carrier entity, CarrierRequest request) {
+    private void validateUpdate(Carrier entity, CarrierRequest request) {
         String carrierName = normalizedCarrierName(request);
         if (carrierRepository.countOtherActiveByCarrierName(carrierName, entity.getId()) > 0) {
             throw duplicateCarrierName(carrierName);
@@ -214,8 +225,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         return carrierName;
     }
 
-    @Override
-    protected void apply(Carrier entity, CarrierRequest request) {
+    private void apply(Carrier entity, CarrierRequest request) {
         entity.setCarrierCode(codeIssuanceService.resolve(
                 CODE_MODULE_KEY,
                 entity.getCarrierCode(),
@@ -238,8 +248,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         return value == null ? null : value.trim().isEmpty() ? null : value.trim();
     }
 
-    @Override
-    protected Carrier saveEntity(Carrier entity) {
+    private Carrier saveCarrier(Carrier entity) {
         try {
             return carrierRepository.saveAndFlush(entity);
         } catch (DataIntegrityViolationException exception) {
@@ -250,15 +259,13 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         }
     }
 
-    @Override
-    protected Carrier saveCreatedEntity(Carrier entity, CarrierRequest request) {
-        Carrier saved = saveEntity(entity);
+    private Carrier saveCreatedCarrier(Carrier entity) {
+        Carrier saved = saveCarrier(entity);
         codeIssuanceService.consume(CODE_MODULE_KEY, saved.getCarrierCode());
         return saved;
     }
 
-    @Override
-    protected CarrierResponse toResponse(Carrier entity) {
+    private CarrierResponse toResponse(Carrier entity) {
         return carrierMapper.toResponse(entity);
     }
 
@@ -324,5 +331,4 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         }
         return false;
     }
-
 }
