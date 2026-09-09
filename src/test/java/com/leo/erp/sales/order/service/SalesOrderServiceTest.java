@@ -1,33 +1,28 @@
 package com.leo.erp.sales.order.service;
 
-import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
-import com.leo.erp.sales.order.repository.SalesOrderOutboundCandidateQueryRepository;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
-import com.leo.erp.sales.order.repository.SalesOrderReferenceQueryRepository;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.security.support.SecurityPrincipal;
-import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -38,9 +33,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -56,117 +54,19 @@ class SalesOrderServiceTest {
     private SnowflakeIdGenerator idGenerator;
 
     @Mock
-    private SalesOrderResponseAssembler responseAssembler;
-
-    @Mock
-    private SalesOrderApplyService salesOrderApplyService;
-
-    @Mock
-    private SalesOrderAuditedPricingService salesOrderAuditedPricingService;
-
-    @Mock
-    private SalesOrderProtectedUpdatePolicy protectedUpdatePolicy;
-
-    @Mock
-    private SalesOrderSaveService saveService;
-
-    @Mock
-    private com.leo.erp.common.concurrency.SourceAllocationLockService sourceAllocationLockService;
-
-    @Mock
-    private SalesOrderDeliveryVerificationGuard deliveryVerificationGuard;
-
-    @Mock
-    private SalesOrderDownstreamMutationGuard downstreamMutationGuard;
-
-    @Mock
-    private SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository;
-
-    @Mock
-    private SalesOrderReferenceQueryRepository referenceQueryRepository;
-
-    @Mock
-    private BusinessOperationEventPublisher businessOperationEventPublisher;
-
-    @Mock
     private DocumentChargeItemService documentChargeItemService;
+
+    @Mock
+    private SalesOrderQueryService queryService;
+
+    @Mock
+    private SalesOrderMutationGuardService mutationGuardService;
+
+    @Mock
+    private SalesOrderWorkflowService workflowService;
+
     @InjectMocks
     private SalesOrderService service;
-
-    @Test
-    void page_pendingOnly_shouldUseRepositoryQueryWithoutCrossModuleEntities() {
-        PageQuery query = new PageQuery(0, 30, null, null);
-        PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
-        when(repository.findPending(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
-
-        Page<SalesOrderResponse> result = service.page(query, filter, null, true);
-
-        assertThat(result.getTotalElements()).isZero();
-        verify(repository).findPending(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(Pageable.class));
-    }
-
-    @Test
-    void page_pendingOnly_shouldPassTypedDateBoundsWhenDatesMissing() {
-        PageQuery query = new PageQuery(0, 30, null, null);
-        PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
-        when(repository.findPending(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
-
-        service.page(query, filter, null, true);
-
-        ArgumentCaptor<LocalDate> startDate = ArgumentCaptor.forClass(LocalDate.class);
-        ArgumentCaptor<LocalDate> endDate = ArgumentCaptor.forClass(LocalDate.class);
-        verify(repository).findPending(
-                any(), any(), any(), any(), any(), any(), any(), any(), startDate.capture(), endDate.capture(),
-                any(), any(Pageable.class));
-        assertThat(startDate.getValue()).isEqualTo(LocalDate.of(1, 1, 1));
-        assertThat(endDate.getValue()).isEqualTo(LocalDate.of(9999, 12, 31));
-    }
-
-    @Test
-    void page_withReferenceFilter_shouldDelegateToReferenceAwareQuery() {
-        PageQuery query = new PageQuery(0, 30, null, null);
-        PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
-        when(repository.findByReferenceFilter(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), isNull(), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
-
-        service.page(query, filter, null, false, true);
-
-        verify(repository).findByReferenceFilter(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false), eq(true), isNull(), any(Pageable.class));
-    }
-
-    @Test
-    void page_withReferencedByFilter_shouldDelegateToReferenceAwareQuery() {
-        PageQuery query = new PageQuery(0, 30, null, null);
-        PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
-        when(repository.findByReferenceFilter(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), isNull(), eq("freight-bill"), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
-
-        service.page(query, filter, null, null, null, "freight-bill");
-
-        verify(repository).findByReferenceFilter(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), isNull(), isNull(), eq("freight-bill"), any(Pageable.class));
-    }
-
-    @Test
-    void page_withUnknownReferencedBy_shouldRejectRequest() {
-        PageQuery query = new PageQuery(0, 30, null, null);
-        PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
-
-        assertThatThrownBy(() -> service.page(query, filter, null, null, null, "unknown"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("下游模块关联筛选值");
-    }
 
     private SalesOrderRequest request(String orderNo, String status) {
         return new SalesOrderRequest(
@@ -194,6 +94,46 @@ class SalesOrderServiceTest {
         SecurityContextHolder.setContext(context);
     }
 
+    // ---------- page 委派 ----------
+
+    @Test
+    void page_shouldDelegateToQueryServiceWithDefaults() {
+        PageQuery query = new PageQuery(0, 30, null, null);
+        PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
+        Page<SalesOrderResponse> expected = mock(Page.class);
+        when(queryService.page(query, filter, null, null, null, null)).thenReturn(expected);
+
+        Page<SalesOrderResponse> result = service.page(query, filter, null);
+
+        assertThat(result).isSameAs(expected);
+    }
+
+    @Test
+    void page_withPendingOnlyAndReferenceFilters_shouldPassThroughAllArguments() {
+        PageQuery query = new PageQuery(0, 30, null, null);
+        PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
+        Page<SalesOrderResponse> expected = mock(Page.class);
+        when(queryService.page(query, filter, "kw", true, true, "freight-bill")).thenReturn(expected);
+
+        Page<SalesOrderResponse> result = service.page(query, filter, "kw", true, true, "freight-bill");
+
+        assertThat(result).isSameAs(expected);
+    }
+
+    // ---------- 出库导入候选 ----------
+
+    @Test
+    void outboundImportCandidates_shouldDelegateToQueryService() {
+        PageQuery query = mock(PageQuery.class);
+        PageFilter filter = mock(PageFilter.class);
+        Page<SalesOrderResponse> expected = mock(Page.class);
+        when(queryService.outboundImportCandidates(query, filter)).thenReturn(expected);
+
+        Page<SalesOrderResponse> result = service.outboundImportCandidates(query, filter);
+
+        assertThat(result).isSameAs(expected);
+    }
+
     // ---------- 单号/导入校验 ----------
 
     @Test
@@ -203,6 +143,13 @@ class SalesOrderServiceTest {
         assertThatThrownBy(() -> service.validateCreate(request("SO001", StatusConstants.DRAFT)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("订单号已存在");
+    }
+
+    @Test
+    void validateCreate_shouldAcceptNullStatus() {
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO001")).thenReturn(false);
+
+        service.validateCreate(request("SO001", null));
     }
 
     @Test
@@ -225,6 +172,16 @@ class SalesOrderServiceTest {
     }
 
     @Test
+    void validateUpdate_shouldRejectUnauthenticatedUser() {
+        SecurityContextHolder.setContext(SecurityContextHolder.createEmptyContext());
+        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+
+        assertThatThrownBy(() -> service.validateUpdate(entity, request("SO001", StatusConstants.DRAFT)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无法识别当前登录账号");
+    }
+
+    @Test
     void validateUpdate_shouldRejectChangedDuplicateNo() {
         loginAs(1L);
         SalesOrder entity = entity(1L, StatusConstants.DRAFT);
@@ -242,174 +199,103 @@ class SalesOrderServiceTest {
         service.validateUpdate(entity, request("SO001", StatusConstants.DRAFT)); // 不抛
     }
 
-    // ---------- 出库导入候选 ----------
+    // ---------- 删除/状态守卫委派与事件顺序 ----------
 
     @Test
-    void outboundImportCandidates_shouldMapCandidates() {
-        SalesOrder order = entity(1L, StatusConstants.AUDITED);
-        SalesOrderResponse response = mock(SalesOrderResponse.class);
-        when(outboundCandidateQueryRepository.pageIds(any(), any()))
-                .thenReturn(new PageImpl<>(List.of(5L), org.springframework.data.domain.PageRequest.of(0, 10), 1));
-        when(repository.findByIdInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(responseAssembler.toDetailResponse(order)).thenReturn(response);
-
-        Page<SalesOrderResponse> result = service.outboundImportCandidates(
-                mock(com.leo.erp.common.api.PageQuery.class), mock(com.leo.erp.common.api.PageFilter.class));
-
-        assertThat(result.getContent()).containsExactly(response);
-    }
-
-    // ---------- 删除/状态守卫与事件 ----------
-
-    @Test
-    void beforeDelete_shouldGuard() {
+    void beforeDelete_shouldDelegateToMutationGuard() {
         loginAs(1L);
         SalesOrder entity = entity(1L, StatusConstants.AUDITED);
-        org.mockito.Mockito.doThrow(new BusinessException(
-                com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "已使用"))
-                .when(downstreamMutationGuard).assertMutable(any(), anyString());
+        doThrow(new BusinessException(ErrorCode.BUSINESS_ERROR, "已使用"))
+                .when(mutationGuardService).assertDeletable(entity);
 
         assertThatThrownBy(() -> service.beforeDelete(entity)).isInstanceOf(BusinessException.class);
+        verify(mutationGuardService).assertDeletable(entity);
     }
 
     @Test
-    void afterDelete_shouldPublishEvent() {
+    void afterDelete_shouldRemoveChargesBeforePublishingEvent() {
         SalesOrder entity = entity(1L, StatusConstants.DRAFT);
 
         service.afterDelete(entity);
 
-        verify(businessOperationEventPublisher).publish(eq("SALES_ORDER_DELETED"), anyString(), anyString(),
-                anyString(), anyString(), eq(5L), anyString(), anyString());
+        InOrder inOrder = inOrder(documentChargeItemService, workflowService);
+        inOrder.verify(documentChargeItemService).removeAll("sales-order", 5L);
+        inOrder.verify(workflowService).publishDeleted(entity);
     }
 
     @Test
-    void beforeStatusUpdate_shouldRejectCompleteViaStatus() {
+    void beforeStatusUpdate_shouldDelegateToMutationGuard() {
         loginAs(1L);
         SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+        doThrow(new BusinessException(ErrorCode.BUSINESS_ERROR, "已使用"))
+                .when(mutationGuardService).assertStatusTransitionAllowed(
+                        entity, StatusConstants.DRAFT, StatusConstants.SALES_COMPLETED);
 
         assertThatThrownBy(() -> service.beforeStatusUpdate(
                 entity, StatusConstants.DRAFT, StatusConstants.SALES_COMPLETED))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("专用完成操作");
-    }
-
-    @Test
-    void beforeStatusUpdate_shouldGuardDeliveryVerificationReverse() {
-        loginAs(1L);
-        SalesOrder entity = entity(1L, StatusConstants.SALES_COMPLETED);
-        org.mockito.Mockito.doThrow(new BusinessException(
-                com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "已使用"))
-                .when(deliveryVerificationGuard).assertMutable(any(), anyString());
-
-        assertThatThrownBy(() -> service.beforeStatusUpdate(
-                entity, StatusConstants.SALES_COMPLETED, StatusConstants.DELIVERY_VERIFICATION))
-                .isInstanceOf(BusinessException.class);
+                .hasMessageContaining("已使用");
     }
 
     // ---------- completeSalesOrder ----------
 
     @Test
-    void completeSalesOrder_shouldRejectWhenNotDeliveryVerification() {
-        loginAs(1L);
-        SalesOrder order = entity(1L, StatusConstants.DRAFT);
-        when(repository.findForUpdateByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(order));
+    void completeSalesOrder_shouldRejectWhenOrderNotFound() {
+        when(repository.findForUpdateByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.completeSalesOrder(5L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("只有交付核定状态可以完成销售");
+                .hasMessageContaining("销售订单不存在");
+        verifyNoInteractions(workflowService);
     }
 
     @Test
-    void completeSalesOrder_shouldCompleteWhenDeliveryVerification() {
+    void completeSalesOrder_shouldDelegateOwnedOrderToWorkflow() {
         loginAs(1L);
         SalesOrder order = entity(1L, StatusConstants.DELIVERY_VERIFICATION);
         when(repository.findForUpdateByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(order));
-        when(saveService.saveStatus(order)).thenReturn(order);
         SalesOrderResponse response = mock(SalesOrderResponse.class);
-        when(responseAssembler.toDetailResponse(order)).thenReturn(response);
+        when(workflowService.completeSalesOrder(order)).thenReturn(response);
 
         SalesOrderResponse result = service.completeSalesOrder(5L);
 
-        assertThat(order.getStatus()).isEqualTo(StatusConstants.SALES_COMPLETED);
         assertThat(result).isSameAs(response);
-        verify(businessOperationEventPublisher).publish(eq("SALES_ORDER_COMPLETED"), anyString(), anyString(),
-                anyString(), anyString(), eq(5L), anyString(), anyString());
     }
 
-    // ---------- apply ----------
+    // ---------- apply / save 委派 ----------
 
     @Test
-    void apply_shouldApplyWhenCreating() {
+    void apply_shouldDelegateToWorkflowWithIdSupplier() {
         loginAs(1L);
         SalesOrder entity = new SalesOrder();
         entity.setId(5L);
-        when(salesOrderAuditedPricingService.isAuditedPricingUpdate(any(), any())).thenReturn(false);
+        SalesOrderRequest req = request("SO001", StatusConstants.DRAFT);
 
-        service.apply(entity, request("SO001", StatusConstants.DRAFT));
+        service.apply(entity, req);
 
-        verify(salesOrderApplyService).apply(any(), any(), any());
+        verify(workflowService).apply(eq(entity), eq(req), any());
     }
 
     @Test
-    void apply_shouldUsePricingUpdatePathWhenAuditedPricingUpdate() {
-        loginAs(1L);
-        SalesOrder entity = new SalesOrder();
-        entity.setId(5L);
-        when(salesOrderAuditedPricingService.isAuditedPricingUpdate(any(), any())).thenReturn(true);
-
-        service.apply(entity, request("SO001", StatusConstants.AUDITED));
-
-        verify(salesOrderApplyService).validateCustomerSnapshot(any(SalesOrderRequest.class));
-        verify(salesOrderAuditedPricingService).applyAuditedPricingUpdate(any(), any());
-        verify(salesOrderApplyService, org.mockito.Mockito.never()).apply(any(), any(), any());
-    }
-
-    @Test
-    void apply_shouldGuardWhenExistingItemsAndNotPricingUpdate() {
-        loginAs(1L);
+    void saveCreatedEntity_shouldDelegateToWorkflow() {
         SalesOrder entity = entity(1L, StatusConstants.DRAFT);
-        com.leo.erp.sales.order.domain.entity.SalesOrderItem item =
-                new com.leo.erp.sales.order.domain.entity.SalesOrderItem();
-        item.setId(100L);
-        entity.setItems(List.of(item));
-        when(salesOrderAuditedPricingService.isAuditedPricingUpdate(any(), any())).thenReturn(false);
+        when(workflowService.saveCreated(entity, request("SO001", StatusConstants.DRAFT))).thenReturn(entity);
 
-        service.apply(entity, request("SO001", StatusConstants.DRAFT));
-
-        verify(downstreamMutationGuard).assertNoFreightReference(any(), anyString());
-        verify(downstreamMutationGuard).assertSourceLineMutationAllowed(any(), any(), anyString());
-        verify(salesOrderApplyService).apply(any(), any(), any());
-    }
-
-    // ---------- save 事件 ----------
-
-    @Test
-    void saveCreatedEntity_shouldPublishEvent() {
-        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
-        when(saveService.save(entity)).thenReturn(entity);
-
-        service.saveCreatedEntity(entity, request("SO001", StatusConstants.DRAFT));
-
-        verify(businessOperationEventPublisher).publish(eq("SALES_ORDER_CREATED"), anyString(), anyString(),
-                anyString(), anyString(), eq(5L), anyString(), anyString());
+        assertThat(service.saveCreatedEntity(entity, request("SO001", StatusConstants.DRAFT))).isSameAs(entity);
     }
 
     @Test
-    void saveUpdatedEntity_shouldUsePricingSaveWhenAuditedPricingUpdate() {
+    void saveUpdatedEntity_shouldDelegateToWorkflow() {
         SalesOrder entity = entity(1L, StatusConstants.AUDITED);
-        when(salesOrderAuditedPricingService.isAuditedPricingUpdate(any(), any())).thenReturn(true);
-        when(saveService.saveAuditedPricingUpdate(entity)).thenReturn(entity);
+        when(workflowService.saveUpdated(entity, request("SO001", StatusConstants.AUDITED))).thenReturn(entity);
 
-        service.saveUpdatedEntity(entity, request("SO001", StatusConstants.AUDITED));
-
-        verify(saveService).saveAuditedPricingUpdate(entity);
-        verify(saveService, org.mockito.Mockito.never()).save(any());
+        assertThat(service.saveUpdatedEntity(entity, request("SO001", StatusConstants.AUDITED))).isSameAs(entity);
     }
 
     @Test
-    void saveStatusEntity_shouldUseSaveStatus() {
+    void saveStatusEntity_shouldDelegateToWorkflow() {
         SalesOrder entity = entity(1L, StatusConstants.DRAFT);
-        when(saveService.saveStatus(entity)).thenReturn(entity);
+        when(workflowService.saveStatus(entity)).thenReturn(entity);
 
         assertThat(service.saveStatusEntity(entity)).isSameAs(entity);
     }
@@ -419,29 +305,21 @@ class SalesOrderServiceTest {
     @Test
     void allowRequestToWriteFinalStatus_shouldAllowDeliveryVerification() {
         SalesOrder entity = entity(1L, StatusConstants.DELIVERY_VERIFICATION);
-        SalesOrderRequest request = request("SO001", StatusConstants.DELIVERY_VERIFICATION);
+        SalesOrderRequest req = request("SO001", StatusConstants.DELIVERY_VERIFICATION);
 
         boolean allowed = service.allowRequestToWriteFinalStatus(
-                entity, request, java.util.Optional.of(StatusConstants.DELIVERY_VERIFICATION));
+                entity, req, Optional.of(StatusConstants.DELIVERY_VERIFICATION));
 
         assertThat(allowed).isTrue();
     }
 
-    // ---------- page ----------
-
     @Test
-    void page_shouldMapEntities() {
-        loginAs(1L);
-        com.leo.erp.common.api.PageQuery query = mock(com.leo.erp.common.api.PageQuery.class);
-        when(query.toPageable("id")).thenReturn(org.springframework.data.domain.PageRequest.of(0, 10));
-        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
-        SalesOrderResponse response = mock(SalesOrderResponse.class);
-        when(responseAssembler.toSummaryResponse(entity)).thenReturn(response);
-        when(repository.findAll(any(org.springframework.data.jpa.domain.Specification.class),
-                any(Pageable.class))).thenReturn(new PageImpl<>(List.of(entity)));
+    void allowRequestToWriteFinalStatus_shouldRejectOtherStatuses() {
+        SalesOrder entity = entity(1L, StatusConstants.AUDITED);
+        SalesOrderRequest req = request("SO001", StatusConstants.AUDITED);
 
-        Page<SalesOrderResponse> result = service.page(query, mock(com.leo.erp.common.api.PageFilter.class), null);
+        boolean allowed = service.allowRequestToWriteFinalStatus(entity, req, Optional.empty());
 
-        assertThat(result.getContent()).containsExactly(response);
+        assertThat(allowed).isFalse();
     }
 }
