@@ -63,7 +63,9 @@ public class SalesOrderQueryService {
         LocalDate endDate = filter.endDate() == null
                 ? MAX_PENDING_DELIVERY_DATE
                 : filter.endDate();
-        if (referenced != null || referencedBy != null) {
+        // pendingOnly=true 等价于 findByReferenceFilter 的 pendingOnly 分支（referenced/referencedBy 为 null 时恒真），
+        // 原 findPending 查询已并入此处，保证同一 where 语义只维护一份。
+        if (referenced != null || referencedBy != null || Boolean.TRUE.equals(pendingOnly)) {
             entities = repository.findByReferenceFilter(
                     normalizeContains(filter.keyword()),
                     filter.customerId(),
@@ -79,21 +81,6 @@ public class SalesOrderQueryService {
                     pendingOnly,
                     referenced,
                     validateReferencedBy(referencedBy),
-                    query.toPageable("id")
-            );
-        } else if (Boolean.TRUE.equals(pendingOnly)) {
-            entities = repository.findPending(
-                    normalizeContains(filter.keyword()),
-                    filter.customerId(),
-                    normalizeExact(filter.name()),
-                    filter.projectId(),
-                    normalizeExact(filter.projectName()),
-                    filter.settlementCompanyId(),
-                    normalizeContains(productKeyword),
-                    normalizeExact(filter.status()),
-                    startDate,
-                    endDate,
-                    StatusConstants.SALES_COMPLETED,
                     query.toPageable("id")
             );
         } else {

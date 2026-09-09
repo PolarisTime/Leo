@@ -38,19 +38,6 @@ public interface PurchaseInboundItemRepository extends JpaRepository<PurchaseInb
             join item.purchaseInbound inbound
             where inbound.deletedFlag = false
               and item.sourcePurchaseOrderItemId in :sourcePurchaseOrderItemIds
-            group by item.sourcePurchaseOrderItemId
-            """)
-    List<PurchaseOrderAllocationSummary> summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(
-            @Param("sourcePurchaseOrderItemIds") Collection<Long> sourcePurchaseOrderItemIds
-    );
-
-    @Query("""
-            select item.sourcePurchaseOrderItemId as sourcePurchaseOrderItemId,
-                   sum(item.quantity) as totalQuantity
-            from PurchaseInboundItem item
-            join item.purchaseInbound inbound
-            where inbound.deletedFlag = false
-              and item.sourcePurchaseOrderItemId in :sourcePurchaseOrderItemIds
               and (:currentInboundId is null or inbound.id <> :currentInboundId)
             group by item.sourcePurchaseOrderItemId
             """)

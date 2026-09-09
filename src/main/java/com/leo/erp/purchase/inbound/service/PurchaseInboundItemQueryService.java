@@ -45,18 +45,17 @@ public class PurchaseInboundItemQueryService {
         return repository.findAllActiveBySourcePurchaseOrderItemIds(sourcePurchaseOrderItemIds);
     }
 
+    /**
+     * 不排除当前入库单，等价于以 {@code currentInboundId = null} 调用排除版汇总，
+     * 复用同一份 @Query，避免两个仅参数组合不同的查询方法。
+     */
     @Transactional(readOnly = true)
     public Map<Long, Long> summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(
             Collection<Long> sourcePurchaseOrderItemIds) {
-        if (sourcePurchaseOrderItemIds == null || sourcePurchaseOrderItemIds.isEmpty()) {
-            return Map.of();
-        }
-        return repository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(sourcePurchaseOrderItemIds)
-                .stream()
-                .collect(Collectors.toMap(
-                        PurchaseInboundItemRepository.PurchaseOrderAllocationSummary::getSourcePurchaseOrderItemId,
-                        PurchaseInboundItemRepository.PurchaseOrderAllocationSummary::getTotalQuantity
-                ));
+        return summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+                sourcePurchaseOrderItemIds,
+                null
+        );
     }
 
     @Transactional(readOnly = true)

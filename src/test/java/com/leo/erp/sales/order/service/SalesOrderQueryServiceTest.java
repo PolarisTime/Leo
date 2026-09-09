@@ -73,36 +73,37 @@ class SalesOrderQueryServiceTest {
     // ---------- page ----------
 
     @Test
-    void page_pendingOnly_shouldUseRepositoryQueryWithoutCrossModuleEntities() {
+    void page_pendingOnly_shouldUseReferenceAwareQueryWithPendingCombination() {
         PageQuery query = query();
-        when(repository.findPending(
+        // pendingOnly=true 且 referenced/referencedBy 为 null，等价于已删除的 repository.findPending 查询。
+        when(repository.findByReferenceFilter(
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(Pageable.class)))
+                eq(true), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
 
         Page<SalesOrderResponse> result = service.page(query, filter(), null, true, null, null);
 
         assertThat(result.getTotalElements()).isZero();
-        verify(repository).findPending(
+        verify(repository).findByReferenceFilter(
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(Pageable.class));
+                eq(true), isNull(), isNull(), any(Pageable.class));
     }
 
     @Test
     void page_pendingOnly_shouldPassTypedDateBoundsWhenDatesMissing() {
         PageQuery query = query();
-        when(repository.findPending(
+        when(repository.findByReferenceFilter(
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(Pageable.class)))
+                eq(true), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
 
         service.page(query, filter(), null, true, null, null);
 
         ArgumentCaptor<LocalDate> startDate = ArgumentCaptor.forClass(LocalDate.class);
         ArgumentCaptor<LocalDate> endDate = ArgumentCaptor.forClass(LocalDate.class);
-        verify(repository).findPending(
+        verify(repository).findByReferenceFilter(
                 any(), any(), any(), any(), any(), any(), any(), any(), startDate.capture(), endDate.capture(),
-                any(), any(Pageable.class));
+                any(), eq(true), isNull(), isNull(), any(Pageable.class));
         assertThat(startDate.getValue()).isEqualTo(LocalDate.of(1, 1, 1));
         assertThat(endDate.getValue()).isEqualTo(LocalDate.of(9999, 12, 31));
     }

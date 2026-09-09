@@ -160,16 +160,21 @@ class PurchaseInboundItemQueryServiceTest {
     }
 
     @Test
-    void summarizeAllocatedQuantityBySourcePurchaseOrderItemIds_shouldMapSummaries() {
-        when(repository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(1L, 2L)))
-                .thenReturn(List.of(
-                        new AllocationSummary(1L, 100L),
-                        new AllocationSummary(2L, 250L)
-                ));
+    void summarizeAllocatedQuantityBySourcePurchaseOrderItemIds_shouldDelegateWithNullExcludedInbound() {
+        // 合并语义：不排除任何入库单 == currentInboundId 传 null（排除条件恒真）。
+        when(repository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+                List.of(1L, 2L), null
+        )).thenReturn(List.of(
+                new AllocationSummary(1L, 100L),
+                new AllocationSummary(2L, 250L)
+        ));
 
         Map<Long, Long> result = service.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(1L, 2L));
 
         assertThat(result).containsEntry(1L, 100L).containsEntry(2L, 250L).hasSize(2);
+        verify(repository).summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+                eq(List.of(1L, 2L)), eq(null)
+        );
     }
 
     // ---------- summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound ----------
