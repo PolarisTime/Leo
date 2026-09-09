@@ -6,7 +6,6 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractStatusCrudService;
-import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
@@ -15,18 +14,11 @@ import com.leo.erp.finance.ledgeradjustment.mapper.LedgerAdjustmentMapper;
 import com.leo.erp.finance.ledgeradjustment.repository.LedgerAdjustmentRepository;
 import com.leo.erp.finance.ledgeradjustment.web.dto.LedgerAdjustmentRequest;
 import com.leo.erp.finance.ledgeradjustment.web.dto.LedgerAdjustmentResponse;
-import com.leo.erp.master.api.CarrierQuery;
-import com.leo.erp.master.api.CustomerQuery;
-import com.leo.erp.master.api.ProjectQuery;
-import com.leo.erp.master.api.SupplierQuery;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
-import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.Set;
 
@@ -35,35 +27,19 @@ public class LedgerAdjustmentService extends AbstractStatusCrudService<
         LedgerAdjustment, LedgerAdjustmentRequest, LedgerAdjustmentResponse> {
 
     private static final String MODULE_KEY = "ledger-adjustment";
-    private static final Set<String> ALLOWED_DIRECTIONS = Set.of("应收", "应付");
-    private static final Set<String> ALLOWED_COUNTERPARTY_TYPES = Set.of("客户", "供应商", "物流商");
-    private static final Set<String> ALLOWED_EFFECTS = Set.of("增加余额", "减少余额");
-    private static final Set<String> ALLOWED_ADJUSTMENT_TYPES = Set.of("坏账", "抹零", "折让", "其他调整");
 
     private final LedgerAdjustmentRepository repository;
     private final LedgerAdjustmentMapper mapper;
-    private final CustomerQuery customerQuery;
-    private final SupplierQuery supplierQuery;
-    private final CarrierQuery carrierQuery;
-    private final ProjectQuery projectQuery;
-    private final CompanySettingService companySettingService;
+    private final LedgerAdjustmentApplyService applyService;
 
     public LedgerAdjustmentService(LedgerAdjustmentRepository repository,
                                    LedgerAdjustmentMapper mapper,
                                    SnowflakeIdGenerator idGenerator,
-                                   CustomerQuery customerQuery,
-                                   SupplierQuery supplierQuery,
-                                   CarrierQuery carrierQuery,
-                                   ProjectQuery projectQuery,
-                                   CompanySettingService companySettingService) {
+                                   LedgerAdjustmentApplyService applyService) {
         super(idGenerator);
         this.repository = repository;
         this.mapper = mapper;
-        this.customerQuery = customerQuery;
-        this.supplierQuery = supplierQuery;
-        this.carrierQuery = carrierQuery;
-        this.projectQuery = projectQuery;
-        this.companySettingService = companySettingService;
+        this.applyService = applyService;
     }
 
     @Transactional(readOnly = true)
@@ -232,73 +208,7 @@ public class LedgerAdjustmentService extends AbstractStatusCrudService<
 
     @Override
     protected void apply(LedgerAdjustment entity, LedgerAdjustmentRequest request) {
-        String direction = normalizeAllowed(request.direction(), "方向", ALLOWED_DIRECTIONS);
-        String counterpartyType = normalizeAllowed(request.counterpartyType(), "往来类型", ALLOWED_COUNTERPARTY_TYPES);
-        assertDirectionMatchesCounterparty(direction, counterpartyType);
-        String effect = normalizeAllowed(request.effect(), "余额影响", ALLOWED_EFFECTS);
-        String adjustmentType = normalizeAllowed(request.adjustmentType(), "调整类型", ALLOWED_ADJUSTMENT_TYPES);
-        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
-                request.status(),
-                StatusConstants.DRAFT,
-                "调整单状态",
-                StatusConstants.ALLOWED_AUDIT_STATUS
-        );
-        assertStatusNotChangedBySave(entity, nextStatus);
-        BigDecimal amount = normalizeAmount(request.amount());
-        ResolvedCounterparty counterparty = resolveCounterparty(
-                counterpartyType,
-                request.counterpartyId(),
-                request.counterpartyCode(),
-                request.counterpartyName()
-        );
-        ResolvedProject project = resolveProject(
-                counterpartyType,
-                counterparty.id(),
-                request.projectId(),
-                request.projectName()
-        );
-        CompanySetting settlementCompany = resolveSettlementCompany(
-                request.settlementCompanyId(),
-                request.settlementCompanyName(),
-                project
-        );
-
-        entity.setAdjustmentNo(request.adjustmentNo());
-        entity.setDirection(direction);
-        entity.setCounterpartyType(counterpartyType);
-        entity.setCounterpartyId(counterparty.id());
-        entity.setCounterpartyCode(counterparty.code());
-        entity.setCounterpartyName(counterparty.name());
-        entity.setSettlementCompanyId(settlementCompany.getId());
-        entity.setSettlementCompanyName(settlementCompany.getCompanyName());
-        entity.setProjectId(project.id());
-        entity.setProjectName(project.name());
-        entity.setAdjustmentDate(request.adjustmentDate());
-        entity.setAmount(amount);
-        entity.setAdjustmentType(adjustmentType);
-        entity.setEffect(effect);
-        entity.setStatus(nextStatus);
-        entity.setOperatorName(trimRequired(request.operatorName(), "经办人"));
-        entity.setRemark(trimToNull(request.remark()));
-    }
-
-    private void assertStatusNotChangedBySave(LedgerAdjustment entity, String requestedStatus) {
-        String currentStatus = entity.getStatus();
-        if (currentStatus == null) {
-            if (!StatusConstants.DRAFT.equals(requestedStatus)) {
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_ERROR,
-                        "新建台账调整单只能保存为草稿，审核请使用审核命令"
-                );
-            }
-            return;
-        }
-        if (!currentStatus.equals(requestedStatus)) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "普通保存不能修改台账调整单状态，请使用审核或反审核命令"
-            );
-        }
+        applyService.apply(entity, request);
     }
 
     @Override
@@ -309,185 +219,5 @@ public class LedgerAdjustmentService extends AbstractStatusCrudService<
     @Override
     protected LedgerAdjustmentResponse toResponse(LedgerAdjustment entity) {
         return mapper.toResponse(entity);
-    }
-
-    private String normalizeAllowed(String value, String label, Set<String> allowedValues) {
-        String normalized = trimRequired(value, label);
-        if (!allowedValues.contains(normalized)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, label + "不合法");
-        }
-        return normalized;
-    }
-
-    private void assertDirectionMatchesCounterparty(String direction, String counterpartyType) {
-        if ("应收".equals(direction) && !"客户".equals(counterpartyType)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "应收调整只能选择客户");
-        }
-        if ("应付".equals(direction) && "客户".equals(counterpartyType)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "应付调整只能选择供应商或物流商");
-        }
-    }
-
-    private BigDecimal normalizeAmount(BigDecimal amount) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "金额必须大于0");
-        }
-        return amount.setScale(2, java.math.RoundingMode.HALF_UP);
-    }
-
-    private ResolvedCounterparty resolveCounterparty(String counterpartyType,
-                                                     Long counterpartyId,
-                                                     String counterpartyCode,
-                                                     String counterpartyName) {
-        if (counterpartyId != null) {
-            return resolveCounterpartyById(
-                    counterpartyType,
-                    counterpartyId,
-                    counterpartyCode,
-                    counterpartyName
-            );
-        }
-        String normalizedCode = trimRequired(counterpartyCode, "往来单位编码");
-        if ("客户".equals(counterpartyType)) {
-            return customerQuery.findActiveByCode(normalizedCode)
-                    .map(customer -> resolvedCounterparty(
-                            customer.id(),
-                            customer.code(),
-                            customer.name(),
-                            "客户"
-                    ))
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
-        }
-        if ("供应商".equals(counterpartyType)) {
-            return supplierQuery.findActiveByCode(normalizedCode)
-                    .map(supplier -> resolvedCounterparty(
-                            supplier.id(),
-                            supplier.code(),
-                            supplier.name(),
-                            "供应商"
-                    ))
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
-        }
-        return carrierQuery.findActiveByCode(normalizedCode)
-                .map(carrier -> resolvedCounterparty(
-                        carrier.id(),
-                        carrier.code(),
-                        carrier.name(),
-                        "物流商"
-                ))
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "物流商不存在"));
-    }
-
-    private ResolvedCounterparty resolveCounterpartyById(String counterpartyType,
-                                                         Long counterpartyId,
-                                                         String counterpartyCode,
-                                                         String counterpartyName) {
-        ResolvedCounterparty resolved;
-        if ("客户".equals(counterpartyType)) {
-            resolved = customerQuery.findActiveById(counterpartyId)
-                    .map(customer -> resolvedCounterparty(
-                            customer.id(), customer.code(), customer.name(), "客户"))
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
-        } else if ("供应商".equals(counterpartyType)) {
-            resolved = supplierQuery.findActiveById(counterpartyId)
-                    .map(supplier -> resolvedCounterparty(
-                            supplier.id(), supplier.code(), supplier.name(), "供应商"))
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
-        } else {
-            resolved = carrierQuery.findActiveById(counterpartyId)
-                    .map(carrier -> resolvedCounterparty(
-                            carrier.id(), carrier.code(), carrier.name(), "物流商"))
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "物流商不存在"));
-        }
-        requireSnapshotMatches(counterpartyCode, resolved.code(), counterpartyType + "编码与ID不一致");
-        requireSnapshotMatches(counterpartyName, resolved.name(), counterpartyType + "名称与ID不一致");
-        return resolved;
-    }
-
-    private ResolvedCounterparty resolvedCounterparty(Long id, String code, String name, String label) {
-        if (id == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, label + "缺少内部ID");
-        }
-        return new ResolvedCounterparty(id, code, name);
-    }
-
-    private ResolvedProject resolveProject(String counterpartyType,
-                                           Long counterpartyId,
-                                           Long projectId,
-                                           String projectName) {
-        String normalizedName = trimToNull(projectName);
-        if (!"客户".equals(counterpartyType)) {
-            if (projectId != null || normalizedName != null) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商或物流商台账调整不能选择项目");
-            }
-            return new ResolvedProject(null, null, null, null);
-        }
-        if (projectId == null) {
-            if (normalizedName != null) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "项目名称不能脱离项目ID单独提交");
-            }
-            return new ResolvedProject(null, null, null, null);
-        }
-        return projectQuery.findActiveById(projectId)
-                .map(project -> {
-                    if (!java.util.Objects.equals(project.customerId(), counterpartyId)) {
-                        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不属于所选客户");
-                    }
-                    requireSnapshotMatches(projectName, project.name(), "项目名称与ID不一致");
-                    return new ResolvedProject(
-                            project.id(),
-                            project.name(),
-                            project.settlementCompanyId(),
-                            project.settlementCompanyName()
-                    );
-                })
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不存在"));
-    }
-
-    private CompanySetting resolveSettlementCompany(Long requestedId,
-                                                     String requestedName,
-                                                     ResolvedProject project) {
-        if (project.settlementCompanyId() != null) {
-            if (requestedId != null && !project.settlementCompanyId().equals(requestedId)) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "结算主体与项目不一致");
-            }
-            CompanySetting company = companySettingService.requireActiveSettlementCompany(
-                    project.settlementCompanyId()
-            );
-            requireSnapshotMatches(requestedName, company.getCompanyName(), "结算主体名称与项目不一致");
-            return company;
-        }
-        return companySettingService.requireActiveSettlementCompany(requestedId);
-    }
-
-    private void requireSnapshotMatches(String requestedValue, String resolvedValue, String message) {
-        String normalizedRequested = trimToNull(requestedValue);
-        if (normalizedRequested != null && !normalizedRequested.equals(trimToNull(resolvedValue))) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, message);
-        }
-    }
-
-    private String trimRequired(String value, String label) {
-        String normalized = trimToNull(value);
-        if (normalized == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, label + "不能为空");
-        }
-        return normalized;
-    }
-
-    private String trimToNull(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
-    }
-
-    private record ResolvedCounterparty(Long id, String code, String name) {
-    }
-
-    private record ResolvedProject(Long id,
-                                   String name,
-                                   Long settlementCompanyId,
-                                   String settlementCompanyName) {
     }
 }
