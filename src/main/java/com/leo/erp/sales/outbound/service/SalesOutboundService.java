@@ -2,21 +2,15 @@ package com.leo.erp.sales.outbound.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractStatusCrudService;
-import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
-import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
-import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
-import com.leo.erp.sales.order.repository.SalesOrderRepository;
-import com.leo.erp.sales.order.service.SalesOrderDownstreamMutationGuard;
 import com.leo.erp.sales.outbound.web.dto.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -24,66 +18,34 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.TreeSet;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Service
 public class SalesOutboundService extends AbstractStatusCrudService<
         SalesOutbound, SalesOutboundRequest, SalesOutboundResponse> {
 
     private static final String[] PRODUCT_SEARCH_FIELDS = {"materialCode", "brand", "material", "spec"};
+    private static final String[] OUTBOUND_SEARCH_FIELDS = {"outboundNo", "salesOrderNo", "customerName", "projectName"};
 
     private final SalesOutboundRepository repository;
-    private final SalesOutboundApplyService salesOutboundApplyService;
     private final SalesOutboundResponseAssembler responseAssembler;
-    private final SalesOutboundSaveService saveService;
-    private final SalesOutboundPurchaseInboundGuard purchaseInboundGuard;
-    private final SourceAllocationLockService sourceAllocationLockService;
-    private final SalesOutboundDownstreamMutationGuard downstreamMutationGuard;
-    private SalesOutboundCoverageValidator coverageValidator;
-    private SalesOrderRepository salesOrderRepository;
-    private SalesOrderDownstreamMutationGuard salesOrderDownstreamMutationGuard;
-    private final BusinessOperationEventPublisher businessOperationEventPublisher;
+    private final SalesOutboundWorkflowService workflowService;
+    private final SalesOutboundDeleteRollbackService deleteRollbackService;
+    private final SalesOutboundImportedUpdatePolicy importedUpdatePolicy;
 
     @Autowired
     public SalesOutboundService(SalesOutboundRepository repository,
                                 SnowflakeIdGenerator idGenerator,
-                                SalesOutboundApplyService salesOutboundApplyService,
                                 SalesOutboundResponseAssembler responseAssembler,
-                                SalesOutboundSaveService saveService,
-                                SalesOutboundPurchaseInboundGuard purchaseInboundGuard,
-                                SourceAllocationLockService sourceAllocationLockService,
-                                SalesOutboundDownstreamMutationGuard downstreamMutationGuard,
-                                BusinessOperationEventPublisher businessOperationEventPublisher) {
+                                SalesOutboundWorkflowService workflowService,
+                                SalesOutboundDeleteRollbackService deleteRollbackService) {
         super(idGenerator);
         this.repository = repository;
-        this.salesOutboundApplyService = salesOutboundApplyService;
         this.responseAssembler = responseAssembler;
-        this.saveService = saveService;
-        this.purchaseInboundGuard = purchaseInboundGuard;
-        this.sourceAllocationLockService = sourceAllocationLockService;
-        this.downstreamMutationGuard = downstreamMutationGuard;
-        this.businessOperationEventPublisher = businessOperationEventPublisher;
-    }
-
-    @Autowired
-    void setCoverageValidator(SalesOutboundCoverageValidator coverageValidator) {
-        this.coverageValidator = coverageValidator;
-    }
-
-    @Autowired
-    void setSalesOrderRepository(SalesOrderRepository salesOrderRepository) {
-        this.salesOrderRepository = salesOrderRepository;
-    }
-
-    @Autowired
-    void setSalesOrderDownstreamMutationGuard(SalesOrderDownstreamMutationGuard salesOrderDownstreamMutationGuard) {
-        this.salesOrderDownstreamMutationGuard = salesOrderDownstreamMutationGuard;
+        this.workflowService = workflowService;
+        this.deleteRollbackService = deleteRollbackService;
+        this.importedUpdatePolicy = new SalesOutboundImportedUpdatePolicy();
     }
 
     @Transactional(readOnly = true)
@@ -99,8 +61,6 @@ public class SalesOutboundService extends AbstractStatusCrudService<
                 .and(Specs.betweenIfPresent("outboundDate", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
     }
-
-    private static final String[] OUTBOUND_SEARCH_FIELDS = {"outboundNo", "salesOrderNo", "customerName", "projectName"};
 
     @Transactional(readOnly = true)
     public java.util.List<SalesOutboundResponse> search(String keyword, int maxSize) {
@@ -194,103 +154,7 @@ public class SalesOutboundService extends AbstractStatusCrudService<
 
     @Override
     protected SalesOutboundRequest normalizeUpdateRequest(SalesOutbound entity, SalesOutboundRequest request) {
-        assertOrdinaryUpdateKeepsStatus(entity.getStatus(), request.status());
-        if (hasImportedSalesOrder(entity)) {
-            return restrictImportedOutboundUpdate(entity, request);
-        }
-        return new SalesOutboundRequest(
-                entity.getOutboundNo(),
-                entity.getSalesOrderNo(),
-                request.customerId() == null ? entity.getCustomerId() : request.customerId(),
-                request.customerName(),
-                request.projectId() == null ? entity.getProjectId() : request.projectId(),
-                request.projectName(),
-                request.warehouseId() == null ? entity.getWarehouseId() : request.warehouseId(),
-                request.warehouseName(),
-                request.outboundDate(),
-                entity.getStatus(),
-                request.remark(),
-                request.items(),
-                request.audit()
-        );
-    }
-
-    private void assertOrdinaryUpdateKeepsStatus(String currentStatus, String requestedStatus) {
-        String normalizedRequestedStatus = requestedStatus == null ? null : requestedStatus.trim();
-        if (normalizedRequestedStatus != null
-                && !normalizedRequestedStatus.isEmpty()
-                && !Objects.equals(currentStatus, normalizedRequestedStatus)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "销售出库状态只能通过审核或反审核操作变更");
-        }
-    }
-
-    private boolean hasImportedSalesOrder(SalesOutbound entity) {
-        if (entity.getSalesOrderNo() != null && !entity.getSalesOrderNo().isBlank()) {
-            return true;
-        }
-        return entity.getItems().stream()
-                .anyMatch(item -> item.getSourceSalesOrderItemId() != null);
-    }
-
-    private SalesOutboundRequest restrictImportedOutboundUpdate(SalesOutbound entity, SalesOutboundRequest request) {
-        Map<Long, SalesOutboundItemRequest> requestItemsById = request.items().stream()
-                .filter(item -> item.id() != null)
-                .collect(Collectors.toMap(
-                        SalesOutboundItemRequest::id,
-                        Function.identity(),
-                        (left, right) -> left
-                ));
-        List<SalesOutboundItemRequest> restrictedItems = entity.getItems().stream()
-                .sorted(java.util.Comparator.comparing(SalesOutboundItem::getLineNo, java.util.Comparator.nullsLast(Integer::compareTo)))
-                .map(item -> restrictImportedOutboundItem(item, requestItemsById.get(item.getId())))
-                .toList();
-        return new SalesOutboundRequest(
-                entity.getOutboundNo(),
-                entity.getSalesOrderNo(),
-                entity.getCustomerId(),
-                entity.getCustomerName(),
-                entity.getProjectId(),
-                entity.getProjectName(),
-                entity.getWarehouseId(),
-                entity.getWarehouseName(),
-                request.outboundDate(),
-                entity.getStatus(),
-                request.remark(),
-                restrictedItems,
-                request.audit()
-        );
-    }
-
-    private SalesOutboundItemRequest restrictImportedOutboundItem(
-            SalesOutboundItem item,
-            SalesOutboundItemRequest requestItem
-    ) {
-        java.math.BigDecimal weightTon = requestItem == null || requestItem.weightTon() == null
-                ? item.getWeightTon()
-                : requestItem.weightTon();
-        return new SalesOutboundItemRequest(
-                item.getId(),
-                null,
-                item.getSourceSalesOrderItemId(),
-                item.getMaterialId(),
-                item.getMaterialCode(),
-                item.getBrand(),
-                item.getCategory(),
-                item.getMaterial(),
-                item.getSpec(),
-                item.getLength(),
-                item.getUnit(),
-                item.getWarehouseId(),
-                item.getWarehouseName(),
-                item.getBatchNo(),
-                item.getQuantity(),
-                item.getQuantityUnit(),
-                item.getPieceWeightTon(),
-                item.getPiecesPerBundle(),
-                weightTon,
-                item.getUnitPrice(),
-                item.getAmount()
-        );
+        return importedUpdatePolicy.normalizeUpdateRequest(entity, request);
     }
 
     @Override
@@ -330,50 +194,12 @@ public class SalesOutboundService extends AbstractStatusCrudService<
 
     @Override
     protected void apply(SalesOutbound entity, SalesOutboundRequest request) {
-        lockSourceSalesOrderItems(entity.getItems(), request.items());
-        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
-                request.status(),
-                StatusConstants.DRAFT,
-                "销售出库状态",
-                StatusConstants.ALLOWED_SALES_OUTBOUND_STATUS
-        );
-        entity.setOutboundNo(entity.getOutboundNo() == null ? request.outboundNo() : entity.getOutboundNo());
-        entity.setSalesOrderNo(request.salesOrderNo());
-        entity.setCustomerId(request.customerId());
-        entity.setCustomerName(request.customerName());
-        entity.setProjectId(request.projectId());
-        entity.setProjectName(request.projectName());
-        entity.setWarehouseId(request.warehouseId());
-        entity.setOutboundDate(request.outboundDate());
-        entity.setStatus(nextStatus);
-        entity.setRemark(request.remark());
-        salesOutboundApplyService.applyItems(entity, request, this::nextId);
-        if (coverageValidator != null) {
-            coverageValidator.assertExactCoverage(entity);
-        }
-        if (StatusConstants.AUDITED.equals(nextStatus)) {
-            purchaseInboundGuard.assertPurchaseInboundCompletedBeforeAudit(entity);
-        }
+        workflowService.apply(entity, request, this::nextId);
     }
 
     @Override
     protected void beforeStatusUpdate(SalesOutbound entity, String currentStatus, String nextStatus) {
-        lockSourceSalesOrderItems(entity.getItems(), List.of());
-        if (StatusConstants.AUDITED.equals(currentStatus) && StatusConstants.DRAFT.equals(nextStatus)) {
-            sourceAllocationLockService.lockDocumentSources(
-                    List.of(),
-                    List.of(),
-                    List.of(entity.getId()),
-                    List.of()
-            );
-            downstreamMutationGuard.assertReverseAuditAllowed(entity);
-        }
-        if (StatusConstants.AUDITED.equals(nextStatus)) {
-            purchaseInboundGuard.assertPurchaseInboundCompletedBeforeAudit(entity);
-            if (coverageValidator != null) {
-                coverageValidator.assertExactCoverage(entity);
-            }
-        }
+        workflowService.beforeStatusUpdate(entity, currentStatus, nextStatus);
     }
 
     @Override
@@ -383,125 +209,35 @@ public class SalesOutboundService extends AbstractStatusCrudService<
         String currentStatus = outbound.getStatus();
         SalesOutboundResponse response = super.updateStatus(id, status);
         if (!Objects.equals(currentStatus, response.status())) {
-            String actionType = StatusConstants.DRAFT.equals(response.status()) ? "反审核" : "审核";
-            publishEvent(outbound, "SALES_OUTBOUND_STATUS_CHANGED", actionType,
-                    "销售出库状态 " + currentStatus + " -> " + response.status());
+            workflowService.publishStatusChanged(outbound, currentStatus, response.status());
         }
         return response;
     }
 
     @Override
     protected void beforeDelete(SalesOutbound entity) {
-        lockSourceSalesOrderItems(entity.getItems(), List.of());
-        if (StatusConstants.AUDITED.equals(entity.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核销售出库必须先反审核为草稿才能删除");
-        }
-        downstreamMutationGuard.assertDeleteAllowed(entity);
-        List<Long> sourceSalesOrderIds = salesOutboundApplyService.sourceSalesOrderIds(entity).stream()
-                .sorted()
-                .toList();
-        sourceAllocationLockService.lockDocumentSources(
-                List.of(),
-                sourceSalesOrderIds,
-                List.of(entity.getId()),
-                List.of()
-        );
-        rollbackSourceSalesOrders(entity, sourceSalesOrderIds);
+        workflowService.lockSourceSalesOrderItems(entity.getItems(), java.util.List.of());
+        deleteRollbackService.beforeDelete(entity);
     }
 
     @Override
     protected void afterDelete(SalesOutbound entity) {
-        publishEvent(entity, "SALES_OUTBOUND_DELETED", "删除", "删除销售出库 " + entity.getOutboundNo());
-    }
-
-    private void rollbackSourceSalesOrders(SalesOutbound entity, List<Long> sourceSalesOrderIds) {
-        if (salesOrderRepository == null) {
-            return;
-        }
-        for (Long sourceSalesOrderId : sourceSalesOrderIds) {
-            var order = salesOrderRepository.findForUpdateByIdAndDeletedFlagFalse(sourceSalesOrderId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单不存在或已删除"));
-            List<Long> itemIds = order.getItems().stream()
-                    .map(com.leo.erp.sales.order.domain.entity.SalesOrderItem::getId)
-                    .filter(java.util.Objects::nonNull)
-                    .toList();
-            long remainingOutbounds = itemIds.isEmpty() ? 0
-                    : repository.countActiveBySourceSalesOrderItemIdsExcludingOutbound(itemIds, entity.getId());
-            if (remainingOutbounds > 0) {
-                continue;
-            }
-            if (!StatusConstants.AUDITED.equals(order.getStatus())) {
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_ERROR,
-                        "来源销售订单当前状态不是已审核，不能删除销售出库"
-                );
-            }
-            if (salesOrderDownstreamMutationGuard != null) {
-                salesOrderDownstreamMutationGuard.assertNoFreightReference(order, "删除销售出库");
-            }
-            order.setStatus(StatusConstants.DRAFT);
-            salesOrderRepository.save(order);
-            publishSalesOrderRollbackEvent(order);
-        }
-    }
-
-    private void publishSalesOrderRollbackEvent(com.leo.erp.sales.order.domain.entity.SalesOrder order) {
-        businessOperationEventPublisher.publish(
-                "SALES_ORDER_REOPENED_AFTER_OUTBOUND_DELETED",
-                "sales-order",
-                "销售订单",
-                "退回草稿",
-                "SalesOrder",
-                order.getId(),
-                order.getOrderNo(),
-                "删除销售出库后，销售订单状态 已审核 -> 草稿"
-        );
-    }
-
-    private void lockSourceSalesOrderItems(List<SalesOutboundItem> existingItems,
-                                           List<SalesOutboundItemRequest> requestedItems) {
-        TreeSet<Long> sourceIds = new TreeSet<>();
-        existingItems.stream()
-                .map(SalesOutboundItem::getSourceSalesOrderItemId)
-                .filter(java.util.Objects::nonNull)
-                .forEach(sourceIds::add);
-        requestedItems.stream()
-                .map(SalesOutboundItemRequest::sourceSalesOrderItemId)
-                .filter(java.util.Objects::nonNull)
-                .forEach(sourceIds::add);
-        sourceAllocationLockService.lockTradeItemSources(List.of(), List.of(), List.copyOf(sourceIds));
+        workflowService.publishDeleted(entity);
     }
 
     @Override
     protected SalesOutbound saveEntity(SalesOutbound entity) {
-        return saveService.save(entity);
+        return workflowService.save(entity);
     }
 
     @Override
     protected SalesOutbound saveCreatedEntity(SalesOutbound entity, SalesOutboundRequest request) {
-        SalesOutbound saved = saveEntity(entity);
-        publishEvent(saved, "SALES_OUTBOUND_CREATED", "新增", "新增销售出库 " + saved.getOutboundNo());
-        return saved;
+        return workflowService.saveCreated(entity, request);
     }
 
     @Override
     protected SalesOutbound saveUpdatedEntity(SalesOutbound entity, SalesOutboundRequest request) {
-        SalesOutbound saved = saveEntity(entity);
-        publishEvent(saved, "SALES_OUTBOUND_UPDATED", "编辑", "编辑销售出库 " + saved.getOutboundNo());
-        return saved;
-    }
-
-    private void publishEvent(SalesOutbound outbound, String eventType, String actionType, String remark) {
-        businessOperationEventPublisher.publish(
-                eventType,
-                "sales-outbound",
-                "销售出库",
-                actionType,
-                "SalesOutbound",
-                outbound.getId(),
-                outbound.getOutboundNo(),
-                remark
-        );
+        return workflowService.saveUpdated(entity, request);
     }
 
     @Override

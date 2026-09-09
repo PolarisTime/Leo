@@ -2,7 +2,6 @@ package com.leo.erp.statement.freight.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -11,7 +10,6 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
-import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
 import com.leo.erp.statement.freight.repository.FreightStatementRepository;
 import com.leo.erp.statement.freight.repository.FreightStatementSummaryAggregate;
@@ -20,10 +18,6 @@ import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import com.leo.erp.statement.freight.web.dto.FreightStatementSummaryResponse;
-import com.leo.erp.statement.service.StatementSettlementSyncService;
-import com.leo.erp.statement.service.StatementSettlementMutationGuard;
-import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -33,49 +27,41 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeSet;
 
 @Service
 public class FreightStatementService extends AbstractStatusCrudService<
         FreightStatement, FreightStatementCommand, FreightStatementView> {
 
+    private static final String[] FREIGHT_STATEMENT_SEARCH_FIELDS = {
+            "statementNo",
+            "carrierCode",
+            "carrierName"
+    };
+
     private final FreightStatementRepository repository;
     private final FreightStatementSummaryQueryRepository summaryQueryRepository;
-    private final StatementSettlementSyncService statementSettlementSyncService;
     private final FreightStatementWebMapper freightStatementWebMapper;
     private final FreightStatementSourceService freightStatementSourceService;
     private final FreightStatementViewAssembler viewAssembler;
     private final FreightStatementPageAssembler pageAssembler;
-    private final FreightStatementApplyService freightStatementApplyService;
-    private final SourceAllocationLockService sourceAllocationLockService;
-    private final StatementSettlementMutationGuard settlementMutationGuard;
-    private final BusinessOperationEventPublisher businessOperationEventPublisher;
+    private final FreightStatementWorkflowService workflowService;
 
-    @Autowired
     public FreightStatementService(FreightStatementRepository repository,
                                    FreightStatementSummaryQueryRepository summaryQueryRepository,
                                    SnowflakeIdGenerator idGenerator,
-                                   StatementSettlementSyncService statementSettlementSyncService,
                                    FreightStatementWebMapper freightStatementWebMapper,
                                    FreightStatementSourceService freightStatementSourceService,
                                    FreightStatementViewAssembler viewAssembler,
                                    FreightStatementPageAssembler pageAssembler,
-                                   FreightStatementApplyService freightStatementApplyService,
-                                   SourceAllocationLockService sourceAllocationLockService,
-                                   StatementSettlementMutationGuard settlementMutationGuard,
-                                   BusinessOperationEventPublisher businessOperationEventPublisher) {
+                                   FreightStatementWorkflowService workflowService) {
         super(idGenerator);
         this.repository = repository;
         this.summaryQueryRepository = summaryQueryRepository;
-        this.statementSettlementSyncService = statementSettlementSyncService;
         this.freightStatementWebMapper = freightStatementWebMapper;
         this.freightStatementSourceService = freightStatementSourceService;
         this.viewAssembler = viewAssembler;
         this.pageAssembler = pageAssembler;
-        this.freightStatementApplyService = freightStatementApplyService;
-        this.sourceAllocationLockService = sourceAllocationLockService;
-        this.settlementMutationGuard = settlementMutationGuard;
-        this.businessOperationEventPublisher = businessOperationEventPublisher;
+        this.workflowService = workflowService;
     }
 
     @Transactional(readOnly = true)
@@ -125,12 +111,6 @@ public class FreightStatementService extends AbstractStatusCrudService<
     public Page<FreightStatementResponse> responsePage(PageQuery query, PageFilter filter, String carrierCode) {
         return page(query, filter, carrierCode).map(freightStatementWebMapper::toResponse);
     }
-
-    private static final String[] FREIGHT_STATEMENT_SEARCH_FIELDS = {
-            "statementNo",
-            "carrierCode",
-            "carrierName"
-    };
 
     @Transactional(readOnly = true)
     public List<FreightStatementView> search(String keyword, int maxSize) {
@@ -323,29 +303,12 @@ public class FreightStatementService extends AbstractStatusCrudService<
 
     @Override
     protected void apply(FreightStatement entity, FreightStatementCommand command) {
-        boolean creating = entity.getStatus() == null;
-        lockSourceFreightBills(entity, command);
-        if (!creating) {
-            settlementMutationGuard.assertFinancialLinkageMutationAllowed(
-                    StatementSettlementMutationGuard.StatementType.FREIGHT,
-                    entity.getId(),
-                    freightFinancialLinkageChanged(entity, command)
-            );
-        }
-        freightStatementApplyService.apply(entity, command, this::nextId);
+        workflowService.apply(entity, command, this::nextId);
     }
 
     @Override
     protected void beforeStatusUpdate(FreightStatement entity, String currentStatus, String nextStatus) {
-        lockSourceFreightBills(entity, null);
-        if (StatusConstants.AUDITED.equals(currentStatus)
-                && StatusConstants.DRAFT.equals(nextStatus)) {
-            settlementMutationGuard.assertNoSettledAllocations(
-                    StatementSettlementMutationGuard.StatementType.FREIGHT,
-                    entity.getId(),
-                    "反审核"
-            );
-        }
+        workflowService.beforeStatusUpdate(entity, currentStatus, nextStatus);
     }
 
     @Override
@@ -355,111 +318,38 @@ public class FreightStatementService extends AbstractStatusCrudService<
         String currentStatus = statement.getStatus();
         FreightStatementView response = super.updateStatus(id, status);
         if (!Objects.equals(currentStatus, response.status())) {
-            String actionType = StatusConstants.DRAFT.equals(response.status()) ? "反审核" : "审核";
-            publishEvent(
-                    statement,
-                    "FREIGHT_STATEMENT_STATUS_CHANGED",
-                    actionType,
-                    "物流对账单状态 " + currentStatus + " -> " + response.status()
-            );
+            workflowService.publishStatusChanged(statement, currentStatus, response.status());
         }
         return response;
     }
 
     @Override
     protected void beforeDelete(FreightStatement entity) {
-        lockSourceFreightBills(entity, null);
-        settlementMutationGuard.assertNoSettledAllocations(
-                StatementSettlementMutationGuard.StatementType.FREIGHT,
-                entity.getId(),
-                "删除"
-        );
+        workflowService.assertDeleteAllowed(entity);
     }
 
     @Override
     protected void afterDelete(FreightStatement entity) {
-        publishEvent(entity, "FREIGHT_STATEMENT_DELETED", "删除", "删除物流对账单 " + entity.getStatementNo());
-    }
-
-    private boolean freightFinancialLinkageChanged(FreightStatement entity, FreightStatementCommand command) {
-        boolean identityChanged = (command.carrierId() != null
-                && !Objects.equals(entity.getCarrierId(), command.carrierId()))
-                || explicitTextChanged(entity.getCarrierCode(), command.carrierCode())
-                || !Objects.equals(normalizeText(entity.getCarrierName()), normalizeText(command.carrierName()))
-                || (command.settlementCompanyId() != null
-                && !Objects.equals(entity.getSettlementCompanyId(), command.settlementCompanyId()));
-        Set<Long> existingSources = entity.getItems().stream()
-                .map(FreightStatementItem::getSourceFreightBillId)
-                .filter(Objects::nonNull)
-                .collect(java.util.stream.Collectors.toSet());
-        Set<Long> requestedSources = command.items().stream()
-                .map(FreightStatementItemCommand::sourceFreightBillId)
-                .filter(Objects::nonNull)
-                .collect(java.util.stream.Collectors.toSet());
-        return identityChanged || !existingSources.equals(requestedSources);
-    }
-
-    private boolean explicitTextChanged(String currentValue, String requestedValue) {
-        String normalizedRequested = normalizeText(requestedValue);
-        return normalizedRequested != null
-                && !Objects.equals(normalizeText(currentValue), normalizedRequested);
+        workflowService.publishDeleted(entity);
     }
 
     private String normalizeText(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    private void lockSourceFreightBills(FreightStatement entity, FreightStatementCommand command) {
-        TreeSet<Long> sourceIds = new TreeSet<>();
-        entity.getItems().stream()
-                .map(FreightStatementItem::getSourceFreightBillId)
-                .filter(Objects::nonNull)
-                .forEach(sourceIds::add);
-        if (command != null) {
-            command.items().stream()
-                    .map(FreightStatementItemCommand::sourceFreightBillId)
-                    .filter(Objects::nonNull)
-                    .forEach(sourceIds::add);
-        }
-        sourceAllocationLockService.lockDocumentSources(
-                List.of(),
-                List.of(),
-                List.of(),
-                List.copyOf(sourceIds)
-        );
-    }
-
     @Override
     protected FreightStatement saveEntity(FreightStatement entity) {
-        FreightStatement saved = repository.save(entity);
-        return statementSettlementSyncService.syncFreightStatement(saved);
+        return workflowService.save(entity);
     }
 
     @Override
     protected FreightStatement saveCreatedEntity(FreightStatement entity, FreightStatementCommand command) {
-        FreightStatement saved = saveEntity(entity);
-        publishEvent(saved, "FREIGHT_STATEMENT_CREATED", "新增", "新增物流对账单 " + saved.getStatementNo());
-        return saved;
+        return workflowService.saveCreated(entity, command);
     }
 
     @Override
     protected FreightStatement saveUpdatedEntity(FreightStatement entity, FreightStatementCommand command) {
-        FreightStatement saved = saveEntity(entity);
-        publishEvent(saved, "FREIGHT_STATEMENT_UPDATED", "编辑", "编辑物流对账单 " + saved.getStatementNo());
-        return saved;
-    }
-
-    private void publishEvent(FreightStatement statement, String eventType, String actionType, String remark) {
-        businessOperationEventPublisher.publish(
-                eventType,
-                "freight-statement",
-                "物流对账单",
-                actionType,
-                "FreightStatement",
-                statement.getId(),
-                statement.getStatementNo(),
-                remark
-        );
+        return workflowService.saveUpdated(entity, command);
     }
 
     @Override

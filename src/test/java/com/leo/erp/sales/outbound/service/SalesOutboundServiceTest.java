@@ -1,18 +1,16 @@
 package com.leo.erp.sales.outbound.service;
 
-import com.leo.erp.common.concurrency.SourceAllocationLockService;
+import com.leo.erp.common.api.PageFilter;
+import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.sales.order.repository.SalesOrderRepository;
-import com.leo.erp.sales.order.service.SalesOrderDownstreamMutationGuard;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundItemRequest;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundResponse;
-import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -26,13 +24,13 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * SalesOutboundService 极端情况测试。
+ * SalesOutboundService 门面职责测试：查询、校验、规范化与协作服务委托。
+ * 写侧工作流与删除回退的详细行为见对应协作服务测试。
  */
 @ExtendWith(MockitoExtension.class)
 class SalesOutboundServiceTest {
@@ -44,45 +42,16 @@ class SalesOutboundServiceTest {
     private SnowflakeIdGenerator idGenerator;
 
     @Mock
-    private SalesOutboundApplyService salesOutboundApplyService;
-
-    @Mock
     private SalesOutboundResponseAssembler responseAssembler;
 
     @Mock
-    private SalesOutboundSaveService saveService;
+    private SalesOutboundWorkflowService workflowService;
 
     @Mock
-    private SalesOutboundPurchaseInboundGuard purchaseInboundGuard;
-
-    @Mock
-    private SourceAllocationLockService sourceAllocationLockService;
-
-    @Mock
-    private SalesOutboundDownstreamMutationGuard downstreamMutationGuard;
-
-    @Mock
-    private BusinessOperationEventPublisher businessOperationEventPublisher;
-
-    @Mock
-    private SalesOutboundCoverageValidator coverageValidator;
-
-    @Mock
-    private SalesOrderRepository salesOrderRepository;
-
-    @Mock
-    private SalesOrderDownstreamMutationGuard salesOrderDownstreamMutationGuard;
+    private SalesOutboundDeleteRollbackService deleteRollbackService;
 
     @InjectMocks
     private SalesOutboundService service;
-
-    @org.junit.jupiter.api.BeforeEach
-    void setUp() {
-        // @InjectMocks 不自动调用包级 setter 注入，手动补齐
-        service.setCoverageValidator(coverageValidator);
-        service.setSalesOrderRepository(salesOrderRepository);
-        service.setSalesOrderDownstreamMutationGuard(salesOrderDownstreamMutationGuard);
-    }
 
     private SalesOutboundRequest request(String outboundNo, String salesOrderNo, String status) {
         return new SalesOutboundRequest(
@@ -129,215 +98,151 @@ class SalesOutboundServiceTest {
 
     @Test
     void validateUpdate_shouldRejectChangedDuplicateNo() {
-        SalesOutbound entity = entity(StatusConstants.DRAFT);
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
         when(repository.existsByOutboundNoAndDeletedFlagFalse("OB999")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.validateUpdate(entity, request("OB999", "SO001", StatusConstants.DRAFT)))
+        assertThatThrownBy(() -> service.validateUpdate(outbound, request("OB999", "SO001", StatusConstants.DRAFT)))
                 .isInstanceOf(BusinessException.class);
     }
 
-    // ---------- apply ----------
+    // ---------- 写侧委托 ----------
 
     @Test
-    void apply_shouldSetFieldsAndValidateCoverage() {
-        SalesOutbound entity = new SalesOutbound();
-        entity.setOutboundNo("OB001");
+    void apply_shouldDelegateToWorkflow() {
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
+        SalesOutboundRequest req = request("OB001", "SO001", StatusConstants.DRAFT);
 
-        service.apply(entity, request("OB001", "SO001", StatusConstants.DRAFT));
+        service.apply(outbound, req);
 
-        assertThat(entity.getStatus()).isEqualTo(StatusConstants.DRAFT);
-        assertThat(entity.getCustomerId()).isEqualTo(10L);
-        assertThat(entity.getProjectName()).isEqualTo("项目A");
-        verify(coverageValidator).assertExactCoverage(any());
-        verify(salesOutboundApplyService).applyItems(any(), any(), any());
+        verify(workflowService).apply(any(), any(), any());
     }
 
     @Test
-    void apply_shouldGuardPurchaseInboundWhenAudited() {
-        SalesOutbound entity = new SalesOutbound();
-        entity.setOutboundNo("OB001");
-        doThrow(new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "采购未完成"))
-                .when(purchaseInboundGuard).assertPurchaseInboundCompletedBeforeAudit(any());
+    void beforeStatusUpdate_shouldDelegateToWorkflow() {
+        SalesOutbound outbound = entity(StatusConstants.AUDITED);
 
-        assertThatThrownBy(() -> service.apply(entity, request("OB001", "SO001", StatusConstants.AUDITED)))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("采购未完成");
-    }
+        service.beforeStatusUpdate(outbound, StatusConstants.AUDITED, StatusConstants.DRAFT);
 
-    // ---------- 删除 ----------
-
-    @Test
-    void beforeDelete_shouldRejectAudited() {
-        SalesOutbound entity = entity(StatusConstants.AUDITED);
-
-        assertThatThrownBy(() -> service.beforeDelete(entity))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("必须先反审核");
+        verify(workflowService).beforeStatusUpdate(outbound, StatusConstants.AUDITED, StatusConstants.DRAFT);
     }
 
     @Test
-    void beforeDelete_shouldAllowForDraft() {
-        SalesOutbound entity = entity(StatusConstants.DRAFT);
+    void beforeDelete_shouldLockSourcesAndDelegate() {
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
+        SalesOutboundItem item = new SalesOutboundItem();
+        item.setSourceSalesOrderItemId(11L);
+        outbound.setItems(List.of(item));
 
-        service.beforeDelete(entity); // 不抛（items 空 → 无来源回滚）
+        service.beforeDelete(outbound);
+
+        verify(workflowService).lockSourceSalesOrderItems(outbound.getItems(), List.of());
+        verify(deleteRollbackService).beforeDelete(outbound);
     }
 
     @Test
-    void afterDelete_shouldPublishEvent() {
-        SalesOutbound entity = entity(StatusConstants.DRAFT);
+    void afterDelete_shouldDelegatePublish() {
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
 
-        service.afterDelete(entity);
+        service.afterDelete(outbound);
 
-        verify(businessOperationEventPublisher).publish(
-                org.mockito.ArgumentMatchers.eq("SALES_OUTBOUND_DELETED"),
-                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.eq(5L), org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyString());
-    }
-
-    // ---------- 状态守卫 ----------
-
-    @Test
-    void beforeStatusUpdate_shouldGuardReverseAudit() {
-        SalesOutbound entity = entity(StatusConstants.AUDITED);
-        doThrow(new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "已使用"))
-                .when(downstreamMutationGuard).assertReverseAuditAllowed(any());
-
-        assertThatThrownBy(() -> service.beforeStatusUpdate(
-                entity, StatusConstants.AUDITED, StatusConstants.DRAFT))
-                .isInstanceOf(BusinessException.class);
+        verify(workflowService).publishDeleted(outbound);
     }
 
     @Test
-    void beforeStatusUpdate_shouldGuardPurchaseInboundOnAudit() {
-        SalesOutbound entity = entity(StatusConstants.DRAFT);
-        doThrow(new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "采购未完成"))
-                .when(purchaseInboundGuard).assertPurchaseInboundCompletedBeforeAudit(any());
+    void saveCreatedEntity_shouldDelegateToWorkflow() {
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
+        SalesOutboundRequest req = request("OB001", "SO001", StatusConstants.DRAFT);
 
-        assertThatThrownBy(() -> service.beforeStatusUpdate(
-                entity, StatusConstants.DRAFT, StatusConstants.AUDITED))
-                .isInstanceOf(BusinessException.class);
+        service.saveCreatedEntity(outbound, req);
+
+        verify(workflowService).saveCreated(outbound, req);
     }
 
-    // ---------- 导入出库更新限制 ----------
+    @Test
+    void saveUpdatedEntity_shouldDelegateToWorkflow() {
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
+        SalesOutboundRequest req = request("OB001", "SO001", StatusConstants.DRAFT);
+
+        service.saveUpdatedEntity(outbound, req);
+
+        verify(workflowService).saveUpdated(outbound, req);
+    }
+
+    // ---------- 状态变更事件 ----------
+
+    @Test
+    void updateStatus_shouldPublishEventWhenChanged() {
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(outbound));
+        when(workflowService.save(outbound)).thenReturn(outbound);
+        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
+        when(response.status()).thenReturn(StatusConstants.AUDITED);
+        when(responseAssembler.toDetailResponse(outbound)).thenReturn(response);
+
+        service.updateStatus(5L, StatusConstants.AUDITED);
+
+        verify(workflowService).publishStatusChanged(outbound, StatusConstants.DRAFT, StatusConstants.AUDITED);
+    }
+
+    @Test
+    void updateStatus_shouldNotPublishWhenUnchanged() {
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(outbound));
+        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
+        when(response.status()).thenReturn(StatusConstants.DRAFT);
+        when(responseAssembler.toDetailResponse(outbound)).thenReturn(response);
+
+        service.updateStatus(5L, StatusConstants.DRAFT);
+
+        verify(workflowService, org.mockito.Mockito.never()).publishStatusChanged(any(), any(), any());
+    }
+
+    // ---------- 导入出库更新限制（委托真实策略） ----------
 
     @Test
     void normalizeUpdateRequest_shouldRestrictImportedOutbound() {
-        SalesOutbound entity = entity(StatusConstants.DRAFT);
-        entity.setSalesOrderNo("SO001");
-        entity.setCustomerId(10L);
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
+        outbound.setSalesOrderNo("SO001");
+        outbound.setCustomerId(10L);
         SalesOutboundItem item = new SalesOutboundItem();
         item.setId(100L);
         item.setLineNo(1);
         item.setSourceSalesOrderItemId(11L);
         item.setWeightTon(new BigDecimal("12.500"));
         item.setUnitPrice(new BigDecimal("4000"));
-        entity.setItems(List.of(item));
+        outbound.setItems(List.of(item));
         SalesOutboundItemRequest reqItem = new SalesOutboundItemRequest(
                 100L, null, 11L, 500L, "M001", "品牌A", "型钢", "螺纹钢", "HRB400", "12m", "吨",
                 1L, "库房A", "B001", 5, "件", new BigDecimal("1.250"), 100, null,
                 new BigDecimal("4000"), null);
 
-        SalesOutboundRequest normalized = service.normalizeUpdateRequest(entity,
-                request("OB001", "SO001", StatusConstants.DRAFT));
+        SalesOutboundRequest req = new SalesOutboundRequest(
+                "OB001", "SO001", 99L, "其它客户", 20L, "项目A", 9L, "库房A",
+                LocalDate.of(2026, 8, 2), StatusConstants.DRAFT, null, List.of(reqItem), false);
+
+        SalesOutboundRequest normalized = service.normalizeUpdateRequest(outbound, req);
 
         assertThat(normalized.items()).hasSize(1);
         assertThat(normalized.items().get(0).weightTon()).isEqualByComparingTo("12.500"); // 保留实体重量
         assertThat(normalized.customerId()).isEqualTo(10L); // 保留导入时的客户
+        assertThat(normalized.salesOrderNo()).isEqualTo("SO001");
     }
 
-    // ---------- updateStatus 事件 ----------
-
-    @Test
-    void updateStatus_shouldPublishEventWhenChanged() {
-        SalesOutbound entity = entity(StatusConstants.DRAFT);
-        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(entity));
-        when(saveService.save(entity)).thenReturn(entity);
-        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
-        when(response.status()).thenReturn(StatusConstants.AUDITED);
-        when(responseAssembler.toDetailResponse(entity)).thenReturn(response);
-
-        service.updateStatus(5L, StatusConstants.AUDITED);
-
-        verify(businessOperationEventPublisher).publish(
-                org.mockito.ArgumentMatchers.eq("SALES_OUTBOUND_STATUS_CHANGED"),
-                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.eq(5L), org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyString());
-    }
-
-    // ---------- save 事件与回滚 ----------
-
-    @Test
-    void saveCreatedEntity_shouldPublishEvent() {
-        SalesOutbound entity = entity(StatusConstants.DRAFT);
-        when(saveService.save(entity)).thenReturn(entity);
-
-        service.saveCreatedEntity(entity, request("OB001", "SO001", StatusConstants.DRAFT));
-
-        verify(businessOperationEventPublisher).publish(
-                org.mockito.ArgumentMatchers.eq("SALES_OUTBOUND_CREATED"),
-                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.eq(5L), org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyString());
-    }
-
-    @Test
-    void saveUpdatedEntity_shouldPublishEvent() {
-        SalesOutbound entity = entity(StatusConstants.DRAFT);
-        when(saveService.save(entity)).thenReturn(entity);
-
-        service.saveUpdatedEntity(entity, request("OB001", "SO001", StatusConstants.DRAFT));
-
-        verify(businessOperationEventPublisher).publish(
-                org.mockito.ArgumentMatchers.eq("SALES_OUTBOUND_UPDATED"),
-                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.eq(5L), org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyString());
-    }
-
-    @Test
-    void beforeDelete_shouldRollbackSourceOrder() {
-        SalesOutbound entity = entity(StatusConstants.DRAFT);
-        SalesOutboundItem item = new SalesOutboundItem();
-        item.setSourceSalesOrderItemId(11L);
-        entity.setItems(List.of(item));
-        // sourceSalesOrderIds 解析：salesOutboundApplyService 返回来源订单 id
-        org.mockito.Mockito.doReturn(List.of(1L))
-                .when(salesOutboundApplyService).sourceSalesOrderIds(entity);
-        com.leo.erp.sales.order.domain.entity.SalesOrder order =
-                new com.leo.erp.sales.order.domain.entity.SalesOrder();
-        order.setId(1L);
-        order.setOrderNo("SO001");
-        order.setStatus(StatusConstants.AUDITED);
-        order.setItems(List.of());
-        when(salesOrderRepository.findForUpdateByIdAndDeletedFlagFalse(1L))
-                .thenReturn(java.util.Optional.of(order));
-        when(salesOrderRepository.save(order)).thenReturn(order);
-
-        service.beforeDelete(entity);
-
-        assertThat(order.getStatus()).isEqualTo(StatusConstants.DRAFT); // 来源订单回退草稿
-        verify(salesOrderRepository).save(order);
-    }
+    // ---------- 查询 ----------
 
     @Test
     void page_shouldMapEntities() {
-        com.leo.erp.common.api.PageQuery query = mock(com.leo.erp.common.api.PageQuery.class);
+        PageQuery query = mock(PageQuery.class);
         when(query.toPageable("id")).thenReturn(org.springframework.data.domain.PageRequest.of(0, 10));
-        SalesOutbound entity = entity(StatusConstants.DRAFT);
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
         SalesOutboundResponse response = mock(SalesOutboundResponse.class);
-        when(responseAssembler.toSummaryResponse(entity)).thenReturn(response);
+        when(responseAssembler.toSummaryResponse(outbound)).thenReturn(response);
         when(repository.findAll(any(org.springframework.data.jpa.domain.Specification.class),
                 any(org.springframework.data.domain.Pageable.class)))
-                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(entity)));
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(outbound)));
 
         org.springframework.data.domain.Page<SalesOutboundResponse> result =
-                service.page(query, mock(com.leo.erp.common.api.PageFilter.class), null);
+                service.page(query, mock(PageFilter.class), null);
 
         assertThat(result.getContent()).containsExactly(response);
     }

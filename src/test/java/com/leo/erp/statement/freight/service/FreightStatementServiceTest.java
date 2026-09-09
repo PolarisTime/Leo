@@ -2,7 +2,6 @@ package com.leo.erp.statement.freight.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -12,9 +11,6 @@ import com.leo.erp.statement.freight.repository.FreightStatementRepository;
 import com.leo.erp.statement.freight.repository.FreightStatementSummaryAggregate;
 import com.leo.erp.statement.freight.repository.FreightStatementSummaryQueryRepository;
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
-import com.leo.erp.statement.service.StatementSettlementMutationGuard;
-import com.leo.erp.statement.service.StatementSettlementSyncService;
-import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -28,20 +24,17 @@ import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * FreightStatementService 极端情况测试。
+ * FreightStatementService 门面职责测试：查询、汇总、单号校验与协作服务委托。
+ * 写侧工作流（锁定/守卫/保存/事件）见 FreightStatementWorkflowServiceTest。
  */
 @ExtendWith(MockitoExtension.class)
 class FreightStatementServiceTest {
@@ -56,9 +49,6 @@ class FreightStatementServiceTest {
     private SnowflakeIdGenerator idGenerator;
 
     @Mock
-    private StatementSettlementSyncService statementSettlementSyncService;
-
-    @Mock
     private FreightStatementWebMapper freightStatementWebMapper;
 
     @Mock
@@ -71,16 +61,7 @@ class FreightStatementServiceTest {
     private FreightStatementPageAssembler pageAssembler;
 
     @Mock
-    private FreightStatementApplyService freightStatementApplyService;
-
-    @Mock
-    private SourceAllocationLockService sourceAllocationLockService;
-
-    @Mock
-    private StatementSettlementMutationGuard settlementMutationGuard;
-
-    @Mock
-    private BusinessOperationEventPublisher businessOperationEventPublisher;
+    private FreightStatementWorkflowService workflowService;
 
     @InjectMocks
     private FreightStatementService service;
@@ -150,6 +131,14 @@ class FreightStatementServiceTest {
     }
 
     @Test
+    void validateCreate_shouldAcceptNullStatus() {
+        when(repository.existsByStatementNoAndDeletedFlagFalse("FS001")).thenReturn(false);
+
+        org.assertj.core.api.Assertions.assertThatCode(
+                () -> service.validateCreate(command("FS001", null))).doesNotThrowAnyException();
+    }
+
+    @Test
     void validateUpdate_shouldRejectChangedDuplicateNo() {
         FreightStatement entity = new FreightStatement();
         entity.setStatementNo("FS001");
@@ -159,70 +148,66 @@ class FreightStatementServiceTest {
                 .isInstanceOf(BusinessException.class);
     }
 
-    // ---------- 结算守卫 ----------
+    // ---------- 写侧委托 ----------
 
     @Test
-    void beforeDelete_shouldGuardSettledAllocations() {
-        FreightStatement entity = new FreightStatement();
-        entity.setId(5L);
-        doThrow(new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "已结算"))
-                .when(settlementMutationGuard).assertNoSettledAllocations(any(), any(), any());
-
-        assertThatThrownBy(() -> service.beforeDelete(entity)).isInstanceOf(BusinessException.class);
-    }
-
-    @Test
-    void beforeStatusUpdate_shouldGuardReverseAudit() {
-        FreightStatement entity = new FreightStatement();
-        entity.setId(5L);
-        doThrow(new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "已结算"))
-                .when(settlementMutationGuard).assertNoSettledAllocations(any(), any(), any());
-
-        assertThatThrownBy(() -> service.beforeStatusUpdate(
-                entity, StatusConstants.AUDITED, StatusConstants.DRAFT))
-                .isInstanceOf(BusinessException.class);
-    }
-
-    // ---------- apply ----------
-
-    @Test
-    void apply_shouldSkipGuardWhenCreating() {
+    void apply_shouldDelegateToWorkflow() {
         FreightStatement entity = new FreightStatement();
         FreightStatementCommand cmd = command("FS001", StatusConstants.DRAFT);
 
         service.apply(entity, cmd);
 
-        verify(freightStatementApplyService).apply(any(), any(), any());
-        verify(settlementMutationGuard, org.mockito.Mockito.never())
-                .assertFinancialLinkageMutationAllowed(any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
+        verify(workflowService).apply(any(), any(), any());
     }
 
     @Test
-    void apply_shouldGuardWhenUpdating() {
+    void beforeStatusUpdate_shouldDelegateToWorkflow() {
         FreightStatement entity = new FreightStatement();
-        entity.setStatus(StatusConstants.DRAFT);
-        entity.setCarrierCode("C001");
-        FreightStatementCommand cmd = command("FS001", StatusConstants.DRAFT);
 
-        service.apply(entity, cmd);
+        service.beforeStatusUpdate(entity, StatusConstants.AUDITED, StatusConstants.DRAFT);
 
-        verify(settlementMutationGuard).assertFinancialLinkageMutationAllowed(any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
-        verify(freightStatementApplyService).apply(any(), any(), any());
+        verify(workflowService).beforeStatusUpdate(entity, StatusConstants.AUDITED, StatusConstants.DRAFT);
     }
 
-    // ---------- 删除/状态事件 ----------
+    @Test
+    void beforeDelete_shouldDelegateToWorkflow() {
+        FreightStatement entity = new FreightStatement();
+
+        service.beforeDelete(entity);
+
+        verify(workflowService).assertDeleteAllowed(entity);
+    }
 
     @Test
-    void afterDelete_shouldPublishEvent() {
+    void afterDelete_shouldDelegatePublish() {
         FreightStatement entity = new FreightStatement();
-        entity.setId(5L);
-        entity.setStatementNo("FS001");
 
         service.afterDelete(entity);
 
-        verify(businessOperationEventPublisher).publish(eq("FREIGHT_STATEMENT_DELETED"), anyString(), anyString(),
-                anyString(), anyString(), eq(5L), anyString(), anyString());
+        verify(workflowService).publishDeleted(entity);
     }
+
+    @Test
+    void saveCreatedEntity_shouldDelegateToWorkflow() {
+        FreightStatement entity = new FreightStatement();
+        FreightStatementCommand cmd = command("FS001", StatusConstants.DRAFT);
+
+        service.saveCreatedEntity(entity, cmd);
+
+        verify(workflowService).saveCreated(entity, cmd);
+    }
+
+    @Test
+    void saveUpdatedEntity_shouldDelegateToWorkflow() {
+        FreightStatement entity = new FreightStatement();
+        FreightStatementCommand cmd = command("FS001", StatusConstants.DRAFT);
+
+        service.saveUpdatedEntity(entity, cmd);
+
+        verify(workflowService).saveUpdated(entity, cmd);
+    }
+
+    // ---------- 状态变更事件 ----------
 
     @Test
     void updateStatus_shouldPublishEventWhenStatusChanged() {
@@ -230,48 +215,18 @@ class FreightStatementServiceTest {
         entity.setId(5L);
         entity.setStatementNo("FS001");
         entity.setStatus(StatusConstants.DRAFT);
-        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
-        when(repository.save(entity)).thenReturn(entity);
-        when(statementSettlementSyncService.syncFreightStatement(entity)).thenReturn(entity);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(java.util.Optional.of(entity));
+        when(workflowService.save(entity)).thenReturn(entity);
         FreightStatementView view = mock(FreightStatementView.class);
         when(view.status()).thenReturn(StatusConstants.AUDITED);
         when(viewAssembler.toDetailView(entity)).thenReturn(view);
 
         service.updateStatus(5L, StatusConstants.AUDITED);
 
-        verify(businessOperationEventPublisher).publish(eq("FREIGHT_STATEMENT_STATUS_CHANGED"), anyString(), anyString(),
-                anyString(), anyString(), eq(5L), anyString(), anyString());
+        verify(workflowService).publishStatusChanged(entity, StatusConstants.DRAFT, StatusConstants.AUDITED);
     }
 
-    // ---------- save 事件与 normalize ----------
-
-    @Test
-    void saveCreatedEntity_shouldPublishEvent() {
-        FreightStatement entity = new FreightStatement();
-        entity.setId(5L);
-        entity.setStatementNo("FS001");
-        when(repository.save(entity)).thenReturn(entity);
-        when(statementSettlementSyncService.syncFreightStatement(entity)).thenReturn(entity);
-
-        service.saveCreatedEntity(entity, command("FS001", StatusConstants.DRAFT));
-
-        verify(businessOperationEventPublisher).publish(eq("FREIGHT_STATEMENT_CREATED"), anyString(), anyString(),
-                anyString(), anyString(), eq(5L), anyString(), anyString());
-    }
-
-    @Test
-    void saveUpdatedEntity_shouldPublishEvent() {
-        FreightStatement entity = new FreightStatement();
-        entity.setId(5L);
-        entity.setStatementNo("FS001");
-        when(repository.save(entity)).thenReturn(entity);
-        when(statementSettlementSyncService.syncFreightStatement(entity)).thenReturn(entity);
-
-        service.saveUpdatedEntity(entity, command("FS001", StatusConstants.DRAFT));
-
-        verify(businessOperationEventPublisher).publish(eq("FREIGHT_STATEMENT_UPDATED"), anyString(), anyString(),
-                anyString(), anyString(), eq(5L), anyString(), anyString());
-    }
+    // ---------- normalize ----------
 
     @Test
     void normalizeUpdateRequest_shouldRejectStatusChange() {
