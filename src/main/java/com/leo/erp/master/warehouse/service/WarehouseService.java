@@ -68,6 +68,7 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
                 .toList();
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public Page<WarehouseResponse> page(PageQuery query, String keyword, String warehouseType, String status) {
         Specification<Warehouse> spec = Specs.<Warehouse>notDeleted()
                 .and(Specs.keywordLike(keyword, "warehouseCode", "warehouseName", "contactName"))

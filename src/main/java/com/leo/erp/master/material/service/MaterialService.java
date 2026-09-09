@@ -63,6 +63,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         return response;
     }
 
+    @Transactional(readOnly = true)
     public Page<MaterialResponse> page(PageQuery query, String keyword, String category, String material,
                                        String materialType) {
         Pageable pageable = query.sortBy() != null

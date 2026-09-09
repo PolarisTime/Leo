@@ -52,6 +52,7 @@ public class PaymentService extends AbstractStatusCrudService<Payment, PaymentRe
         this.settlementSyncService = settlementSyncService;
     }
 
+    @Transactional(readOnly = true)
     public Page<PaymentResponse> page(PageQuery query, PageFilter filter) {
         Specification<Payment> spec = Specs.<Payment>keywordLike(filter.keyword(), "paymentNo", "businessType", "counterpartyName")
                 .and(Specs.equalIfPresent("businessType", filter.businessType()))
@@ -60,6 +61,7 @@ public class PaymentService extends AbstractStatusCrudService<Payment, PaymentRe
         return page(query, spec, paymentRepository);
     }
 
+    @Transactional(readOnly = true)
     public List<PaymentResponse> search(String keyword, int maxSize) {
         return search(keyword, PAYMENT_SEARCH_FIELDS, maxSize, null, paymentRepository);
     }

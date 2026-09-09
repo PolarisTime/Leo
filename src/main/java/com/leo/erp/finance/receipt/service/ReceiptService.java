@@ -62,6 +62,7 @@ public class ReceiptService extends AbstractStatusCrudService<Receipt, ReceiptRe
         this.supplierPrepaymentBalanceService = supplierPrepaymentBalanceService;
     }
 
+    @Transactional(readOnly = true)
     public Page<ReceiptResponse> page(PageQuery query, PageFilter filter) {
         Specification<Receipt> spec = Specs.<Receipt>keywordLike(
                         filter.keyword(),
@@ -85,6 +86,7 @@ public class ReceiptService extends AbstractStatusCrudService<Receipt, ReceiptRe
             "projectName"
     };
 
+    @Transactional(readOnly = true)
     public List<ReceiptResponse> search(String keyword, int maxSize) {
         return search(keyword, RECEIPT_SEARCH_FIELDS, maxSize, null, receiptRepository);
     }

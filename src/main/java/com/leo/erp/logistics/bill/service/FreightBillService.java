@@ -81,10 +81,12 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
         this.businessOperationEventPublisher = businessOperationEventPublisher;
     }
 
+    @Transactional(readOnly = true)
     public Page<FreightBillResponse> page(PageQuery query, PageFilter filter) {
         return page(query, filter, null);
     }
 
+    @Transactional(readOnly = true)
     public Page<FreightBillResponse> page(PageQuery query, PageFilter filter, String carrierCode) {
         Specification<FreightBill> spec = Specs.<FreightBill>keywordLike(filter.keyword(), SEARCH_FIELDS)
                 .and(Specs.equalValueIfPresent("carrierId", filter.carrierId()))
