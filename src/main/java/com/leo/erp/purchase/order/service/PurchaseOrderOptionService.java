@@ -9,15 +9,16 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /** 采购订单下拉选项(供比价报价单关联/展示订货吨数)。 */
 @Service
 public class PurchaseOrderOptionService {
 
     private static final int MAX_OPTIONS = 200;
-    private static final String NORMAL_STATUS = "正常";
 
     private final PurchaseOrderRepository repository;
 
@@ -51,16 +52,16 @@ public class PurchaseOrderOptionService {
 
     /** 订购吨数合计(NORMAL 状态), 供"已开吨"汇总预留。 */
     @Transactional(readOnly = true)
-    public java.math.BigDecimal sumOrderedWeight(List<Long> orderIds) {
+    public BigDecimal sumOrderedWeight(List<Long> orderIds) {
         if (orderIds == null || orderIds.isEmpty()) {
-            return java.math.BigDecimal.ZERO;
+            return BigDecimal.ZERO;
         }
         Specification<PurchaseOrder> specification = (root, query, builder) -> builder.and(
                 builder.isFalse(root.get("deletedFlag")),
                 root.get("id").in(orderIds));
         return repository.findAll(specification).stream()
                 .map(PurchaseOrder::getTotalWeight)
-                .filter(java.util.Objects::nonNull)
-                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

@@ -66,14 +66,14 @@ public class V2PurchaseOrderController {
 
     @Operation(summary = "采购订单下拉选项(单号/供应商/订货吨数/状态)")
     @GetMapping("/options")
-    public java.util.List<PurchaseOrderOptionResponse> options(@RequestParam(required = false) String keyword,
+    public List<PurchaseOrderOptionResponse> options(@RequestParam(required = false) String keyword,
                                                               @RequestParam(required = false) String status) {
         return purchaseOrderOptionService.listOptions(keyword, status);
     }
 
     @Operation(summary = "搜索采购订单")
     @GetMapping("/search")
-    public java.util.List<PurchaseOrderResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
+    public List<PurchaseOrderResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
         return purchaseOrderService.search(keyword != null ? keyword : "", Math.min(limit, 500));
     }
 

@@ -21,7 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -114,13 +113,7 @@ public class QuoteSheetService {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "品牌重复: " + brand.brandName());
             }
         }
-        Set<Integer> lineNos = new HashSet<>();
-        int lineNo = 0;
         for (QuoteSheetRequest.ItemRequest item : request.items()) {
-            lineNo += 1;
-            if (!lineNos.add(lineNo)) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "商品行重复");
-            }
             if (item.prices() != null) {
                 for (QuoteSheetRequest.ItemPriceRequest price : item.prices()) {
                     if (!brandNames.contains(price.brandName())) {
