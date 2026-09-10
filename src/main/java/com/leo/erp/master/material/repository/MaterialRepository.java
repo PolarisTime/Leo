@@ -94,4 +94,7 @@ public interface MaterialRepository extends JpaRepository<Material, Long>, JpaSp
 
     @Query("SELECT DISTINCT m.material FROM Material m WHERE m.deletedFlag = false AND m.material IS NOT NULL ORDER BY m.material")
     List<String> findDistinctMaterials();
+
+    @Query("SELECT DISTINCT m.brand FROM Material m WHERE m.deletedFlag = false AND m.materialType = '实体商品' AND m.brand IS NOT NULL ORDER BY m.brand")
+    List<String> findDistinctActiveProductBrands();
 }

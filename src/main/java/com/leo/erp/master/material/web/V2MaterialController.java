@@ -93,6 +93,11 @@ public class V2MaterialController {
         return materialService.materialGrades();
     }
 
+    @GetMapping("/brands")
+    public java.util.List<String> materialBrands() {
+        return materialService.materialBrands();
+    }
+
     @PostMapping("/export")
     public ResponseEntity<byte[]> export(@RequestParam(required = false) String keyword) {
         return toDownloadResponse(

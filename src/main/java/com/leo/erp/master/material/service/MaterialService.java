@@ -137,6 +137,11 @@ public class MaterialService {
         return materialRepository.findDistinctMaterials();
     }
 
+    @Transactional(readOnly = true)
+    public List<String> materialBrands() {
+        return materialRepository.findDistinctActiveProductBrands();
+    }
+
     private Material requireActiveMaterial(Long id) {
         return materialRepository.findByIdAndDeletedFlagFalse(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "商品不存在"));
