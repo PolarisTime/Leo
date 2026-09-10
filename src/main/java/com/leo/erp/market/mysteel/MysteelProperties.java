@@ -3,12 +3,16 @@ package com.leo.erp.market.mysteel;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * Mysteel 行情抓取与商品匹配配置。
+ *
+ * <p>映射类配置统一使用列表 + ASCII 键(from/to 等)承载, 因为 Spring 属性名不允许中文键;
+ * 业务层仍通过 Map 视图访问。</p>
  */
 @Validated
 @ConfigurationProperties(prefix = "leo.market.steel-quote")
@@ -111,12 +115,12 @@ public class MysteelProperties {
     public static class Match {
         /** 忽略的材质(不参与匹配, 直接返回无网价)。 */
         private List<String> ignoredMaterials = List.of("HRB500E");
-        /** 商品品牌 -> Mysteel 钢厂别名映射, 未列出 = 同名直接匹配。 */
-        private Map<String, String> brandAlias = defaultBrandAlias();
-        /** 商品类别 -> Mysteel 品名映射, 未列出 = 同名直接匹配。 */
-        private Map<String, String> breedMap = defaultBreedMap();
+        /** 商品品牌 -> Mysteel 钢厂别名映射。 */
+        private List<AliasEntry> brandAliases = defaultBrandAliases();
+        /** 商品类别 -> Mysteel 品名映射。 */
+        private List<AliasEntry> breedMappings = defaultBreedMappings();
         /** 商品长度 -> 每吨加价(元), 如 12米 +30。 */
-        private Map<String, Integer> lengthPremium = defaultLengthPremium();
+        private List<LengthPremium> lengthPremiums = defaultLengthPremiums();
 
         public List<String> getIgnoredMaterials() {
             return ignoredMaterials;
@@ -126,54 +130,145 @@ public class MysteelProperties {
             this.ignoredMaterials = ignoredMaterials;
         }
 
+        public List<AliasEntry> getBrandAliases() {
+            return brandAliases;
+        }
+
+        public void setBrandAliases(List<AliasEntry> brandAliases) {
+            this.brandAliases = brandAliases;
+        }
+
+        public List<AliasEntry> getBreedMappings() {
+            return breedMappings;
+        }
+
+        public void setBreedMappings(List<AliasEntry> breedMappings) {
+            this.breedMappings = breedMappings;
+        }
+
+        public List<LengthPremium> getLengthPremiums() {
+            return lengthPremiums;
+        }
+
+        public void setLengthPremiums(List<LengthPremium> lengthPremiums) {
+            this.lengthPremiums = lengthPremiums;
+        }
+
+        /** 品牌别名 Map 视图。 */
         public Map<String, String> getBrandAlias() {
-            return brandAlias;
+            return toMap(brandAliases);
         }
 
-        public void setBrandAlias(Map<String, String> brandAlias) {
-            this.brandAlias = brandAlias;
-        }
-
+        /** 类别映射 Map 视图。 */
         public Map<String, String> getBreedMap() {
-            return breedMap;
+            return toMap(breedMappings);
         }
 
-        public void setBreedMap(Map<String, String> breedMap) {
-            this.breedMap = breedMap;
-        }
-
+        /** 长度加价 Map 视图。 */
         public Map<String, Integer> getLengthPremium() {
-            return lengthPremium;
+            Map<String, Integer> result = new LinkedHashMap<>();
+            for (LengthPremium item : lengthPremiums) {
+                if (item.getLength() != null) {
+                    result.put(item.getLength(), item.getPremium());
+                }
+            }
+            return result;
         }
 
-        public void setLengthPremium(Map<String, Integer> lengthPremium) {
-            this.lengthPremium = lengthPremium;
+        private static Map<String, String> toMap(List<AliasEntry> entries) {
+            Map<String, String> result = new LinkedHashMap<>();
+            for (AliasEntry entry : entries) {
+                if (entry.getFrom() != null && entry.getTo() != null) {
+                    result.put(entry.getFrom(), entry.getTo());
+                }
+            }
+            return result;
         }
 
-        private static Map<String, String> defaultBrandAlias() {
-            Map<String, String> alias = new LinkedHashMap<>();
-            alias.put("万泰", "浙江万泰");
-            alias.put("中新", "中新钢铁");
-            alias.put("中杭", "今胜中杭");
-            alias.put("圆钢", "今胜中杭");
-            alias.put("新梅鹿", "隆鑫/新梅鹿");
-            alias.put("芜湖富鑫", "安徽富鑫");
-            alias.put("铜陵富鑫", "安徽富鑫");
-            return alias;
+        private static List<AliasEntry> defaultBrandAliases() {
+            List<AliasEntry> entries = new ArrayList<>();
+            entries.add(new AliasEntry("万泰", "浙江万泰"));
+            entries.add(new AliasEntry("中新", "中新钢铁"));
+            entries.add(new AliasEntry("中杭", "今胜中杭"));
+            entries.add(new AliasEntry("圆钢", "今胜中杭"));
+            entries.add(new AliasEntry("新梅鹿", "隆鑫/新梅鹿"));
+            entries.add(new AliasEntry("芜湖富鑫", "安徽富鑫"));
+            entries.add(new AliasEntry("铜陵富鑫", "安徽富鑫"));
+            return entries;
         }
 
-        private static Map<String, String> defaultBreedMap() {
-            Map<String, String> breed = new LinkedHashMap<>();
-            breed.put("直条", "螺纹钢");
-            breed.put("盘螺", "盘螺");
-            breed.put("圆钢", "圆钢");
-            return breed;
+        private static List<AliasEntry> defaultBreedMappings() {
+            List<AliasEntry> entries = new ArrayList<>();
+            entries.add(new AliasEntry("直条", "螺纹钢"));
+            entries.add(new AliasEntry("盘螺", "盘螺"));
+            entries.add(new AliasEntry("圆钢", "圆钢"));
+            return entries;
         }
 
-        private static Map<String, Integer> defaultLengthPremium() {
-            Map<String, Integer> premium = new LinkedHashMap<>();
-            premium.put("12米", 30);
+        private static List<LengthPremium> defaultLengthPremiums() {
+            List<LengthPremium> entries = new ArrayList<>();
+            entries.add(new LengthPremium("12米", 30));
+            return entries;
+        }
+    }
+
+    /** 映射项: from -> to。 */
+    public static class AliasEntry {
+        private String from;
+        private String to;
+
+        public AliasEntry() {
+        }
+
+        public AliasEntry(String from, String to) {
+            this.from = from;
+            this.to = to;
+        }
+
+        public String getFrom() {
+            return from;
+        }
+
+        public void setFrom(String from) {
+            this.from = from;
+        }
+
+        public String getTo() {
+            return to;
+        }
+
+        public void setTo(String to) {
+            this.to = to;
+        }
+    }
+
+    /** 长度加价项。 */
+    public static class LengthPremium {
+        private String length;
+        private Integer premium;
+
+        public LengthPremium() {
+        }
+
+        public LengthPremium(String length, Integer premium) {
+            this.length = length;
+            this.premium = premium;
+        }
+
+        public String getLength() {
+            return length;
+        }
+
+        public void setLength(String length) {
+            this.length = length;
+        }
+
+        public Integer getPremium() {
             return premium;
+        }
+
+        public void setPremium(Integer premium) {
+            this.premium = premium;
         }
     }
 }

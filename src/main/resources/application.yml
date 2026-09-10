@@ -276,23 +276,34 @@ leo:
       match:
         # 匹配时忽略的材质(直接返回无网价)
         ignored-materials: ${LEO_MARKET_STEEL_QUOTE_IGNORED_MATERIALS:HRB500E}
-        # 商品品牌 -> Mysteel 钢厂别名; 未列出的品牌按同名匹配
-        brand-alias:
-          万泰: 浙江万泰
-          中新: 中新钢铁
-          中杭: 今胜中杭
-          圆钢: 今胜中杭
-          新梅鹿: 隆鑫/新梅鹿
-          芜湖富鑫: 安徽富鑫
-          铜陵富鑫: 安徽富鑫
+        # 商品品牌 -> Mysteel 钢厂别名(Spring 属性名不支持中文, 用 from/to 列表承载)
+        brand-aliases:
+          - from: 万泰
+            to: 浙江万泰
+          - from: 中新
+            to: 中新钢铁
+          - from: 中杭
+            to: 今胜中杭
+          - from: 圆钢
+            to: 今胜中杭
+          - from: 新梅鹿
+            to: 隆鑫/新梅鹿
+          - from: 芜湖富鑫
+            to: 安徽富鑫
+          - from: 铜陵富鑫
+            to: 安徽富鑫
         # 商品类别 -> Mysteel 品名
-        breed-map:
-          直条: 螺纹钢
-          盘螺: 盘螺
-          圆钢: 圆钢
+        breed-mappings:
+          - from: 直条
+            to: 螺纹钢
+          - from: 盘螺
+            to: 盘螺
+          - from: 圆钢
+            to: 圆钢
         # 商品长度 -> 每吨加价(元)
-        length-premium:
-          12米: 30
+        length-premiums:
+          - length: 12米
+            premium: 30
   auth:
     login-protection:
       # 是否启用登录失败次数保护
