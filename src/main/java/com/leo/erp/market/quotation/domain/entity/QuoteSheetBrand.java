@@ -1,0 +1,36 @@
+package com.leo.erp.market.quotation.domain.entity;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.math.BigDecimal;
+
+@Getter
+@Setter
+@Entity
+@Table(name = "mk_quote_sheet_brand")
+public class QuoteSheetBrand {
+
+    @Id
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sheet_id", nullable = false)
+    private QuoteSheet sheet;
+
+    @Column(name = "brand_name", nullable = false, length = 64)
+    private String brandName;
+
+    @Column(name = "freight", nullable = false, precision = 10, scale = 2)
+    private BigDecimal freight;
+
+    @Column(name = "sort_order", nullable = false)
+    private Integer sortOrder;
+}

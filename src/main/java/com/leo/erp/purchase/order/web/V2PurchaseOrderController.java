@@ -7,9 +7,11 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.purchase.order.service.PurchaseOrderPickupListService;
+import com.leo.erp.purchase.order.service.PurchaseOrderOptionService;
 import com.leo.erp.purchase.order.service.PurchaseOrderService;
 import com.leo.erp.purchase.order.service.PurchaseOrderWarehouseRecommendationService;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
+import com.leo.erp.purchase.order.web.dto.PurchaseOrderOptionResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderPageCriteria;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderPickupListResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
@@ -50,13 +52,23 @@ public class V2PurchaseOrderController {
     private final PurchaseOrderService purchaseOrderService;
     private final PurchaseOrderPickupListService pickupListService;
     private final PurchaseOrderWarehouseRecommendationService warehouseRecommendationService;
+    private final PurchaseOrderOptionService purchaseOrderOptionService;
 
     public V2PurchaseOrderController(PurchaseOrderService purchaseOrderService,
                                      PurchaseOrderPickupListService pickupListService,
-                                     PurchaseOrderWarehouseRecommendationService warehouseRecommendationService) {
+                                     PurchaseOrderWarehouseRecommendationService warehouseRecommendationService,
+                                     PurchaseOrderOptionService purchaseOrderOptionService) {
         this.purchaseOrderService = purchaseOrderService;
         this.pickupListService = pickupListService;
         this.warehouseRecommendationService = warehouseRecommendationService;
+        this.purchaseOrderOptionService = purchaseOrderOptionService;
+    }
+
+    @Operation(summary = "采购订单下拉选项(单号/供应商/订货吨数/状态)")
+    @GetMapping("/options")
+    public java.util.List<PurchaseOrderOptionResponse> options(@RequestParam(required = false) String keyword,
+                                                              @RequestParam(required = false) String status) {
+        return purchaseOrderOptionService.listOptions(keyword, status);
     }
 
     @Operation(summary = "搜索采购订单")
