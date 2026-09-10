@@ -12,9 +12,9 @@ import java.util.regex.Pattern;
  */
 public final class MysteelArticleParser {
 
-    /** 形如 "2026年9月9日(15:40)杭州市场建筑钢材价格行情"。 */
+    /** 形如 "2026年9月9日(15:40)杭州市场建筑钢材价格行情"; 括号兼容全角/半角。 */
     static final Pattern TITLE_PATTERN = Pattern.compile(
-            "(\\d{4})年(\\d{1,2})月(\\d{1,2})日\\((\\d{1,2}):(\\d{2})\\)杭州市场建筑钢材价格行情");
+            "(\\d{4})年(\\d{1,2})月(\\d{1,2})日[（(](\\d{1,2}):(\\d{2})[)）]杭州市场建筑钢材价格行情");
     private static final Pattern MARKET_TABLE_PATTERN = Pattern.compile(
             "<table id=\"marketTable\".*?</table>", Pattern.DOTALL);
     private static final Pattern KM_ATTRS_PATTERN = Pattern.compile(

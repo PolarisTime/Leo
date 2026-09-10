@@ -88,6 +88,15 @@ class MysteelArticleParserTest {
     }
 
     @Test
+    void parseTitle_supportsFullwidthParentheses() {
+        String html = articleHtml("2026年9月10日（9:30）杭州市场建筑钢材价格行情", "");
+        MysteelArticleParser.TitleInfo title = MysteelArticleParser.parseTitle(html);
+        assertThat(title.articleDate()).isEqualTo(LocalDate.of(2026, 9, 10));
+        assertThat(title.hhmm()).isEqualTo("0930");
+        assertThat(title.fullTitle()).isEqualTo("2026年9月10日（9:30）杭州市场建筑钢材价格行情");
+    }
+
+    @Test
     void parseTitle_rejectsMissingTitle() {
         String html = articleHtml("其他文章标题", "");
         assertThatThrownBy(() -> MysteelArticleParser.parseTitle(html))
