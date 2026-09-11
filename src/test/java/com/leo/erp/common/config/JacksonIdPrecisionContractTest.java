@@ -1,5 +1,6 @@
 package com.leo.erp.common.config;
 
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
@@ -8,6 +9,7 @@ import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * API JSON 序列化契约：雪花 ID 必须为字符串，金额/重量精度不变。
@@ -70,5 +72,33 @@ class JacksonIdPrecisionContractTest {
 
         String serialized = json.replaceAll(".*\"id\":\"(\\d+)\".*", "$1");
         assertThat(Long.parseLong(serialized)).isEqualTo(9007199254740993000L);
+    }
+
+    @Test
+    void longField_shouldAcceptDecimalStringId() throws Exception {
+        SamplePayload payload = mapper().readValue("{\"id\":\"9007199254740993000\"}", SamplePayload.class);
+
+        assertThat(payload.id).isEqualTo(9007199254740993000L);
+    }
+
+    @Test
+    void longField_shouldAcceptSafeNumberId() throws Exception {
+        SamplePayload payload = mapper().readValue("{\"id\":12345}", SamplePayload.class);
+
+        assertThat(payload.id).isEqualTo(12345L);
+    }
+
+    @Test
+    void longField_shouldRejectUnsafeNumberId() {
+        assertThatThrownBy(() -> mapper().readValue("{\"id\":9007199254740993000}", SamplePayload.class))
+                .isInstanceOf(JsonMappingException.class)
+                .hasMessageContaining("安全整数范围");
+    }
+
+    @Test
+    void longField_shouldRejectNonNumericStringId() {
+        assertThatThrownBy(() -> mapper().readValue("{\"id\":\"abc\"}", SamplePayload.class))
+                .isInstanceOf(JsonMappingException.class)
+                .hasMessageContaining("十进制整数字符串");
     }
 }

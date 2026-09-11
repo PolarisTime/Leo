@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -41,11 +42,50 @@ public class JacksonConfig {
         return builder -> builder
                 .serializerByType(Long.class, ToStringSerializer.instance)
                 .serializerByType(Long.TYPE, ToStringSerializer.instance)
+                .deserializerByType(Long.class, new SnowflakeSafeLongDeserializer())
+                .deserializerByType(Long.TYPE, new SnowflakeSafeLongDeserializer())
                 .serializerByType(BigDecimal.class, new ScaledBigDecimalSerializer())
                 .serializerByType(LocalDateTime.class, new IsoLocalDateTimeSerializer())
                 .deserializerByType(LocalDateTime.class, new FlexibleLocalDateTimeDeserializer())
                 .serializerByType(LocalDate.class, new IsoLocalDateSerializer())
                 .deserializerByType(LocalDate.class, new FlexibleLocalDateDeserializer());
+    }
+
+    /**
+     * 雪花 ID 入参加固：允许十进制字符串；数值仅接受 ≤ 2^53-1 的安全整数，
+     * 超出范围（前端用 Number 处理会丢低位）直接拒绝，返回 400。
+     */
+    static class SnowflakeSafeLongDeserializer extends JsonDeserializer<Long> {
+        private static final long JS_MAX_SAFE_INTEGER = 9007199254740991L;
+
+        @Override
+        public Long deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+            JsonToken token = p.currentToken();
+            if (token == JsonToken.VALUE_NUMBER_INT) {
+                long value = p.getLongValue();
+                if (value > JS_MAX_SAFE_INTEGER || value < -JS_MAX_SAFE_INTEGER) {
+                    throw InvalidFormatException.from(
+                            p,
+                            "ID 数值超出 JavaScript 安全整数范围，请以十进制字符串传递",
+                            value,
+                            Long.class
+                    );
+                }
+                return value;
+            }
+            if (token == JsonToken.VALUE_STRING) {
+                String text = p.getText().trim();
+                if (text.isEmpty()) {
+                    return null;
+                }
+                try {
+                    return Long.parseLong(text);
+                } catch (NumberFormatException e) {
+                    throw InvalidFormatException.from(p, "ID 必须为十进制整数字符串", text, Long.class);
+                }
+            }
+            return (Long) ctxt.handleUnexpectedToken(Long.class, p);
+        }
     }
 
     /** API 日期统一输出 ISO-8601。 */
