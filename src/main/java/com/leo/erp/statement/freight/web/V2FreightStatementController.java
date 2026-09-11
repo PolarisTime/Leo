@@ -4,6 +4,8 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.statement.freight.service.FreightStatementService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
@@ -47,7 +49,13 @@ public class V2FreightStatementController {
         this.freightStatementService = freightStatementService;
     }
 
-    @Operation(summary = "搜索物流对账单")
+    /**
+     * @deprecated 动作后缀查询端点，已由资源型集合端点
+     * {@code GET /freight-statements?keyword=...&page=...&size=...} （PageQuery/PageResponse）取代，
+     * 保留以兼容既有调用方。
+     */
+    @Deprecated
+    @Operation(summary = "搜索物流对账单（已废弃，请使用 GET /freight-statements 集合查询）", deprecated = true)
     @GetMapping("/search")
     public java.util.List<FreightStatementResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
         return freightStatementService.responseSearch(
@@ -111,6 +119,21 @@ public class V2FreightStatementController {
     @DomainEventAudited
     public FreightStatementResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return freightStatementService.responseUpdateStatus(id, request.status());
+    }
+
+    /**
+     * 资源型审核端点：创建“审核记录”子资源即把物流对账单推进到已审核。
+     * 子资源无独立可回读路径，Location 指向父资源 {@code GET /freight-statements/{id}}。
+     * 反审核仍使用 {@code PATCH /freight-statements/{id}/status}。
+     */
+    @Operation(summary = "创建物流对账单审核记录（审核）")
+    @IdempotencyRequired
+    @PostMapping("/{id}/audits")
+    @DomainEventAudited
+    @V2Created
+    public ResponseEntity<FreightStatementResponse> createAudit(@PathVariable Long id) {
+        return V2ResponseSupport.created(
+                "/freight-statements", freightStatementService.responseUpdateStatus(id, StatusConstants.AUDITED));
     }
 
     @Operation(summary = "删除物流对账单")

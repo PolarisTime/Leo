@@ -4,6 +4,8 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.logistics.bill.service.FreightBillSalesOrderCandidateService;
 import com.leo.erp.logistics.bill.service.FreightBillService;
@@ -11,6 +13,7 @@ import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import com.leo.erp.logistics.bill.web.dto.FreightBillSalesOrderCandidateResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
@@ -57,6 +60,13 @@ public class V2FreightBillController {
         ));
     }
 
+    /**
+     * @deprecated 动作后缀查询端点，已由资源型集合端点
+     * {@code GET /freight-bills?keyword=...&page=...&size=...} （PageQuery/PageResponse）取代，
+     * 保留以兼容既有调用方。
+     */
+    @Deprecated
+    @Operation(summary = "搜索物流单（已废弃，请使用 GET /freight-bills 集合查询）", deprecated = true)
     @GetMapping("/search")
     public java.util.List<FreightBillResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
         return service.search(keyword != null ? keyword : "", Math.min(limit, 500));
@@ -94,6 +104,20 @@ public class V2FreightBillController {
     @DomainEventAudited
     public FreightBillResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return service.updateStatus(id, request.status());
+    }
+
+    /**
+     * 资源型审核端点：创建“审核记录”子资源即把物流单推进到已审核。
+     * 子资源无独立可回读路径，Location 指向父资源 {@code GET /freight-bills/{id}}。
+     * 反审核仍使用 {@code PATCH /freight-bills/{id}/status}。
+     */
+    @Operation(summary = "创建物流单审核记录（审核）")
+    @IdempotencyRequired
+    @PostMapping("/{id}/audits")
+    @DomainEventAudited
+    @V2Created
+    public ResponseEntity<FreightBillResponse> createAudit(@PathVariable Long id) {
+        return V2ResponseSupport.created("/freight-bills", service.updateStatus(id, StatusConstants.AUDITED));
     }
 
     @DeleteMapping("/{id}")

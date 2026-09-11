@@ -3,6 +3,7 @@ package com.leo.erp.logistics.bill.web;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.logistics.bill.service.FreightBillSalesOrderCandidateService;
 import com.leo.erp.logistics.bill.service.FreightBillService;
@@ -143,6 +144,21 @@ class V2FreightBillControllerTest {
 
         assertThat(controller.updateStatus(5L, new StatusUpdateRequest("AUDITED"))).isSameAs(response);
         verify(service).updateStatus(5L, "AUDITED");
+    }
+
+    @Test
+    void createAudit_shouldReturnCreatedPointingToParentBill() {
+        FreightBillResponse response = mock(FreightBillResponse.class);
+        when(response.id()).thenReturn(5L);
+        when(service.updateStatus(5L, StatusConstants.AUDITED)).thenReturn(response);
+
+        ResponseEntity<FreightBillResponse> result = controller.createAudit(5L);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(result.getBody()).isSameAs(response);
+        assertThat(result.getHeaders().getLocation()).isNotNull();
+        assertThat(result.getHeaders().getLocation().getPath()).endsWith("/v2.0/freight-bills/5");
+        verify(service).updateStatus(5L, StatusConstants.AUDITED);
     }
 
     @Test

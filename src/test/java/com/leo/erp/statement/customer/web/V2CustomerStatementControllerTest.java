@@ -3,6 +3,7 @@ package com.leo.erp.statement.customer.web;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.statement.customer.service.CustomerStatementService;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
@@ -142,6 +143,21 @@ class V2CustomerStatementControllerTest {
 
         assertThat(controller.updateStatus(5L, new StatusUpdateRequest("CONFIRMED"))).isSameAs(response);
         verify(customerStatementService).updateStatus(5L, "CONFIRMED");
+    }
+
+    @Test
+    void createConfirmation_shouldReturnCreatedPointingToParentStatement() {
+        CustomerStatementResponse response = mock(CustomerStatementResponse.class);
+        when(response.id()).thenReturn(5L);
+        when(customerStatementService.updateStatus(5L, StatusConstants.CONFIRMED)).thenReturn(response);
+
+        ResponseEntity<CustomerStatementResponse> result = controller.createConfirmation(5L);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(result.getBody()).isSameAs(response);
+        assertThat(result.getHeaders().getLocation()).isNotNull();
+        assertThat(result.getHeaders().getLocation().getPath()).endsWith("/v2.0/customer-statements/5");
+        verify(customerStatementService).updateStatus(5L, StatusConstants.CONFIRMED);
     }
 
     @Test

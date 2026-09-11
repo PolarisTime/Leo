@@ -5,6 +5,8 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.statement.customer.service.CustomerStatementService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
@@ -44,7 +46,13 @@ public class V2CustomerStatementController {
         this.customerStatementService = customerStatementService;
     }
 
-    @Operation(summary = "搜索客户对账单")
+    /**
+     * @deprecated 动作后缀查询端点，已由资源型集合端点
+     * {@code GET /customer-statements?keyword=...&page=...&size=...} （PageQuery/PageResponse）取代，
+     * 保留以兼容既有调用方。
+     */
+    @Deprecated
+    @Operation(summary = "搜索客户对账单（已废弃，请使用 GET /customer-statements 集合查询）", deprecated = true)
     @GetMapping("/search")
     public java.util.List<CustomerStatementResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
         return customerStatementService.search(keyword != null ? keyword : "", Math.min(limit, 500));
@@ -102,6 +110,20 @@ public class V2CustomerStatementController {
     @PatchMapping("/{id}/status")
     public CustomerStatementResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return customerStatementService.updateStatus(id, request.status());
+    }
+
+    /**
+     * 资源型确认端点：创建“确认记录”子资源即把客户对账单推进到已确认。
+     * 子资源无独立可回读路径，Location 指向父资源 {@code GET /customer-statements/{id}}。
+     * 反确认仍使用 {@code PATCH /customer-statements/{id}/status}。
+     */
+    @Operation(summary = "创建客户对账单确认记录（确认）")
+    @IdempotencyRequired
+    @PostMapping("/{id}/confirmations")
+    @V2Created
+    public ResponseEntity<CustomerStatementResponse> createConfirmation(@PathVariable Long id) {
+        return V2ResponseSupport.created(
+                "/customer-statements", customerStatementService.updateStatus(id, StatusConstants.CONFIRMED));
     }
 
     @Operation(summary = "删除客户对账单")

@@ -42,7 +42,13 @@ public class V2LedgerAdjustmentController {
         this.ledgerAdjustmentService = ledgerAdjustmentService;
     }
 
-    @Operation(summary = "搜索台账调整单")
+    /**
+     * @deprecated 动作后缀查询端点，已由资源型集合端点
+     * {@code GET /ledger-adjustments?keyword=...&page=...&size=...} （PageQuery/PageResponse）取代，
+     * 保留以兼容既有调用方。
+     */
+    @Deprecated
+    @Operation(summary = "搜索台账调整单（已废弃，请使用 GET /ledger-adjustments 集合查询）", deprecated = true)
     @GetMapping("/search")
     public java.util.List<LedgerAdjustmentResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
         return ledgerAdjustmentService.search(keyword != null ? keyword : "", Math.min(limit, 500));
