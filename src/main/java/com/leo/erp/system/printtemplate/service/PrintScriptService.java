@@ -1,21 +1,27 @@
 package com.leo.erp.system.printtemplate.service;
 
 import com.leo.erp.attachment.api.AttachmentRecordAccess;
+import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 @Service
 public class PrintScriptService {
@@ -25,6 +31,17 @@ public class PrintScriptService {
     private static final String PDF_FORM_TEMPLATE_TYPE = "PDF_FORM";
     private static final String GROUP_HEADER_SOURCE = "source";
     private static final String GROUP_HEADER_PROJECT = "project";
+
+    private static final Map<String, Comparator<PrintRecordItem>> PRINT_ITEM_COMPARATORS = Map.ofEntries(
+            Map.entry("id", compareBy(PrintRecordItem::id)),
+            Map.entry("recordId", compareBy(PrintRecordItem::recordId)),
+            Map.entry("sourceNo", compareBy(PrintRecordItem::sourceNo)),
+            Map.entry("deliveryDate", compareBy(PrintRecordItem::deliveryDate)),
+            Map.entry("customerName", compareBy(PrintRecordItem::customerName)),
+            Map.entry("projectName", compareBy(PrintRecordItem::projectName)),
+            Map.entry("material", compareBy(PrintRecordItem::material)),
+            Map.entry("spec", compareBy(PrintRecordItem::spec))
+    );
 
     private final PrintTemplateRepository templateRepository;
     private final PrintRecordDataProvider dataProvider;
@@ -281,6 +298,38 @@ public class PrintScriptService {
             recordAccessService.assertRecordExists(moduleKey, recordId);
         }
         return dataProvider.listPrintItems(moduleKey, recordIds);
+    }
+
+    /**
+     * 打印明细分页查询：调用方需提供有上界的 recordIds 集合，服务端在内存中稳定分页，
+     * 避免一次返回无边界的大列表。
+     */
+    public Page<PrintRecordItem> pagePrintItems(String moduleKey, List<Long> recordIds, PageQuery query) {
+        List<PrintRecordItem> all = listPrintItems(moduleKey, recordIds);
+        List<PrintRecordItem> sorted = sortPrintItems(all, query);
+        int from = (int) Math.min((long) query.page() * query.size(), sorted.size());
+        int to = (int) Math.min((long) from + query.size(), sorted.size());
+        List<PrintRecordItem> content = sorted.subList(from, to);
+        return new PageImpl<>(content, PageRequest.of(query.page(), query.size()), sorted.size());
+    }
+
+    private List<PrintRecordItem> sortPrintItems(List<PrintRecordItem> items, PageQuery query) {
+        String sortBy = query.sortBy();
+        if (sortBy == null || sortBy.isBlank()) {
+            return items;
+        }
+        Comparator<PrintRecordItem> comparator = PRINT_ITEM_COMPARATORS.get(sortBy);
+        if (comparator == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "打印明细不支持按字段排序: " + sortBy);
+        }
+        if ("asc".equalsIgnoreCase(query.direction())) {
+            return items.stream().sorted(comparator).toList();
+        }
+        return items.stream().sorted(comparator.reversed()).toList();
+    }
+
+    private static <T extends Comparable<T>> Comparator<PrintRecordItem> compareBy(Function<PrintRecordItem, T> key) {
+        return Comparator.comparing(key, Comparator.nullsLast(Comparator.naturalOrder()));
     }
 
     private void applyPrintOptions(Map<String, String> data, List<Map<String, String>> items, PrintRenderOptions options) {
