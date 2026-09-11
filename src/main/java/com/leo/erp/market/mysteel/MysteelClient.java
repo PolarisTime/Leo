@@ -83,6 +83,9 @@ public class MysteelClient {
     }
 
     private String fetch(String url, String what) {
+        if (properties.getFetchSshHost() != null && !properties.getFetchSshHost().isBlank()) {
+            return fetchViaSsh(url, what);
+        }
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .timeout(Duration.ofMillis(properties.getRequestTimeoutMs()))
@@ -103,6 +106,45 @@ public class MysteelClient {
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, what + "请求被中断");
+        }
+    }
+
+    /** 经跳板机 SSH 远程 curl 取数, 用于绕过本机 IP 风控。 */
+    private String fetchViaSsh(String url, String what) {
+        String userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
+        String safeUrl = url.replace("'", "'\\''");
+        // ssh 会把剩余参数拼接为远端 shell 命令, 故整体作为一条命令传入并自行加引号
+        String remoteCommand = "curl -sSL --max-time 25 -A '" + userAgent + "'"
+                + " -e 'https://hangzhou.mysteel.com/' '" + safeUrl + "'";
+        ProcessBuilder builder = new ProcessBuilder(
+                "ssh",
+                "-o", "BatchMode=yes",
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "ConnectTimeout=10",
+                properties.getFetchSshHost(),
+                remoteCommand);
+        try {
+            Process process = builder.start();
+            byte[] out = process.getInputStream().readAllBytes();
+            byte[] err = process.getErrorStream().readAllBytes();
+            if (!process.waitFor(35, java.util.concurrent.TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, what + "远程取数超时");
+            }
+            String body = new String(out, java.nio.charset.StandardCharsets.UTF_8);
+            if (process.exitValue() != 0 || body.isBlank()) {
+                String message = new String(err, java.nio.charset.StandardCharsets.UTF_8).trim();
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                        what + "远程取数失败: exit " + process.exitValue()
+                                + (message.isEmpty() ? "" : (": " + message)));
+            }
+            return body;
+        } catch (java.io.IOException ex) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, what + "远程取数异常: " + ex.getMessage());
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, what + "远程取数被中断");
         }
     }
 

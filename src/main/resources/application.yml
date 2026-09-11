@@ -268,6 +268,8 @@ leo:
       request-timeout-ms: ${LEO_MARKET_STEEL_QUOTE_REQUEST_TIMEOUT_MS:20000}
       # 相邻请求间隔(毫秒), 降低风控概率
       rate-limit-millis: ${LEO_MARKET_STEEL_QUOTE_RATE_LIMIT_MILLIS:1000}
+      # 经跳板机 SSH 远程取数(如 root@139.224.9.181); 为空则直连。用于绕过本机 IP 风控
+      fetch-ssh-host: ${LEO_MARKET_STEEL_QUOTE_FETCH_SSH_HOST:root@139.224.9.181}
       # 启动时补数天数(默认 0 关闭; >0 时同步最近 N 天, 跳过周末)
       backfill-days: ${LEO_MARKET_STEEL_QUOTE_BACKFILL_DAYS:0}
       sync:
