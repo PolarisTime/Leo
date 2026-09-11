@@ -50,13 +50,29 @@ public class MasterDataCodeIssuanceService {
     public String validate(String moduleKey, String code) {
         String normalizedModuleKey = requireModuleKey(moduleKey);
         String normalizedCode = requireSnowflakeCode(normalizedModuleKey, code);
-        if (!Boolean.TRUE.equals(redisTemplate.hasKey(issuanceKey(normalizedModuleKey, normalizedCode)))) {
+        if (!exists(normalizedModuleKey, normalizedCode)) {
             throw new BusinessException(
                     ErrorCode.VALIDATION_ERROR,
                     moduleLabel(normalizedModuleKey) + "编码未由系统签发或已失效，请重新打开新建页面"
             );
         }
         return normalizedCode;
+    }
+
+    public String get(String moduleKey, String code) {
+        String normalizedModuleKey = requireModuleKey(moduleKey);
+        String normalizedCode = requireSnowflakeCode(normalizedModuleKey, code);
+        if (!exists(normalizedModuleKey, normalizedCode)) {
+            throw new BusinessException(
+                    ErrorCode.NOT_FOUND,
+                    moduleLabel(normalizedModuleKey) + "编码签发记录不存在或已失效"
+            );
+        }
+        return normalizedCode;
+    }
+
+    private boolean exists(String moduleKey, String code) {
+        return Boolean.TRUE.equals(redisTemplate.hasKey(issuanceKey(moduleKey, code)));
     }
 
     public String resolve(String moduleKey, String currentCode, String requestedCode) {
