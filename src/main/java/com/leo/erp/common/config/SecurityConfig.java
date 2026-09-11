@@ -3,10 +3,12 @@ package com.leo.erp.common.config;
 import com.leo.erp.security.jwt.JwtAuthenticationFilter;
 import com.leo.erp.system.setup.web.InitialSetupTokenFilter;
 import com.leo.erp.common.api.ApiErrorResponseWriter;
+import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.idempotent.HttpIdempotencyFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -144,6 +146,16 @@ public class SecurityConfig {
             HttpIdempotencyFilter httpIdempotencyFilter) {
         FilterRegistrationBean<HttpIdempotencyFilter> registration = new FilterRegistrationBean<>(httpIdempotencyFilter);
         registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    public FilterRegistrationBean<CacheControlShallowEtagFilter> cacheControlShallowEtagFilterRegistration() {
+        FilterRegistrationBean<CacheControlShallowEtagFilter> registration =
+                new FilterRegistrationBean<>(new CacheControlShallowEtagFilter());
+        registration.setName("cacheControlShallowEtagFilter");
+        registration.setUrlPatterns(List.of(ApiVersion.V2_PREFIX + "/*"));
+        registration.setOrder(Ordered.LOWEST_PRECEDENCE);
         return registration;
     }
 

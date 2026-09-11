@@ -7,6 +7,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Part;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -22,9 +23,13 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -33,6 +38,7 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
 
     public static final String HEADER = "X-Idempotency-Key";
     public static final String LEGACY_HEADER = "Idempotency-Key";
+    public static final long MULTIPART_MAX_IDEMPOTENT_BYTES = 5L * 1024 * 1024;
     static final Duration DEFAULT_TTL = Duration.ofHours(24);
 
     private static final Set<String> WRITE_METHODS = Set.of("POST", "PUT", "PATCH", "DELETE");
@@ -62,10 +68,23 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
             return;
         }
 
-        byte[] body = StreamUtils.copyToByteArray(request.getInputStream());
-        HttpServletRequest replayableRequest = new ReplayableBodyHttpServletRequest(request, body);
+        HttpServletRequest replayableRequest = request;
+        String fingerprint;
+        if (isMultipart(request)) {
+            try {
+                fingerprint = multipartFingerprint(request);
+            } catch (IOException | ServletException ex) {
+                logger.warn("Failed to fingerprint multipart request, skip HTTP idempotency: path="
+                        + normalizedPath(request), ex);
+                filterChain.doFilter(request, response);
+                return;
+            }
+        } else {
+            byte[] body = StreamUtils.copyToByteArray(request.getInputStream());
+            replayableRequest = new ReplayableBodyHttpServletRequest(request, body);
+            fingerprint = fingerprint(request, body);
+        }
         String scopedKey = scopedKey(request, idempotencyKey);
-        String fingerprint = fingerprint(request, body);
         HttpIdempotencyService.Decision decision =
                 idempotencyService.start(scopedKey, fingerprint, DEFAULT_TTL);
         HttpIdempotencyService.Status status = decision.status();
@@ -87,10 +106,22 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
     }
 
     private boolean shouldEnforce(HttpServletRequest request, String idempotencyKey) {
-        return WRITE_METHODS.contains(request.getMethod())
-                && idempotencyKey != null
-                && !idempotencyKey.isBlank()
-                && !isMultipart(request);
+        if (!WRITE_METHODS.contains(request.getMethod())
+                || idempotencyKey == null
+                || idempotencyKey.isBlank()) {
+            return false;
+        }
+        if (isMultipart(request) && !isWithinMultipartLimit(request)) {
+            logger.info("Skip HTTP idempotency for oversized multipart request: path="
+                    + normalizedPath(request) + ", contentLength=" + request.getContentLengthLong());
+            return false;
+        }
+        return true;
+    }
+
+    private boolean isWithinMultipartLimit(HttpServletRequest request) {
+        long contentLength = request.getContentLengthLong();
+        return contentLength >= 0 && contentLength <= MULTIPART_MAX_IDEMPOTENT_BYTES;
     }
 
     private String resolveIdempotencyKey(HttpServletRequest request) {
@@ -199,6 +230,23 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
                 + normalizedPath(request) + "\n"
                 + queryStringOrEmpty(request.getQueryString()) + "\n"
                 + sha256Hex(body);
+        return sha256Hex(raw.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String multipartFingerprint(HttpServletRequest request) throws ServletException, IOException {
+        Collection<Part> parts = request.getParts();
+        List<String> descriptors = new ArrayList<>(parts.size());
+        for (Part part : parts) {
+            descriptors.add(part.getName()
+                    + '\n' + part.getSubmittedFileName()
+                    + '\n' + part.getSize()
+                    + '\n' + sha256Hex(part.getInputStream().readAllBytes()));
+        }
+        Collections.sort(descriptors);
+        String raw = request.getMethod() + "\n"
+                + normalizedPath(request) + "\n"
+                + queryStringOrEmpty(request.getQueryString()) + "\n"
+                + String.join("\n", descriptors);
         return sha256Hex(raw.getBytes(StandardCharsets.UTF_8));
     }
 

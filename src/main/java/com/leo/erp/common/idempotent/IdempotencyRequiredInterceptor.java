@@ -15,7 +15,8 @@ import java.util.Set;
 
 /**
  * 对标注 {@link IdempotencyRequired} 的写接口强制要求幂等键；
- * 缺失时返回 422。multipart 请求暂不强制（无法稳定指纹化）。
+ * 缺失时返回 422。multipart 请求不强制要求幂等键，
+ * 但携带幂等键时由 {@link HttpIdempotencyFilter} 按文件内容指纹纳入幂等。
  */
 @Component
 public class IdempotencyRequiredInterceptor implements HandlerInterceptor {
