@@ -32,7 +32,7 @@ class SteelQuoteBackfillServiceTest {
         when(syncService.backfill(any(), any())).thenAnswer(invocation -> {
             started.countDown();
             release.await(5, TimeUnit.SECONDS);
-            return new SteelQuoteSyncService.BackfillResult(from, to, 2, 0, 100);
+            return new SteelQuoteSyncService.BackfillResult(from, to, 2, 0, 100, java.util.List.of());
         });
 
         assertThat(service.submit(from, to)).isTrue();
