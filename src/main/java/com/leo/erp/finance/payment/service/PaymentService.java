@@ -18,23 +18,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
 @Service
 public class PaymentService {
 
-    private static final String[] PAYMENT_SEARCH_FIELDS = {
-            "paymentNo",
-            "businessType",
-            "counterpartyName"
-    };
     private static final CrudStatusGuard<Payment> STATUS_GUARD = CrudStatusGuard.forStatusAwareEntities();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
     private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
@@ -68,17 +61,6 @@ public class PaymentService {
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("paymentDate", filter.startDate(), filter.endDate()));
         return pageEntities(query, spec).map(this::toResponse);
-    }
-
-    @Transactional(readOnly = true)
-    public List<PaymentResponse> search(String keyword, int maxSize) {
-        Specification<Payment> spec = combineSpecifications(
-                VISIBILITY_POLICY.applyDeletedVisibility(null, false),
-                Specs.keywordLike(keyword, PAYMENT_SEARCH_FIELDS)
-        );
-        return paymentRepository.findAll(spec, PageRequest.of(0, maxSize))
-                .map(this::toResponse)
-                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -361,17 +343,6 @@ public class PaymentService {
         Specification<Payment> effectiveSpec =
                 VISIBILITY_POLICY.applyDeletedVisibility(specification, allowViewingDeletedRecords());
         return paymentRepository.findAll(effectiveSpec, query.toPageable("id"));
-    }
-
-    private Specification<Payment> combineSpecifications(Specification<Payment> left,
-                                                         Specification<Payment> right) {
-        if (left == null) {
-            return right;
-        }
-        if (right == null) {
-            return left;
-        }
-        return left.and(right);
     }
 
     private long nextId() {

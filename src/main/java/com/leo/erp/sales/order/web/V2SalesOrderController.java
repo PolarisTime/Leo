@@ -73,12 +73,6 @@ public class V2SalesOrderController {
                 startDate, endDate, currentSalesOrderId, query);
     }
 
-    @Operation(summary = "搜索销售订单")
-    @GetMapping("/search")
-    public java.util.List<SalesOrderResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
-        return service.search(keyword != null ? keyword : "", Math.min(limit, 500));
-    }
-
     @Operation(summary = "分页查询销售订单")
     @GetMapping
     public PageResponse<SalesOrderResponse> page(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @ModelAttribute SalesOrderPageCriteria criteria) {

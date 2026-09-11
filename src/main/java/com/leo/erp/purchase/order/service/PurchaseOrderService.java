@@ -4,7 +4,6 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -19,7 +18,6 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -27,7 +25,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -108,17 +105,6 @@ public class PurchaseOrderService {
                 toResponse(order),
                 statuses.get(order.getId())
         ));
-    }
-
-    @Transactional(readOnly = true)
-    public List<PurchaseOrderResponse> search(String keyword, int maxSize) {
-        Specification<PurchaseOrder> spec = combineSpecifications(
-                VISIBILITY_POLICY.applyDeletedVisibility(null, false),
-                Specs.keywordLike(keyword, PurchaseOrderQueryService.PURCHASE_ORDER_SEARCH_FIELDS)
-        );
-        return purchaseOrderRepository.findAll(spec, PageRequest.of(0, maxSize))
-                .map(this::toResponse)
-                .toList();
     }
 
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
@@ -451,15 +437,5 @@ public class PurchaseOrderService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "业务单据雪花ID尚未分配");
         }
         return String.valueOf(entityId);
-    }
-    private Specification<PurchaseOrder> combineSpecifications(Specification<PurchaseOrder> left,
-                                                               Specification<PurchaseOrder> right) {
-        if (left == null) {
-            return right;
-        }
-        if (right == null) {
-            return left;
-        }
-        return left.and(right);
     }
 }

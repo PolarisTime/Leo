@@ -33,7 +33,6 @@ import com.leo.erp.common.api.V2NoContent;
 @RequestMapping(ApiVersion.V2_PREFIX + "/materials")
 public class V2MaterialController {
 
-    private static final int MAX_SEARCH_LIMIT = 500;
     private static final MediaType CSV_MEDIA_TYPE = new MediaType("text", "csv", StandardCharsets.UTF_8);
     private static final MediaType XLSX_MEDIA_TYPE = new MediaType(
             "application",
@@ -47,11 +46,6 @@ public class V2MaterialController {
                                 MaterialDocumentService materialDocumentService) {
         this.materialService = materialService;
         this.materialDocumentService = materialDocumentService;
-    }
-
-    @GetMapping("/search")
-    public java.util.List<MaterialResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
-        return materialService.search(keyword != null ? keyword : "", Math.min(limit, MAX_SEARCH_LIMIT));
     }
 
     @GetMapping

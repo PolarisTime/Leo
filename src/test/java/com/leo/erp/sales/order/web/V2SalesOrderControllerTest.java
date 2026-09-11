@@ -78,16 +78,6 @@ class V2SalesOrderControllerTest {
     }
 
     @Test
-    void search_shouldCapLimit() {
-        when(service.search("", 500)).thenReturn(List.of(mock(SalesOrderResponse.class)));
-
-        var result = controller.search(null, 1000);
-
-        assertThat(result).hasSize(1);
-        verify(service).search("", 500);
-    }
-
-    @Test
     void page_shouldDelegate() {
         when(service.page(any(PageQuery.class), any(PageFilter.class), any(), isNull(), isNull(), isNull()))
                 .thenReturn(mock(org.springframework.data.domain.Page.class));

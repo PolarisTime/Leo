@@ -123,16 +123,6 @@ public class MaterialService {
     }
 
     @Transactional(readOnly = true)
-    public List<MaterialResponse> search(String keyword, int maxSize) {
-        return materialRepository.findAll(
-                        MaterialSearchPolicy.search(keyword),
-                        PageRequest.of(0, maxSize, MaterialSearchPolicy.DEFAULT_SORT)
-                )
-                .map(this::toResponse)
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
     public List<String> materialGrades() {
         return materialRepository.findDistinctMaterials();
     }

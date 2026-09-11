@@ -44,12 +44,6 @@ public class V2PaymentController {
         this.paymentService = paymentService;
     }
 
-    @Operation(summary = "搜索付款单")
-    @GetMapping("/search")
-    public java.util.List<PaymentResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
-        return paymentService.search(keyword != null ? keyword : "", Math.min(limit, 500));
-    }
-
     @Operation(summary = "分页查询付款单")
     @GetMapping
     public PageResponse<PaymentResponse> page(@BindPageQuery(sortFieldKey = "payment") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String businessType, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {

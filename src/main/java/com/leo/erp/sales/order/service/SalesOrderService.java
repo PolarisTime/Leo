@@ -5,9 +5,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.CrudStatusGuard;
-import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
@@ -20,8 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -29,7 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -38,9 +33,7 @@ import java.util.Set;
 public class SalesOrderService {
 
     private static final String MODULE_KEY = "sales-order";
-    private static final String[] SALES_ORDER_SEARCH_FIELDS = {"orderNo", "purchaseOrderNo", "customerName", "projectName"};
     private static final CrudStatusGuard<SalesOrder> STATUS_GUARD = CrudStatusGuard.forStatusAwareEntities();
-    private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
     private static final Logger log = LoggerFactory.getLogger(SalesOrderService.class);
 
     private final SnowflakeIdGenerator idGenerator;
@@ -88,17 +81,6 @@ public class SalesOrderService {
                                          Boolean referenced,
                                          String referencedBy) {
         return queryService.page(query, filter, productKeyword, pendingOnly, referenced, referencedBy);
-    }
-
-    @Transactional(readOnly = true)
-    public List<SalesOrderResponse> search(String keyword, int maxSize) {
-        Specification<SalesOrder> spec = combineSpecifications(
-                VISIBILITY_POLICY.applyDeletedVisibility(null, false),
-                Specs.keywordLike(keyword, SALES_ORDER_SEARCH_FIELDS)
-        );
-        return repository.findAll(spec, PageRequest.of(0, maxSize))
-                .map(this::toResponse)
-                .toList();
     }
 
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
@@ -473,17 +455,6 @@ public class SalesOrderService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "业务单据雪花ID尚未分配");
         }
         return String.valueOf(entityId);
-    }
-
-    private Specification<SalesOrder> combineSpecifications(Specification<SalesOrder> left,
-                                                            Specification<SalesOrder> right) {
-        if (left == null) {
-            return right;
-        }
-        if (right == null) {
-            return left;
-        }
-        return left.and(right);
     }
 
     private String normalizeStatus(String value) {

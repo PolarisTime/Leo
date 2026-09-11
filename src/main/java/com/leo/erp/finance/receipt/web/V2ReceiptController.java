@@ -44,12 +44,6 @@ public class V2ReceiptController {
         this.receiptService = receiptService;
     }
 
-    @Operation(summary = "搜索收款单")
-    @GetMapping("/search")
-    public java.util.List<ReceiptResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
-        return receiptService.search(keyword != null ? keyword : "", Math.min(limit, 500));
-    }
-
     @Operation(summary = "分页查询收款单")
     @GetMapping
     public PageResponse<ReceiptResponse> page(@BindPageQuery(sortFieldKey = "receipt") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String customerName, @RequestParam(required = false) String counterpartyType, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
