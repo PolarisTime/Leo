@@ -64,6 +64,11 @@ public class V2AttachmentController {
         );
     }
 
+    /**
+     * @deprecated 动作型端点，已由资源型 {@code POST /attachment-upload-sessions} 取代，保留以兼容既有调用方。
+     */
+    @Deprecated
+    @Operation(summary = "生成附件直传地址（已废弃，请使用 POST /attachment-upload-sessions）", deprecated = true)
     @PostMapping("/direct-upload/prepare")
     @OperationLoggable(moduleName = "附件管理", actionType = "生成附件直传地址")
     public AttachmentDirectUploadPrepareResponse prepareDirectUpload(@AuthenticationPrincipal SecurityPrincipal principal, @RequestParam @NotBlank(message = "模块标识不能为空") String moduleKey, @Valid @RequestBody AttachmentDirectUploadPrepareRequest request) {
@@ -71,6 +76,11 @@ public class V2AttachmentController {
         return attachmentWebService.prepareDirectUpload(request, normalizedModuleKey, principal.id());
     }
 
+    /**
+     * @deprecated 动作型端点，已由资源型 {@code POST /attachment-upload-sessions/{sessionId}/completions} 取代，保留以兼容既有调用方。
+     */
+    @Deprecated
+    @Operation(summary = "完成附件直传（已废弃，请使用 POST /attachment-upload-sessions/{sessionId}/completions）", deprecated = true)
     @PostMapping("/direct-upload/complete")
     @OperationLoggable(moduleName = "附件管理", actionType = "完成附件直传")
     @V2Created
@@ -107,24 +117,6 @@ public class V2AttachmentController {
                                             @RequestParam String accessKey,
                                             @RequestParam(defaultValue = "attachment") String disposition) {
         return loadContent(principal, id, moduleKey, accessKey, resolveInline(disposition));
-    }
-
-    /**
-     * @deprecated 动作型端点，已由 {@code GET /attachments/{id}/content?disposition=attachment} 取代，保留以兼容既有调用方。
-     */
-    @Deprecated
-    @GetMapping("/{id}/download")
-    public ResponseEntity<Resource> download(@AuthenticationPrincipal SecurityPrincipal principal, @PathVariable Long id, @RequestParam String moduleKey, @RequestParam String accessKey) {
-        return loadContent(principal, id, moduleKey, accessKey, false);
-    }
-
-    /**
-     * @deprecated 动作型端点，已由 {@code GET /attachments/{id}/content?disposition=inline} 取代，保留以兼容既有调用方。
-     */
-    @Deprecated
-    @GetMapping("/{id}/preview")
-    public ResponseEntity<Resource> preview(@AuthenticationPrincipal SecurityPrincipal principal, @PathVariable Long id, @RequestParam String moduleKey, @RequestParam String accessKey) {
-        return loadContent(principal, id, moduleKey, accessKey, true);
     }
 
     private boolean resolveInline(String disposition) {

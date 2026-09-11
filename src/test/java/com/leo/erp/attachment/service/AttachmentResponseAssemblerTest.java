@@ -47,9 +47,9 @@ class AttachmentResponseAssemblerTest {
         assertThat(view.previewSupported()).isTrue();
         assertThat(view.previewType()).isEqualTo("pdf");
         assertThat(view.previewUrl())
-                .isEqualTo("/api/v2.0/attachments/123/preview?accessKey=access-key-1");
+                .isEqualTo("/api/v2.0/attachments/123/content?disposition=inline&accessKey=access-key-1");
         assertThat(view.downloadUrl())
-                .isEqualTo("/api/v2.0/attachments/123/download?accessKey=access-key-1");
+                .isEqualTo("/api/v2.0/attachments/123/content?disposition=attachment&accessKey=access-key-1");
         assertThat(view.storageType()).isEqualTo("local");
         assertThat(view.storageLabel()).isEqualTo("本机存储");
     }
@@ -59,7 +59,7 @@ class AttachmentResponseAssemblerTest {
         AttachmentView view = assembler.toResponse(entity("pdf", "/a.pdf"), "sales order");
 
         assertThat(view.downloadUrl())
-                .isEqualTo("/api/v2.0/attachments/123/download?accessKey=access-key-1&moduleKey=sales+order");
+                .isEqualTo("/api/v2.0/attachments/123/content?disposition=attachment&accessKey=access-key-1&moduleKey=sales+order");
     }
 
     @Test
@@ -87,7 +87,7 @@ class AttachmentResponseAssemblerTest {
         assertThat(view.uploadTime()).isNull();
         assertThat(view.previewType()).isEqualTo("none");
         assertThat(view.storageType()).isEqualTo("local");
-        assertThat(view.downloadUrl()).isEqualTo("/api/v2.0/attachments/1/download?accessKey=access-key-1");
+        assertThat(view.downloadUrl()).isEqualTo("/api/v2.0/attachments/1/content?disposition=attachment&accessKey=access-key-1");
     }
 
     @Test

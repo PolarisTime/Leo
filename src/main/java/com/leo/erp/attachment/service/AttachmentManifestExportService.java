@@ -2,6 +2,7 @@ package com.leo.erp.attachment.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.leo.erp.attachment.api.AttachmentManifestArchive;
 import com.leo.erp.attachment.api.AttachmentManifestExporter;
 import com.leo.erp.attachment.api.AttachmentManifestExportResult;
 import com.leo.erp.attachment.domain.entity.AttachmentBinding;
@@ -68,6 +69,18 @@ public class AttachmentManifestExportService implements AttachmentManifestExport
     @Transactional(readOnly = true)
     @Override
     public AttachmentManifestExportResult exportDaily() {
+        AttachmentManifestArchive archive = exportDailyArchive();
+        return new AttachmentManifestExportResult(
+                archive.objectKey(),
+                archive.storagePath(),
+                archive.attachmentCount(),
+                archive.bindingCount()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public AttachmentManifestArchive exportDailyArchive() {
         Instant exportedAt = clock.instant();
         List<AttachmentFile> attachments = attachmentFileRepository.findAllByOrderByIdAsc();
         List<AttachmentBinding> bindings = attachmentBindingRepository
@@ -77,10 +90,23 @@ public class AttachmentManifestExportService implements AttachmentManifestExport
         String objectKey = dailyObjectKey(exportedAt);
         try {
             String storagePath = storageResolver.storeBytes(objectKey, payload, CONTENT_TYPE_GZIP);
-            return new AttachmentManifestExportResult(objectKey, storagePath, attachments.size(), bindings.size());
+            return new AttachmentManifestArchive(
+                    objectKey,
+                    storagePath,
+                    fileNameFromObjectKey(objectKey),
+                    CONTENT_TYPE_GZIP,
+                    payload,
+                    attachments.size(),
+                    bindings.size()
+            );
         } catch (IOException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "附件恢复清单写入失败");
         }
+    }
+
+    private String fileNameFromObjectKey(String objectKey) {
+        int slashIndex = objectKey.lastIndexOf('/');
+        return slashIndex < 0 ? objectKey : objectKey.substring(slashIndex + 1);
     }
 
     private Map<Long, List<AttachmentBinding>> groupBindingsByAttachmentId(List<AttachmentBinding> bindings) {

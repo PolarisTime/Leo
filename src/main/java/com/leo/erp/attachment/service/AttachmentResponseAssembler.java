@@ -56,8 +56,10 @@ public class AttachmentResponseAssembler {
                 entity.getCreatedAt(),
                 previewSupported,
                 previewType,
-                previewSupported ? baseUrl + "/preview?accessKey=" + accessKey + moduleQuery : null,
-                baseUrl + "/download?accessKey=" + accessKey + moduleQuery,
+                previewSupported
+                        ? baseUrl + "/content?disposition=inline&accessKey=" + accessKey + moduleQuery
+                        : null,
+                baseUrl + "/content?disposition=attachment&accessKey=" + accessKey + moduleQuery,
                 storageType,
                 resolveStorageLabel(storageType)
         );

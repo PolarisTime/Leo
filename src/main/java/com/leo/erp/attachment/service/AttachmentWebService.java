@@ -52,13 +52,13 @@ public class AttachmentWebService {
 
     public AttachmentUploadResponse completeDirectUpload(
             AttachmentDirectUploadCompleteRequest request, String moduleKey, Long ownerUserId) {
+        return completeDirectUpload(request.attachmentId(), request.token(), moduleKey, ownerUserId);
+    }
+
+    public AttachmentUploadResponse completeDirectUpload(
+            Long attachmentId, String token, String moduleKey, Long ownerUserId) {
         return attachmentWebMapper.toUploadResponse(
-                attachmentService.completeDirectUpload(
-                        request.attachmentId(),
-                        request.token(),
-                        moduleKey,
-                        ownerUserId
-                ));
+                attachmentService.completeDirectUpload(attachmentId, token, moduleKey, ownerUserId));
     }
 
     public AttachmentBindingResponse detail(String moduleKey, Long recordId) {
