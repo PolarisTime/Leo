@@ -66,16 +66,6 @@ class V2CustomerStatementControllerTest {
     }
 
     @Test
-    void search_shouldCapLimit() {
-        when(customerStatementService.search("", 500)).thenReturn(List.of(mock(CustomerStatementResponse.class)));
-
-        var result = controller.search(null, 1000);
-
-        assertThat(result).hasSize(1);
-        verify(customerStatementService).search("", 500);
-    }
-
-    @Test
     void page_shouldDelegate() {
         when(customerStatementService.page(any(PageQuery.class), any(PageFilter.class)))
                 .thenReturn(mock(org.springframework.data.domain.Page.class));

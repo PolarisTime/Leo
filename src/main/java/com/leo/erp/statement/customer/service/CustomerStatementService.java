@@ -28,7 +28,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,11 +41,6 @@ import java.util.TreeSet;
 @Service
 public class CustomerStatementService {
 
-    private static final String[] CUSTOMER_STATEMENT_SEARCH_FIELDS = {
-            "statementNo",
-            "customerName",
-            "projectName"
-    };
     private static final CrudStatusGuard<CustomerStatement> STATUS_GUARD = CrudStatusGuard.forStatusAwareEntities();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
     private static final Logger log = LoggerFactory.getLogger(CustomerStatementService.class);
@@ -109,17 +103,6 @@ public class CustomerStatementService {
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()));
-    }
-
-    @Transactional(readOnly = true)
-    public List<CustomerStatementResponse> search(String keyword, int maxSize) {
-        Specification<CustomerStatement> spec = combineSpecifications(
-                VISIBILITY_POLICY.applyDeletedVisibility(null, false),
-                Specs.keywordLike(keyword, CUSTOMER_STATEMENT_SEARCH_FIELDS)
-        );
-        return repository.findAll(spec, PageRequest.of(0, maxSize))
-                .map(this::toResponse)
-                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -468,17 +451,6 @@ public class CustomerStatementService {
 
     private Page<CustomerStatement> pageEntities(PageQuery query, Specification<CustomerStatement> specification) {
         return repository.findAll(applyDeletedVisibilityPolicy(specification), query.toPageable("id"));
-    }
-
-    private Specification<CustomerStatement> combineSpecifications(Specification<CustomerStatement> left,
-                                                                  Specification<CustomerStatement> right) {
-        if (left == null) {
-            return right;
-        }
-        if (right == null) {
-            return left;
-        }
-        return left.and(right);
     }
 
     private long nextId() {

@@ -5,7 +5,6 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.master.material.service.MaterialDocumentService;
 import com.leo.erp.master.material.service.MaterialService;
-import com.leo.erp.master.material.web.dto.MaterialImportResultResponse;
 import com.leo.erp.master.material.web.dto.MaterialRequest;
 import com.leo.erp.master.material.web.dto.MaterialResponse;
 import jakarta.validation.Valid;
@@ -23,8 +22,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.api.V2ResponseSupport;
@@ -45,14 +42,11 @@ public class V2MaterialController {
 
     private final MaterialService materialService;
     private final MaterialDocumentService materialDocumentService;
-    private final MaterialImportFileAdapter materialImportFileAdapter;
 
     public V2MaterialController(MaterialService materialService,
-                                MaterialDocumentService materialDocumentService,
-                                MaterialImportFileAdapter materialImportFileAdapter) {
+                                MaterialDocumentService materialDocumentService) {
         this.materialService = materialService;
         this.materialDocumentService = materialDocumentService;
-        this.materialImportFileAdapter = materialImportFileAdapter;
     }
 
     @GetMapping("/search")
@@ -96,28 +90,6 @@ public class V2MaterialController {
     @GetMapping("/brands")
     public java.util.List<String> materialBrands() {
         return materialService.materialBrands();
-    }
-
-    @PostMapping("/export")
-    public ResponseEntity<byte[]> export(@RequestParam(required = false) String keyword) {
-        return toDownloadResponse(
-                "material.xlsx", XLSX_MEDIA_TYPE, materialDocumentService.exportSpreadsheet(keyword));
-    }
-
-    @PostMapping("/export/csv")
-    public ResponseEntity<byte[]> exportCsv(@RequestParam(required = false) String keyword) {
-        return toDownloadResponse(
-                "materials.csv", CSV_MEDIA_TYPE, materialDocumentService.exportCsv(keyword));
-    }
-
-    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public MaterialImportResultResponse importMaterials(@RequestParam("file") MultipartFile file) throws IOException {
-        return materialImportFileAdapter.importSpreadsheet(file);
-    }
-
-    @PostMapping(value = "/import/csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public MaterialImportResultResponse importCsvMaterials(@RequestParam("file") MultipartFile file) throws IOException {
-        return materialImportFileAdapter.importCsv(file);
     }
 
     @PutMapping("/{id}")

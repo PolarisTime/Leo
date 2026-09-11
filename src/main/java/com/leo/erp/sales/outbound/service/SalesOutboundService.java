@@ -18,7 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -70,11 +69,6 @@ public class SalesOutboundService {
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("outboundDate", filter.startDate(), filter.endDate()));
         return pageEntities(query, spec).map(this::toResponse);
-    }
-
-    @Transactional(readOnly = true)
-    public List<SalesOutboundResponse> search(String keyword, int maxSize) {
-        return search(keyword, OUTBOUND_SEARCH_FIELDS, maxSize);
     }
 
     @Transactional(readOnly = true)
@@ -368,27 +362,6 @@ public class SalesOutboundService {
         Specification<SalesOutbound> effectiveSpec =
                 VISIBILITY_POLICY.applyDeletedVisibility(specification, allowViewingDeletedRecords());
         return repository.findAll(effectiveSpec, query.toPageable("id"));
-    }
-
-    private List<SalesOutboundResponse> search(String keyword, String[] searchFields, int maxSize) {
-        Specification<SalesOutbound> spec = combineSpecifications(
-                VISIBILITY_POLICY.applyDeletedVisibility(null, false),
-                Specs.keywordLike(keyword, searchFields)
-        );
-        return repository.findAll(spec, PageRequest.of(0, maxSize))
-                .map(this::toResponse)
-                .toList();
-    }
-
-    private Specification<SalesOutbound> combineSpecifications(Specification<SalesOutbound> left,
-                                                              Specification<SalesOutbound> right) {
-        if (left == null) {
-            return right;
-        }
-        if (right == null) {
-            return left;
-        }
-        return left.and(right);
     }
 
     private long nextId() {

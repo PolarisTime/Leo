@@ -44,16 +44,6 @@ public class V2PurchaseInboundController {
         this.service = service;
     }
 
-    /**
-     * @deprecated 非资源的 RPC 搜索端点，已由分页资源查询 {@code GET /purchase-inbounds} 取代，保留以兼容既有调用方。
-     */
-    @Deprecated
-    @GetMapping("/search")
-    @Operation(summary = "搜索采购入库（已废弃，请使用 GET /purchase-inbounds + PageQuery 分页查询）", deprecated = true)
-    public java.util.List<PurchaseInboundResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
-        return service.search(keyword != null ? keyword : "", Math.min(limit, 500));
-    }
-
     @GetMapping
     @Operation(summary = "分页查询采购入库")
     public PageResponse<PurchaseInboundResponse> page(@BindPageQuery(sortFieldKey = "purchase-inbound") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long supplierId, @RequestParam(required = false) String supplierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {

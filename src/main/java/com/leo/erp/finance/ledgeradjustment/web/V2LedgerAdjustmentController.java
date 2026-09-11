@@ -42,18 +42,6 @@ public class V2LedgerAdjustmentController {
         this.ledgerAdjustmentService = ledgerAdjustmentService;
     }
 
-    /**
-     * @deprecated 动作后缀查询端点，已由资源型集合端点
-     * {@code GET /ledger-adjustments?keyword=...&page=...&size=...} （PageQuery/PageResponse）取代，
-     * 保留以兼容既有调用方。
-     */
-    @Deprecated
-    @Operation(summary = "搜索台账调整单（已废弃，请使用 GET /ledger-adjustments 集合查询）", deprecated = true)
-    @GetMapping("/search")
-    public java.util.List<LedgerAdjustmentResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
-        return ledgerAdjustmentService.search(keyword != null ? keyword : "", Math.min(limit, 500));
-    }
-
     @Operation(summary = "分页查询台账调整单")
     @GetMapping
     public PageResponse<LedgerAdjustmentResponse> page(@BindPageQuery(sortFieldKey = "ledger-adjustment", directionParam = "sortDirection") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String direction, @RequestParam(required = false) String counterpartyType, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {

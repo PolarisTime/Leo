@@ -60,18 +60,6 @@ public class V2FreightBillController {
         ));
     }
 
-    /**
-     * @deprecated 动作后缀查询端点，已由资源型集合端点
-     * {@code GET /freight-bills?keyword=...&page=...&size=...} （PageQuery/PageResponse）取代，
-     * 保留以兼容既有调用方。
-     */
-    @Deprecated
-    @Operation(summary = "搜索物流单（已废弃，请使用 GET /freight-bills 集合查询）", deprecated = true)
-    @GetMapping("/search")
-    public java.util.List<FreightBillResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
-        return service.search(keyword != null ? keyword : "", Math.min(limit, 500));
-    }
-
     @GetMapping
     public PageResponse<FreightBillResponse> page(@BindPageQuery(sortFieldKey = "freight-bill") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long carrierId, @RequestParam(required = false) String carrierCode, @RequestParam(required = false) String carrierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return PageResponse.from(service.page(

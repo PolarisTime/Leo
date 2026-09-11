@@ -89,16 +89,6 @@ class V2FreightBillControllerTest {
     }
 
     @Test
-    void search_shouldCapLimit() {
-        when(service.search("", 500)).thenReturn(List.of(mock(FreightBillResponse.class)));
-
-        var result = controller.search(null, 1000);
-
-        assertThat(result).hasSize(1);
-        verify(service).search("", 500);
-    }
-
-    @Test
     void page_shouldDelegateWithCarrierCode() {
         when(service.page(any(PageQuery.class), any(PageFilter.class), anyString()))
                 .thenReturn(mock(org.springframework.data.domain.Page.class));

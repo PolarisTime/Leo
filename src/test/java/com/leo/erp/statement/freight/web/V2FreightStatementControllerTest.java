@@ -67,16 +67,6 @@ class V2FreightStatementControllerTest {
     }
 
     @Test
-    void search_shouldCapLimit() {
-        when(freightStatementService.responseSearch("", 500)).thenReturn(List.of(mock(FreightStatementResponse.class)));
-
-        var result = controller.search(null, 1000);
-
-        assertThat(result).hasSize(1);
-        verify(freightStatementService).responseSearch("", 500);
-    }
-
-    @Test
     void page_shouldDelegate() {
         when(freightStatementService.responsePage(any(PageQuery.class), any(PageFilter.class), anyString()))
                 .thenReturn(mock(org.springframework.data.domain.Page.class));

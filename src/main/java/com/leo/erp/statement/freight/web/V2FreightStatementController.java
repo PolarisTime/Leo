@@ -49,19 +49,6 @@ public class V2FreightStatementController {
         this.freightStatementService = freightStatementService;
     }
 
-    /**
-     * @deprecated 动作后缀查询端点，已由资源型集合端点
-     * {@code GET /freight-statements?keyword=...&page=...&size=...} （PageQuery/PageResponse）取代，
-     * 保留以兼容既有调用方。
-     */
-    @Deprecated
-    @Operation(summary = "搜索物流对账单（已废弃，请使用 GET /freight-statements 集合查询）", deprecated = true)
-    @GetMapping("/search")
-    public java.util.List<FreightStatementResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
-        return freightStatementService.responseSearch(
-                keyword != null ? keyword : "", Math.min(limit, 500));
-    }
-
     @Operation(summary = "分页查询物流对账单")
     @GetMapping
     public PageResponse<FreightStatementResponse> page(@BindPageQuery(sortFieldKey = "freight-statement") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long carrierId, @RequestParam(required = false) String carrierCode, @RequestParam(required = false) String carrierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {

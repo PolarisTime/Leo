@@ -30,7 +30,6 @@ import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -101,17 +100,6 @@ public class FreightBillService {
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("billTime", filter.startDate(), filter.endDate()));
         return pageEntities(query, spec).map(this::toResponse);
-    }
-
-    @Transactional(readOnly = true)
-    public List<FreightBillResponse> search(String keyword, int maxSize) {
-        Specification<FreightBill> spec = combineSpecifications(
-                VISIBILITY_POLICY.applyDeletedVisibility(null, false),
-                Specs.keywordLike(keyword, SEARCH_FIELDS)
-        );
-        return repository.findAll(spec, PageRequest.of(0, maxSize))
-                .map(this::toResponse)
-                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -496,17 +484,6 @@ public class FreightBillService {
         Specification<FreightBill> effectiveSpec =
                 VISIBILITY_POLICY.applyDeletedVisibility(specification, allowViewingDeletedRecords());
         return repository.findAll(effectiveSpec, query.toPageable("id"));
-    }
-
-    private Specification<FreightBill> combineSpecifications(Specification<FreightBill> left,
-                                                            Specification<FreightBill> right) {
-        if (left == null) {
-            return right;
-        }
-        if (right == null) {
-            return left;
-        }
-        return left.and(right);
     }
 
     private long nextId() {

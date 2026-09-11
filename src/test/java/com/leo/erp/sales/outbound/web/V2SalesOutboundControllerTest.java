@@ -64,25 +64,6 @@ class V2SalesOutboundControllerTest {
     }
 
     @Test
-    void search_shouldNormalizeNullKeywordAndCapLimit() {
-        when(service.search("", 100)).thenReturn(List.of(mock(SalesOutboundResponse.class)));
-
-        var result = controller.search(null, 100);
-
-        assertThat(result).hasSize(1);
-        verify(service).search("", 100);
-    }
-
-    @Test
-    void search_shouldCapLimitAt500() {
-        when(service.search("kw", 500)).thenReturn(List.of());
-
-        controller.search("kw", 1000);
-
-        verify(service).search("kw", 500);
-    }
-
-    @Test
     void page_shouldDelegateWithFilter() {
         when(service.page(any(PageQuery.class), any(PageFilter.class), anyString())).thenReturn(
                 org.mockito.Mockito.mock(org.springframework.data.domain.Page.class));

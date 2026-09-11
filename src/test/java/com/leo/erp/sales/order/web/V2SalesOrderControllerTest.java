@@ -221,14 +221,6 @@ class V2SalesOrderControllerTest {
     }
 
     @Test
-    void updateAndComplete_shouldDelegate() {
-        SalesOrderResponse response = mock(SalesOrderResponse.class);
-        when(service.updateAndComplete(anyLong(), any())).thenReturn(response);
-
-        assertThat(controller.updateAndComplete(5L, request())).isSameAs(response);
-    }
-
-    @Test
     void createDeliveryVerification_shouldReturnCreatedPointingToParentOrder() {
         SalesOrderResponse response = mock(SalesOrderResponse.class);
         when(response.id()).thenReturn(5L);
@@ -250,14 +242,6 @@ class V2SalesOrderControllerTest {
 
         assertThat(controller.updateStatus(5L, new StatusUpdateRequest("AUDITED"))).isSameAs(response);
         verify(service).updateStatus(5L, "AUDITED");
-    }
-
-    @Test
-    void complete_shouldDelegate() {
-        SalesOrderResponse response = mock(SalesOrderResponse.class);
-        when(service.completeSalesOrder(anyLong())).thenReturn(response);
-
-        assertThat(controller.complete(5L)).isSameAs(response);
     }
 
     @Test

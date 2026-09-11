@@ -46,18 +46,6 @@ public class V2CustomerStatementController {
         this.customerStatementService = customerStatementService;
     }
 
-    /**
-     * @deprecated 动作后缀查询端点，已由资源型集合端点
-     * {@code GET /customer-statements?keyword=...&page=...&size=...} （PageQuery/PageResponse）取代，
-     * 保留以兼容既有调用方。
-     */
-    @Deprecated
-    @Operation(summary = "搜索客户对账单（已废弃，请使用 GET /customer-statements 集合查询）", deprecated = true)
-    @GetMapping("/search")
-    public java.util.List<CustomerStatementResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
-        return customerStatementService.search(keyword != null ? keyword : "", Math.min(limit, 500));
-    }
-
     @Operation(summary = "分页查询客户对账单")
     @GetMapping
     public PageResponse<CustomerStatementResponse> page(@BindPageQuery(sortFieldKey = "customer-statement") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {

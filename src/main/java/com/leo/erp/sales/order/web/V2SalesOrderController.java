@@ -163,18 +163,6 @@ public class V2SalesOrderController {
         return V2ResponseSupport.created("/sales-orders", service.updateAndComplete(id, request));
     }
 
-    /**
-     * @deprecated 动作型端点，已由 {@code POST /sales-orders/{id}/delivery-verifications} 取代，保留以兼容既有调用方。
-     */
-    @Deprecated
-    @Operation(summary = "保存并确认销售订单交付核定（已废弃，请使用 POST /sales-orders/{id}/delivery-verifications）", deprecated = true)
-    @IdempotencyRequired
-    @PutMapping("/{id}/save-and-complete")
-    @DomainEventAudited
-    public SalesOrderResponse updateAndComplete(@PathVariable Long id, @Valid @RequestBody SalesOrderRequest request) {
-        return service.updateAndComplete(id, request);
-    }
-
     @Operation(summary = "更新销售订单状态")
     @IdempotencyRequired
     @PatchMapping("/{id}/status")
@@ -194,18 +182,6 @@ public class V2SalesOrderController {
     @V2Created
     public ResponseEntity<SalesOrderResponse> createCompletion(@PathVariable Long id) {
         return V2ResponseSupport.created("/sales-orders", service.completeSalesOrder(id));
-    }
-
-    /**
-     * @deprecated 动作型端点，已由 {@code POST /sales-orders/{id}/completions} 取代，保留以兼容既有调用方。
-     */
-    @Deprecated
-    @Operation(summary = "完成销售（已废弃，请使用 POST /sales-orders/{id}/completions）", deprecated = true)
-    @IdempotencyRequired
-    @PostMapping("/{id}/complete")
-    @DomainEventAudited
-    public SalesOrderResponse complete(@PathVariable Long id) {
-        return service.completeSalesOrder(id);
     }
 
     @Operation(summary = "删除销售订单")

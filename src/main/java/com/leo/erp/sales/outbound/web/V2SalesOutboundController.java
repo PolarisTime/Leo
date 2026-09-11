@@ -44,16 +44,6 @@ public class V2SalesOutboundController {
         this.service = service;
     }
 
-    /**
-     * @deprecated 非资源的 RPC 搜索端点，已由分页资源查询 {@code GET /sales-outbounds} 取代，保留以兼容既有调用方。
-     */
-    @Deprecated
-    @GetMapping("/search")
-    @Operation(summary = "搜索销售出库（已废弃，请使用 GET /sales-outbounds + PageQuery 分页查询）", deprecated = true)
-    public java.util.List<SalesOutboundResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
-        return service.search(keyword != null ? keyword : "", Math.min(limit, 500));
-    }
-
     @GetMapping
     @Operation(summary = "分页查询销售出库")
     public PageResponse<SalesOutboundResponse> page(@BindPageQuery(sortFieldKey = "sales-outbound") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String productKeyword, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {

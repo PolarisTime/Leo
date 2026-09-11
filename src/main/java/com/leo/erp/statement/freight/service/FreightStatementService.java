@@ -22,7 +22,6 @@ import com.leo.erp.statement.freight.web.dto.FreightStatementSummaryResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,11 +34,6 @@ import java.util.Set;
 @Service
 public class FreightStatementService {
 
-    private static final String[] FREIGHT_STATEMENT_SEARCH_FIELDS = {
-            "statementNo",
-            "carrierCode",
-            "carrierName"
-    };
     private static final CrudStatusGuard<FreightStatement> STATUS_GUARD = CrudStatusGuard.forStatusAwareEntities();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
     private static final Logger log = LoggerFactory.getLogger(FreightStatementService.class);
@@ -117,24 +111,6 @@ public class FreightStatementService {
     @Transactional(readOnly = true)
     public Page<FreightStatementResponse> responsePage(PageQuery query, PageFilter filter, String carrierCode) {
         return page(query, filter, carrierCode).map(freightStatementWebMapper::toResponse);
-    }
-
-    @Transactional(readOnly = true)
-    public List<FreightStatementView> search(String keyword, int maxSize) {
-        Specification<FreightStatement> spec = combineSpecifications(
-                VISIBILITY_POLICY.applyDeletedVisibility(null, false),
-                Specs.keywordLike(keyword, FREIGHT_STATEMENT_SEARCH_FIELDS)
-        );
-        return repository.findAll(spec, PageRequest.of(0, maxSize))
-                .map(this::toResponse)
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public List<FreightStatementResponse> responseSearch(String keyword, int maxSize) {
-        return search(keyword, maxSize).stream()
-                .map(freightStatementWebMapper::toResponse)
-                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -439,17 +415,6 @@ public class FreightStatementService {
 
     private Specification<FreightStatement> applyDeletedVisibilityPolicy(Specification<FreightStatement> specification) {
         return VISIBILITY_POLICY.applyDeletedVisibility(specification, allowViewingDeletedRecords());
-    }
-
-    private Specification<FreightStatement> combineSpecifications(Specification<FreightStatement> left,
-                                                                 Specification<FreightStatement> right) {
-        if (left == null) {
-            return right;
-        }
-        if (right == null) {
-            return left;
-        }
-        return left.and(right);
     }
 
     private String normalizeText(String value) {

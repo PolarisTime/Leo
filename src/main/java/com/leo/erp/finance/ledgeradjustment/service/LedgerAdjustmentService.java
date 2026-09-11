@@ -16,7 +16,6 @@ import com.leo.erp.finance.ledgeradjustment.repository.LedgerAdjustmentRepositor
 import com.leo.erp.finance.ledgeradjustment.web.dto.LedgerAdjustmentRequest;
 import com.leo.erp.finance.ledgeradjustment.web.dto.LedgerAdjustmentResponse;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,20 +65,6 @@ public class LedgerAdjustmentService {
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("adjustmentDate", filter.startDate(), filter.endDate()));
         return pageEntities(query, spec).map(this::toResponse);
-    }
-
-    @Transactional(readOnly = true)
-    public java.util.List<LedgerAdjustmentResponse> search(String keyword, int maxSize) {
-        Specification<LedgerAdjustment> spec = combineSpecifications(
-                VISIBILITY_POLICY.applyDeletedVisibility(null, false),
-                Specs.keywordLike(
-                        keyword,
-                        new String[]{"adjustmentNo", "counterpartyCode", "counterpartyName", "projectName", "adjustmentType"}
-                )
-        );
-        return repository.findAll(spec, PageRequest.of(0, maxSize))
-                .map(this::toResponse)
-                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -236,17 +221,6 @@ public class LedgerAdjustmentService {
         Specification<LedgerAdjustment> effectiveSpec =
                 VISIBILITY_POLICY.applyDeletedVisibility(specification, allowViewingDeletedRecords());
         return repository.findAll(effectiveSpec, query.toPageable("id"));
-    }
-
-    private Specification<LedgerAdjustment> combineSpecifications(Specification<LedgerAdjustment> left,
-                                                                  Specification<LedgerAdjustment> right) {
-        if (left == null) {
-            return right;
-        }
-        if (right == null) {
-            return left;
-        }
-        return left.and(right);
     }
 
     private long nextId() {

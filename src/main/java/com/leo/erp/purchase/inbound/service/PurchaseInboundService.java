@@ -20,7 +20,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -85,19 +84,6 @@ public class PurchaseInboundService {
         Map<Long, PurchaseInboundItemRepository.InboundWeightSummary> weightSummaryMap =
                 responseAssembler.loadInboundWeightSummaryMap(page.getContent());
         return page.map(inbound -> responseAssembler.toListResponse(inbound, weightSummaryMap.get(inbound.getId())));
-    }
-
-    @Transactional(readOnly = true)
-    public java.util.List<PurchaseInboundResponse> search(String keyword, int maxSize) {
-        java.util.List<PurchaseInboundResponse> responses = search(keyword, INBOUND_SEARCH_FIELDS, maxSize);
-        Map<Long, PurchaseInboundItemRepository.InboundWeightSummary> weightSummaryMap =
-                responseAssembler.loadInboundWeightSummaryMapByIds(responses.stream()
-                        .map(PurchaseInboundResponse::id)
-                        .distinct()
-                        .toList());
-        return responses.stream()
-                .map(response -> responseAssembler.withInboundWeightSummary(response, weightSummaryMap.get(response.id())))
-                .toList();
     }
 
     @Transactional
@@ -392,27 +378,6 @@ public class PurchaseInboundService {
         Specification<PurchaseInbound> effectiveSpec =
                 VISIBILITY_POLICY.applyDeletedVisibility(specification, allowViewingDeletedRecords());
         return repository.findAll(effectiveSpec, query.toPageable("id"));
-    }
-
-    private java.util.List<PurchaseInboundResponse> search(String keyword, String[] searchFields, int maxSize) {
-        Specification<PurchaseInbound> spec = combineSpecifications(
-                VISIBILITY_POLICY.applyDeletedVisibility(null, false),
-                Specs.keywordLike(keyword, searchFields)
-        );
-        return repository.findAll(spec, PageRequest.of(0, maxSize))
-                .map(this::toResponse)
-                .toList();
-    }
-
-    private Specification<PurchaseInbound> combineSpecifications(Specification<PurchaseInbound> left,
-                                                                 Specification<PurchaseInbound> right) {
-        if (left == null) {
-            return right;
-        }
-        if (right == null) {
-            return left;
-        }
-        return left.and(right);
     }
 
     private long nextId() {
