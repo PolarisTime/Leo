@@ -229,6 +229,21 @@ class V2SalesOrderControllerTest {
     }
 
     @Test
+    void createDeliveryVerification_shouldReturnCreatedPointingToParentOrder() {
+        SalesOrderResponse response = mock(SalesOrderResponse.class);
+        when(response.id()).thenReturn(5L);
+        when(service.updateAndComplete(eq(5L), any(SalesOrderRequest.class))).thenReturn(response);
+
+        ResponseEntity<SalesOrderResponse> result = controller.createDeliveryVerification(5L, request());
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(result.getBody()).isSameAs(response);
+        assertThat(result.getHeaders().getLocation()).isNotNull();
+        assertThat(result.getHeaders().getLocation().getPath()).endsWith("/v2.0/sales-orders/5");
+        verify(service).updateAndComplete(eq(5L), any(SalesOrderRequest.class));
+    }
+
+    @Test
     void updateStatus_shouldPassStatus() {
         SalesOrderResponse response = mock(SalesOrderResponse.class);
         when(service.updateStatus(anyLong(), anyString())).thenReturn(response);
@@ -243,6 +258,21 @@ class V2SalesOrderControllerTest {
         when(service.completeSalesOrder(anyLong())).thenReturn(response);
 
         assertThat(controller.complete(5L)).isSameAs(response);
+    }
+
+    @Test
+    void createCompletion_shouldReturnCreatedPointingToParentOrder() {
+        SalesOrderResponse response = mock(SalesOrderResponse.class);
+        when(response.id()).thenReturn(5L);
+        when(service.completeSalesOrder(eq(5L))).thenReturn(response);
+
+        ResponseEntity<SalesOrderResponse> result = controller.createCompletion(5L);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(result.getBody()).isSameAs(response);
+        assertThat(result.getHeaders().getLocation()).isNotNull();
+        assertThat(result.getHeaders().getLocation().getPath()).endsWith("/v2.0/sales-orders/5");
+        verify(service).completeSalesOrder(5L);
     }
 
     @Test

@@ -149,7 +149,25 @@ public class V2SalesOrderController {
         return service.update(id, request);
     }
 
-    @Operation(summary = "保存并确认销售订单交付核定")
+    /**
+     * 资源型交付核定端点：创建“交付核定”子资源即保存订单并确认交付核定。
+     * 子资源无独立可回读路径，Location 指向父订单 {@code GET /api/v2.0/sales-orders/{id}}。
+     */
+    @Operation(summary = "创建销售订单交付核定（保存并确认交付核定）")
+    @IdempotencyRequired
+    @PostMapping("/{id}/delivery-verifications")
+    @DomainEventAudited
+    @V2Created
+    public ResponseEntity<SalesOrderResponse> createDeliveryVerification(@PathVariable Long id,
+                                                                         @Valid @RequestBody SalesOrderRequest request) {
+        return V2ResponseSupport.created("/sales-orders", service.updateAndComplete(id, request));
+    }
+
+    /**
+     * @deprecated 动作型端点，已由 {@code POST /sales-orders/{id}/delivery-verifications} 取代，保留以兼容既有调用方。
+     */
+    @Deprecated
+    @Operation(summary = "保存并确认销售订单交付核定（已废弃，请使用 POST /sales-orders/{id}/delivery-verifications）", deprecated = true)
     @IdempotencyRequired
     @PutMapping("/{id}/save-and-complete")
     @DomainEventAudited
@@ -165,7 +183,24 @@ public class V2SalesOrderController {
         return service.updateStatus(id, request.status());
     }
 
-    @Operation(summary = "完成销售")
+    /**
+     * 资源型完成销售端点：创建“完成记录”子资源即完成销售。
+     * 子资源无独立可回读路径，Location 指向父订单 {@code GET /api/v2.0/sales-orders/{id}}。
+     */
+    @Operation(summary = "创建销售订单完成记录（完成销售）")
+    @IdempotencyRequired
+    @PostMapping("/{id}/completions")
+    @DomainEventAudited
+    @V2Created
+    public ResponseEntity<SalesOrderResponse> createCompletion(@PathVariable Long id) {
+        return V2ResponseSupport.created("/sales-orders", service.completeSalesOrder(id));
+    }
+
+    /**
+     * @deprecated 动作型端点，已由 {@code POST /sales-orders/{id}/completions} 取代，保留以兼容既有调用方。
+     */
+    @Deprecated
+    @Operation(summary = "完成销售（已废弃，请使用 POST /sales-orders/{id}/completions）", deprecated = true)
     @IdempotencyRequired
     @PostMapping("/{id}/complete")
     @DomainEventAudited
