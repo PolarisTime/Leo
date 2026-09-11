@@ -298,7 +298,7 @@ public class GlobalExceptionHandler {
             return HttpStatus.UNPROCESSABLE_ENTITY;
         }
         return switch (errorCode) {
-            case VALIDATION_ERROR -> HttpStatus.BAD_REQUEST;
+            case VALIDATION_ERROR -> HttpStatus.UNPROCESSABLE_ENTITY;
             case UNAUTHORIZED, SESSION_EVICTED -> HttpStatus.UNAUTHORIZED;
             case FORBIDDEN -> HttpStatus.FORBIDDEN;
             case NOT_FOUND -> HttpStatus.NOT_FOUND;

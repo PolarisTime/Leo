@@ -16,6 +16,7 @@ import java.util.regex.Pattern;
 public final class CandidatePageables {
 
     private static final Pattern SAFE_SORT_FIELD = Pattern.compile("[A-Za-z][A-Za-z0-9_]*");
+    private static final String DEFAULT_SORT_FIELD = "id";
 
     private CandidatePageables() {
     }
@@ -27,7 +28,7 @@ public final class CandidatePageables {
             String direction,
             Set<String> allowedSortFields
     ) {
-        String property = sortBy == null || sortBy.isBlank() ? "id" : sortBy.trim();
+        String property = sortBy == null || sortBy.isBlank() ? DEFAULT_SORT_FIELD : sortBy.trim();
         if (!SAFE_SORT_FIELD.matcher(property).matches()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "sortBy 格式不合法");
         }
@@ -37,6 +38,10 @@ public final class CandidatePageables {
         Sort.Direction dir = "asc".equalsIgnoreCase(direction)
                 ? Sort.Direction.ASC
                 : Sort.Direction.DESC;
-        return PageRequest.of(page, size, Sort.by(dir, property));
+        Sort sort = Sort.by(dir, property);
+        if (!DEFAULT_SORT_FIELD.equals(property)) {
+            sort = sort.and(Sort.by(dir, DEFAULT_SORT_FIELD));
+        }
+        return PageRequest.of(page, size, sort);
     }
 }

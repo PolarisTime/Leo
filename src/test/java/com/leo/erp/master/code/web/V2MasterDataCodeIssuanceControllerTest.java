@@ -81,6 +81,6 @@ class V2MasterDataCodeIssuanceControllerTest {
                 .thenThrow(new BusinessException(ErrorCode.VALIDATION_ERROR, "编码必须使用系统生成的雪花ID"));
 
         mockMvc.perform(get("/v2.0/master-data/code-issuances/{moduleKey}/{code}", MODULE_KEY, "not-a-code"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnprocessableEntity());
     }
 }

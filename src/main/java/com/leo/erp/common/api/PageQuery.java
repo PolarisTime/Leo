@@ -19,11 +19,16 @@ public record PageQuery(
 
     private static final int DEFAULT_PAGE = 0;
     private static final int MAX_SIZE = 200;
+    private static final String UNIQUE_TIEBREAKER = "id";
 
     public Pageable toPageable(String defaultSortBy) {
         String property = (sortBy == null || sortBy.isBlank()) ? defaultSortBy : sortBy;
         Sort.Direction sortDirection = "asc".equalsIgnoreCase(direction) ? Sort.Direction.ASC : Sort.Direction.DESC;
-        return PageRequest.of(page, size, Sort.by(sortDirection, property));
+        Sort sort = Sort.by(sortDirection, property);
+        if (!UNIQUE_TIEBREAKER.equals(property)) {
+            sort = sort.and(Sort.by(sortDirection, UNIQUE_TIEBREAKER));
+        }
+        return PageRequest.of(page, size, sort);
     }
 
     public static PageQuery of(Integer page, int size, String sortBy, String direction, Set<String> allowedSortFields) {
