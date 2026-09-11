@@ -1,6 +1,7 @@
 package com.leo.erp.master.warehouse.service;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -19,6 +20,8 @@ import com.leo.erp.master.warehouse.web.dto.WarehouseOptionResponse;
 import com.leo.erp.master.warehouse.web.dto.WarehouseRequest;
 import com.leo.erp.master.warehouse.web.dto.WarehouseResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -31,6 +34,7 @@ import java.util.Set;
 public class WarehouseService {
 
     private static final String CODE_MODULE_KEY = "warehouse";
+    private static final String WAREHOUSE_OPTIONS_CACHE_KEY = "leo:warehouse:all";
     private static final CrudStatusGuard<Warehouse> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
     private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
@@ -64,6 +68,7 @@ public class WarehouseService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + WAREHOUSE_OPTIONS_CACHE_KEY + "'")
     public WarehouseResponse create(WarehouseRequest request) {
         codeIssuanceService.validate(CODE_MODULE_KEY, request.warehouseCode());
         Warehouse entity = new Warehouse();
@@ -76,6 +81,7 @@ public class WarehouseService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + WAREHOUSE_OPTIONS_CACHE_KEY + "'")
     public WarehouseResponse update(Long id, WarehouseRequest request) {
         Warehouse entity = requireActiveWarehouse(id);
         String currentName = entity.getWarehouseName();
@@ -90,6 +96,7 @@ public class WarehouseService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + WAREHOUSE_OPTIONS_CACHE_KEY + "'")
     public WarehouseResponse updateStatus(Long id, String status) {
         Warehouse entity = requireActiveWarehouse(id);
         String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
@@ -102,6 +109,7 @@ public class WarehouseService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + WAREHOUSE_OPTIONS_CACHE_KEY + "'")
     public void delete(Long id) {
         Warehouse entity = requireActiveWarehouse(id);
         if (warehouseReferenceGuard != null) {
@@ -113,6 +121,8 @@ public class WarehouseService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_OPTIONS, key = "'" + WAREHOUSE_OPTIONS_CACHE_KEY + "'",
+            unless = "#result == null || #result.isEmpty()")
     public List<WarehouseOptionResponse> listActiveOptions() {
         return warehouseRepository.findByDeletedFlagFalseAndStatusOrderByWarehouseNameAsc(StatusConstants.NORMAL).stream()
                 .map(warehouse -> new WarehouseOptionResponse(

@@ -1,6 +1,7 @@
 package com.leo.erp.master.project.service;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
@@ -19,7 +20,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 
+import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -240,5 +245,26 @@ class ProjectServiceTest {
 
         assertThat(entity.isDeletedFlag()).isTrue();
         verify(projectRepository).save(entity);
+    }
+
+    @Test
+    void cacheAnnotations_coverOptionsReadAndAllWritePaths() throws Exception {
+        Method create = ProjectService.class.getMethod("create", ProjectRequest.class);
+        Method update = ProjectService.class.getMethod("update", Long.class, ProjectRequest.class);
+        Method updateStatus = ProjectService.class.getMethod("updateStatus", Long.class, String.class);
+        Method delete = ProjectService.class.getMethod("delete", Long.class);
+        Method listActiveOptions = ProjectService.class.getMethod("listActiveOptions", Long.class);
+
+        for (Method method : List.of(create, update, updateStatus, delete)) {
+            CacheEvict cacheEvict = method.getAnnotation(CacheEvict.class);
+            assertThat(cacheEvict).as(method.getName()).isNotNull();
+            assertThat(cacheEvict.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+            assertThat(cacheEvict.allEntries()).isTrue();
+        }
+        Cacheable cacheable = listActiveOptions.getAnnotation(Cacheable.class);
+        assertThat(cacheable).isNotNull();
+        assertThat(cacheable.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+        assertThat(cacheable.key()).isEqualTo("'leo:project:all:' + #customerId");
+        assertThat(cacheable.unless()).isEqualTo("#result == null || #result.isEmpty()");
     }
 }

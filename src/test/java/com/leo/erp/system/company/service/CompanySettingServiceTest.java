@@ -17,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -25,6 +26,7 @@ import java.util.Optional;
 import static com.leo.erp.common.support.StatusConstants.NORMAL;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -241,17 +243,27 @@ class CompanySettingServiceTest {
         Method delete = CompanySettingService.class.getMethod("delete", Long.class);
         Method saveCurrent = CompanySettingService.class.getMethod("saveCurrent", CompanySettingRequest.class);
         Method current = CompanySettingService.class.getMethod("current");
+        Method listActiveOptions = CompanySettingService.class.getMethod("listActiveOptions");
 
         for (Method method : List.of(create, update, updateStatus, delete, saveCurrent)) {
-            CacheEvict cacheEvict = method.getAnnotation(CacheEvict.class);
-            assertThat(cacheEvict).as(method.getName()).isNotNull();
-            assertThat(cacheEvict.value()).containsExactly(CacheConfig.CACHE_STATIC);
-            assertThat(cacheEvict.key()).isEqualTo("'leo:company:current:v2'");
+            Caching caching = method.getAnnotation(Caching.class);
+            assertThat(caching).as(method.getName()).isNotNull();
+            assertThat(caching.evict())
+                    .extracting(cacheEvict -> cacheEvict.value()[0], CacheEvict::key)
+                    .containsExactlyInAnyOrder(
+                            tuple(CacheConfig.CACHE_STATIC, "'leo:company:current:v2'"),
+                            tuple(CacheConfig.CACHE_OPTIONS, "'leo:company-setting:all'"));
         }
         Cacheable cacheable = current.getAnnotation(Cacheable.class);
         assertThat(cacheable).isNotNull();
         assertThat(cacheable.value()).containsExactly(CacheConfig.CACHE_STATIC);
         assertThat(cacheable.key()).isEqualTo("'leo:company:current:v2'");
         assertThat(cacheable.unless()).isEqualTo("#result == null");
+
+        Cacheable optionsCacheable = listActiveOptions.getAnnotation(Cacheable.class);
+        assertThat(optionsCacheable).isNotNull();
+        assertThat(optionsCacheable.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+        assertThat(optionsCacheable.key()).isEqualTo("'leo:company-setting:all'");
+        assertThat(optionsCacheable.unless()).isEqualTo("#result == null || #result.isEmpty()");
     }
 }

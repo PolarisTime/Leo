@@ -1,6 +1,7 @@
 package com.leo.erp.master.material.service;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -15,6 +16,8 @@ import com.leo.erp.master.material.repository.MaterialCategoryRepository;
 import com.leo.erp.master.material.web.dto.MaterialCategoryOptionResponse;
 import com.leo.erp.master.material.web.dto.MaterialCategoryRequest;
 import com.leo.erp.master.material.web.dto.MaterialCategoryResponse;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -27,6 +30,7 @@ import java.util.Set;
 public class MaterialCategoryService {
 
     private static final String CODE_MODULE_KEY = "material-categories";
+    private static final String MATERIAL_CATEGORY_OPTIONS_CACHE_KEY = "leo:material-category:all";
     private static final CrudStatusGuard<MaterialCategory> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
 
@@ -52,6 +56,7 @@ public class MaterialCategoryService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + MATERIAL_CATEGORY_OPTIONS_CACHE_KEY + "'")
     public MaterialCategoryResponse create(MaterialCategoryRequest request) {
         MaterialCategory entity = new MaterialCategory();
         long entityId = snowflakeIdGenerator.nextId();
@@ -64,6 +69,7 @@ public class MaterialCategoryService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + MATERIAL_CATEGORY_OPTIONS_CACHE_KEY + "'")
     public MaterialCategoryResponse update(Long id, MaterialCategoryRequest request) {
         MaterialCategory entity = requireActiveCategory(id);
         apply(entity, request);
@@ -73,6 +79,7 @@ public class MaterialCategoryService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + MATERIAL_CATEGORY_OPTIONS_CACHE_KEY + "'")
     public MaterialCategoryResponse updateStatus(Long id, String status) {
         MaterialCategory entity = requireActiveCategory(id);
         String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
@@ -85,6 +92,7 @@ public class MaterialCategoryService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + MATERIAL_CATEGORY_OPTIONS_CACHE_KEY + "'")
     public void delete(Long id) {
         MaterialCategory entity = requireActiveCategory(id);
         entity.setDeletedFlag(true);
@@ -106,6 +114,8 @@ public class MaterialCategoryService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_OPTIONS, key = "'" + MATERIAL_CATEGORY_OPTIONS_CACHE_KEY + "'",
+            unless = "#result == null || #result.isEmpty()")
     public List<MaterialCategoryOptionResponse> options() {
         return repository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常")
                 .stream()

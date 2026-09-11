@@ -1,5 +1,6 @@
 package com.leo.erp.master.material.service;
 
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -15,7 +16,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Optional;
 
@@ -186,5 +190,26 @@ class MaterialCategoryServiceTest {
         when(materialCategoryMapper.toOptionResponse(entity)).thenReturn(option);
 
         assertThat(service().options()).containsExactly(option);
+    }
+
+    @Test
+    void cacheAnnotations_coverOptionsReadAndAllWritePaths() throws Exception {
+        Method create = MaterialCategoryService.class.getMethod("create", MaterialCategoryRequest.class);
+        Method update = MaterialCategoryService.class.getMethod("update", Long.class, MaterialCategoryRequest.class);
+        Method updateStatus = MaterialCategoryService.class.getMethod("updateStatus", Long.class, String.class);
+        Method delete = MaterialCategoryService.class.getMethod("delete", Long.class);
+        Method options = MaterialCategoryService.class.getMethod("options");
+
+        for (Method method : List.of(create, update, updateStatus, delete)) {
+            CacheEvict cacheEvict = method.getAnnotation(CacheEvict.class);
+            assertThat(cacheEvict).as(method.getName()).isNotNull();
+            assertThat(cacheEvict.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+            assertThat(cacheEvict.key()).isEqualTo("'leo:material-category:all'");
+        }
+        Cacheable cacheable = options.getAnnotation(Cacheable.class);
+        assertThat(cacheable).isNotNull();
+        assertThat(cacheable.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+        assertThat(cacheable.key()).isEqualTo("'leo:material-category:all'");
+        assertThat(cacheable.unless()).isEqualTo("#result == null || #result.isEmpty()");
     }
 }

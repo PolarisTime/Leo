@@ -1,6 +1,7 @@
 package com.leo.erp.master.project.service;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -26,6 +27,8 @@ import com.leo.erp.system.company.service.CompanySettingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -39,6 +42,7 @@ public class ProjectService {
 
     private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
     private static final String CODE_MODULE_KEY = "project";
+    private static final String PROJECT_OPTIONS_CACHE_KEY = "leo:project:all";
     private static final CrudStatusGuard<Project> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
     private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
@@ -78,6 +82,7 @@ public class ProjectService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, allEntries = true)
     public ProjectResponse create(ProjectRequest request) {
         ProjectRequest normalized = normalizeCreateRequest(request);
         codeIssuanceService.validate(CODE_MODULE_KEY, normalized.projectCode());
@@ -91,6 +96,7 @@ public class ProjectService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, allEntries = true)
     public ProjectResponse update(Long id, ProjectRequest request) {
         Project entity = requireActiveProject(id);
         String currentName = entity.getProjectName();
@@ -106,6 +112,7 @@ public class ProjectService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, allEntries = true)
     public ProjectResponse updateStatus(Long id, String status) {
         Project entity = requireActiveProject(id);
         String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
@@ -118,6 +125,7 @@ public class ProjectService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, allEntries = true)
     public void delete(Long id) {
         Project entity = requireActiveProject(id);
         if (referenceGuard != null) {
@@ -142,6 +150,8 @@ public class ProjectService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_OPTIONS, key = "'" + PROJECT_OPTIONS_CACHE_KEY + ":' + #customerId",
+            unless = "#result == null || #result.isEmpty()")
     public List<ProjectOptionResponse> listActiveOptions(Long customerId) {
         Customer customer = customerRepository.findByIdAndDeletedFlagFalse(customerId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));

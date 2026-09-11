@@ -1,6 +1,7 @@
 package com.leo.erp.master.warehouse.service;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
@@ -17,10 +18,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
+import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -213,5 +218,26 @@ class WarehouseServiceTest {
         assertThat(idOrder).isNotNull();
         assertThat(idOrder.getDirection()).isEqualTo(Sort.Direction.DESC);
         assertThat(pageable.getPageSize()).isEqualTo(10);
+    }
+
+    @Test
+    void cacheAnnotations_coverOptionsReadAndAllWritePaths() throws Exception {
+        Method create = WarehouseService.class.getMethod("create", WarehouseRequest.class);
+        Method update = WarehouseService.class.getMethod("update", Long.class, WarehouseRequest.class);
+        Method updateStatus = WarehouseService.class.getMethod("updateStatus", Long.class, String.class);
+        Method delete = WarehouseService.class.getMethod("delete", Long.class);
+        Method listActiveOptions = WarehouseService.class.getMethod("listActiveOptions");
+
+        for (Method method : List.of(create, update, updateStatus, delete)) {
+            CacheEvict cacheEvict = method.getAnnotation(CacheEvict.class);
+            assertThat(cacheEvict).as(method.getName()).isNotNull();
+            assertThat(cacheEvict.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+            assertThat(cacheEvict.key()).isEqualTo("'leo:warehouse:all'");
+        }
+        Cacheable cacheable = listActiveOptions.getAnnotation(Cacheable.class);
+        assertThat(cacheable).isNotNull();
+        assertThat(cacheable.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+        assertThat(cacheable.key()).isEqualTo("'leo:warehouse:all'");
+        assertThat(cacheable.unless()).isEqualTo("#result == null || #result.isEmpty()");
     }
 }
