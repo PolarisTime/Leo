@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2NoContent;
@@ -27,6 +28,7 @@ import org.springframework.http.ResponseEntity;
 
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/customers")
 public class V2CustomerController {
 

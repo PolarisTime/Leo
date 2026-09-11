@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.api.V2ResponseSupport;
@@ -31,6 +32,7 @@ import org.springframework.http.ResponseEntity;
 
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/print-templates")
 public class V2PrintTemplateController {
 

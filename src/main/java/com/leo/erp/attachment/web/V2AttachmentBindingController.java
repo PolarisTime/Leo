@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 
@@ -26,6 +27,7 @@ import java.util.List;
 
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/attachments/bindings")
 public class V2AttachmentBindingController {
 

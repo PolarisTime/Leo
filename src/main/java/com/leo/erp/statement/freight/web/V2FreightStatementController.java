@@ -40,6 +40,7 @@ import org.springframework.http.ResponseEntity;
 @Tag(name = "物流对账单")
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/freight-statements")
 public class V2FreightStatementController {
 

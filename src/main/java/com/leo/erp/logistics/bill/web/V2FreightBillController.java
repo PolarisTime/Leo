@@ -36,6 +36,7 @@ import org.springframework.http.ResponseEntity;
 
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/freight-bills")
 public class V2FreightBillController {
 

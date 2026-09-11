@@ -35,6 +35,7 @@ import org.springframework.http.ResponseEntity;
 @RestController
 @Validated
 @Tag(name = "销售出库")
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/sales-outbounds")
 public class V2SalesOutboundController {
 

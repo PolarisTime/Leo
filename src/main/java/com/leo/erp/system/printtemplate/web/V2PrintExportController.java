@@ -1,6 +1,7 @@
 package com.leo.erp.system.printtemplate.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.system.printtemplate.service.PrintOutput;
@@ -34,6 +35,7 @@ import java.util.Base64;
 @Tag(name = "打印导出")
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/print-exports")
 public class V2PrintExportController {
 

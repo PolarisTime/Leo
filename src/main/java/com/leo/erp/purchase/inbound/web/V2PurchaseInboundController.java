@@ -35,6 +35,7 @@ import org.springframework.http.ResponseEntity;
 @RestController
 @Validated
 @Tag(name = "采购入库")
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/purchase-inbounds")
 public class V2PurchaseInboundController {
 

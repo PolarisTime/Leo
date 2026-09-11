@@ -1,6 +1,7 @@
 package com.leo.erp.market.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.error.BusinessException;
@@ -33,6 +34,7 @@ import java.time.ZoneId;
 @Tag(name = "钢材行情同步")
 @RestController
 @org.springframework.validation.annotation.Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/steel-quote-syncs")
 public class V2SteelQuoteSyncController {
 

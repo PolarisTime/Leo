@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.error.BusinessException;
@@ -53,6 +54,7 @@ public class V2AttachmentController {
         this.attachmentRecordAccessService = attachmentRecordAccessService;
     }
 
+    @IdempotencyRequired
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @OperationLoggable(moduleName = "附件管理", actionType = "上传附件")
     @V2Created

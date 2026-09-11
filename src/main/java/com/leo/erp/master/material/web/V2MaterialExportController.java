@@ -1,6 +1,7 @@
 package com.leo.erp.master.material.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.master.material.service.MaterialDocumentService;
@@ -26,6 +27,7 @@ import java.util.Locale;
  */
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/material-exports")
 @Tag(name = "商品资料导出")
 public class V2MaterialExportController {

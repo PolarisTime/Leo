@@ -1,6 +1,7 @@
 package com.leo.erp.master.material.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.error.BusinessException;
@@ -27,6 +28,7 @@ import java.util.Locale;
  */
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/material-imports")
 @Tag(name = "商品资料导入")
 public class V2MaterialImportController {

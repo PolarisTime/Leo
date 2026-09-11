@@ -50,6 +50,7 @@ import com.leo.erp.common.api.V2NoContent;
 @Tag(name = "销售订单")
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/sales-orders")
 public class V2SalesOrderController {
 

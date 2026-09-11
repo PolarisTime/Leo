@@ -37,6 +37,7 @@ import org.springframework.http.ResponseEntity;
 @Tag(name = "客户对账单")
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/customer-statements")
 public class V2CustomerStatementController {
 

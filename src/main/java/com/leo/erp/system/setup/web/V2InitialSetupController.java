@@ -2,6 +2,7 @@ package com.leo.erp.system.setup.web;
 
 import com.leo.erp.auth.api.InitialAccountCreated;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.web.PublicAccess;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @PublicAccess
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/setup")
 public class V2InitialSetupController {
 

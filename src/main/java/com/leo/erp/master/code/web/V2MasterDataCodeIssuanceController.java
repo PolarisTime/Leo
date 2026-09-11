@@ -1,6 +1,7 @@
 package com.leo.erp.master.code.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.code.web.dto.MasterDataCodeIssuanceResponse;
@@ -16,6 +17,7 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/master-data/code-issuances")
 public class V2MasterDataCodeIssuanceController {
 

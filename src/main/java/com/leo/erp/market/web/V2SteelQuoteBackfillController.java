@@ -1,6 +1,7 @@
 package com.leo.erp.market.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.market.service.SteelQuoteBackfillService;
@@ -27,6 +28,7 @@ import java.time.ZoneId;
 @Tag(name = "钢材行情补数")
 @RestController
 @org.springframework.validation.annotation.Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/steel-quote-backfills")
 public class V2SteelQuoteBackfillController {
 

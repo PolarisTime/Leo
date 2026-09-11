@@ -7,6 +7,7 @@ import com.leo.erp.auth.web.dto.RefreshTokenRequest;
 import com.leo.erp.auth.web.dto.TokenResponse;
 import com.leo.erp.auth.web.support.AuthWebFlow;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2NoContent;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -33,6 +34,7 @@ public class V2AuthController {
         this.authWebFlow = authWebFlow;
     }
 
+    @IdempotencyRequired
     @PostMapping("/login")
     public TokenResponse login(@Valid @RequestBody LoginRequest request,
                                HttpServletRequest httpRequest,
@@ -51,6 +53,7 @@ public class V2AuthController {
         return result.token();
     }
 
+    @IdempotencyRequired
     @PostMapping("/logout")
     @V2NoContent
     public ResponseEntity<Void> logout(@Valid @RequestBody(required = false) LogoutRequest request,
