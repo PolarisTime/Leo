@@ -131,6 +131,18 @@ public class PurchaseInboundService {
         return response;
     }
 
+    /** 资源型审核：对既有采购入库执行审核（草稿 -> 已审核），复用既有状态迁移与联动链路。 */
+    @Transactional
+    public PurchaseInboundResponse audit(Long id) {
+        return updateStatus(id, StatusConstants.AUDITED);
+    }
+
+    /** 资源型保存并审核：复用既有 update，强制同事务完成保存与审核。 */
+    @Transactional
+    public PurchaseInboundResponse updateAndAudit(Long id, PurchaseInboundRequest request) {
+        return update(id, withAudit(request));
+    }
+
     @Transactional
     public void delete(Long id) {
         PurchaseInbound entity = requireEntity(id);
@@ -256,6 +268,27 @@ public class PurchaseInboundService {
                 request.remark(),
                 request.items(),
                 request.audit()
+        );
+    }
+
+    private PurchaseInboundRequest withAudit(PurchaseInboundRequest request) {
+        if (request.audit()) {
+            return request;
+        }
+        return new PurchaseInboundRequest(
+                request.inboundNo(),
+                request.purchaseOrderNo(),
+                request.supplierId(),
+                request.supplierCode(),
+                request.supplierName(),
+                request.warehouseId(),
+                request.warehouseName(),
+                request.inboundDate(),
+                request.settlementMode(),
+                request.status(),
+                request.remark(),
+                request.items(),
+                true
         );
     }
 

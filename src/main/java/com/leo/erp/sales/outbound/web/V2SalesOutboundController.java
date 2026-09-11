@@ -3,6 +3,7 @@ package com.leo.erp.sales.outbound.web;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.sales.outbound.service.SalesOutboundService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
@@ -43,8 +44,12 @@ public class V2SalesOutboundController {
         this.service = service;
     }
 
+    /**
+     * @deprecated 非资源的 RPC 搜索端点，已由分页资源查询 {@code GET /sales-outbounds} 取代，保留以兼容既有调用方。
+     */
+    @Deprecated
     @GetMapping("/search")
-    @Operation(summary = "搜索销售出库")
+    @Operation(summary = "搜索销售出库（已废弃，请使用 GET /sales-outbounds + PageQuery 分页查询）", deprecated = true)
     public java.util.List<SalesOutboundResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "100") int limit) {
         return service.search(keyword != null ? keyword : "", Math.min(limit, 500));
     }
@@ -79,6 +84,24 @@ public class V2SalesOutboundController {
     @DomainEventAudited
     public SalesOutboundResponse update(@PathVariable Long id, @Valid @RequestBody SalesOutboundRequest request) {
         return service.update(id, request);
+    }
+
+    /**
+     * 资源型审核端点：创建“审核记录”子资源即完成审核。
+     * 携带请求体时先保存再审核（等价于旧 save-and-audit），省略时仅审核既有草稿。
+     * 子资源无独立可回读路径，Location 指向父单据 {@code GET /api/v2.0/sales-outbounds/{id}}。
+     */
+    @Operation(summary = "创建销售出库审核记录（审核既有草稿或保存并审核）")
+    @IdempotencyRequired
+    @PostMapping("/{id}/audits")
+    @DomainEventAudited
+    @V2Created
+    public ResponseEntity<SalesOutboundResponse> createAudit(@PathVariable Long id,
+                                                             @Valid @RequestBody(required = false) SalesOutboundRequest request) {
+        SalesOutboundResponse response = request == null
+                ? service.audit(id)
+                : service.updateAndAudit(id, request);
+        return V2ResponseSupport.created("/sales-outbounds", response);
     }
 
     @PatchMapping("/{id}/status")

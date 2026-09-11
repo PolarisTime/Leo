@@ -1,12 +1,11 @@
-package com.leo.erp.sales.outbound.web;
+package com.leo.erp.purchase.inbound.web;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
-import com.leo.erp.sales.outbound.service.SalesOutboundService;
-import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
-import com.leo.erp.sales.outbound.web.dto.SalesOutboundResponse;
+import com.leo.erp.purchase.inbound.service.PurchaseInboundService;
+import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
+import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,31 +19,28 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * V2SalesOutboundController 极端情况测试。
+ * V2PurchaseInboundController 极端情况测试。
  */
 @ExtendWith(MockitoExtension.class)
-class V2SalesOutboundControllerTest {
+class V2PurchaseInboundControllerTest {
 
     @Mock
-    private SalesOutboundService service;
+    private PurchaseInboundService service;
 
     @InjectMocks
-    private V2SalesOutboundController controller;
+    private V2PurchaseInboundController controller;
 
     @BeforeEach
     void setUpServletContext() {
@@ -57,15 +53,15 @@ class V2SalesOutboundControllerTest {
         RequestContextHolder.resetRequestAttributes();
     }
 
-    private SalesOutboundRequest request() {
-        return new SalesOutboundRequest(
-                "OB001", "SO001", 10L, "客户A", 20L, "项目A", 1L, "库房A",
-                LocalDate.of(2026, 8, 1), "DRAFT", null, List.of(), false);
+    private PurchaseInboundRequest request() {
+        return new PurchaseInboundRequest(
+                "IB001", "PO001", 10L, "S001", "供应商A", 1L, "库房A",
+                LocalDate.of(2026, 8, 1), "MONTHLY", "DRAFT", null, List.of(), false);
     }
 
     @Test
     void search_shouldNormalizeNullKeywordAndCapLimit() {
-        when(service.search("", 100)).thenReturn(List.of(mock(SalesOutboundResponse.class)));
+        when(service.search("", 100)).thenReturn(List.of(mock(PurchaseInboundResponse.class)));
 
         var result = controller.search(null, 100);
 
@@ -84,20 +80,20 @@ class V2SalesOutboundControllerTest {
 
     @Test
     void page_shouldDelegateWithFilter() {
-        when(service.page(any(PageQuery.class), any(PageFilter.class), anyString())).thenReturn(
+        when(service.page(any(PageQuery.class), any(PageFilter.class))).thenReturn(
                 org.mockito.Mockito.mock(org.springframework.data.domain.Page.class));
 
         PageQuery query = mock(PageQuery.class);
-        var result = controller.page(query, "kw", 10L, "客户A", 20L, "项目A", 30L, "M001", "DRAFT",
+        var result = controller.page(query, "kw", 10L, "供应商A", 30L, "DRAFT",
                 LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
 
         assertThat(result).isNotNull();
-        verify(service).page(any(PageQuery.class), any(PageFilter.class), anyString());
+        verify(service).page(any(PageQuery.class), any(PageFilter.class));
     }
 
     @Test
     void detail_shouldDelegate() {
-        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
+        PurchaseInboundResponse response = mock(PurchaseInboundResponse.class);
         when(service.detail(5L)).thenReturn(response);
 
         assertThat(controller.detail(5L)).isSameAs(response);
@@ -105,11 +101,10 @@ class V2SalesOutboundControllerTest {
 
     @Test
     void create_shouldReturnCreatedWithLocation() {
-        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
+        PurchaseInboundResponse response = mock(PurchaseInboundResponse.class);
         when(service.create(any())).thenReturn(response);
-        SalesOutboundRequest req = request();
 
-        ResponseEntity<SalesOutboundResponse> result = controller.create(req);
+        ResponseEntity<PurchaseInboundResponse> result = controller.create(request());
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(result.getBody()).isSameAs(response);
@@ -117,7 +112,7 @@ class V2SalesOutboundControllerTest {
 
     @Test
     void update_shouldDelegate() {
-        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
+        PurchaseInboundResponse response = mock(PurchaseInboundResponse.class);
         when(service.update(anyLong(), any())).thenReturn(response);
 
         assertThat(controller.update(5L, request())).isSameAs(response);
@@ -125,10 +120,10 @@ class V2SalesOutboundControllerTest {
 
     @Test
     void createAudit_shouldAuditExistingWhenBodyAbsent() {
-        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
+        PurchaseInboundResponse response = mock(PurchaseInboundResponse.class);
         when(service.audit(5L)).thenReturn(response);
 
-        ResponseEntity<SalesOutboundResponse> result = controller.createAudit(5L, null);
+        ResponseEntity<PurchaseInboundResponse> result = controller.createAudit(5L, null);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(result.getBody()).isSameAs(response);
@@ -138,10 +133,10 @@ class V2SalesOutboundControllerTest {
 
     @Test
     void createAudit_shouldSaveAndAuditWhenBodyPresent() {
-        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
+        PurchaseInboundResponse response = mock(PurchaseInboundResponse.class);
         when(service.updateAndAudit(anyLong(), any())).thenReturn(response);
 
-        ResponseEntity<SalesOutboundResponse> result = controller.createAudit(5L, request());
+        ResponseEntity<PurchaseInboundResponse> result = controller.createAudit(5L, request());
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(result.getBody()).isSameAs(response);
@@ -151,8 +146,8 @@ class V2SalesOutboundControllerTest {
 
     @Test
     void updateStatus_shouldPassStatusFromRequest() {
-        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
-        when(service.updateStatus(anyLong(), anyString())).thenReturn(response);
+        PurchaseInboundResponse response = mock(PurchaseInboundResponse.class);
+        when(service.updateStatus(anyLong(), any())).thenReturn(response);
         StatusUpdateRequest statusReq = new StatusUpdateRequest("AUDITED");
 
         assertThat(controller.updateStatus(5L, statusReq)).isSameAs(response);
