@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +45,7 @@ public class V2SteelQuoteCalendarController {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "to 不能早于 from");
         }
         Map<LocalDate, List<String>> calendar = new LinkedHashMap<>();
+        Map<LocalDate, Map<String, Integer>> rows = new HashMap<>();
         for (SteelArticle article : articleRepository
                 .findByArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(from, to)) {
             calendar.computeIfAbsent(article.getArticleDate(), key -> new ArrayList<>());
@@ -52,10 +54,15 @@ public class V2SteelQuoteCalendarController {
             if (period != null && !period.isBlank() && !periods.contains(period)) {
                 periods.add(period);
             }
+            if (period != null && !period.isBlank()) {
+                rows.computeIfAbsent(article.getArticleDate(), key -> new HashMap<>())
+                        .merge(period, article.getRowCount() == null ? 0 : article.getRowCount(), Integer::sum);
+            }
         }
         List<SteelQuoteCalendarResponse> result = new ArrayList<>(calendar.size());
         for (Map.Entry<LocalDate, List<String>> entry : calendar.entrySet()) {
-            result.add(new SteelQuoteCalendarResponse(entry.getKey(), entry.getValue()));
+            result.add(new SteelQuoteCalendarResponse(entry.getKey(), entry.getValue(),
+                    rows.getOrDefault(entry.getKey(), Map.of())));
         }
         return result;
     }

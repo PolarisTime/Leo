@@ -64,6 +64,35 @@ public class SteelQuoteSyncService {
         return results;
     }
 
+    /** 补数: 逐日同步区间内所有时段(跳过周末); 返回成功/失败天数与总行数。 */
+    public BackfillResult backfill(LocalDate from, LocalDate to) {
+        int synced = 0;
+        int failed = 0;
+        int totalRows = 0;
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            java.time.DayOfWeek dow = date.getDayOfWeek();
+            if (dow == java.time.DayOfWeek.SATURDAY || dow == java.time.DayOfWeek.SUNDAY) {
+                continue;
+            }
+            try {
+                List<SyncResult> results = syncAll(date);
+                synced++;
+                totalRows += results.stream().mapToInt(SyncResult::rowCount).sum();
+                log.info("行情补数成功: {} {}", date,
+                        results.stream().map(SyncResult::period).distinct().toList());
+            } catch (Exception ex) {
+                failed++;
+                log.warn("行情补数失败: {} - {}", date, ex.getMessage());
+            }
+        }
+        log.info("行情补数结束: 成功 {} 天, 失败 {} 天, 共 {} 行", synced, failed, totalRows);
+        return new BackfillResult(from, to, synced, failed, totalRows);
+    }
+
+    /** 补数结果。 */
+    public record BackfillResult(LocalDate from, LocalDate to, int syncedDays, int failedDays, int totalRows) {
+    }
+
     private SyncResult syncArticle(String articleUrl) {
         Optional<SteelArticle> existing = articleRepository.findByArticleUrlAndDeletedFlagFalse(articleUrl);
         if (existing.isPresent()) {
