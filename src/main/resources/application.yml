@@ -268,6 +268,8 @@ leo:
       request-timeout-ms: ${LEO_MARKET_STEEL_QUOTE_REQUEST_TIMEOUT_MS:20000}
       # 相邻请求间隔(毫秒), 降低风控概率
       rate-limit-millis: ${LEO_MARKET_STEEL_QUOTE_RATE_LIMIT_MILLIS:1000}
+      # 启动时补数天数(默认 0 关闭; >0 时同步最近 N 天, 跳过周末)
+      backfill-days: ${LEO_MARKET_STEEL_QUOTE_BACKFILL_DAYS:0}
       sync:
         # 定时抓取开关; 默认每日 10:35/13:05/16:35 覆盖上午/中午/下午发布节奏
         enabled: ${LEO_MARKET_STEEL_QUOTE_SYNC_ENABLED:true}
