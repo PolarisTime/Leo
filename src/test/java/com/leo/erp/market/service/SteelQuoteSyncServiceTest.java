@@ -95,7 +95,9 @@ class SteelQuoteSyncServiceTest {
     private SteelQuoteSyncService service() {
         MysteelProperties properties = new MysteelProperties();
         properties.setRateLimitMillis(0);
-        return new SteelQuoteSyncService(properties, mysteelClient, steelQuoteStore, articleRepository);
+        return new SteelQuoteSyncService(properties, mysteelClient,
+                new com.leo.erp.market.mysteel.MysteelRateLimiter(properties),
+                steelQuoteStore, articleRepository);
     }
 
     private SteelArticle article() {

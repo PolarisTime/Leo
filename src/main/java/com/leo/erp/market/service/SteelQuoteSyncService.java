@@ -4,6 +4,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.market.domain.entity.SteelArticle;
 import com.leo.erp.market.mysteel.MysteelClient;
+import com.leo.erp.market.mysteel.MysteelRateLimiter;
 import com.leo.erp.market.mysteel.MysteelProperties;
 import com.leo.erp.market.repository.SteelArticleRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -24,13 +25,16 @@ public class SteelQuoteSyncService {
 
     private final MysteelProperties properties;
     private final MysteelClient mysteelClient;
+    private final MysteelRateLimiter rateLimiter;
     private final SteelQuoteStore steelQuoteStore;
     private final SteelArticleRepository articleRepository;
 
     public SteelQuoteSyncService(MysteelProperties properties, MysteelClient mysteelClient,
-                                 SteelQuoteStore steelQuoteStore, SteelArticleRepository articleRepository) {
+                                 MysteelRateLimiter rateLimiter, SteelQuoteStore steelQuoteStore,
+                                 SteelArticleRepository articleRepository) {
         this.properties = properties;
         this.mysteelClient = mysteelClient;
+        this.rateLimiter = rateLimiter;
         this.steelQuoteStore = steelQuoteStore;
         this.articleRepository = articleRepository;
     }
@@ -42,7 +46,7 @@ public class SteelQuoteSyncService {
 
     /** 同步指定日期最新行情文章; 文章已入库时直接返回既有结果(幂等)。 */
     public SyncResult sync(LocalDate date) {
-        rateLimit();
+        rateLimiter.acquire();
         String articleUrl = mysteelClient.findLatestArticleUrl(date)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR,
                         String.format("%tF 未找到杭州市场建筑钢材价格行情文章", date)));
@@ -58,7 +62,7 @@ public class SteelQuoteSyncService {
         }
         List<SyncResult> results = new ArrayList<>(articleUrls.size());
         for (String articleUrl : articleUrls) {
-            rateLimit();
+            rateLimiter.acquire();
             results.add(syncArticle(articleUrl));
         }
         return results;
@@ -98,7 +102,7 @@ public class SteelQuoteSyncService {
         if (existing.isPresent()) {
             return toResult(existing.get(), false);
         }
-        rateLimit();
+        rateLimiter.acquire();
         String articleHtml = mysteelClient.fetchArticle(articleUrl);
         if (articleHtml.contains("安全验证")) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文章页返回安全验证页(疑似触发IP风控), 请稍后再试");
@@ -112,17 +116,5 @@ public class SteelQuoteSyncService {
         return new SyncResult(article.getId(), article.getArticleUrl(),
                 article.getArticleDate().toString(), article.getArticleTime(),
                 article.getPeriod(), article.getRowCount(), created);
-    }
-
-    private void rateLimit() {
-        long millis = properties.getRateLimitMillis();
-        if (millis > 0) {
-            try {
-                Thread.sleep(millis);
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "行情同步被中断");
-            }
-        }
     }
 }
