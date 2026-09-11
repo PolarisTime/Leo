@@ -1,6 +1,8 @@
 package com.leo.erp.market.repository;
 
 import com.leo.erp.market.domain.entity.SteelArticle;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;
@@ -19,4 +21,6 @@ public interface SteelArticleRepository extends JpaRepository<SteelArticle, Long
 
     List<SteelArticle> findByArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
             LocalDate from, LocalDate to);
+
+    Page<SteelArticle> findByDeletedFlagFalse(Pageable pageable);
 }
