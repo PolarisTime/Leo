@@ -116,10 +116,10 @@ public class PurchaseOrderAvailabilityService {
     }
 
     private Map<Long, Integer> toIntegerQuantityMap(Map<Long, Long> source) {
-        if (source == null || source.isEmpty()) {
-            return Map.of();
-        }
         Map<Long, Integer> target = new HashMap<>();
+        if (source == null || source.isEmpty()) {
+            return target;
+        }
         source.forEach((key, value) -> target.put(key, Math.toIntExact(value)));
         return target;
     }
