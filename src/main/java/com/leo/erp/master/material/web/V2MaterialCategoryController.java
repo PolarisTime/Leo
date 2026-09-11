@@ -2,6 +2,7 @@ package com.leo.erp.master.material.web;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.support.OptionLimits;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.master.material.service.MaterialCategoryService;
 import com.leo.erp.master.material.web.dto.MaterialCategoryOptionResponse;
@@ -67,6 +68,6 @@ public class V2MaterialCategoryController {
 
     @GetMapping("/options")
     public List<MaterialCategoryOptionResponse> options() {
-        return service.options();
+        return OptionLimits.cap(service.options());
     }
 }

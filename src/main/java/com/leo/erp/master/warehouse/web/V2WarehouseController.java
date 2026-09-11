@@ -2,6 +2,7 @@ package com.leo.erp.master.warehouse.web;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.support.OptionLimits;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.master.warehouse.service.WarehouseService;
 import com.leo.erp.master.warehouse.web.dto.WarehouseOptionResponse;
@@ -38,7 +39,7 @@ public class V2WarehouseController {
 
     @GetMapping("/options")
     public List<WarehouseOptionResponse> options() {
-        return warehouseService.listActiveOptions();
+        return OptionLimits.cap(warehouseService.listActiveOptions());
     }
 
     @GetMapping

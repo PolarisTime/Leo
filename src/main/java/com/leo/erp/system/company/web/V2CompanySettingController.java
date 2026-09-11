@@ -2,6 +2,7 @@ package com.leo.erp.system.company.web;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.support.OptionLimits;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.company.web.dto.CompanySettingOptionResponse;
@@ -44,7 +45,7 @@ public class V2CompanySettingController {
 
     @GetMapping("/options")
     public List<CompanySettingOptionResponse> options() {
-        return companySettingService.listActiveOptions();
+        return OptionLimits.cap(companySettingService.listActiveOptions());
     }
 
     @GetMapping("/{id}")

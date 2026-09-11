@@ -2,6 +2,7 @@ package com.leo.erp.master.project.web;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.support.OptionLimits;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.master.project.service.ProjectService;
 import com.leo.erp.master.project.web.dto.ProjectOptionResponse;
@@ -38,7 +39,7 @@ public class V2ProjectController {
 
     @GetMapping("/options")
     public List<ProjectOptionResponse> options(@RequestParam Long customerId) {
-        return projectService.listActiveOptions(customerId);
+        return OptionLimits.cap(projectService.listActiveOptions(customerId));
     }
 
     @GetMapping

@@ -5,6 +5,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
+import com.leo.erp.common.support.OptionLimits;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.purchase.order.service.PurchaseOrderPickupListService;
@@ -70,7 +71,7 @@ public class V2PurchaseOrderController {
     @GetMapping("/options")
     public List<PurchaseOrderOptionResponse> options(@RequestParam(required = false) String keyword,
                                                               @RequestParam(required = false) String status) {
-        return purchaseOrderOptionService.listOptions(keyword, status);
+        return OptionLimits.cap(purchaseOrderOptionService.listOptions(keyword, status));
     }
 
     @Operation(summary = "搜索采购订单")
