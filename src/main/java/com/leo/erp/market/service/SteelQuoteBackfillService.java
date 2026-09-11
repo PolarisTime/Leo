@@ -20,7 +20,7 @@ public class SteelQuoteBackfillService {
     private final ExecutorService executor;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile SteelQuoteBackfillStatusResponse status =
-            new SteelQuoteBackfillStatusResponse(false, null, null, null, null, 0, 0, 0);
+            new SteelQuoteBackfillStatusResponse(false, null, null, null, null, 0, 0, 0, java.util.List.of());
 
     public SteelQuoteBackfillService(SteelQuoteSyncService syncService) {
         this.syncService = syncService;
@@ -42,7 +42,8 @@ public class SteelQuoteBackfillService {
             return false;
         }
         Instant startedAt = Instant.now();
-        status = new SteelQuoteBackfillStatusResponse(true, from, to, startedAt, null, 0, 0, 0);
+        status = new SteelQuoteBackfillStatusResponse(true, from, to, startedAt, null, 0, 0, 0,
+                java.util.List.of());
         executor.submit(() -> run(from, to, startedAt));
         return true;
     }
@@ -51,9 +52,10 @@ public class SteelQuoteBackfillService {
         try {
             SteelQuoteSyncService.BackfillResult result = syncService.backfill(from, to);
             status = new SteelQuoteBackfillStatusResponse(false, from, to, startedAt, Instant.now(),
-                    result.syncedDays(), result.failedDays(), result.totalRows());
+                    result.syncedDays(), result.failedDays(), result.totalRows(), result.failures());
         } catch (RuntimeException ex) {
-            status = new SteelQuoteBackfillStatusResponse(false, from, to, startedAt, Instant.now(), 0, 0, 0);
+            status = new SteelQuoteBackfillStatusResponse(false, from, to, startedAt, Instant.now(), 0, 0, 0,
+                    java.util.List.of());
             throw ex;
         } finally {
             running.set(false);

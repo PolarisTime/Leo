@@ -73,6 +73,7 @@ public class SteelQuoteSyncService {
         int synced = 0;
         int failed = 0;
         int totalRows = 0;
+        List<BackfillFailure> failures = new ArrayList<>();
         for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
             java.time.DayOfWeek dow = date.getDayOfWeek();
             if (dow == java.time.DayOfWeek.SATURDAY || dow == java.time.DayOfWeek.SUNDAY) {
@@ -86,15 +87,21 @@ public class SteelQuoteSyncService {
                         results.stream().map(SyncResult::period).distinct().toList());
             } catch (Exception ex) {
                 failed++;
+                failures.add(new BackfillFailure(date, ex.getMessage()));
                 log.warn("行情补数失败: {} - {}", date, ex.getMessage());
             }
         }
         log.info("行情补数结束: 成功 {} 天, 失败 {} 天, 共 {} 行", synced, failed, totalRows);
-        return new BackfillResult(from, to, synced, failed, totalRows);
+        return new BackfillResult(from, to, synced, failed, totalRows, failures);
+    }
+
+    /** 补数失败项。 */
+    public record BackfillFailure(LocalDate date, String message) {
     }
 
     /** 补数结果。 */
-    public record BackfillResult(LocalDate from, LocalDate to, int syncedDays, int failedDays, int totalRows) {
+    public record BackfillResult(LocalDate from, LocalDate to, int syncedDays, int failedDays, int totalRows,
+                                 List<BackfillFailure> failures) {
     }
 
     private SyncResult syncArticle(String articleUrl) {

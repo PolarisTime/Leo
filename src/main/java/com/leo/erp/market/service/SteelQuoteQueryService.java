@@ -29,14 +29,16 @@ public class SteelQuoteQueryService {
 
     @Transactional(readOnly = true)
     public Page<SteelQuoteResponse> page(PageQuery query, LocalDate quoteDate, String period, String breed,
-                                         String spec, String material, String factory) {
+                                         String spec, String material, String factory, String changeDirection) {
         Pageable pageable = query.toPageable("id");
-        Specification<SteelQuote> specification = buildSpecification(quoteDate, period, breed, spec, material, factory);
+        Specification<SteelQuote> specification = buildSpecification(quoteDate, period, breed, spec, material,
+                factory, changeDirection);
         return quoteRepository.findAll(specification, pageable).map(SteelQuoteResponse::from);
     }
 
     private Specification<SteelQuote> buildSpecification(LocalDate quoteDate, String period, String breed,
-                                                         String spec, String material, String factory) {
+                                                         String spec, String material, String factory,
+                                                         String changeDirection) {
         return (root, criteriaQuery, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(builder.isFalse(root.get("deletedFlag")));
@@ -48,6 +50,11 @@ public class SteelQuoteQueryService {
             requireEqual(predicates, builder, root, "spec", spec);
             requireEqual(predicates, builder, root, "material", material);
             requireEqual(predicates, builder, root, "factory", factory);
+            if ("up".equalsIgnoreCase(changeDirection)) {
+                predicates.add(builder.like(root.get("changeVal"), "+%"));
+            } else if ("down".equalsIgnoreCase(changeDirection)) {
+                predicates.add(builder.like(root.get("changeVal"), "-%"));
+            }
             return builder.and(predicates.toArray(new Predicate[0]));
         };
     }
