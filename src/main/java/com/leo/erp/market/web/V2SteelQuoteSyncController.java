@@ -6,7 +6,7 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.web.BindPageQuery;
-import com.leo.erp.market.repository.SteelArticleRepository;
+import com.leo.erp.market.service.SteelArticleQueryService;
 import com.leo.erp.market.service.SteelQuoteSyncService;
 import com.leo.erp.market.service.SteelQuoteSyncService.SyncResult;
 import com.leo.erp.market.web.dto.SteelQuoteSyncRequest;
@@ -37,23 +37,21 @@ import java.time.ZoneId;
 public class V2SteelQuoteSyncController {
 
     private final SteelQuoteSyncService steelQuoteSyncService;
-    private final SteelArticleRepository articleRepository;
+    private final SteelArticleQueryService articleQueryService;
     private final ZoneId zone;
 
     public V2SteelQuoteSyncController(SteelQuoteSyncService steelQuoteSyncService,
-                                      SteelArticleRepository articleRepository,
+                                      SteelArticleQueryService articleQueryService,
                                       @Value("${leo.timezone:Asia/Shanghai}") String timezone) {
         this.steelQuoteSyncService = steelQuoteSyncService;
-        this.articleRepository = articleRepository;
+        this.articleQueryService = articleQueryService;
         this.zone = ZoneId.of(timezone);
     }
 
     @Operation(summary = "同步记录分页", description = "按抓取时间倒序返回已入库的行情文章记录")
     @GetMapping
     public PageResponse<SteelQuoteSyncRecordResponse> page(@BindPageQuery(sortFieldKey = "steel-quote") PageQuery query) {
-        Page<SteelQuoteSyncRecordResponse> page = articleRepository
-                .findByDeletedFlagFalse(query.toPageable("articleDate"))
-                .map(SteelQuoteSyncRecordResponse::from);
+        Page<SteelQuoteSyncRecordResponse> page = articleQueryService.pageSyncRecords(query);
         return PageResponse.from(page);
     }
 

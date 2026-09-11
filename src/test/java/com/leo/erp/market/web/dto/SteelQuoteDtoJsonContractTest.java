@@ -59,7 +59,8 @@ class SteelQuoteDtoJsonContractTest {
     void steelQuoteSyncResponse_serializesSnowflakeIdAsString() throws Exception {
         SteelQuoteSyncResponse response = new SteelQuoteSyncResponse(
                 9223372036854775807L, "https://jiancai.mysteel.com/m/x.html",
-                "2026-09-09", "1540", "下午", 540, true);
+                "2026-09-09", "1540", "下午", java.util.List.of("上午", "中午", "下午"),
+                540, true);
 
         String json = objectMapper.writeValueAsString(response);
 
