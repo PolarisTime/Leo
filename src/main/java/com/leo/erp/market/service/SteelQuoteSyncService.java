@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -44,6 +46,25 @@ public class SteelQuoteSyncService {
         String articleUrl = mysteelClient.findLatestArticleUrl(date)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR,
                         String.format("%tF 未找到杭州市场建筑钢材价格行情文章", date)));
+        return syncArticle(articleUrl);
+    }
+
+    /** 同步指定日期当天所有行情文章(覆盖上午/中午/下午), 返回各文章结果。 */
+    public List<SyncResult> syncAll(LocalDate date) {
+        List<String> articleUrls = mysteelClient.findArticleUrls(date);
+        if (articleUrls.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    String.format("%tF 未找到杭州市场建筑钢材价格行情文章", date));
+        }
+        List<SyncResult> results = new ArrayList<>(articleUrls.size());
+        for (String articleUrl : articleUrls) {
+            rateLimit();
+            results.add(syncArticle(articleUrl));
+        }
+        return results;
+    }
+
+    private SyncResult syncArticle(String articleUrl) {
         Optional<SteelArticle> existing = articleRepository.findByArticleUrlAndDeletedFlagFalse(articleUrl);
         if (existing.isPresent()) {
             return toResult(existing.get(), false);

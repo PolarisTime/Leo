@@ -46,9 +46,12 @@ public class SteelQuoteBackfillRunner implements ApplicationRunner {
                 continue;
             }
             try {
-                SteelQuoteSyncService.SyncResult result = syncService.sync(date);
+                java.util.List<SteelQuoteSyncService.SyncResult> results = syncService.syncAll(date);
                 success++;
-                log.info("行情补数成功: {} {} ({} 行)", date, result.period(), result.rowCount());
+                int rows = results.stream().mapToInt(SteelQuoteSyncService.SyncResult::rowCount).sum();
+                java.util.List<String> periods = results.stream()
+                        .map(SteelQuoteSyncService.SyncResult::period).distinct().toList();
+                log.info("行情补数成功: {} {} ({} 行)", date, periods, rows);
             } catch (Exception ex) {
                 failed++;
                 log.warn("行情补数失败: {} - {}", date, ex.getMessage());
