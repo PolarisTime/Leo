@@ -5,9 +5,6 @@ import com.leo.erp.attachment.service.AttachmentRecordAccessService;
 import com.leo.erp.attachment.service.AttachmentService;
 import com.leo.erp.attachment.service.AttachmentWebService;
 import com.leo.erp.attachment.web.dto.AttachmentAccessUrlResponse;
-import com.leo.erp.attachment.web.dto.AttachmentDirectUploadCompleteRequest;
-import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareRequest;
-import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareResponse;
 import com.leo.erp.attachment.web.dto.AttachmentUploadResponse;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
@@ -63,34 +60,6 @@ public class V2AttachmentController {
         return V2ResponseSupport.created(
                 "/attachments",
                 attachmentWebService.upload(file, sourceType, normalizedModuleKey, principal.id())
-        );
-    }
-
-    /**
-     * @deprecated 动作型端点，已由资源型 {@code POST /attachment-upload-sessions} 取代，保留以兼容既有调用方。
-     */
-    @Deprecated
-    @Operation(summary = "生成附件直传地址（已废弃，请使用 POST /attachment-upload-sessions）", deprecated = true)
-    @PostMapping("/direct-upload/prepare")
-    @OperationLoggable(moduleName = "附件管理", actionType = "生成附件直传地址")
-    public AttachmentDirectUploadPrepareResponse prepareDirectUpload(@AuthenticationPrincipal SecurityPrincipal principal, @RequestParam @NotBlank(message = "模块标识不能为空") String moduleKey, @Valid @RequestBody AttachmentDirectUploadPrepareRequest request) {
-        String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
-        return attachmentWebService.prepareDirectUpload(request, normalizedModuleKey, principal.id());
-    }
-
-    /**
-     * @deprecated 动作型端点，已由资源型 {@code POST /attachment-upload-sessions/{sessionId}/completions} 取代，保留以兼容既有调用方。
-     */
-    @Deprecated
-    @Operation(summary = "完成附件直传（已废弃，请使用 POST /attachment-upload-sessions/{sessionId}/completions）", deprecated = true)
-    @PostMapping("/direct-upload/complete")
-    @OperationLoggable(moduleName = "附件管理", actionType = "完成附件直传")
-    @V2Created
-    public ResponseEntity<AttachmentUploadResponse> completeDirectUpload(@AuthenticationPrincipal SecurityPrincipal principal, @RequestParam @NotBlank(message = "模块标识不能为空") String moduleKey, @Valid @RequestBody AttachmentDirectUploadCompleteRequest request) {
-        String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
-        return V2ResponseSupport.created(
-                "/attachments",
-                attachmentWebService.completeDirectUpload(request, normalizedModuleKey, principal.id())
         );
     }
 
