@@ -3,6 +3,7 @@ package com.leo.erp.finance.payment.web;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.finance.payment.service.PaymentService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
@@ -33,6 +34,7 @@ import org.springframework.http.ResponseEntity;
 @Tag(name = "付款管理")
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/payments")
 public class V2PaymentController {
 

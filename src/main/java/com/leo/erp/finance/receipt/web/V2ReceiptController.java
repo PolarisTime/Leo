@@ -3,6 +3,7 @@ package com.leo.erp.finance.receipt.web;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.finance.receipt.service.ReceiptService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
@@ -33,6 +34,7 @@ import org.springframework.http.ResponseEntity;
 @Tag(name = "收款管理")
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/receipts")
 public class V2ReceiptController {
 

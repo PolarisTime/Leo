@@ -3,6 +3,7 @@ package com.leo.erp.sales.order.web;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
@@ -132,6 +133,7 @@ public class V2SalesOrderController {
     }
 
     @Operation(summary = "创建销售订单")
+    @IdempotencyRequired
     @PostMapping
     @DomainEventAudited
     @V2Created
@@ -140,6 +142,7 @@ public class V2SalesOrderController {
     }
 
     @Operation(summary = "更新销售订单")
+    @IdempotencyRequired
     @PutMapping("/{id}")
     @DomainEventAudited
     public SalesOrderResponse update(@PathVariable Long id, @Valid @RequestBody SalesOrderRequest request) {
@@ -147,6 +150,7 @@ public class V2SalesOrderController {
     }
 
     @Operation(summary = "保存并确认销售订单交付核定")
+    @IdempotencyRequired
     @PutMapping("/{id}/save-and-complete")
     @DomainEventAudited
     public SalesOrderResponse updateAndComplete(@PathVariable Long id, @Valid @RequestBody SalesOrderRequest request) {
@@ -154,6 +158,7 @@ public class V2SalesOrderController {
     }
 
     @Operation(summary = "更新销售订单状态")
+    @IdempotencyRequired
     @PatchMapping("/{id}/status")
     @DomainEventAudited
     public SalesOrderResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
@@ -161,6 +166,7 @@ public class V2SalesOrderController {
     }
 
     @Operation(summary = "完成销售")
+    @IdempotencyRequired
     @PostMapping("/{id}/complete")
     @DomainEventAudited
     public SalesOrderResponse complete(@PathVariable Long id) {

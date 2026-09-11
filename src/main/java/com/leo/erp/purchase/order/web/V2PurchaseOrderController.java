@@ -4,6 +4,7 @@ import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.purchase.order.service.PurchaseOrderPickupListService;
@@ -46,6 +47,7 @@ import org.springframework.http.ResponseEntity;
 @Tag(name = "采购订单")
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/purchase-orders")
 public class V2PurchaseOrderController {
 
