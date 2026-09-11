@@ -22,8 +22,10 @@ public class PrintPdfFormService {
         this.renderer = renderer;
     }
 
-    PrintPdfFormService(PrintScriptService printScriptService, PrintPdfFormTemplateValidator templateValidator) {
-        this(printScriptService, templateValidator, new PrintRuntimeProperties(new ObjectMapper()));
+    PrintPdfFormService(PrintScriptService printScriptService,
+                        PrintPdfFormTemplateValidator templateValidator,
+                        ObjectMapper objectMapper) {
+        this(printScriptService, templateValidator, new PrintRuntimeProperties(objectMapper));
     }
 
     PrintPdfFormService(

@@ -21,7 +21,8 @@ class CustomerStatementPdfTemplateRenderTest {
         ObjectMapper objectMapper = new ObjectMapper();
         PrintPdfFormService service = new PrintPdfFormService(
                 null,
-                new PrintPdfFormTemplateValidator(objectMapper)
+                new PrintPdfFormTemplateValidator(objectMapper),
+                objectMapper
         );
         String template;
         try (var stream = getClass().getClassLoader().getResourceAsStream(

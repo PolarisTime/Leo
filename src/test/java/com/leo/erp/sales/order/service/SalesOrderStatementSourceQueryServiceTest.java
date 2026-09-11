@@ -6,6 +6,7 @@ import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.CandidatePage;
 import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.CandidateSnapshot;
 import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.ItemSnapshot;
 import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.OrderSnapshot;
+import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
@@ -194,34 +195,27 @@ class SalesOrderStatementSourceQueryServiceTest {
     @Test
     void findCandidates_shouldRejectZeroSize() {
         assertThatThrownBy(() -> service.findCandidates(criteria(0, 0)))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
     void findCandidates_shouldRejectNegativeSize() {
         assertThatThrownBy(() -> service.findCandidates(criteria(0, -5)))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
     void findCandidates_shouldRejectNegativePage() {
         assertThatThrownBy(() -> service.findCandidates(criteria(-1, 20)))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
-    void findCandidates_shouldDefaultSortToIdDescendingWhenDirectionInvalid() {
-        when(salesOrderRepository.findAll(any(Specification.class), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0L));
-
-        service.findCandidates(new CandidateCriteria(
-                0, 20, null, "weird", null, null, null, null, null, null, null, null, null));
-
-        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(salesOrderRepository).findAll(any(Specification.class), captor.capture());
-        Sort.Order order = captor.getValue().getSort().getOrderFor("id");
-        assertThat(order).isNotNull();
-        assertThat(order.getDirection()).isEqualTo(Sort.Direction.DESC);
+    void findCandidates_shouldRejectInvalidDirection() {
+        // 分页校验收敛到 PageQuery：非法 direction 不再静默回退为 DESC，而是返回 422
+        assertThatThrownBy(() -> service.findCandidates(new CandidateCriteria(
+                0, 20, null, "weird", null, null, null, null, null, null, null, null, null)))
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
@@ -234,7 +228,9 @@ class SalesOrderStatementSourceQueryServiceTest {
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
         verify(salesOrderRepository).findAll(any(Specification.class), captor.capture());
-        assertThat(captor.getValue().getSort().getOrderFor("id")).isNotNull();
+        Sort.Order order = captor.getValue().getSort().getOrderFor("id");
+        assertThat(order).isNotNull();
+        assertThat(order.getDirection()).isEqualTo(Sort.Direction.DESC);
     }
 
     @Test

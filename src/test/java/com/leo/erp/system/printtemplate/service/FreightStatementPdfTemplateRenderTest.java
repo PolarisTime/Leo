@@ -56,7 +56,8 @@ class FreightStatementPdfTemplateRenderTest {
 
         PrintPdfFormService service = new PrintPdfFormService(
                 null,
-                new PrintPdfFormTemplateValidator(objectMapper)
+                new PrintPdfFormTemplateValidator(objectMapper),
+                objectMapper
         );
         String statementNo = "35314192407436492";
         byte[] pdf = service.generateFromPayload(Map.of(
