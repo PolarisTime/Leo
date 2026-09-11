@@ -32,6 +32,9 @@ import java.io.IOException;
 import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
+import io.swagger.v3.oas.annotations.Operation;
 
 @RestController
 @Validated
@@ -92,21 +95,53 @@ public class V2AttachmentController {
         );
     }
 
+    /**
+     * 资源型附件内容读取端点：文件内容即资源表示，通过 disposition 区分下载与内联预览。
+     */
+    @GetMapping("/{id}/content")
+    @Operation(summary = "获取附件内容",
+            description = "读取附件二进制内容。disposition=attachment 触发浏览器下载（默认），disposition=inline 用于内联预览；非法的 disposition 返回 400。")
+    public ResponseEntity<Resource> content(@AuthenticationPrincipal SecurityPrincipal principal,
+                                            @PathVariable Long id,
+                                            @RequestParam String moduleKey,
+                                            @RequestParam String accessKey,
+                                            @RequestParam(defaultValue = "attachment") String disposition) {
+        return loadContent(principal, id, moduleKey, accessKey, resolveInline(disposition));
+    }
+
+    /**
+     * @deprecated 动作型端点，已由 {@code GET /attachments/{id}/content?disposition=attachment} 取代，保留以兼容既有调用方。
+     */
+    @Deprecated
     @GetMapping("/{id}/download")
     public ResponseEntity<Resource> download(@AuthenticationPrincipal SecurityPrincipal principal, @PathVariable Long id, @RequestParam String moduleKey, @RequestParam String accessKey) {
-        return content(principal, id, moduleKey, accessKey, false);
+        return loadContent(principal, id, moduleKey, accessKey, false);
     }
 
+    /**
+     * @deprecated 动作型端点，已由 {@code GET /attachments/{id}/content?disposition=inline} 取代，保留以兼容既有调用方。
+     */
+    @Deprecated
     @GetMapping("/{id}/preview")
     public ResponseEntity<Resource> preview(@AuthenticationPrincipal SecurityPrincipal principal, @PathVariable Long id, @RequestParam String moduleKey, @RequestParam String accessKey) {
-        return content(principal, id, moduleKey, accessKey, true);
+        return loadContent(principal, id, moduleKey, accessKey, true);
     }
 
-    private ResponseEntity<Resource> content(SecurityPrincipal principal,
-                                             Long id,
-                                             String moduleKey,
-                                             String accessKey,
-                                             boolean inline) {
+    private boolean resolveInline(String disposition) {
+        if (disposition == null || disposition.isBlank() || "attachment".equalsIgnoreCase(disposition)) {
+            return false;
+        }
+        if ("inline".equalsIgnoreCase(disposition)) {
+            return true;
+        }
+        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "disposition 仅支持 inline 或 attachment");
+    }
+
+    private ResponseEntity<Resource> loadContent(SecurityPrincipal principal,
+                                                 Long id,
+                                                 String moduleKey,
+                                                 String accessKey,
+                                                 boolean inline) {
         String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
         attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, id);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
