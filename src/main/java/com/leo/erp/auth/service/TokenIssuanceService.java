@@ -133,13 +133,13 @@ public class TokenIssuanceService {
 
         eventPublisher.publishEvent(new SessionInvalidatedEvent(user.getId(), sessionTokenId, false));
 
-        long refreshExpiresIn = jwtTokenService.getRefreshExpirationMs() / MILLIS_PER_SECOND;
+        int refreshExpiresIn = (int) (jwtTokenService.getRefreshExpirationMs() / MILLIS_PER_SECOND);
 
         return new TokenResponse(
                 accessToken,
                 rawRefreshToken,
                 TOKEN_TYPE_BEARER,
-                jwtTokenService.getAccessExpirationMs() / MILLIS_PER_SECOND,
+                (int) (jwtTokenService.getAccessExpirationMs() / MILLIS_PER_SECOND),
                 refreshExpiresIn,
                 new AuthUserResponse(
                         user.getId(),
@@ -159,13 +159,13 @@ public class TokenIssuanceService {
         );
         String accessToken = jwtTokenService.generateAccessToken(principal, session.getTokenId());
 
-        long refreshExpiresIn = jwtTokenService.getRefreshExpirationMs() / MILLIS_PER_SECOND;
+        int refreshExpiresIn = (int) (jwtTokenService.getRefreshExpirationMs() / MILLIS_PER_SECOND);
 
         return new TokenResponse(
                 accessToken,
                 rawRefreshToken,
                 TOKEN_TYPE_BEARER,
-                jwtTokenService.getAccessExpirationMs() / MILLIS_PER_SECOND,
+                (int) (jwtTokenService.getAccessExpirationMs() / MILLIS_PER_SECOND),
                 refreshExpiresIn,
                 new AuthUserResponse(
                         user.getId(),

@@ -4,8 +4,8 @@ public record TokenResponse(
         String accessToken,
         String refreshToken,
         String tokenType,
-        long expiresIn,
-        long refreshExpiresIn,
+        int expiresIn,
+        int refreshExpiresIn,
         AuthUserResponse user
 ) {
     public String refreshTokenForCookie() {
