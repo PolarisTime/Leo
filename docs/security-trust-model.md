@@ -37,16 +37,16 @@
 
 以下资源影响全局行为或全部业务单据的呈现，任何登录用户均可修改（单账号模型下的预期行为）：
 
-### 打印模板（`/api/v2/print-templates`）
+### 打印模板（`/api/v2.0/print-templates`）
 
 | 端点 | 全局影响 |
 | --- | --- |
 | `POST /print-templates` | 新增全局打印模板 |
 | `PUT /print-templates/{id}` | 修改模板正文/布局，影响对应单据类型的所有后续打印 |
-| `POST /print-templates/{id}/upload-json` | 上传模板文件，同上 |
+| `PUT /print-templates/{id}/content` | 替换模板文件内容（multipart 上传），同上 |
 | `DELETE /print-templates/{id}` | 删除模板，影响所有后续打印 |
 
-相关运行时端点：`POST /print/record`、`POST /print/items`（打印脚本/记录生成，读取上述模板）。
+相关运行时端点：`GET /print-previews/items`（打印明细查询）、`POST /print-exports`（打印输出生成，读取上述模板）。
 
 ### 公司设置（`/api/v2/company-settings`）
 
@@ -67,7 +67,7 @@
 引入角色/权限模型时，按以下顺序收敛（先收窄破坏面最大的写操作）：
 
 1. **打印模板管理**：`POST/PUT/DELETE /print-templates*` 收敛至模板管理员角色；
-   打印执行（`/print/*`）保持普通登录用户可用。
+   打印执行（`GET /print-previews/items`、`POST /print-exports`）保持普通登录用户可用。
 2. **公司设置**：`POST/PUT/DELETE /company-settings*` 收敛至系统管理员角色；
    `GET /current`、`GET /options` 保持全员可读。
 3. **运行时配置**：如新增写端点，直接要求系统管理员角色。

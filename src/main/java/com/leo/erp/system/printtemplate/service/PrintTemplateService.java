@@ -3,7 +3,6 @@ package com.leo.erp.system.printtemplate.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.service.CrudOperationLogger;
-import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
@@ -16,15 +15,12 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 @Service
 public class PrintTemplateService {
 
     private static final String SYNC_MODE_MANUAL = "MANUAL";
     private static final String SYNC_MODE_FILE = "FILE";
-    private static final CrudStatusGuard<PrintTemplate> STATUS_GUARD = CrudStatusGuard.withoutStatus();
-    private static final Set<com.leo.erp.common.support.StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
 
     private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(PrintTemplateService.class);
     private final SnowflakeIdGenerator idGenerator;
@@ -54,16 +50,6 @@ public class PrintTemplateService {
                 .toList();
     }
 
-    @Transactional(readOnly = true)
-    public String getBillType(Long id) {
-        return requireEntity(id).getBillType();
-    }
-
-    @Transactional(readOnly = true)
-    public PrintTemplateResponse detail(Long id) {
-        return toResponse(requireEntity(id));
-    }
-
     @Transactional
     public PrintTemplateResponse create(PrintTemplateRequest request) {
         PrintTemplate entity = new PrintTemplate();
@@ -89,20 +75,11 @@ public class PrintTemplateService {
     }
 
     @Transactional
-    public PrintTemplateResponse updateStatus(Long id, String status) {
-        PrintTemplate entity = requireEntity(id);
-        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
-        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
-        if (currentStatus.equals(nextStatus)) {
-            return toResponse(entity);
-        }
-        STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
-        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
-    }
-
-    @Transactional
     public PrintTemplateResponse uploadJson(Long id, MultipartFile file) {
         PrintTemplate template = requireEntity(id);
+        if (SYNC_MODE_FILE.equals(template.getSyncMode())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文件托管模板不支持上传 JSON，请先复制为手动模板");
+        }
         if (!PrintTemplateRequestNormalizer.TEMPLATE_TYPE_PDF_FORM.equals(
                 requestNormalizer.normalizeTemplateType(template.getTemplateType()))) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "仅 PDF_FORM 模板支持上传 JSON");
@@ -137,12 +114,8 @@ public class PrintTemplateService {
         )) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据和结算主体下已存在同名打印模板");
         }
-        if (repository.existsByBillTypeAndSettlementCompanyIdAndTemplateCodeAndDeletedFlagFalse(
-                billType,
-                settlementCompanyId,
-                templateCode
-        )) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据和结算主体下已存在同编码打印模板");
+        if (repository.existsByBillTypeAndTemplateCodeAndDeletedFlagFalse(billType, templateCode)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据下已存在同编码打印模板");
         }
     }
 
@@ -163,17 +136,15 @@ public class PrintTemplateService {
         if (duplicatedName) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据和结算主体下已存在同名打印模板");
         }
-        boolean duplicatedCode = repository.existsByBillTypeAndSettlementCompanyIdAndTemplateCodeAndDeletedFlagFalse(
+        boolean duplicatedCode = repository.existsByBillTypeAndTemplateCodeAndDeletedFlagFalse(
                 billType,
-                settlementCompanyId,
                 templateCode
         ) && !(
                 entity.getBillType().equals(billType)
-                        && Objects.equals(entity.getSettlementCompanyId(), settlementCompanyId)
                         && Objects.equals(entity.getTemplateCode(), templateCode)
         );
         if (duplicatedCode) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据和结算主体下已存在同编码打印模板");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据下已存在同编码打印模板");
         }
     }
 

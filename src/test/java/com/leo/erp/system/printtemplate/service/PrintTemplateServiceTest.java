@@ -131,26 +131,6 @@ class PrintTemplateServiceTest {
         verify(repository, never()).save(any(PrintTemplate.class));
     }
 
-    // ---------- updateStatus（无状态模块守卫） ----------
-
-    @Test
-    void updateStatus_shouldRejectBlankStatus() {
-        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity()));
-
-        assertThatThrownBy(() -> service.updateStatus(5L, " "))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("状态不能为空");
-    }
-
-    @Test
-    void updateStatus_shouldRejectAnyStatusChange() {
-        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity()));
-
-        assertThatThrownBy(() -> service.updateStatus(5L, "已审核"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("当前模块不支持状态变更");
-    }
-
     // ---------- uploadJson ----------
 
     @Test
@@ -167,13 +147,25 @@ class PrintTemplateServiceTest {
     }
 
     @Test
+    void uploadJson_shouldRejectFileManagedTemplate() {
+        PrintTemplate template = entity();
+        template.setTemplateType("PDF_FORM");
+        template.setSyncMode("FILE");
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(template));
+
+        assertThatThrownBy(() -> service.uploadJson(5L, file()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("文件托管模板不支持上传 JSON");
+
+        verify(repository, never()).save(any(PrintTemplate.class));
+    }
+
+    @Test
     void uploadJson_shouldBumpVersionAndClearSourceRef() {
         PrintTemplate template = entity();
         template.setTemplateType("PDF_FORM");
         template.setVersionNo(2);
-        template.setSyncMode("FILE");
-        template.setSourceRef("remote/template.json");
-        template.setSourceChecksum("abc");
+        template.setSyncMode("MANUAL");
         when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(template));
         when(requestNormalizer.normalizeTemplateType("PDF_FORM")).thenReturn("PDF_FORM");
         when(jsonUploadReader.read(any())).thenReturn("{}");
@@ -201,15 +193,24 @@ class PrintTemplateServiceTest {
         verify(repository).save(template);
     }
 
-    // ---------- detail ----------
-
     @Test
-    void detail_shouldRejectMissingTemplate() {
-        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.empty());
+    void create_shouldRejectDuplicateCodeAcrossSettlementCompanies() {
+        when(idGenerator.nextId()).thenReturn(100L);
+        when(requestNormalizer.normalizeSettlementCompany(null))
+                .thenReturn(new PrintTemplateRequestNormalizer.SettlementCompanySnapshot(null, null));
+        when(requestNormalizer.normalizeBillType("sales-order")).thenReturn("sales-order");
+        when(requestNormalizer.normalizeTemplateName("模板A")).thenReturn("模板A");
+        when(requestNormalizer.normalizeTemplateCode("TPL_100")).thenReturn("TPL_100");
+        when(repository.existsByBillTypeAndTemplateCodeAndDeletedFlagFalse("sales-order", "TPL_100"))
+                .thenReturn(true);
+        PrintTemplateRequest request = new PrintTemplateRequest(
+                "sales-order", "模板A", null, "<html/>", "PDF_FORM", "PDF", null, null, null, 1, null);
 
-        assertThatThrownBy(() -> service.detail(5L))
+        assertThatThrownBy(() -> service.create(request))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("打印模板不存在");
+                .hasMessageContaining("同一单据下已存在同编码打印模板");
+
+        verify(repository, never()).save(any(PrintTemplate.class));
     }
 
     private MockMultipartFile file() {

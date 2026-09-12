@@ -25,4 +25,6 @@ public interface PrintTemplateRepository extends JpaRepository<PrintTemplate, Lo
             Long settlementCompanyId,
             String templateCode
     );
+
+    boolean existsByBillTypeAndTemplateCodeAndDeletedFlagFalse(String billType, String templateCode);
 }
