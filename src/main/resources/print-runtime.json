@@ -225,7 +225,6 @@
   },
   "templateDefaults": {
     "remark": "无",
-    "chargeItemsText": "无",
     "settlementCompanyName": "嘉兴颖捷建材有限公司"
   },
   "legacyLayout": {
@@ -387,7 +386,8 @@
         "sourceField": "id",
         "targetField": "chargeItemsText",
         "argumentType": "long",
-        "emptyText": "无",
+        "emptyText": "",
+        "prefix": "    |    附加费用：",
         "separator": "、",
         "sql": "SELECT charge_name, amount FROM bd_document_charge_item WHERE module_key = 'sales-order' AND document_id = ? AND deleted_flag = FALSE ORDER BY line_no ASC, id ASC"
       }

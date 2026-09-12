@@ -46,9 +46,10 @@
     "height": 26,
     "lines": [
       "合计件数：${totalQuantity}件    |    合计重量：${totalWeight}吨",
-      "单据备注：${remark}    |    附加费用：${chargeItemsText}"
+      "单据备注：${remark}${chargeItemsText}"
     ],
     "fontSize": 12,
+    "align": "center",
     "border": true
   },
   "clauses": {

@@ -88,16 +88,16 @@ class PrintRecordEnricherTest {
         enricher.enrich("sales-order", data, List.of());
 
         assertThat(data.get("chargeItemsText"))
-                .isEqualTo("运费 1000元（大写壹仟元整）、装卸费 250.50元（大写贰佰伍拾元伍角）");
+                .isEqualTo("    |    附加费用：运费 1000元（大写壹仟元整）、装卸费 250.50元（大写贰佰伍拾元伍角）");
     }
 
     @Test
-    void enrich_shouldFallbackToPlaceholderWhenNoChargeItems() {
+    void enrich_shouldHideChargeItemsWhenNone() {
         Map<String, String> data = new HashMap<>();
         data.put("id", "42");
 
         enricher.enrich("sales-order", data, List.of());
 
-        assertThat(data.get("chargeItemsText")).isEqualTo("无");
+        assertThat(data.get("chargeItemsText")).isEmpty();
     }
 }

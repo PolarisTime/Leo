@@ -134,7 +134,8 @@ class PrintRecordEnricher {
             parts.add(name + " " + ChineseAmountFormatter.plain(amount)
                     + "元（大写" + ChineseAmountFormatter.toWords(amount) + "）");
         }
-        data.put(targetField, String.join(separator, parts));
+        // prefix 承载「| 附加费用：」等展示前缀，空费用时整体隐藏由 emptyText="" 控制。
+        data.put(targetField, runtimeProperties.text(rule, "prefix", "") + String.join(separator, parts));
     }
 
     private BigDecimal toAmount(Object value) {
