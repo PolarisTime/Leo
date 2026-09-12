@@ -1,3 +1,25 @@
+# [10.8.0](https://github.com/PolarisTime/Leo/compare/v10.7.0...v10.8.0) (2026-09-12)
+
+
+### Bug Fixes
+
+* **print:** 修正物流对账模板校验值口径并收敛 seed 状态 ([00b15b5](https://github.com/PolarisTime/Leo/commit/00b15b573a73959e861935449df42517cda9542e))
+* **print:** 加固打印模板上传与唯一性契约 ([70da2a5](https://github.com/PolarisTime/Leo/commit/70da2a534e4b1b43fa758be0a24cd73057f9f098))
+* **print:** 无附加费用时隐藏费用段并将汇总行居中 ([1e49ecb](https://github.com/PolarisTime/Leo/commit/1e49ecb694065f91ba8ffe4d3752689959a4e0a7))
+* **print:** 销售订单A4汇总区改两行并对齐熠祺版式 ([78c5193](https://github.com/PolarisTime/Leo/commit/78c519341a8a28241b9f656bac69acd1c808a934))
+
+
+### Features
+
+* **print:** 文件托管模板支持默认标记 ([b29e3ca](https://github.com/PolarisTime/Leo/commit/b29e3ca6c75793e984f5bd0b87b5d68873f2b1a8))
+* **print:** 销售订单 A4 模板打印附加费用 ([c7535aa](https://github.com/PolarisTime/Leo/commit/c7535aa1b4fe09c5ce939cae2327079563a87b71))
+* **print:** 销售订单A4附加费用展示明细与中文大写金额 ([a127a64](https://github.com/PolarisTime/Leo/commit/a127a64eecadce2d07e222d5a723982775ca9d6d))
+
+
+### Reverts
+
+* **print:** 回退销售订单模板附加费用打印 ([c713f7b](https://github.com/PolarisTime/Leo/commit/c713f7b1e432ea092a945e1ac0a7d4a29e7559c6))
+
 # [10.7.0](https://github.com/PolarisTime/Leo/compare/v10.6.2...v10.7.0) (2026-09-12)
 
 
