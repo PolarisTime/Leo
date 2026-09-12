@@ -7,7 +7,9 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -24,11 +26,14 @@ public class SteelQuoteBackfillService {
 
     public SteelQuoteBackfillService(SteelQuoteSyncService syncService) {
         this.syncService = syncService;
-        this.executor = Executors.newSingleThreadExecutor(task -> {
-            Thread thread = new Thread(task, "steel-quote-backfill");
-            thread.setDaemon(true);
-            return thread;
-        });
+        this.executor = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<>(),
+                task -> {
+                    Thread thread = new Thread(task, "steel-quote-backfill");
+                    thread.setDaemon(true);
+                    return thread;
+                });
     }
 
     /** 当前/最近一次补数状态。 */
