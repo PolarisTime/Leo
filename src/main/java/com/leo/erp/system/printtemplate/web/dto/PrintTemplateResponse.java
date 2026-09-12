@@ -14,6 +14,7 @@ public record PrintTemplateResponse(
         String settlementCompanyId,
         String settlementCompanyName,
         Integer versionNo,
+        Boolean isDefault,
         String status,
         String syncMode,
         String sourceRef,

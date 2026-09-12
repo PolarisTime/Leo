@@ -80,7 +80,11 @@ public class PrintTemplateFileSyncRunner implements ApplicationRunner {
                     bySourceRef.put(item.getSourceRef(), template);
                     registeredCount++;
                 }
+                boolean metadataChanged = applyManifestMetadata(template, item);
                 if (syncTemplate(template)) {
+                    updatedCount++;
+                } else if (metadataChanged) {
+                    repository.save(template);
                     updatedCount++;
                 }
             } catch (RuntimeException ex) {
@@ -133,11 +137,23 @@ public class PrintTemplateFileSyncRunner implements ApplicationRunner {
         templateApplyService.activate(template);
         template.setSyncMode(SYNC_MODE_FILE);
         template.setSourceRef(normalizeSourceRef(template, item.getSourceRef()));
+        template.setIsDefault(item.isDefault());
         resolveSettlementCompany(item, template);
         repository.save(template);
         log.info("Registered print template from manifest: code={}, sourceRef={}",
                 item.getTemplateCode(), item.getSourceRef());
         return template;
+    }
+
+    /** 清单是文件托管模板元数据的单一事实源，isDefault 变更时同步落库。 */
+    private boolean applyManifestMetadata(PrintTemplate template, PrintTemplateManifest.Item item) {
+        boolean desired = item.isDefault();
+        boolean current = Boolean.TRUE.equals(template.getIsDefault());
+        if (current == desired) {
+            return false;
+        }
+        template.setIsDefault(desired);
+        return true;
     }
 
     /** 按清单结算主体名称解析公司；解析失败则作为通用模板登记。 */

@@ -5,7 +5,7 @@
       "billType": "freight-bill",
       "templateName": "默认物流单 PDF",
       "templateCode": "DEFAULT_LOGISTICS_PDF_FORM",
-      "isDefault": false,
+      "isDefault": true,
       "settlementCompanyName": null
     },
     {
@@ -13,7 +13,7 @@
       "billType": "purchase-order",
       "templateName": "默认采购订单 PDF",
       "templateCode": "DEFAULT_PURCHASE_ORDER_PDF_FORM",
-      "isDefault": false,
+      "isDefault": true,
       "settlementCompanyName": null
     },
     {
@@ -21,7 +21,7 @@
       "billType": "sales-order",
       "templateName": "默认销售订单 PDF",
       "templateCode": "DEFAULT_SALES_ORDER_PDF_FORM",
-      "isDefault": false,
+      "isDefault": true,
       "settlementCompanyName": null
     },
     {
@@ -29,7 +29,7 @@
       "billType": "purchase-inbound",
       "templateName": "默认采购入库 PDF",
       "templateCode": "DEFAULT_PURCHASE_INBOUND_PDF_FORM",
-      "isDefault": false,
+      "isDefault": true,
       "settlementCompanyName": null
     },
     {
@@ -37,7 +37,7 @@
       "billType": "sales-outbound",
       "templateName": "默认销售出库 PDF",
       "templateCode": "DEFAULT_SALES_OUTBOUND_PDF_FORM",
-      "isDefault": false,
+      "isDefault": true,
       "settlementCompanyName": null
     },
     {
@@ -45,7 +45,7 @@
       "billType": "customer-statement",
       "templateName": "默认客户对账 PDF",
       "templateCode": "DEFAULT_CUSTOMER_STATEMENT_PDF_FORM",
-      "isDefault": false,
+      "isDefault": true,
       "settlementCompanyName": null
     },
     {
@@ -53,7 +53,7 @@
       "billType": "freight-statement",
       "templateName": "默认物流对账 PDF",
       "templateCode": "DEFAULT_FREIGHT_STATEMENT_PDF_FORM",
-      "isDefault": false,
+      "isDefault": true,
       "settlementCompanyName": null
     },
     {
