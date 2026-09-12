@@ -2,6 +2,8 @@ package com.leo.erp.common.web;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageSortFieldCatalog;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.MethodParameter;
 import org.springframework.lang.Nullable;
@@ -42,10 +44,10 @@ public class PageQueryArgumentResolver implements HandlerMethodArgumentResolver 
         String directionParam = binding == null ? "direction" : binding.directionParam();
         String sortFieldKey = binding == null ? "" : binding.sortFieldKey();
 
-        Integer pageSize = toInteger(request.getParameter(sizeParam));
+        Integer pageSize = toInteger(request.getParameter(sizeParam), sizeParam);
 
         return PageQuery.of(
-                toInteger(request.getParameter(pageParam)),
+                toInteger(request.getParameter(pageParam), pageParam),
                 pageSize != null ? pageSize : pageQuerySettings.getDefaultListPageSize(),
                 request.getParameter(sortByParam),
                 request.getParameter(directionParam),
@@ -53,10 +55,14 @@ public class PageQueryArgumentResolver implements HandlerMethodArgumentResolver 
         );
     }
 
-    private Integer toInteger(String raw) {
+    private Integer toInteger(String raw, String fieldName) {
         if (raw == null || raw.isBlank()) {
             return null;
         }
-        return Integer.valueOf(raw.trim());
+        try {
+            return Integer.valueOf(raw.trim());
+        } catch (NumberFormatException ex) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, fieldName + " 必须为整数");
+        }
     }
 }

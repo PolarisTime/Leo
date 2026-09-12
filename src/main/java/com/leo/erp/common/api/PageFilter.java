@@ -1,5 +1,8 @@
 package com.leo.erp.common.api;
 
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
+
 import java.time.LocalDate;
 
 /**
@@ -65,11 +68,13 @@ public record PageFilter(
         Long currentRecordId
 ) {
     /**
-     * 紧凑构造保持既有“全字段可空、不做归一化”的语义不变。
-     * 既有调用方（含直接使用 20 参构造的控制器）继续按原行为工作。
+     * 紧凑构造保持既有“全字段可空、不做归一化”的语义；仅校验日期区间顺序，
+     * 避免 {@code startDate > endDate} 被静默当作空结果。
      */
     public PageFilter {
-        // no-op, all fields nullable
+        if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "开始日期不能晚于结束日期");
+        }
     }
 
     public PageFilter(

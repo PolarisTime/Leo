@@ -9,6 +9,7 @@ import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -248,6 +249,30 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<?> handleNoResourceFound(NoResourceFoundException ex, HttpServletRequest request) {
         return failure(request, HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, "资源不存在");
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<?> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex,
+            HttpServletRequest request
+    ) {
+        Throwable cause = ex.getMostSpecificCause();
+        String message = cause == null ? "" : String.valueOf(cause.getMessage());
+        if (message.contains("duplicate key") || message.contains("unique constraint")) {
+            return failure(
+                    request,
+                    HttpStatus.CONFLICT,
+                    ErrorCode.CONCURRENT_MODIFICATION,
+                    "数据已存在或与现有记录冲突"
+            );
+        }
+        log.warn("数据完整性校验失败: {}", message);
+        return failure(
+                request,
+                HttpStatus.UNPROCESSABLE_ENTITY,
+                ErrorCode.VALIDATION_ERROR,
+                "字段长度或数值超出允许范围"
+        );
     }
 
     @ExceptionHandler(Exception.class)
