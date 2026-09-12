@@ -225,6 +225,7 @@
   },
   "templateDefaults": {
     "remark": "无",
+    "chargeItemsText": "无",
     "settlementCompanyName": "嘉兴颖捷建材有限公司"
   },
   "legacyLayout": {
@@ -380,6 +381,15 @@
         "targetField": "totalChargeAmount",
         "argumentType": "long",
         "sql": "SELECT to_char(COALESCE(SUM(amount), 0), 'FM99999999999990.00') FROM bd_document_charge_item WHERE module_key = 'sales-order' AND document_id = ? AND deleted_flag = FALSE"
+      },
+      {
+        "type": "chargeItemSummary",
+        "sourceField": "id",
+        "targetField": "chargeItemsText",
+        "argumentType": "long",
+        "emptyText": "无",
+        "separator": "、",
+        "sql": "SELECT charge_name, amount FROM bd_document_charge_item WHERE module_key = 'sales-order' AND document_id = ? AND deleted_flag = FALSE ORDER BY line_no ASC, id ASC"
       }
     ],
     "sales-outbound": [

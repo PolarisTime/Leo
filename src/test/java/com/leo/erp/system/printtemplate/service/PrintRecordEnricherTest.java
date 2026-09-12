@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,5 +70,34 @@ class PrintRecordEnricherTest {
 
         assertThat(data).doesNotContainKey("totalChargeAmount");
         verify(jdbc, never()).queryForList(anyString(), eq(String.class), any(Object[].class));
+    }
+
+    @Test
+    void enrich_shouldBuildChargeItemSummaryWithChineseUpperAmount() {
+        when(jdbc.queryForList(anyString(), eq(String.class), any(Object[].class)))
+                .thenReturn(List.of("1250.50"));
+        when(jdbc.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(
+                        Map.of("charge_name", "运费", "amount", new BigDecimal("1000.00")),
+                        Map.of("charge_name", "装卸费", "amount", new BigDecimal("250.50"))
+                ));
+
+        Map<String, String> data = new HashMap<>();
+        data.put("id", "42");
+
+        enricher.enrich("sales-order", data, List.of());
+
+        assertThat(data.get("chargeItemsText"))
+                .isEqualTo("运费 1000元（大写壹仟元整）、装卸费 250.50元（大写贰佰伍拾元伍角）");
+    }
+
+    @Test
+    void enrich_shouldFallbackToPlaceholderWhenNoChargeItems() {
+        Map<String, String> data = new HashMap<>();
+        data.put("id", "42");
+
+        enricher.enrich("sales-order", data, List.of());
+
+        assertThat(data.get("chargeItemsText")).isEqualTo("无");
     }
 }

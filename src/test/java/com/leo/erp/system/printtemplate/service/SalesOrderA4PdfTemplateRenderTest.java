@@ -49,7 +49,7 @@ class SalesOrderA4PdfTemplateRenderTest {
         data.put("totalQuantity", "5");
         data.put("totalWeight", "1.000");
         data.put("totalAmount", "5000.00");
-        data.put("totalChargeAmount", "150.00");
+        data.put("chargeItemsText", "运费 1000元（大写壹仟元整）、装卸费 250.50元（大写贰佰伍拾元伍角）");
 
         byte[] pdf = service.generateFromPayload(Map.of(
                 "templateType", "PDF_FORM",
@@ -65,7 +65,7 @@ class SalesOrderA4PdfTemplateRenderTest {
                     .contains("合计件数：5件")
                     .contains("合计重量：1.000吨")
                     .contains("单据备注：请雨天遮盖")
-                    .contains("附加费用：150.00元")
+                    .contains("附加费用：运费 1000元（大写壹仟元整）")
                     .doesNotContain("null")
                     .doesNotContain("${");
         }
@@ -77,7 +77,7 @@ class SalesOrderA4PdfTemplateRenderTest {
             "print-forms/sales-order-a4-yiqi.layout.json",
             "print-forms/yingjie-a4-remark.layout.json"
     })
-    void rendersZeroChargeAsZero(String templatePath) throws Exception {
+    void rendersEmptyChargeAsPlaceholder(String templatePath) throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         PrintPdfFormService service = new PrintPdfFormService(
                 null,
@@ -97,14 +97,14 @@ class SalesOrderA4PdfTemplateRenderTest {
                         "remark", "",
                         "totalQuantity", "1",
                         "totalWeight", "0.200",
-                        "totalChargeAmount", "0.00"
+                        "chargeItemsText", "无"
                 ),
                 "items", List.of(item())
         ));
 
         try (PdfDocument document = new PdfDocument(new PdfReader(new ByteArrayInputStream(pdf)))) {
             assertThat(PdfTextExtractor.getTextFromPage(document.getFirstPage()))
-                    .contains("附加费用：0.00元");
+                    .contains("附加费用：无");
         }
     }
 

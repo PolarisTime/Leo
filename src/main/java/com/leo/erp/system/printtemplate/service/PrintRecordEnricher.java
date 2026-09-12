@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -21,6 +22,7 @@ class PrintRecordEnricher {
 
     private static final String TYPE_DATA_LOOKUP = "dataLookup";
     private static final String TYPE_ITEM_LOOKUP_BY_FIELD = "itemLookupByField";
+    private static final String TYPE_CHARGE_ITEM_SUMMARY = "chargeItemSummary";
     private static final String RESULT_LIST = "list";
     private static final String SETTLEMENT_COMPANY_ID = "settlementCompanyId";
     private static final String SETTLEMENT_COMPANY_NAME = "settlementCompanyName";
@@ -44,6 +46,8 @@ class PrintRecordEnricher {
                     applyDataLookup(data, rule);
                 } else if (TYPE_ITEM_LOOKUP_BY_FIELD.equals(type)) {
                     applyItemLookup(data, items, rule);
+                } else if (TYPE_CHARGE_ITEM_SUMMARY.equals(type)) {
+                    applyChargeItemSummary(data, rule);
                 }
             } catch (RuntimeException ex) {
                 // SQL 执行异常升为 WARN：缺字段照常出单会打出不完整单据，必须可发现。
@@ -99,6 +103,54 @@ class PrintRecordEnricher {
         List<String> values = jdbc.queryForList(sql, String.class, arguments);
         if (!values.isEmpty() && !values.get(0).isBlank()) {
             data.put(targetField, values.get(0));
+        }
+    }
+
+    /**
+     * 附加费用明细：逐行拼成「名称 金额元（大写…）」，空费用回退为配置文案。
+     * 金额大写由 {@link ChineseAmountFormatter} 统一处理，SQL 只负责取名称与金额。
+     */
+    private void applyChargeItemSummary(Map<String, String> data, JsonNode rule) {
+        String targetField = runtimeProperties.text(rule, "targetField", "");
+        if (targetField.isBlank()) {
+            return;
+        }
+        Object[] arguments = arguments(data, rule);
+        if (arguments.length == 0) {
+            return;
+        }
+        String sql = runtimeProperties.text(rule, "sql", "");
+        assertReadOnlySql(sql);
+        List<Map<String, Object>> rows = jdbc.queryForList(sql, arguments);
+        if (rows.isEmpty()) {
+            data.put(targetField, runtimeProperties.text(rule, "emptyText", ""));
+            return;
+        }
+        String separator = runtimeProperties.text(rule, "separator", "、");
+        List<String> parts = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            String name = String.valueOf(row.getOrDefault("charge_name", "")).trim();
+            BigDecimal amount = toAmount(row.get("amount"));
+            parts.add(name + " " + ChineseAmountFormatter.plain(amount)
+                    + "元（大写" + ChineseAmountFormatter.toWords(amount) + "）");
+        }
+        data.put(targetField, String.join(separator, parts));
+    }
+
+    private BigDecimal toAmount(Object value) {
+        if (value == null) {
+            return BigDecimal.ZERO;
+        }
+        if (value instanceof BigDecimal decimal) {
+            return decimal;
+        }
+        if (value instanceof Number number) {
+            return BigDecimal.valueOf(number.doubleValue());
+        }
+        try {
+            return new BigDecimal(String.valueOf(value).trim());
+        } catch (NumberFormatException ignored) {
+            return BigDecimal.ZERO;
         }
     }
 

@@ -45,6 +45,14 @@ class PrintRuntimeFieldContractTest {
     }
 
     @Test
+    void salesOrderEnrichers_shouldExposeChargeItemsText() {
+        assertThat(runtimeProperties.childObjects(runtimeProperties.enrichers("sales-order")))
+                .as("销售订单打印必须回填附加费用明细 chargeItemsText")
+                .anySatisfy(rule -> assertThat(rule.path("targetField").asText())
+                        .isEqualTo("chargeItemsText"));
+    }
+
+    @Test
     void pageHiddenFields_shouldRemainInSalesOrderPrintColumns() {
         PrintRecordSource source = runtimeProperties.source("sales-order");
 
