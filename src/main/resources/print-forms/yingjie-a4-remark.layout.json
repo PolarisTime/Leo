@@ -16,12 +16,12 @@
     {"type": "text", "text": "物流车号：", "left": 387, "top": 135, "width": 68, "height": 14, "fontSize": 12}
   ],
   "fields": {
-    "customerName": {"source": "customerName", "left": 106, "top": 68, "width": 264, "height": 20, "fontSize": 12},
-    "billNo": {"source": ["outboundNo", "orderNo", "billNo"], "left": 456, "top": 68, "width": 102, "height": 20, "fontSize": 12},
-    "projectName": {"source": "projectName", "left": 106, "top": 96, "width": 264, "height": 28, "fontSize": 12, "minimumFontSize": 8, "maxLines": 2, "multiline": true, "vertical": "middle", "lineHeight": 1.0, "verticalPadding": 1},
-    "billDate": {"source": ["deliveryDate", "outboundDate", "orderDate"], "format": "chineseDate", "left": 456, "top": 100, "width": 102, "height": 20, "fontSize": 12},
-    "projectAddress": {"source": "projectAddress", "left": 106, "top": 132, "width": 264, "height": 20, "fontSize": 12, "multiline": true},
-    "vehiclePlate": {"source": "vehiclePlate", "left": 456, "top": 132, "width": 102, "height": 20, "fontSize": 12}
+    "customerName": {"source": "customerName", "left": 94, "top": 68, "width": 264, "height": 20, "fontSize": 12},
+    "billNo": {"source": ["outboundNo", "orderNo", "billNo"], "left": 444, "top": 68, "width": 102, "height": 20, "fontSize": 11},
+    "projectName": {"source": "projectName", "left": 94, "top": 96, "width": 264, "height": 28, "fontSize": 12, "minimumFontSize": 8, "maxLines": 2, "multiline": true, "vertical": "middle", "lineHeight": 1.0, "verticalPadding": 1},
+    "billDate": {"source": ["deliveryDate", "outboundDate", "orderDate"], "format": "chineseDate", "left": 444, "top": 100, "width": 102, "height": 20, "fontSize": 12},
+    "projectAddress": {"source": "projectAddress", "left": 94, "top": 132, "width": 264, "height": 20, "fontSize": 12, "multiline": true},
+    "vehiclePlate": {"source": "vehiclePlate", "left": 444, "top": 132, "width": 102, "height": 20, "fontSize": 12}
   },
   "table": {
     "left": 28,
@@ -34,7 +34,7 @@
       {"key": "index", "label": "序号", "width": 30, "headerFontSize": 12, "fontSize": 12},
       {"key": "brand", "label": "品牌", "width": 65, "headerFontSize": 12, "fontSize": 12},
       {"key": "category", "label": "品名", "width": 45, "headerFontSize": 12, "fontSize": 12},
-      {"key": "material", "label": "材质", "width": 70, "headerFontSize": 12, "fontSize": 12, "normalize": "compactAscii"},
+      {"key": "material", "label": "材质", "width": 70, "headerFontSize": 12, "fontSize": 12, "normalize": "compactAscii", "font": "latinIfAscii"},
       {"key": "spec", "label": "规格", "width": 62, "headerFontSize": 12, "fontSize": 12},
       {"key": "length", "label": "长度", "width": 45, "headerFontSize": 12, "fontSize": 12},
       {"key": "quantity", "label": "件数", "width": 45, "headerFontSize": 12, "fontSize": 12},
@@ -44,7 +44,10 @@
   },
   "summary": {
     "height": 26,
-    "template": "单据备注：${remark}    |    合计件数：${totalQuantity}件    |    合计重量：${totalWeight}吨",
+    "lines": [
+      "合计件数：${totalQuantity}件    |    合计重量：${totalWeight}吨",
+      "单据备注：${remark}    |    附加费用：${totalChargeAmount}元"
+    ],
     "fontSize": 12,
     "border": true
   },

@@ -125,22 +125,44 @@ public class PrintLayoutLodopRenderer {
         if (!summary.isObject()) {
             return top;
         }
+        List<String> lines = summaryLines(summary);
+        if (lines.isEmpty()) {
+            return top;
+        }
         float left = number(table, "left", 28);
         float width = tableWidth(table);
         float height = number(summary, "height", number(table, "rowHeight", 26));
-        if (bool(summary, "border", true)) {
-            addRect(script, top, left, width, height);
+        boolean border = bool(summary, "border", true);
+        float paddingTop = number(summary, "paddingTop", 7);
+        float paddingLeft = number(summary, "paddingLeft", 6);
+        int fontSize = integer(summary, "fontSize", 9);
+        float lineTop = top;
+        for (String line : lines) {
+            if (border) {
+                addRect(script, lineTop, left, width, height);
+            }
+            addText(
+                    script,
+                    lineTop + paddingTop,
+                    left + paddingLeft,
+                    width - paddingLeft * 2,
+                    12,
+                    applyTemplate(line, variables),
+                    fontSize
+            );
+            lineTop += height;
         }
-        addText(
-                script,
-                top + number(summary, "paddingTop", 7),
-                left + number(summary, "paddingLeft", 6),
-                width - number(summary, "paddingLeft", 6) * 2,
-                12,
-                applyTemplate(text(summary, "template", ""), variables),
-                integer(summary, "fontSize", 9)
-        );
-        return top + height;
+        return lineTop;
+    }
+
+    /** 汇总行支持 lines 数组渲染多行；未配置时回退为单行 template。 */
+    private List<String> summaryLines(JsonNode summary) {
+        List<String> configured = childTextValues(summary.path("lines"));
+        if (!configured.isEmpty()) {
+            return configured;
+        }
+        String template = text(summary, "template", "");
+        return template.isBlank() ? List.of() : List.of(template);
     }
 
     private void renderClauses(StringBuilder script, JsonNode clauses, JsonNode table, float top) {

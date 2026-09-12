@@ -341,36 +341,57 @@ public class PrintPdfTableRenderer {
         if (!summaryConfig.isObject()) {
             return top;
         }
+        List<String> lines = summaryLines(summaryConfig);
+        if (lines.isEmpty()) {
+            return top;
+        }
         float left = drawing.number(tableConfig, "left", 28f);
         float width = drawing.tableWidth(tableConfig);
-        float height = drawing.number(summaryConfig, "height", drawing.number(tableConfig, "rowHeight", 26f));
-        if (drawing.bool(summaryConfig, "border", true)) {
-            drawing.drawRect(
+        // height 为单行汇总行高，多行汇总按行数向下堆叠。
+        float rowHeight = drawing.number(summaryConfig, "height", drawing.number(tableConfig, "rowHeight", 26f));
+        boolean border = drawing.bool(summaryConfig, "border", true);
+        Color borderColor = drawing.color(
+                summaryConfig, "borderColor", drawing.color(tableConfig, "borderColor", ColorConstants.BLACK)
+        );
+        float lineWidth = drawing.number(summaryConfig, "lineWidth", drawing.number(tableConfig, "lineWidth", 1f));
+        Color fillColor = drawing.color(summaryConfig, "fillColor", null);
+        float paddingLeft = drawing.number(summaryConfig, "paddingLeft", 6f);
+        float paddingTop = drawing.number(summaryConfig, "paddingTop", 7f);
+        float fontSize = drawing.number(summaryConfig, "fontSize", 8.5f);
+        TextAlignment alignment = drawing.alignment(text(summaryConfig, "align", "left"));
+        Color color = drawing.color(summaryConfig, "color", drawing.color(summaryConfig, "textColor", ColorConstants.BLACK));
+
+        float lineTop = top;
+        for (String line : lines) {
+            if (border) {
+                drawing.drawRect(canvas, left, lineTop, width, rowHeight, fillColor, borderColor, lineWidth, pageMetrics);
+            }
+            drawing.drawCanvasText(
                     canvas,
-                    left,
-                    top,
-                    width,
-                    height,
-                    drawing.color(summaryConfig, "fillColor", null),
-                    drawing.color(summaryConfig, "borderColor", drawing.color(tableConfig, "borderColor", ColorConstants.BLACK)),
-                    drawing.number(summaryConfig, "lineWidth", drawing.number(tableConfig, "lineWidth", 1f)),
+                    font,
+                    valueResolver.applyTemplate(line, variables),
+                    left + paddingLeft,
+                    lineTop + paddingTop,
+                    width - paddingLeft * 2,
+                    12,
+                    fontSize,
+                    alignment,
+                    color,
                     pageMetrics
             );
+            lineTop += rowHeight;
         }
-        drawing.drawCanvasText(
-                canvas,
-                font,
-                valueResolver.applyTemplate(text(summaryConfig, "template", ""), variables),
-                left + drawing.number(summaryConfig, "paddingLeft", 6f),
-                top + drawing.number(summaryConfig, "paddingTop", 7f),
-                width - drawing.number(summaryConfig, "paddingLeft", 6f) * 2,
-                12,
-                drawing.number(summaryConfig, "fontSize", 8.5f),
-                drawing.alignment(text(summaryConfig, "align", "left")),
-                drawing.color(summaryConfig, "color", drawing.color(summaryConfig, "textColor", ColorConstants.BLACK)),
-                pageMetrics
-        );
-        return top + height;
+        return lineTop;
+    }
+
+    /** 汇总行支持 lines 数组渲染多行；未配置时回退为单行 template。 */
+    private List<String> summaryLines(JsonNode summaryConfig) {
+        List<String> configured = drawing.childTextValues(summaryConfig.path("lines"));
+        if (!configured.isEmpty()) {
+            return configured;
+        }
+        String template = text(summaryConfig, "template", "");
+        return template.isBlank() ? List.of() : List.of(template);
     }
 
     void drawClauses(PdfCanvas canvas, PdfFont font, JsonNode clausesConfig, JsonNode tableConfig, float top, PrintPdfDrawingSupport.PageMetrics pageMetrics) {
