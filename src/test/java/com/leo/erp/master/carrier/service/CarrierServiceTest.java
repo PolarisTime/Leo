@@ -101,6 +101,33 @@ class CarrierServiceTest {
     }
 
     @Test
+    void create_trimsUserVisibleStrings() {
+        Carrier[] savedHolder = new Carrier[1];
+        CompanySetting company = new CompanySetting();
+        company.setId(9L);
+        company.setCompanyName("结算公司C");
+        when(snowflakeIdGenerator.nextId()).thenReturn(77L);
+        when(codeIssuanceService.resolve(eq("carrier"), any(), anyString())).thenReturn("111");
+        when(companySettingService.requireActiveSettlementCompany(9L)).thenReturn(company);
+        when(carrierRepository.saveAndFlush(any(Carrier.class))).thenAnswer(invocation -> {
+            Carrier entity = invocation.getArgument(0);
+            savedHolder[0] = entity;
+            return entity;
+        });
+
+        service().create(new CarrierRequest(" 111 ", "  承运A  ", " 联系人 ", " 138 ", " 厢式 ", null,
+                " 满载 ", 9L, "正常", " 备注 "));
+
+        Carrier entity = savedHolder[0];
+        assertThat(entity.getCarrierName()).isEqualTo("承运A");
+        assertThat(entity.getContactName()).isEqualTo("联系人");
+        assertThat(entity.getContactPhone()).isEqualTo("138");
+        assertThat(entity.getVehicleType()).isEqualTo("厢式");
+        assertThat(entity.getPriceMode()).isEqualTo("满载");
+        assertThat(entity.getRemark()).isEqualTo("备注");
+    }
+
+    @Test
     void create_duplicateName_rejectedBeforeSave() {
         when(carrierRepository.countActiveByCarrierName("承运A")).thenReturn(1L);
 

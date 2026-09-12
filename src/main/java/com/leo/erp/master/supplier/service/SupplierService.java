@@ -90,11 +90,12 @@ public class SupplierService implements RedisCacheHealthCheck {
         Supplier entity = requireActiveSupplier(id);
         String currentName = entity.getSupplierName();
         apply(entity, request);
+        String nextName = entity.getSupplierName();
         Supplier saved = saveSupplier(entity);
         SupplierResponse response = toResponse(saved);
         operationLogger.updated(entity, id);
-        if (!currentName.equals(request.supplierName())) {
-            referenceSnapshotSyncService.syncSupplierName(id, request.supplierName());
+        if (!currentName.equals(nextName)) {
+            referenceSnapshotSyncService.syncSupplierName(id, nextName);
         }
         return response;
     }
@@ -188,12 +189,28 @@ public class SupplierService implements RedisCacheHealthCheck {
                 entity.getSupplierCode(),
                 request.supplierCode()
         ));
-        entity.setSupplierName(request.supplierName());
-        entity.setContactName(request.contactName());
-        entity.setContactPhone(request.contactPhone());
-        entity.setCity(request.city());
+        entity.setSupplierName(requireText(request.supplierName(), "供应商名称不能为空"));
+        entity.setContactName(trimToNull(request.contactName()));
+        entity.setContactPhone(trimToNull(request.contactPhone()));
+        entity.setCity(trimToNull(request.city()));
         entity.setStatus(StatusConstants.normalizeActiveStatus(request.status(), "供应商状态"));
-        entity.setRemark(request.remark());
+        entity.setRemark(trimToNull(request.remark()));
+    }
+
+    private String requireText(String value, String message) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, message);
+        }
+        return normalized;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private Supplier saveSupplier(Supplier entity) {

@@ -105,6 +105,38 @@ class CustomerServiceTest {
     }
 
     @Test
+    void create_trimsUserVisibleStrings() {
+        Customer[] savedHolder = new Customer[1];
+        CompanySetting company = new CompanySetting();
+        company.setId(9L);
+        company.setCompanyName("结算公司C");
+        when(snowflakeIdGenerator.nextId()).thenReturn(77L);
+        when(codeIssuanceService.resolve(eq("customer"), any(), anyString())).thenReturn("KH001");
+        when(companySettingService.requireActiveSettlementCompany(9L)).thenReturn(company);
+        when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> {
+            Customer entity = invocation.getArgument(0);
+            savedHolder[0] = entity;
+            return entity;
+        });
+        when(customerMapper.toResponse(any(Customer.class))).thenReturn(baseResponse("客户A"));
+        when(projectRepository.findAllByCustomerIdentity(77L, "KH001")).thenReturn(List.of());
+
+        service().create(new CustomerRequest("  KH001  ", "  客户A  ", " 联系人 ", " 138 ", " 上海 ",
+                " 月结 ", "  项目A ", " 项A ", " 地址 ", 9L, "正常", " 备注 "));
+
+        Customer entity = savedHolder[0];
+        assertThat(entity.getCustomerName()).isEqualTo("客户A");
+        assertThat(entity.getContactName()).isEqualTo("联系人");
+        assertThat(entity.getContactPhone()).isEqualTo("138");
+        assertThat(entity.getCity()).isEqualTo("上海");
+        assertThat(entity.getSettlementMode()).isEqualTo("月结");
+        assertThat(entity.getProjectName()).isEqualTo("项目A");
+        assertThat(entity.getProjectNameAbbr()).isEqualTo("项A");
+        assertThat(entity.getProjectAddress()).isEqualTo("地址");
+        assertThat(entity.getRemark()).isEqualTo("备注");
+    }
+
+    @Test
     void create_nullSettlementCompanyService_toleratedWithIdOnlySnapshot() {
         CustomerService nullCollaboratorService = new CustomerService(customerRepository, snowflakeIdGenerator,
                 customerMapper, referenceGuard, null, codeIssuanceService, projectRepository,

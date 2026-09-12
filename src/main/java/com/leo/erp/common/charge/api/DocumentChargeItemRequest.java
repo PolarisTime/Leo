@@ -1,6 +1,7 @@
 package com.leo.erp.common.charge.api;
 
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -19,6 +20,7 @@ public record DocumentChargeItemRequest(
         Long materialId,
         @NotNull(message = "费用金额不能为空")
         @DecimalMin(value = "0.00", message = "费用金额不能小于0")
+        @Digits(integer = 12, fraction = 2, message = "费用金额整数位不能超过12位，小数位不能超过2位")
         BigDecimal amount,
         @Size(max = 16, message = "单位长度不能超过16")
         String unit,

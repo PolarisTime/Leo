@@ -2,6 +2,7 @@ package com.leo.erp.finance.payment.web.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
@@ -32,6 +33,7 @@ public record PaymentRequest(
         String payType,
         @NotNull(message = "金额不能为空")
         @DecimalMin(value = "0.00", inclusive = false, message = "金额必须大于0")
+        @Digits(integer = 12, fraction = 2, message = "金额整数位不能超过12位，小数位不能超过2位")
         BigDecimal amount,
         @jakarta.validation.constraints.NotBlank(message = "状态不能为空")
         String status,

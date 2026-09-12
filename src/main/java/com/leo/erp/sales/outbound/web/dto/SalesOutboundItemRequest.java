@@ -1,6 +1,7 @@
 package com.leo.erp.sales.outbound.web.dto;
 
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
@@ -31,10 +32,17 @@ public record SalesOutboundItemRequest(
         String batchNo,
         @NotNull @Min(0) Integer quantity,
         String quantityUnit,
-        @NotNull @DecimalMin("0.000") BigDecimal pieceWeightTon,
+        @NotNull @DecimalMin("0.000")
+        @Digits(integer = 10, fraction = 8, message = "件重整数位不能超过10位，小数位不能超过8位")
+        BigDecimal pieceWeightTon,
         @NotNull @Min(0) Integer piecesPerBundle,
-        @DecimalMin("0.000") BigDecimal weightTon,
-        @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
+        @DecimalMin("0.000")
+        @Digits(integer = 10, fraction = 8, message = "重量整数位不能超过10位，小数位不能超过8位")
+        BigDecimal weightTon,
+        @NotNull @DecimalMin("0.00")
+        @Digits(integer = 10, fraction = 2, message = "单价整数位不能超过10位，小数位不能超过2位")
+        BigDecimal unitPrice,
+        @Digits(integer = 12, fraction = 2, message = "金额整数位不能超过12位，小数位不能超过2位")
         BigDecimal amount
 ) {
     public SalesOutboundItemRequest(Long id,

@@ -1,6 +1,7 @@
 package com.leo.erp.master.material.web.dto;
 
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -35,10 +36,12 @@ public record MaterialRequest(
         @Size(max = 8, message = "数量单位长度不能超过8")
         String quantityUnit,
         @DecimalMin(value = "0.000", message = "件重不能小于0")
+        @Digits(integer = 10, fraction = 8, message = "件重整数位不能超过10位，小数位不能超过8位")
         BigDecimal pieceWeightTon,
         @Min(value = 0, message = "每件支数不能小于0")
         Integer piecesPerBundle,
         @DecimalMin(value = "0.00", message = "单价不能小于0")
+        @Digits(integer = 10, fraction = 2, message = "单价整数位不能超过10位，小数位不能超过2位")
         BigDecimal unitPrice,
         @Size(max = 255, message = "备注长度不能超过255")
         String remark,

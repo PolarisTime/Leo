@@ -1,6 +1,7 @@
 package com.leo.erp.purchase.order.web.dto;
 
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -33,14 +34,18 @@ public record PurchaseOrderItemRequest(
         String quantityUnit,
         @NotNull(message = "件重不能为空")
         @DecimalMin(value = "0.000", message = "件重不能小于0")
+        @Digits(integer = 10, fraction = 8, message = "件重整数位不能超过10位，小数位不能超过8位")
         BigDecimal pieceWeightTon,
         @NotNull(message = "每件支数不能为空")
         @Min(value = 0, message = "每件支数不能小于0")
         Integer piecesPerBundle,
+        @Digits(integer = 10, fraction = 8, message = "重量整数位不能超过10位，小数位不能超过8位")
         BigDecimal weightTon,
         @NotNull(message = "单价不能为空")
         @DecimalMin(value = "0.00", message = "单价不能小于0")
+        @Digits(integer = 10, fraction = 2, message = "单价整数位不能超过10位，小数位不能超过2位")
         BigDecimal unitPrice,
+        @Digits(integer = 12, fraction = 2, message = "金额整数位不能超过12位，小数位不能超过2位")
         BigDecimal amount
 ) {
     public PurchaseOrderItemRequest(Long id,

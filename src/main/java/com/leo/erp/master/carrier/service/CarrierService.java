@@ -107,11 +107,12 @@ public class CarrierService implements RedisCacheHealthCheck {
         String currentName = entity.getCarrierName();
         validateUpdate(entity, request);
         apply(entity, request);
+        String nextName = entity.getCarrierName();
         Carrier saved = saveCarrier(entity);
         CarrierResponse response = toResponse(saved);
         operationLogger.updated(entity, id);
-        if (!currentName.equals(request.carrierName())) {
-            referenceSnapshotSyncService.syncCarrierName(id, request.carrierName());
+        if (!currentName.equals(nextName)) {
+            referenceSnapshotSyncService.syncCarrierName(id, nextName);
         }
         return response;
     }
@@ -236,12 +237,12 @@ public class CarrierService implements RedisCacheHealthCheck {
         entity.setContactPhone(emptyToNull(request.contactPhone()));
         entity.setVehicleType(emptyToNull(request.vehicleType()));
         vehicleSynchronizer.synchronize(entity, request.vehicles());
-        entity.setPriceMode(request.priceMode());
+        entity.setPriceMode(emptyToNull(request.priceMode()));
         SettlementCompanySnapshot settlementCompany = resolveSettlementCompany(request.defaultSettlementCompanyId());
         entity.setDefaultSettlementCompanyId(settlementCompany.id());
         entity.setDefaultSettlementCompanyName(settlementCompany.name());
         entity.setStatus(StatusConstants.normalizeActiveStatus(request.status(), "物流商状态"));
-        entity.setRemark(request.remark());
+        entity.setRemark(emptyToNull(request.remark()));
     }
 
     private String emptyToNull(String value) {

@@ -102,11 +102,12 @@ public class ProjectService {
         String currentName = entity.getProjectName();
         ProjectRequest normalized = normalizeUpdateRequest(entity, request);
         apply(entity, normalized);
+        String nextName = entity.getProjectName();
         Project saved = projectRepository.save(entity);
         ProjectResponse response = toResponse(saved);
         operationLogger.updated(entity, id);
-        if (!currentName.equals(request.projectName())) {
-            referenceSnapshotSyncService.syncProjectName(id, request.projectName());
+        if (!currentName.equals(nextName)) {
+            referenceSnapshotSyncService.syncProjectName(id, nextName);
         }
         return response;
     }
@@ -209,16 +210,16 @@ public class ProjectService {
                 entity.getProjectCode(),
                 request.projectCode()
         ));
-        entity.setProjectName(request.projectName());
-        entity.setProjectNameAbbr(request.projectNameAbbr());
-        entity.setProjectAddress(request.projectAddress());
-        entity.setProjectManager(request.projectManager());
+        entity.setProjectName(requireText(request.projectName(), "项目名称不能为空"));
+        entity.setProjectNameAbbr(trimToNull(request.projectNameAbbr()));
+        entity.setProjectAddress(trimToNull(request.projectAddress()));
+        entity.setProjectManager(trimToNull(request.projectManager()));
         entity.setCustomerId(request.customerId());
-        entity.setCustomerCode(request.customerCode());
+        entity.setCustomerCode(trimToNull(request.customerCode()));
         entity.setSettlementCompanyId(request.settlementCompanyId());
-        entity.setSettlementCompanyName(request.settlementCompanyName());
+        entity.setSettlementCompanyName(trimToNull(request.settlementCompanyName()));
         entity.setStatus(request.status());
-        entity.setRemark(request.remark());
+        entity.setRemark(trimToNull(request.remark()));
     }
 
     private Project saveCreatedProject(Project entity) {
@@ -326,6 +327,14 @@ public class ProjectService {
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String requireText(String value, String message) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, message);
+        }
+        return normalized;
     }
 
     private List<ReferenceCheck> projectReferences(Project entity) {

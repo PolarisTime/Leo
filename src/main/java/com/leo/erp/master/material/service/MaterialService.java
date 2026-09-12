@@ -80,12 +80,13 @@ public class MaterialService {
         String currentBrand = entity.getBrand();
         validateUpdate(entity, request);
         apply(entity, request);
+        String nextBrand = entity.getBrand();
         Material saved = saveMaterial(entity);
         MaterialResponse response = toResponse(saved);
         operationLogger.updated(entity, id);
         // 品牌变更同步引用快照；附加费用类无品牌语义，不触发。
-        if (!request.isExpense() && !currentBrand.equals(request.brand())) {
-            referenceSnapshotSyncService.syncMaterialName(id, request.brand());
+        if (!request.isExpense() && !currentBrand.equals(nextBrand)) {
+            referenceSnapshotSyncService.syncMaterialName(id, nextBrand);
         }
         return response;
     }
@@ -158,32 +159,33 @@ public class MaterialService {
         }
         entity.setMaterialType(MaterialRequest.TYPE_PHYSICAL);
         entity.setBrand(requireText(request.brand(), "品牌不能为空"));
-        entity.setMaterial(request.material());
-        entity.setCategory(request.category());
+        entity.setMaterial(requireText(request.material(), "名称不能为空"));
+        entity.setCategory(requireText(request.category(), "类别不能为空"));
         entity.setSpec(requireText(request.spec(), "规格不能为空"));
-        entity.setLength(request.length());
-        entity.setUnit(request.unit());
-        entity.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(request.quantityUnit()));
+        entity.setLength(trimToNull(request.length()));
+        entity.setUnit(requireText(request.unit(), "单位不能为空"));
+        entity.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(trimToNull(request.quantityUnit())));
         entity.setPieceWeightTon(requireWeight(request.pieceWeightTon()));
         entity.setPiecesPerBundle(request.piecesPerBundle() == null ? 0 : request.piecesPerBundle());
         entity.setUnitPrice(request.unitPrice() == null ? BigDecimal.ZERO : request.unitPrice());
-        entity.setRemark(request.remark());
+        entity.setRemark(trimToNull(request.remark()));
     }
 
     /** 附加费用类：物理属性列存空串/零值，名称即品名，类别固定"附加费用"。 */
     private void applyExpense(Material entity, MaterialRequest request) {
         entity.setMaterialType(MaterialRequest.TYPE_EXPENSE);
         entity.setBrand("");
-        entity.setMaterial(request.material());
+        entity.setMaterial(requireText(request.material(), "名称不能为空"));
         entity.setCategory("附加费用");
         entity.setSpec("");
         entity.setLength("");
-        entity.setUnit(request.unit());
-        entity.setQuantityUnit(request.unit());
+        String unit = requireText(request.unit(), "单位不能为空");
+        entity.setUnit(unit);
+        entity.setQuantityUnit(unit);
         entity.setPieceWeightTon(BigDecimal.ZERO);
         entity.setPiecesPerBundle(0);
         entity.setUnitPrice(request.unitPrice() == null ? BigDecimal.ZERO : request.unitPrice());
-        entity.setRemark(request.remark());
+        entity.setRemark(trimToNull(request.remark()));
     }
 
     private String requireText(String value, String message) {
@@ -191,6 +193,14 @@ public class MaterialService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, message);
         }
         return value.trim();
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private BigDecimal requireWeight(BigDecimal value) {

@@ -99,6 +99,34 @@ class MaterialServiceTest {
     }
 
     @Test
+    void create_trimsUserVisibleStringsForPhysicalMaterial() {
+        Material[] savedHolder = new Material[1];
+        when(snowflakeIdGenerator.nextId()).thenReturn(123L);
+        when(codeIssuanceService.resolve(eq("material"), any(), anyString())).thenReturn("111");
+        when(materialRepository.save(any(Material.class))).thenAnswer(invocation -> {
+            Material entity = invocation.getArgument(0);
+            savedHolder[0] = entity;
+            return entity;
+        });
+        when(materialMapper.toResponse(any(Material.class))).thenReturn(new MaterialResponse(123L, "111", null,
+                null, null, null, null, null, null, null, null, null, null, null));
+
+        service().create(new MaterialRequest("  111  ", "  纯棉  ", "  棉布  ", "  面料  ", "  1米  ",
+                "  100  ", "  米  ", "  支  ", new BigDecimal("1.0"), 2, new BigDecimal("10.00"),
+                "  备注  ", null));
+
+        Material entity = savedHolder[0];
+        assertThat(entity.getBrand()).isEqualTo("纯棉");
+        assertThat(entity.getMaterial()).isEqualTo("棉布");
+        assertThat(entity.getCategory()).isEqualTo("面料");
+        assertThat(entity.getSpec()).isEqualTo("1米");
+        assertThat(entity.getLength()).isEqualTo("100");
+        assertThat(entity.getUnit()).isEqualTo("米");
+        assertThat(entity.getQuantityUnit()).isEqualTo("支");
+        assertThat(entity.getRemark()).isEqualTo("备注");
+    }
+
+    @Test
     void create_expense_withoutBrandSucceeds() {
         Material[] savedHolder = new Material[1];
         when(snowflakeIdGenerator.nextId()).thenReturn(222L);

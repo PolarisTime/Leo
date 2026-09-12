@@ -1,6 +1,7 @@
 package com.leo.erp.finance.ledgeradjustment.web.dto;
 
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -27,6 +28,7 @@ public record LedgerAdjustmentRequest(
         LocalDate adjustmentDate,
         @NotNull(message = "金额不能为空")
         @DecimalMin(value = "0.01", message = "金额必须大于0")
+        @Digits(integer = 12, fraction = 2, message = "金额整数位不能超过12位，小数位不能超过2位")
         BigDecimal amount,
         @NotBlank(message = "调整类型不能为空")
         String adjustmentType,

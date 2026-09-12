@@ -87,6 +87,28 @@ class SupplierServiceTest {
     }
 
     @Test
+    void create_trimsUserVisibleStringsAndNormalizesBlankOptionalFields() {
+        Supplier[] savedHolder = new Supplier[1];
+        when(snowflakeIdGenerator.nextId()).thenReturn(77L);
+        when(codeIssuanceService.resolve(eq("supplier"), any(), anyString())).thenReturn("S001");
+        when(supplierRepository.save(any(Supplier.class))).thenAnswer(invocation -> {
+            Supplier entity = invocation.getArgument(0);
+            savedHolder[0] = entity;
+            return entity;
+        });
+        when(supplierMapper.toResponse(any(Supplier.class))).thenReturn(null);
+
+        service().create(new SupplierRequest("  S001  ", "  供应商A  ", "  ", null, " 上海 ", "正常", "  "));
+
+        Supplier entity = savedHolder[0];
+        assertThat(entity.getSupplierName()).isEqualTo("供应商A");
+        assertThat(entity.getContactName()).isNull();
+        assertThat(entity.getContactPhone()).isNull();
+        assertThat(entity.getCity()).isEqualTo("上海");
+        assertThat(entity.getRemark()).isNull();
+    }
+
+    @Test
     void create_codeValidationFailure_rejectedBeforeSave() {
         doThrow(new BusinessException(ErrorCode.BUSINESS_ERROR, "编码已占用"))
                 .when(codeIssuanceService).validate("supplier", "GYS001");

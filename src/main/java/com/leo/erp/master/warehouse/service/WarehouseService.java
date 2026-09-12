@@ -86,11 +86,12 @@ public class WarehouseService {
         Warehouse entity = requireActiveWarehouse(id);
         String currentName = entity.getWarehouseName();
         apply(entity, request);
+        String nextName = entity.getWarehouseName();
         Warehouse saved = warehouseRepository.save(entity);
         WarehouseResponse response = toResponse(saved);
         operationLogger.updated(entity, id);
-        if (!currentName.equals(request.warehouseName())) {
-            referenceSnapshotSyncService.syncWarehouseName(id, request.warehouseName());
+        if (!currentName.equals(nextName)) {
+            referenceSnapshotSyncService.syncWarehouseName(id, nextName);
         }
         return response;
     }
@@ -155,13 +156,29 @@ public class WarehouseService {
                 entity.getWarehouseCode(),
                 request.warehouseCode()
         ));
-        entity.setWarehouseName(request.warehouseName());
-        entity.setWarehouseType(request.warehouseType());
-        entity.setContactName(request.contactName());
-        entity.setContactPhone(request.contactPhone());
-        entity.setAddress(request.address());
+        entity.setWarehouseName(requireText(request.warehouseName(), "仓库名称不能为空"));
+        entity.setWarehouseType(requireText(request.warehouseType(), "仓库类型不能为空"));
+        entity.setContactName(trimToNull(request.contactName()));
+        entity.setContactPhone(trimToNull(request.contactPhone()));
+        entity.setAddress(trimToNull(request.address()));
         entity.setStatus(StatusConstants.normalizeActiveStatus(request.status(), "仓库状态"));
-        entity.setRemark(request.remark());
+        entity.setRemark(trimToNull(request.remark()));
+    }
+
+    private String requireText(String value, String message) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, message);
+        }
+        return normalized;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private Warehouse saveCreatedWarehouse(Warehouse entity) {

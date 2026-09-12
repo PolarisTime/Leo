@@ -87,6 +87,30 @@ class WarehouseServiceTest {
     }
 
     @Test
+    void create_trimsUserVisibleStrings() {
+        Warehouse[] savedHolder = new Warehouse[1];
+        when(snowflakeIdGenerator.nextId()).thenReturn(88L);
+        when(codeIssuanceService.resolve(eq("warehouse"), any(), anyString())).thenReturn("111");
+        when(warehouseRepository.save(any(Warehouse.class))).thenAnswer(invocation -> {
+            Warehouse entity = invocation.getArgument(0);
+            savedHolder[0] = entity;
+            return entity;
+        });
+        when(warehouseMapper.toResponse(any(Warehouse.class))).thenReturn(null);
+
+        service().create(new WarehouseRequest("  111  ", "  仓库A  ", "  实体仓  ", " 联系人 ", " 138 ",
+                " 地址 ", "正常", " 备注 "));
+
+        Warehouse entity = savedHolder[0];
+        assertThat(entity.getWarehouseName()).isEqualTo("仓库A");
+        assertThat(entity.getWarehouseType()).isEqualTo("实体仓");
+        assertThat(entity.getContactName()).isEqualTo("联系人");
+        assertThat(entity.getContactPhone()).isEqualTo("138");
+        assertThat(entity.getAddress()).isEqualTo("地址");
+        assertThat(entity.getRemark()).isEqualTo("备注");
+    }
+
+    @Test
     void create_invalidStatus_rejected() {
         assertThatThrownBy(() -> service().create(request("仓库A", "已审核")))
                 .isInstanceOf(BusinessException.class)

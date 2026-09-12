@@ -102,11 +102,12 @@ public class CustomerService implements RedisCacheHealthCheck {
         Customer entity = requireActiveCustomer(id);
         String currentName = entity.getCustomerName();
         apply(entity, request);
+        String nextName = entity.getCustomerName();
         Customer saved = saveCustomer(entity);
         CustomerResponse response = toResponse(saved);
         operationLogger.updated(entity, id);
-        if (!currentName.equals(request.customerName())) {
-            referenceSnapshotSyncService.syncCustomerName(id, request.customerName());
+        if (!currentName.equals(nextName)) {
+            referenceSnapshotSyncService.syncCustomerName(id, nextName);
         }
         return response;
     }
@@ -205,24 +206,24 @@ public class CustomerService implements RedisCacheHealthCheck {
                 entity.getCustomerCode(),
                 request.customerCode()
         ));
-        entity.setCustomerName(request.customerName());
-        entity.setContactName(request.contactName());
-        entity.setContactPhone(request.contactPhone());
-        entity.setCity(request.city());
-        entity.setSettlementMode(request.settlementMode());
+        entity.setCustomerName(requireText(request.customerName(), "客户名称不能为空"));
+        entity.setContactName(trimToNull(request.contactName()));
+        entity.setContactPhone(trimToNull(request.contactPhone()));
+        entity.setCity(trimToNull(request.city()));
+        entity.setSettlementMode(trimToNull(request.settlementMode()));
         String requestedProjectName = trimToNull(request.projectName());
         if (requestedProjectName != null) {
             entity.setProjectName(requestedProjectName);
-            entity.setProjectNameAbbr(request.projectNameAbbr());
-            entity.setProjectAddress(request.projectAddress());
+            entity.setProjectNameAbbr(trimToNull(request.projectNameAbbr()));
+            entity.setProjectAddress(trimToNull(request.projectAddress()));
         } else if (trimToNull(entity.getProjectName()) == null) {
-            entity.setProjectName(request.customerName());
+            entity.setProjectName(requireText(request.customerName(), "客户名称不能为空"));
         }
         SettlementCompanySnapshot settlementCompany = resolveSettlementCompany(request.defaultSettlementCompanyId());
         entity.setDefaultSettlementCompanyId(settlementCompany.id());
         entity.setDefaultSettlementCompanyName(settlementCompany.name());
         entity.setStatus(StatusConstants.normalizeActiveStatus(request.status(), "客户状态"));
-        entity.setRemark(request.remark());
+        entity.setRemark(trimToNull(request.remark()));
     }
 
     private Customer saveCustomer(Customer entity) {
@@ -337,6 +338,14 @@ public class CustomerService implements RedisCacheHealthCheck {
             return null;
         }
         return value.trim();
+    }
+
+    private String requireText(String value, String message) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, message);
+        }
+        return normalized;
     }
 
     private List<ReferenceCheck> customerReferences(Customer entity) {

@@ -106,6 +106,31 @@ class ProjectServiceTest {
     }
 
     @Test
+    void create_trimsUserVisibleStrings() {
+        Project[] savedHolder = new Project[1];
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L);
+        when(codeIssuanceService.resolve(eq("project"), any(), anyString())).thenReturn("111");
+        when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
+            Project entity = invocation.getArgument(0);
+            savedHolder[0] = entity;
+            return entity;
+        });
+
+        service().create(new ProjectRequest("  111  ", "  项目A  ", " 项A ", " 地址 ", " 张三 ",
+                7L, " C007 ", null, null, "正常", " 备注 "));
+
+        Project entity = savedHolder[0];
+        assertThat(entity.getProjectName()).isEqualTo("项目A");
+        assertThat(entity.getProjectNameAbbr()).isEqualTo("项A");
+        assertThat(entity.getProjectAddress()).isEqualTo("地址");
+        assertThat(entity.getProjectManager()).isEqualTo("张三");
+        assertThat(entity.getCustomerCode()).isEqualTo("C007");
+        assertThat(entity.getRemark()).isEqualTo("备注");
+    }
+
+    @Test
     void create_customerNotFound_rejected() {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L)).thenReturn(Optional.empty());
 
