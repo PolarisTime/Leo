@@ -53,8 +53,8 @@
   },
   "summary": {
     "height": 32,
-    "template": "销售合计：${totalAmount}    |    附加费用：${totalChargeAmount}元    |    数量合计：${totalQuantity}    |    备注：${remark}",
-    "fontSize": 10,
+    "template": "销售合计：${totalAmount}    |    数量合计：${totalQuantity}    |    备注：${remark}",
+    "fontSize": 12,
     "border": true,
     "fillColor": "#e6f4ff",
     "borderColor": "#d9d9d9",

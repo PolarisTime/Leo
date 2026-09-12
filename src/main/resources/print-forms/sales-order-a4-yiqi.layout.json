@@ -44,8 +44,8 @@
   },
   "summary": {
     "height": 26,
-    "template": "单据备注：${remark}    |    合计件数：${totalQuantity}件    |    合计重量：${totalWeight}吨    |    附加费用：${totalChargeAmount}元",
-    "fontSize": 10,
+    "template": "单据备注：${remark}    |    合计件数：${totalQuantity}件    |    合计重量：${totalWeight}吨",
+    "fontSize": 12,
     "border": true
   },
   "clauses": {
