@@ -1,3 +1,51 @@
+# [10.7.0](https://github.com/PolarisTime/Leo/compare/v10.6.2...v10.7.0) (2026-09-12)
+
+
+### Bug Fixes
+
+* **api:** 分页参数、日期区间与数据库约束异常统一为 4xx ([639d312](https://github.com/PolarisTime/Leo/commit/639d312af22674b85525f0e80cbfc4dc7c9c1ef8))
+* **api:** 分页排序加唯一兜底并将语义校验统一为 422 ([46f4b11](https://github.com/PolarisTime/Leo/commit/46f4b1166165875f2f508263a07549b1bdbbe9c4))
+* **api:** 编码签发 Location 提供可回读 GET 资源 ([3bfaec3](https://github.com/PolarisTime/Leo/commit/3bfaec34a447ad8fa8f623b5c669b2141b4b5ace))
+* **auth:** 登录令牌过期时间以数值返回 ([b57991e](https://github.com/PolarisTime/Leo/commit/b57991eaa9d164b1835550810933f5105b94aa37))
+* **ci:** 更新 ArchUnit 冻结基线以匹配服务拆分后的类 ([2526a2d](https://github.com/PolarisTime/Leo/commit/2526a2dc9bc294488365fbee037f3a1c79e5de53))
+* **ci:** 清理未使用 import 并替换 Executors 工厂方法 ([0b6d577](https://github.com/PolarisTime/Leo/commit/0b6d5772adac63db0aeadbf88f8156a1510ef51e))
+* **db:** 清洗结算主体名称并重跑名称快照同步 ([4cb5daa](https://github.com/PolarisTime/Leo/commit/4cb5daaf47fc7d873c189feea32d16036ad4da98))
+* **market:** 修复中文键配置导致应用启动失败 ([fd99438](https://github.com/PolarisTime/Leo/commit/fd994385613d8dcd78def8c497b6c610dcf9a003))
+* **market:** 行情标题时间解析兼容全角括号 ([8b2c1f0](https://github.com/PolarisTime/Leo/commit/8b2c1f0988c1a9220b73259bfb7bc2873d668e2a))
+* **material:** 请求字段按列长度校验，超长返回 422 ([9d362de](https://github.com/PolarisTime/Leo/commit/9d362de360cbfe5b4596b85052dced672ed955b8))
+* **purchase:** 修复采购订单可用量汇总空映射下的空指针并补充单测 ([b809013](https://github.com/PolarisTime/Leo/commit/b809013b3e4937df51395add837dc3b6c273974a))
+* **validation:** 数值精度显式校验与主数据字符串归一化 ([79696b5](https://github.com/PolarisTime/Leo/commit/79696b559b6f47099934718edf844d093cd7acba))
+* **validation:** 请求体字符串反序列化统一 trim 并清洗历史主数据 ([d626a2f](https://github.com/PolarisTime/Leo/commit/d626a2f4af34170ebe4407804171aa99aae74f93))
+
+
+### Features
+
+* **api:** 增加 ETag/条件请求与 multipart 幂等 ([048870c](https://github.com/PolarisTime/Leo/commit/048870c21fa31df2529b5ce6e48e17bc139ea021))
+* **api:** 对高风险写接口强制幂等键 ([5ad166e](https://github.com/PolarisTime/Leo/commit/5ad166ed438afdc39d71b339ae9ecd351204d289))
+* **api:** 幂等强制扩面到全部副作用写接口 ([e62448a](https://github.com/PolarisTime/Leo/commit/e62448a0b05a0f73a8cc72ac2038f4ef44ecd78c))
+* **api:** 选项接口增加返回上界，避免无界列表 ([92f2a62](https://github.com/PolarisTime/Leo/commit/92f2a62706902f0aabb2d9bd60b4c80534a2a160))
+* **api:** 雪花 ID 入参拒绝超出 JS 安全整数范围的数值 ([786e71f](https://github.com/PolarisTime/Leo/commit/786e71fa31e9d06ccc369231243712098153273c))
+* **attachment:** 新增资源型附件内容端点 ([50746e2](https://github.com/PolarisTime/Leo/commit/50746e254e0fa22d3e06d7f149eab8a425b32043))
+* **cache:** 缓存故障改为 fail-open 并记录日志 ([c4758fa](https://github.com/PolarisTime/Leo/commit/c4758fab945182cc756835059fa4bfcd9494ed9e))
+* **cache:** 补齐项目/仓库/物料类别/结算主体选项缓存与失效 ([396c08d](https://github.com/PolarisTime/Leo/commit/396c08d78bf7f7bb10dae383e969dca9981c393c))
+* **market:** 抓取支持经跳板机 SSH 远程取数 ([91aefdb](https://github.com/PolarisTime/Leo/commit/91aefdb4cfb8b40ef0ba019d2db81e05ae252b7d))
+* **market:** 新增同步记录分页接口 ([7f3d864](https://github.com/PolarisTime/Leo/commit/7f3d8641fb44547adf85acbde0294a298308d824))
+* **market:** 新增比价报价单落库与采购订单选项接口 ([b0ed01c](https://github.com/PolarisTime/Leo/commit/b0ed01c2a44c2805c249c3c2499f8d7c47a9f347))
+* **market:** 新增行情日历接口给前端日历点位 ([561f2a5](https://github.com/PolarisTime/Leo/commit/561f2a5ce8778e441e35f1559440d9004d96d9fe))
+* **market:** 新增行情补数(启动按配置同步最近N天) ([0cb0853](https://github.com/PolarisTime/Leo/commit/0cb0853197d8a49cd5f16d1e349631b082ba4d52))
+* **market:** 新增钢材行情抓取、按时段入库与商品价格匹配模块 ([05ccc26](https://github.com/PolarisTime/Leo/commit/05ccc269e4e0d1870b61637bd1b975861f3fd251))
+* **market:** 日历返回时段行数并新增区间补数接口 ([a33c34f](https://github.com/PolarisTime/Leo/commit/a33c34f0d5296dd2ce406300d7e0c88df6e9fc8d))
+* **market:** 行情同步支持一天多时段并优化抓取 ([e4050f2](https://github.com/PolarisTime/Leo/commit/e4050f2a0703a695e342b713cde055ab20f72735))
+* **market:** 补数失败明细与行情涨跌筛选 ([2f4ea75](https://github.com/PolarisTime/Leo/commit/2f4ea75ee0a9b6e509b707e88828afa7d0301a1c))
+* **master:** 主数据聚合增加乐观锁版本并新增 Flyway 迁移 ([837302d](https://github.com/PolarisTime/Leo/commit/837302d46be2d7d9963860974a7d39433b37eed0))
+* **master:** 新增商品品牌选项接口 GET /materials/brands ([4e05e7c](https://github.com/PolarisTime/Leo/commit/4e05e7c66ee3a84c5e50c87b3add92cec0869d1d))
+* **material:** 新增商品导出与导入资源端点 ([f549441](https://github.com/PolarisTime/Leo/commit/f549441199174be9c6cf5cf289f4bd5d5b86be4c))
+* **print:** 打印输出资源化为 print-exports / print-previews ([d6ebf78](https://github.com/PolarisTime/Leo/commit/d6ebf78798da316930ae5fdf97f2b960f05381ed))
+* **sales,purchase:** 出库/入库审核资源化 ([c28077c](https://github.com/PolarisTime/Leo/commit/c28077cd98ba82a6ee5f99913e825bd102fc9af5))
+* **sales:** 销售订单交付核定/完成资源化 ([f8511cf](https://github.com/PolarisTime/Leo/commit/f8511cf868048e744849f20ef83bbf85df1b6618))
+* **statement,logistics:** 物流单/对账单审核确认资源化 ([36cecd9](https://github.com/PolarisTime/Leo/commit/36cecd98ed879f5298b3f748bfc811833cd65cca))
+* **validation:** 查询与路径参数绑定统一 trim ([d3af2df](https://github.com/PolarisTime/Leo/commit/d3af2df7a37fdf9223263d68582a0b0d0cfe1b5f))
+
 ## [10.6.2](https://github.com/PolarisTime/Leo/compare/v10.6.1...v10.6.2) (2026-09-08)
 
 
