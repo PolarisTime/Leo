@@ -3,6 +3,7 @@ package com.leo.erp.common.persistence;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.LocalDate;
@@ -15,7 +16,12 @@ public final class Specs {
     private Specs() {}
 
     public static <T> Specification<T> notDeleted() {
-        return (root, q, cb) -> cb.isFalse(root.get("deletedFlag"));
+        return (root, q, cb) -> notDeletedPredicate(root, cb);
+    }
+
+    /** 未删除谓词：供已有谓词列表/递归组合直接复用，避免各处重复 isFalse(root.get("deletedFlag"))。 */
+    public static <T> Predicate notDeletedPredicate(Root<T> root, CriteriaBuilder cb) {
+        return cb.isFalse(root.get("deletedFlag"));
     }
 
     /**

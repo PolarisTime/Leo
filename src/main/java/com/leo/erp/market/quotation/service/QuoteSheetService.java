@@ -3,6 +3,7 @@ package com.leo.erp.market.quotation.service;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
@@ -69,7 +70,7 @@ public class QuoteSheetService {
         Pageable pageable = query.toPageable("id");
         Specification<QuoteSheet> specification = (root, criteriaQuery, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
-            predicates.add(builder.isFalse(root.get("deletedFlag")));
+            predicates.add(Specs.notDeletedPredicate(root, builder));
             if (orderDate != null) {
                 predicates.add(builder.equal(root.get("orderDate"), orderDate));
             }

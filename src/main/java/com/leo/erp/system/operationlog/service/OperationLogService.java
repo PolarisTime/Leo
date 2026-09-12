@@ -5,6 +5,7 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.domain.entity.OperationLog;
@@ -55,15 +56,10 @@ public class OperationLogService {
                 predicate = cb.and(predicate, cb.equal(root.get("recordId"), recordId));
             }
             if (normalizedKeyword != null) {
-                String pattern = "%" + normalizedKeyword + "%";
-                predicate = cb.and(predicate, cb.or(
-                        cb.like(root.get("logNo"), pattern),
-                        cb.like(root.get("operatorName"), pattern),
-                        cb.like(root.get("loginName"), pattern),
-                        cb.like(root.get("businessNo"), pattern),
-                        cb.like(root.get("requestPath"), pattern),
-                        cb.like(root.get("remark"), pattern)
-                ));
+                predicate = cb.and(predicate, Specs.<OperationLog>keywordLike(
+                        normalizedKeyword,
+                        "logNo", "operatorName", "loginName", "businessNo", "requestPath", "remark"
+                ).toPredicate(root, q, cb));
             }
             if (normalizedModuleName != null) {
                 predicate = cb.and(predicate, cb.equal(root.get("moduleName"), normalizedModuleName));

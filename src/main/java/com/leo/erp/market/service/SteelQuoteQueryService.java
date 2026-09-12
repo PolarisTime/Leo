@@ -1,6 +1,7 @@
 package com.leo.erp.market.service;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.market.domain.entity.SteelQuote;
 import com.leo.erp.market.repository.SteelQuoteRepository;
 import com.leo.erp.market.web.dto.SteelQuoteResponse;
@@ -41,7 +42,7 @@ public class SteelQuoteQueryService {
                                                          String changeDirection) {
         return (root, criteriaQuery, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
-            predicates.add(builder.isFalse(root.get("deletedFlag")));
+            predicates.add(Specs.notDeletedPredicate(root, builder));
             if (quoteDate != null) {
                 predicates.add(builder.equal(root.get("quoteDate"), quoteDate));
             }

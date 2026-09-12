@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.service;
 
+import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderOptionResponse;
@@ -30,15 +31,13 @@ public class PurchaseOrderOptionService {
     public List<PurchaseOrderOptionResponse> listOptions(String keyword, String status) {
         Specification<PurchaseOrder> specification = (root, query, builder) -> {
             List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
-            predicates.add(builder.isFalse(root.get("deletedFlag")));
+            predicates.add(Specs.notDeletedPredicate(root, builder));
             if (status != null && !status.isBlank()) {
                 predicates.add(builder.equal(root.get("status"), status));
             }
             if (keyword != null && !keyword.isBlank()) {
-                String like = "%" + keyword.trim() + "%";
-                predicates.add(builder.or(
-                        builder.like(root.get("orderNo"), like),
-                        builder.like(root.get("supplierName"), like)));
+                predicates.add(Specs.<PurchaseOrder>keywordLike(keyword, "orderNo", "supplierName")
+                        .toPredicate(root, query, builder));
             }
             return builder.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
         };
@@ -57,7 +56,7 @@ public class PurchaseOrderOptionService {
             return BigDecimal.ZERO;
         }
         Specification<PurchaseOrder> specification = (root, query, builder) -> builder.and(
-                builder.isFalse(root.get("deletedFlag")),
+                Specs.notDeletedPredicate(root, builder),
                 root.get("id").in(orderIds));
         return repository.findAll(specification).stream()
                 .map(PurchaseOrder::getTotalWeight)
