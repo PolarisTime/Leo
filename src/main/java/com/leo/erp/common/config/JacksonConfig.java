@@ -1,6 +1,7 @@
 package com.leo.erp.common.config;
 
 import com.leo.erp.common.json.ScaledBigDecimalSerializer;
+import com.leo.erp.common.json.TrimmingStringDeserializer;
 import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
@@ -44,6 +45,7 @@ public class JacksonConfig {
                 .serializerByType(Long.TYPE, ToStringSerializer.instance)
                 .deserializerByType(Long.class, new SnowflakeSafeLongDeserializer())
                 .deserializerByType(Long.TYPE, new SnowflakeSafeLongDeserializer())
+                .deserializerByType(String.class, new TrimmingStringDeserializer())
                 .serializerByType(BigDecimal.class, new ScaledBigDecimalSerializer())
                 .serializerByType(LocalDateTime.class, new IsoLocalDateTimeSerializer())
                 .deserializerByType(LocalDateTime.class, new FlexibleLocalDateTimeDeserializer())
