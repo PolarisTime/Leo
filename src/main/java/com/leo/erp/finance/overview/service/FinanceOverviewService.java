@@ -30,14 +30,14 @@ public class FinanceOverviewService {
     public FinanceOverviewResponse overview(PageQuery query,
                                             Long settlementCompanyId,
                                             LocalDate asOfDate,
-                                            String direction,
+                                            String balanceDirection,
                                             String counterpartyType,
                                             String keyword,
                                             boolean onlyOpen) {
         if (settlementCompanyId == null || settlementCompanyId <= 0L) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "结算主体ID必须为正数");
         }
-        String normalizedDirection = normalizeDirection(direction);
+        String normalizedDirection = normalizeBalanceDirection(balanceDirection);
         String normalizedCounterpartyType = trimToNull(counterpartyType);
         if (normalizedCounterpartyType != null && !COUNTERPARTY_TYPES.contains(normalizedCounterpartyType)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "往来方类型不合法");
@@ -67,7 +67,7 @@ public class FinanceOverviewService {
         );
     }
 
-    private String normalizeDirection(String value) {
+    private String normalizeBalanceDirection(String value) {
         String normalized = trimToNull(value);
         if (normalized == null) {
             return null;

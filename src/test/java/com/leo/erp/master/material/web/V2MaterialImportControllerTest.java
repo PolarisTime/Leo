@@ -1,6 +1,6 @@
 package com.leo.erp.master.material.web;
 
-import com.leo.erp.master.material.service.MaterialBatchRollbackService;
+import com.leo.erp.master.material.web.dto.MaterialImportPreviewResponse;
 import com.leo.erp.master.material.web.dto.MaterialImportResultResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,23 +20,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * V2MaterialImportController 资源型导入端点测试：导入属于创建，校验 201 与结果资源体。
+ * V2MaterialImportController 资源型导入端点测试：导入/预览属于创建，校验 201 与结果资源体。
  */
 @ExtendWith(MockitoExtension.class)
 class V2MaterialImportControllerTest {
 
     @Mock
     private MaterialImportFileAdapter materialImportFileAdapter;
-    @Mock
-    private MaterialBatchRollbackService materialBatchRollbackService;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new V2MaterialImportController(
-                        materialImportFileAdapter, materialBatchRollbackService))
+                .standaloneSetup(new V2MaterialImportController(materialImportFileAdapter))
                 .build();
     }
 
@@ -53,5 +50,21 @@ class V2MaterialImportControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.totalRows").value(2))
                 .andExpect(jsonPath("$.successCount").value(2));
+    }
+
+    @Test
+    void preview_shouldReturnCreatedForSpreadsheetUpload() throws Exception {
+        when(materialImportFileAdapter.previewSpreadsheet(any()))
+                .thenReturn(new MaterialImportPreviewResponse(2, 1, 1, 0, 0, List.of()));
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "material.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx".getBytes());
+
+        mockMvc.perform(multipart("/v2.0/material-imports/previews").file(file))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.totalRows").value(2))
+                .andExpect(jsonPath("$.createdCount").value(1))
+                .andExpect(jsonPath("$.updatedCount").value(1));
     }
 }

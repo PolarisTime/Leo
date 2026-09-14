@@ -4,6 +4,7 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.web.PageQueryArgumentResolver;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.statement.customer.service.CustomerStatementService;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
@@ -14,12 +15,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -34,6 +38,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * V2CustomerStatementController 极端情况测试。
@@ -74,6 +80,30 @@ class V2CustomerStatementControllerTest {
                 "DRAFT", "蓝字", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
 
         assertThat(result).isNotNull();
+    }
+
+    @Test
+    void page_shouldBindBillDirectionFilterAndDirectionSort() throws Exception {
+        when(customerStatementService.page(any(PageQuery.class), any(PageFilter.class), anyString()))
+                .thenReturn(mock(org.springframework.data.domain.Page.class));
+
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(controller)
+                .setCustomArgumentResolvers(new PageQueryArgumentResolver(() -> 20))
+                .build();
+
+        mockMvc.perform(get("/v2.0/customer-statements")
+                        .param("billDirection", "蓝字")
+                        .param("direction", "desc")
+                        .param("sortBy", "endDate"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<PageQuery> queryCaptor = ArgumentCaptor.forClass(PageQuery.class);
+        ArgumentCaptor<String> billDirectionCaptor = ArgumentCaptor.forClass(String.class);
+        verify(customerStatementService)
+                .page(queryCaptor.capture(), any(PageFilter.class), billDirectionCaptor.capture());
+        assertThat(queryCaptor.getValue().direction()).isEqualTo("desc");
+        assertThat(billDirectionCaptor.getValue()).isEqualTo("蓝字");
     }
 
     @Test

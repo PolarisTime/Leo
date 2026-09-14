@@ -49,12 +49,12 @@ public class V2CustomerStatementController {
 
     @Operation(summary = "分页查询客户对账单")
     @GetMapping
-    public PageResponse<CustomerStatementResponse> page(@BindPageQuery(sortFieldKey = "customer-statement", directionParam = "sortDirection") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) String direction, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
+    public PageResponse<CustomerStatementResponse> page(@BindPageQuery(sortFieldKey = "customer-statement") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) String billDirection, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
         return PageResponse.from(customerStatementService.page(
                 query,
                 PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, periodStart, periodEnd)
                         .withIdentity(customerId, projectId, null, null, null),
-                direction
+                billDirection
         ));
     }
 

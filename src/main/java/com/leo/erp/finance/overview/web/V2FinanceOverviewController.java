@@ -29,8 +29,8 @@ public class V2FinanceOverviewController {
 
     @GetMapping
     @Operation(summary = "查询应收应付概览")
-    public FinanceOverviewResponse overview(@BindPageQuery(sortFieldKey = "finance-overview", directionParam = "sortDirection") PageQuery query, @RequestParam Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOfDate, @RequestParam(required = false) String direction, @RequestParam(required = false) String counterpartyType, @RequestParam(required = false) String keyword, @RequestParam(defaultValue = "false") boolean onlyOpen) {
+    public FinanceOverviewResponse overview(@BindPageQuery(sortFieldKey = "finance-overview") PageQuery query, @RequestParam Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOfDate, @RequestParam(required = false) String balanceDirection, @RequestParam(required = false) String counterpartyType, @RequestParam(required = false) String keyword, @RequestParam(defaultValue = "false") boolean onlyOpen) {
         return financeOverviewService.overview(
-                query, settlementCompanyId, asOfDate, direction, counterpartyType, keyword, onlyOpen);
+                query, settlementCompanyId, asOfDate, balanceDirection, counterpartyType, keyword, onlyOpen);
     }
 }

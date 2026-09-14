@@ -5,6 +5,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2ResponseSupport;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.inventory.service.InventoryBackfillService;
 import com.leo.erp.inventory.service.InventoryBalanceQueryService;
@@ -27,6 +28,7 @@ import java.time.LocalDate;
 
 @RestController
 @Validated
+@IdempotencyRequired
 @Tag(name = "库存台账")
 @RequestMapping(ApiVersion.V2_PREFIX + "/inventory")
 public class V2InventoryController {

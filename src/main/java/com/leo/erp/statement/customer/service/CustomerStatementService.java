@@ -82,8 +82,8 @@ public class CustomerStatementService {
     }
 
     @Transactional(readOnly = true)
-    public Page<CustomerStatementResponse> page(PageQuery query, PageFilter filter, String direction) {
-        return pageEntities(query, pageSpecification(filter, normalizeDirection(direction)))
+    public Page<CustomerStatementResponse> page(PageQuery query, PageFilter filter, String billDirection) {
+        return pageEntities(query, pageSpecification(filter, normalizeBillDirection(billDirection)))
                 .map(this::toResponse);
     }
 
@@ -111,17 +111,17 @@ public class CustomerStatementService {
                 .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()));
     }
 
-    private Specification<CustomerStatement> pageSpecification(PageFilter filter, String direction) {
-        return pageSpecification(filter).and(Specs.equalIfPresent("direction", direction));
+    private Specification<CustomerStatement> pageSpecification(PageFilter filter, String billDirection) {
+        return pageSpecification(filter).and(Specs.equalIfPresent("direction", billDirection));
     }
 
-    private String normalizeDirection(String direction) {
-        if (direction == null || direction.isBlank()) {
+    private String normalizeBillDirection(String billDirection) {
+        if (billDirection == null || billDirection.isBlank()) {
             return null;
         }
-        String normalized = direction.trim();
+        String normalized = billDirection.trim();
         if (!StatusConstants.ALLOWED_STATEMENT_DIRECTION.contains(normalized)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "对账单方向不合法");
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "billDirection 不合法");
         }
         return normalized;
     }

@@ -6,8 +6,6 @@ import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.master.material.service.MaterialBatchRollbackService;
-import com.leo.erp.master.material.web.dto.MaterialBatchRollbackResponse;
 import com.leo.erp.master.material.web.dto.MaterialImportPreviewResponse;
 import com.leo.erp.master.material.web.dto.MaterialImportResultResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -15,7 +13,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -41,12 +38,9 @@ public class V2MaterialImportController {
     private static final String FORMAT_CSV = "csv";
 
     private final MaterialImportFileAdapter materialImportFileAdapter;
-    private final MaterialBatchRollbackService materialBatchRollbackService;
 
-    public V2MaterialImportController(MaterialImportFileAdapter materialImportFileAdapter,
-                                      MaterialBatchRollbackService materialBatchRollbackService) {
+    public V2MaterialImportController(MaterialImportFileAdapter materialImportFileAdapter) {
         this.materialImportFileAdapter = materialImportFileAdapter;
-        this.materialBatchRollbackService = materialBatchRollbackService;
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -59,24 +53,18 @@ public class V2MaterialImportController {
     }
 
     @PostMapping(value = "/previews", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "创建商品资料导入预览(dry-run)，不落库")
-    public MaterialImportPreviewResponse preview(@RequestParam("file") MultipartFile file,
-                                                 @RequestParam(required = false) String format)
-            throws IOException {
-        if (FORMAT_CSV.equalsIgnoreCase(resolveFormat(file, format))) {
-            return materialImportFileAdapter.previewCsv(file);
-        }
-        return materialImportFileAdapter.previewSpreadsheet(file);
-    }
-
-    @PostMapping("/{importBatchNo}/rollbacks")
     @V2Created
-    @Operation(summary = "创建导入批次回滚任务")
-    public ResponseEntity<MaterialBatchRollbackResponse> rollback(@PathVariable String importBatchNo) {
-        return V2ResponseSupport.created(
-                "/material-imports/" + importBatchNo + "/rollbacks",
-                materialBatchRollbackService.rollback(importBatchNo)
-        );
+    @Operation(summary = "创建商品资料导入预览资源（dry-run，不落库）")
+    public ResponseEntity<MaterialImportPreviewResponse> preview(@RequestParam("file") MultipartFile file,
+                                                                 @RequestParam(required = false) String format)
+            throws IOException {
+        MaterialImportPreviewResponse previewResponse;
+        if (FORMAT_CSV.equalsIgnoreCase(resolveFormat(file, format))) {
+            previewResponse = materialImportFileAdapter.previewCsv(file);
+        } else {
+            previewResponse = materialImportFileAdapter.previewSpreadsheet(file);
+        }
+        return V2ResponseSupport.created("/material-imports/previews", previewResponse);
     }
 
     private MaterialImportResultResponse importFile(MultipartFile file, String format) throws IOException {
