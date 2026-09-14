@@ -64,6 +64,36 @@
 
 ## 4. 未来引入多角色时的收紧点（@PreAuthorize 收敛清单）
 
+> 端点级授权底座已落地：`PermissionCodes` 权限码目录、`@RequirePermission` 注解、可插拔
+> `AuthorityProvider`（默认 `GrantAllAuthorityProvider` 为登录用户返回全部权限）与方法级安全。
+> 详见 `docs/specs/2026-09-14-endpoint-permission-model-plan.md`。当前单账号仍全量可用，
+> 收紧时只需替换 `AuthorityProvider` 并逐步给端点标注权限码，无需改动鉴权链路。
+
+### 4.1 权限码规范与三层粒度
+
+权限码统一为 `<资源复数kebab>:<动作>[:<字段>]`，资源与 REST 路径复数对齐
+（如 `sales-returns`、`material-imports`、`customer-statements`），动作覆盖
+`read | create | update | delete | audit | unaudit | complete | confirm | print | export | import | preview | backfill | rollback | rebuild`；
+通配为 `*` 与 `资源:*`。
+
+粒度分三层：
+
+- **功能层**（当前生效）：`resource:action`，端点一一对应，由 `@RequirePermission` 校验；
+- **字段层**（登记预留）：`resource:action:field`，如 `sales-orders:read:amount`、`inventory:read:cost`，
+  本轮只作为规范占位登记，不强制校验；
+- **数据层**（设计预留）：不进入权限码，由角色数据范围在查询侧收敛。
+
+6 个试点控制器的 33 处注解已按细动作映射（`GET→read`、`POST→create`、`PUT/PATCH→update`、
+`DELETE→delete`，以及 `audit / confirm / import / preview / rollback / backfill`），详见设计文档第 6 节。
+
+### 4.2 RBAC0 落库路线
+
+多角色落地采用标准 `sys_role` / `sys_permission` / `user_role` / `role_permission` /
+`sys_role_data_scope` 表结构（新表，不复用 V94 已退役结构）：功能、字段、数据三类权限点统一登记在
+`sys_permission`（含 `type`、`resource`、`action`、`field`），`code` 与 `PermissionCodes` 常量保持一致；
+角色经 `role_permission` 绑定权限点，经 `sys_role_data_scope` 绑定数据范围，再由数据库版
+`AuthorityProvider` 按 `principal.id()` 解析并注入 `GrantedAuthority`。
+
 引入角色/权限模型时，按以下顺序收敛（先收窄破坏面最大的写操作）：
 
 1. **打印模板管理**：`POST/PUT/DELETE /print-templates*` 收敛至模板管理员角色；
@@ -71,10 +101,11 @@
 2. **公司设置**：`POST/PUT/DELETE /company-settings*` 收敛至系统管理员角色；
    `GET /current`、`GET /options` 保持全员可读。
 3. **运行时配置**：如新增写端点，直接要求系统管理员角色。
-4. **基础资料与业务单据**：视岗位模型决定是否按模块拆分读写权限。
-5. 实现方式建议：在上述控制器方法上添加 `@PreAuthorize("hasAuthority('...')")`，
-   并保留 `GlobalExceptionHandler` 对 `AccessDeniedException` 的 403 映射；
-   同时把 `@PublicAccess` 清单和本节收敛点纳入代码评审门禁。
+4. **基础资料与业务单据**：按资源复数拆分 `read/create/update/delete` 与业务动作权限，
+   不再使用笼统的 `:write`；字段层与数据层在前两层稳定后再启用。
+5. 实现方式建议：在上述控制器方法上添加 `@RequirePermission(PermissionCodes.XXX_YYY)`
+   （或等价的 `@PreAuthorize("hasAuthority(...)")`），并保留 `GlobalExceptionHandler`
+   对 `AccessDeniedException` 的 403 映射；同时把 `@PublicAccess` 清单和本节收敛点纳入代码评审门禁。
 
 ## 5. 相关机制索引
 

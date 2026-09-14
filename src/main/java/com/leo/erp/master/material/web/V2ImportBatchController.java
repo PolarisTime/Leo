@@ -6,6 +6,8 @@ import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.master.material.service.MaterialBatchRollbackService;
 import com.leo.erp.master.material.web.dto.MaterialBatchRollbackResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
@@ -36,6 +38,7 @@ public class V2ImportBatchController {
     @PostMapping("/{importBatchNo}/rollbacks")
     @V2Created
     @Operation(summary = "创建导入批次回滚任务")
+    @RequirePermission(PermissionCodes.IMPORT_BATCHES_ROLLBACK)
     public ResponseEntity<MaterialBatchRollbackResponse> rollback(@PathVariable String importBatchNo) {
         return V2ResponseSupport.created(
                 "/import-batches/" + importBatchNo + "/rollbacks",

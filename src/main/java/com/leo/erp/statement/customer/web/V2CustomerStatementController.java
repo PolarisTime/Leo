@@ -7,6 +7,8 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.statement.customer.service.CustomerStatementService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
@@ -49,6 +51,7 @@ public class V2CustomerStatementController {
 
     @Operation(summary = "分页查询客户对账单")
     @GetMapping
+    @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_READ)
     public PageResponse<CustomerStatementResponse> page(@BindPageQuery(sortFieldKey = "customer-statement") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) String billDirection, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
         return PageResponse.from(customerStatementService.page(
                 query,
@@ -60,6 +63,7 @@ public class V2CustomerStatementController {
 
     @Operation(summary = "汇总客户对账单")
     @GetMapping("/summary")
+    @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_READ)
     public CustomerStatementSummaryResponse summary(@RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
         return customerStatementService.summary(
                 PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, periodStart, periodEnd)
@@ -69,6 +73,7 @@ public class V2CustomerStatementController {
 
     @Operation(summary = "分页查询客户对账单候选销售订单")
     @GetMapping("/candidates")
+    @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_READ)
     public PageResponse<CustomerStatementCandidateResponse> candidates(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Long currentStatementId) {
         return PageResponse.from(customerStatementService.candidatePage(
                 query,
@@ -79,6 +84,7 @@ public class V2CustomerStatementController {
 
     @Operation(summary = "查询客户对账单详情")
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_READ)
     public CustomerStatementResponse detail(@PathVariable Long id) {
         return customerStatementService.detail(id);
     }
@@ -86,18 +92,21 @@ public class V2CustomerStatementController {
     @Operation(summary = "创建客户对账单")
     @PostMapping
     @V2Created
+    @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_CREATE)
     public ResponseEntity<CustomerStatementResponse> create(@Valid @RequestBody CustomerStatementRequest request) {
         return V2ResponseSupport.created("/customer-statements", customerStatementService.create(request));
     }
 
     @Operation(summary = "更新客户对账单")
     @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_UPDATE)
     public CustomerStatementResponse update(@PathVariable Long id, @Valid @RequestBody CustomerStatementRequest request) {
         return customerStatementService.update(id, request);
     }
 
     @Operation(summary = "更新客户对账单状态")
     @PatchMapping("/{id}/status")
+    @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_UPDATE)
     public CustomerStatementResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return customerStatementService.updateStatus(id, request.status());
     }
@@ -111,6 +120,7 @@ public class V2CustomerStatementController {
     @IdempotencyRequired
     @PostMapping("/{id}/confirmations")
     @V2Created
+    @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_CONFIRM)
     public ResponseEntity<CustomerStatementResponse> createConfirmation(@PathVariable Long id) {
         return V2ResponseSupport.created(
                 "/customer-statements", customerStatementService.updateStatus(id, StatusConstants.CONFIRMED));
@@ -119,6 +129,7 @@ public class V2CustomerStatementController {
     @Operation(summary = "删除客户对账单")
     @DeleteMapping("/{id}")
     @V2NoContent
+    @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         customerStatementService.delete(id);
         return V2ResponseSupport.noContent();

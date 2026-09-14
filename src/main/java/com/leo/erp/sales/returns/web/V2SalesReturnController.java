@@ -10,6 +10,8 @@ import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.sales.returns.service.SalesReturnCandidateService;
 import com.leo.erp.sales.returns.service.SalesReturnService;
 import com.leo.erp.sales.returns.web.dto.SalesReturnCandidateResponse;
@@ -53,6 +55,7 @@ public class V2SalesReturnController {
 
     @GetMapping
     @Operation(summary = "分页查询销售退货单")
+    @RequirePermission(PermissionCodes.SALES_RETURNS_READ)
     public PageResponse<SalesReturnResponse> page(
             @BindPageQuery(sortFieldKey = "sales-return") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -72,12 +75,14 @@ public class V2SalesReturnController {
 
     @GetMapping("/candidates")
     @Operation(summary = "查询销售退货来源候选（已审核销售出库可退明细）")
+    @RequirePermission(PermissionCodes.SALES_RETURNS_READ)
     public SalesReturnCandidateResponse candidates(@RequestParam Long salesOutboundId) {
         return candidateService.candidates(salesOutboundId);
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "查询销售退货单详情")
+    @RequirePermission(PermissionCodes.SALES_RETURNS_READ)
     public SalesReturnResponse detail(@PathVariable Long id) {
         return service.detail(id);
     }
@@ -86,6 +91,7 @@ public class V2SalesReturnController {
     @Operation(summary = "创建销售退货单")
     @DomainEventAudited
     @V2Created
+    @RequirePermission(PermissionCodes.SALES_RETURNS_CREATE)
     public ResponseEntity<SalesReturnResponse> create(@Valid @RequestBody SalesReturnRequest request) {
         return V2ResponseSupport.created("/sales-returns", service.create(request));
     }
@@ -93,6 +99,7 @@ public class V2SalesReturnController {
     @PutMapping("/{id}")
     @Operation(summary = "更新销售退货单")
     @DomainEventAudited
+    @RequirePermission(PermissionCodes.SALES_RETURNS_UPDATE)
     public SalesReturnResponse update(@PathVariable Long id, @Valid @RequestBody SalesReturnRequest request) {
         return service.update(id, request);
     }
@@ -106,6 +113,7 @@ public class V2SalesReturnController {
     @PostMapping("/{id}/audits")
     @DomainEventAudited
     @V2Created
+    @RequirePermission(PermissionCodes.SALES_RETURNS_AUDIT)
     public ResponseEntity<SalesReturnResponse> createAudit(
             @PathVariable Long id,
             @Valid @RequestBody(required = false) SalesReturnRequest request) {
@@ -118,6 +126,7 @@ public class V2SalesReturnController {
     @PatchMapping("/{id}/status")
     @Operation(summary = "更新销售退货单状态")
     @DomainEventAudited
+    @RequirePermission(PermissionCodes.SALES_RETURNS_UPDATE)
     public SalesReturnResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return service.updateStatus(id, request.status());
     }
@@ -126,6 +135,7 @@ public class V2SalesReturnController {
     @Operation(summary = "删除销售退货单")
     @DomainEventAudited
     @V2NoContent
+    @RequirePermission(PermissionCodes.SALES_RETURNS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return V2ResponseSupport.noContent();

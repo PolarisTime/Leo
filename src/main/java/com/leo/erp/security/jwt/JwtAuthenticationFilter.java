@@ -2,6 +2,7 @@ package com.leo.erp.security.jwt;
 
 import com.leo.erp.common.api.ApiErrorResponseWriter;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.security.permission.AuthorityProvider;
 import com.leo.erp.security.support.SecurityPrincipal;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -11,6 +12,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
@@ -18,7 +21,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -29,17 +35,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final AccessTokenBlacklistService blacklistService;
     private final SessionActivityService sessionActivityService;
     private final ApiErrorResponseWriter errorResponseWriter;
+    private final AuthorityProvider authorityProvider;
 
     public JwtAuthenticationFilter(JwtTokenService jwtTokenService,
                                    AuthenticatedUserCacheService authenticatedUserCacheService,
                                    AccessTokenBlacklistService blacklistService,
                                    SessionActivityService sessionActivityService,
-                                   ApiErrorResponseWriter errorResponseWriter) {
+                                   ApiErrorResponseWriter errorResponseWriter,
+                                   AuthorityProvider authorityProvider) {
         this.jwtTokenService = jwtTokenService;
         this.authenticatedUserCacheService = authenticatedUserCacheService;
         this.blacklistService = blacklistService;
         this.sessionActivityService = sessionActivityService;
         this.errorResponseWriter = errorResponseWriter;
+        this.authorityProvider = authorityProvider;
     }
 
     @Override
@@ -134,9 +143,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                 principal,
                 null,
-                principal.getAuthorities()
+                resolveAuthorities(principal)
         );
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
         SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
+    private Collection<GrantedAuthority> resolveAuthorities(SecurityPrincipal principal) {
+        Collection<String> permissionCodes = authorityProvider.authoritiesFor(principal);
+        List<GrantedAuthority> authorities = new ArrayList<>(permissionCodes.size());
+        for (String permissionCode : permissionCodes) {
+            authorities.add(new SimpleGrantedAuthority(permissionCode));
+        }
+        return authorities;
     }
 }

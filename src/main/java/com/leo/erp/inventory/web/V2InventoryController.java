@@ -13,6 +13,8 @@ import com.leo.erp.inventory.service.InventoryTransactionQueryService;
 import com.leo.erp.inventory.web.dto.InventoryBackfillResponse;
 import com.leo.erp.inventory.web.dto.InventoryBalanceResponse;
 import com.leo.erp.inventory.web.dto.InventoryTransactionResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -47,6 +49,7 @@ public class V2InventoryController {
 
     @GetMapping("/balances")
     @Operation(summary = "分页查询库存余额（按物料/仓库/批次聚合）")
+    @RequirePermission(PermissionCodes.INVENTORY_READ)
     public PageResponse<InventoryBalanceResponse> balances(
             @BindPageQuery(sortFieldKey = "inventory-balance") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -57,6 +60,7 @@ public class V2InventoryController {
 
     @GetMapping("/transactions")
     @Operation(summary = "分页查询库存事务流水")
+    @RequirePermission(PermissionCodes.INVENTORY_READ)
     public PageResponse<InventoryTransactionResponse> transactions(
             @BindPageQuery(sortFieldKey = "inventory-transaction") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -78,6 +82,7 @@ public class V2InventoryController {
     @PostMapping("/backfills")
     @Operation(summary = "创建库存期初回填任务（扫描已审核来源单据补记库存事务，幂等）")
     @V2Created
+    @RequirePermission(PermissionCodes.INVENTORY_BACKFILL)
     public ResponseEntity<InventoryBackfillResponse> createBackfill() {
         return V2ResponseSupport.created("/inventory/backfills", backfillService.backfill());
     }

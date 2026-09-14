@@ -8,6 +8,8 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.master.material.web.dto.MaterialImportPreviewResponse;
 import com.leo.erp.master.material.web.dto.MaterialImportResultResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.MediaType;
@@ -46,6 +48,7 @@ public class V2MaterialImportController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @V2Created
     @Operation(summary = "创建商品资料导入任务")
+    @RequirePermission(PermissionCodes.MATERIAL_IMPORTS_IMPORT)
     public ResponseEntity<MaterialImportResultResponse> create(@RequestParam("file") MultipartFile file,
                                                                @RequestParam(required = false) String format)
             throws IOException {
@@ -55,6 +58,7 @@ public class V2MaterialImportController {
     @PostMapping(value = "/previews", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @V2Created
     @Operation(summary = "创建商品资料导入预览资源（dry-run，不落库）")
+    @RequirePermission(PermissionCodes.MATERIAL_IMPORTS_PREVIEW)
     public ResponseEntity<MaterialImportPreviewResponse> preview(@RequestParam("file") MultipartFile file,
                                                                  @RequestParam(required = false) String format)
             throws IOException {
