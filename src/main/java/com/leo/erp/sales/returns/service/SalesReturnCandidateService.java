@@ -47,6 +47,7 @@ public class SalesReturnCandidateService {
         List<SalesReturnCandidateItemResponse> itemResponses = items.stream()
                 .sorted(Comparator.comparing(SalesOutboundItem::getLineNo, Comparator.nullsLast(Integer::compareTo)))
                 .map(item -> toItemResponse(item, returnedByOutboundItem.getOrDefault(item.getId(), 0)))
+                .filter(response -> response.returnableQuantity() > 0)
                 .toList();
 
         return new SalesReturnCandidateResponse(

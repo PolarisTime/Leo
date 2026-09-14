@@ -123,7 +123,7 @@ class SalesReturnCandidateServiceTest {
     }
 
     @Test
-    void candidates_shouldClampReturnableToZeroWhenReturnedExceedsOutbound() {
+    void candidates_shouldExcludeFullyReturnedItems() {
         SalesOutbound outbound = outbound(StatusConstants.AUDITED, item(101L, 10, "4000"));
         SalesReturnItemRepository.SourceOutboundReturnSummary overReturnSummary = summary(101L, 12L);
         when(salesOutboundRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(outbound));
@@ -132,8 +132,36 @@ class SalesReturnCandidateServiceTest {
 
         SalesReturnCandidateResponse response = service.candidates(1L);
 
-        assertThat(response.items().get(0).returnedQuantity()).isEqualTo(12);
-        assertThat(response.items().get(0).returnableQuantity()).isEqualTo(0);
+        assertThat(response.items()).isEmpty();
+    }
+
+    @Test
+    void candidates_shouldReturnEmptyItemsWhenAllLinesFullyReturned() {
+        SalesOutbound outbound = outbound(StatusConstants.AUDITED, item(101L, 10, "4000"), item(102L, 8, "3000"));
+        SalesReturnItemRepository.SourceOutboundReturnSummary firstSummary = summary(101L, 10L);
+        SalesReturnItemRepository.SourceOutboundReturnSummary secondSummary = summary(102L, 8L);
+        when(salesOutboundRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(outbound));
+        when(salesReturnItemRepository.summarizeAuditedQuantityBySourceOutboundItemIds(
+                any(), eq(StatusConstants.AUDITED), any())).thenReturn(List.of(firstSummary, secondSummary));
+
+        SalesReturnCandidateResponse response = service.candidates(1L);
+
+        assertThat(response.items()).isEmpty();
+    }
+
+    @Test
+    void candidates_shouldFilterOutLinesWithNoReturnableQuantity() {
+        SalesOutbound outbound = outbound(StatusConstants.AUDITED, item(101L, 10, "4000"), item(102L, 8, "3000"));
+        SalesReturnItemRepository.SourceOutboundReturnSummary secondSummary = summary(102L, 8L);
+        when(salesOutboundRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(outbound));
+        when(salesReturnItemRepository.summarizeAuditedQuantityBySourceOutboundItemIds(
+                any(), eq(StatusConstants.AUDITED), any())).thenReturn(List.of(secondSummary));
+
+        SalesReturnCandidateResponse response = service.candidates(1L);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).sourceSalesOutboundItemId()).isEqualTo(101L);
+        assertThat(response.items().get(0).returnableQuantity()).isEqualTo(10);
     }
 
     @Test
