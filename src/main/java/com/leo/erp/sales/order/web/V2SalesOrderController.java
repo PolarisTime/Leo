@@ -10,8 +10,10 @@ import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.sales.order.service.SalesOrderPrintExportService;
 import com.leo.erp.sales.order.service.SalesOrderPrintXlsxOptions;
 import com.leo.erp.sales.order.service.SalesOrderService;
+import com.leo.erp.sales.order.service.SalesOrderDocumentFlowService;
 import com.leo.erp.sales.order.service.SalesOrderSourceCandidateService;
 import com.leo.erp.system.operationlog.support.OperationLogResultCollector;
+import com.leo.erp.sales.order.web.dto.SalesOrderDocumentFlowResponse;
 import com.leo.erp.sales.order.web.dto.SalesOrderPrintXlsxRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
@@ -57,13 +59,16 @@ public class V2SalesOrderController {
     private final SalesOrderService service;
     private final SalesOrderPrintExportService printExportService;
     private final SalesOrderSourceCandidateService sourceCandidateService;
+    private final SalesOrderDocumentFlowService documentFlowService;
 
     public V2SalesOrderController(SalesOrderService service,
                                   SalesOrderPrintExportService printExportService,
-                                  SalesOrderSourceCandidateService sourceCandidateService) {
+                                  SalesOrderSourceCandidateService sourceCandidateService,
+                                  SalesOrderDocumentFlowService documentFlowService) {
         this.service = service;
         this.printExportService = printExportService;
         this.sourceCandidateService = sourceCandidateService;
+        this.documentFlowService = documentFlowService;
     }
 
     @Operation(summary = "分页查询销售订单采购来源候选")
@@ -115,6 +120,12 @@ public class V2SalesOrderController {
     @GetMapping("/{id}")
     public SalesOrderResponse detail(@PathVariable Long id) {
         return service.detail(id);
+    }
+
+    @Operation(summary = "查询销售订单单据流")
+    @GetMapping("/{id}/document-flow")
+    public SalesOrderDocumentFlowResponse documentFlow(@PathVariable Long id) {
+        return documentFlowService.documentFlow(id);
     }
 
     @Operation(summary = "创建销售订单套打 Excel 导出（同步返回文件）")

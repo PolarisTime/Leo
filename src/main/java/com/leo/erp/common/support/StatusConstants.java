@@ -62,6 +62,7 @@ public final class StatusConstants {
             SALES_COMPLETED
     );
     public static final Set<String> ALLOWED_SALES_OUTBOUND_STATUS = Set.of(DRAFT, AUDITED);
+    public static final Set<String> ALLOWED_SALES_RETURN_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_CONTRACT_STATUS = Set.of(DRAFT, EXECUTING, SIGNED, ARCHIVED);
     public static final Set<String> ALLOWED_STATEMENT_STATUS = Set.of(PENDING_CONFIRM, CONFIRMED);
     public static final Set<String> ALLOWED_FREIGHT_STATEMENT_STATUS = Set.of(DRAFT, AUDITED);
@@ -102,6 +103,10 @@ public final class StatusConstants {
             StatusTransition.of(INBOUND_COMPLETED, DRAFT)
     );
     public static final Set<StatusTransition> SALES_OUTBOUND_TRANSITIONS = Set.of(
+            StatusTransition.of(DRAFT, AUDITED),
+            StatusTransition.of(AUDITED, DRAFT)
+    );
+    public static final Set<StatusTransition> SALES_RETURN_TRANSITIONS = Set.of(
             StatusTransition.of(DRAFT, AUDITED),
             StatusTransition.of(AUDITED, DRAFT)
     );

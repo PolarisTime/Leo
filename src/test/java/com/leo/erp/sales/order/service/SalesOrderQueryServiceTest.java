@@ -52,6 +52,9 @@ class SalesOrderQueryServiceTest {
     @Mock
     private SalesOrderResponseAssembler responseAssembler;
 
+    @Mock
+    private SalesOrderDerivedQuantityService derivedQuantityService;
+
     @InjectMocks
     private SalesOrderQueryService service;
 
@@ -160,6 +163,7 @@ class SalesOrderQueryServiceTest {
         when(status.referencedByFreightBill()).thenReturn(true);
         when(status.referencedBySalesOutbound()).thenReturn(false);
         when(referenceQueryRepository.findByOrderIds(List.of(5L))).thenReturn(Map.of(5L, status));
+        when(summary.withDerivedQuantities(0, 0, 0)).thenReturn(summary);
         when(summary.withReferenceFlags(true, false)).thenReturn(flagged);
 
         Page<SalesOrderResponse> result = service.page(query, filter(), null, null, null, null);
@@ -176,6 +180,7 @@ class SalesOrderQueryServiceTest {
         SalesOrderResponse summary = mock(SalesOrderResponse.class);
         when(responseAssembler.toSummaryResponse(order)).thenReturn(summary);
         when(referenceQueryRepository.findByOrderIds(List.of(5L))).thenReturn(Map.of());
+        when(summary.withDerivedQuantities(0, 0, 0)).thenReturn(summary);
 
         Page<SalesOrderResponse> result = service.page(query, filter(), null, null, null, null);
 

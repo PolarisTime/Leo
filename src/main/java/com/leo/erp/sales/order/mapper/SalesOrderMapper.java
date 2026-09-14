@@ -13,5 +13,8 @@ public interface SalesOrderMapper {
     @Mapping(target = "chargeItems", ignore = true)
     @Mapping(target = "referencedByFreightBill", ignore = true)
     @Mapping(target = "referencedBySalesOutbound", ignore = true)
+    @Mapping(target = "deliveredQuantity", ignore = true)
+    @Mapping(target = "returnedQuantity", ignore = true)
+    @Mapping(target = "deliveredNetQuantity", ignore = true)
     SalesOrderResponse toResponse(SalesOrder order);
 }

@@ -38,15 +38,18 @@ public class SalesOrderQueryService {
     private final SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository;
     private final SalesOrderReferenceQueryRepository referenceQueryRepository;
     private final SalesOrderResponseAssembler responseAssembler;
+    private final SalesOrderDerivedQuantityService derivedQuantityService;
 
     public SalesOrderQueryService(SalesOrderRepository repository,
                                   SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository,
                                   SalesOrderReferenceQueryRepository referenceQueryRepository,
-                                  SalesOrderResponseAssembler responseAssembler) {
+                                  SalesOrderResponseAssembler responseAssembler,
+                                  SalesOrderDerivedQuantityService derivedQuantityService) {
         this.repository = repository;
         this.outboundCandidateQueryRepository = outboundCandidateQueryRepository;
         this.referenceQueryRepository = referenceQueryRepository;
         this.responseAssembler = responseAssembler;
+        this.derivedQuantityService = derivedQuantityService;
     }
 
     @Transactional(readOnly = true)
@@ -100,8 +103,17 @@ public class SalesOrderQueryService {
                         ? Map.of()
                         : referenceQueryRepository.findByOrderIds(
                                 entities.getContent().stream().map(SalesOrder::getId).toList());
+        Map<Long, SalesOrderDerivedQuantityService.Quantities> quantities =
+                derivedQuantityService.orderQuantities(
+                        entities.getContent().stream().map(SalesOrder::getId).toList());
         return entities.map(order -> {
             SalesOrderResponse response = responseAssembler.toSummaryResponse(order);
+            SalesOrderDerivedQuantityService.Quantities quantity = quantities
+                    .getOrDefault(order.getId(), SalesOrderDerivedQuantityService.Quantities.ZERO);
+            response = response.withDerivedQuantities(
+                    quantity.deliveredQuantity(),
+                    quantity.returnedQuantity(),
+                    quantity.deliveredNetQuantity());
             SalesOrderReferenceQueryRepository.ReferenceStatus status = statuses.get(order.getId());
             return status == null
                     ? response

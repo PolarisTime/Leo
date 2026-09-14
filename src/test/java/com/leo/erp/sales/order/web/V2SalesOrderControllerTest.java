@@ -57,6 +57,9 @@ class V2SalesOrderControllerTest {
     @Mock
     private SalesOrderSourceCandidateService sourceCandidateService;
 
+    @Mock
+    private com.leo.erp.sales.order.service.SalesOrderDocumentFlowService documentFlowService;
+
     @InjectMocks
     private V2SalesOrderController controller;
 

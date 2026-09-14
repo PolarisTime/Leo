@@ -8,16 +8,23 @@ import com.leo.erp.sales.order.web.dto.SalesOrderItemResponse;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
 @Service
 public class SalesOrderResponseAssembler {
 
     private final SalesOrderMapper salesOrderMapper;
     private final DocumentChargeItemService documentChargeItemService;
+    private final SalesOrderDerivedQuantityService derivedQuantityService;
 
     public SalesOrderResponseAssembler(SalesOrderMapper salesOrderMapper,
-                                       DocumentChargeItemService documentChargeItemService) {
+                                       DocumentChargeItemService documentChargeItemService,
+                                       SalesOrderDerivedQuantityService derivedQuantityService) {
         this.salesOrderMapper = salesOrderMapper;
         this.documentChargeItemService = documentChargeItemService;
+        this.derivedQuantityService = derivedQuantityService;
     }
 
     SalesOrderResponse toSummaryResponse(SalesOrder entity) {
@@ -31,6 +38,25 @@ public class SalesOrderResponseAssembler {
     SalesOrderResponse toDetailResponse(SalesOrder entity,
                                         java.util.function.Predicate<SalesOrderItem> itemFilter) {
         SalesOrderResponse response = salesOrderMapper.toResponse(entity);
+        List<Long> itemIds = entity.getItems().stream()
+                .map(SalesOrderItem::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        Map<Long, SalesOrderDerivedQuantityService.Quantities> quantities =
+                derivedQuantityService.itemQuantities(itemIds);
+        int deliveredQuantity = 0;
+        int returnedQuantity = 0;
+        for (SalesOrderItem item : entity.getItems()) {
+            SalesOrderDerivedQuantityService.Quantities quantity =
+                    quantities.getOrDefault(item.getId(), SalesOrderDerivedQuantityService.Quantities.ZERO);
+            deliveredQuantity += quantity.deliveredQuantity();
+            returnedQuantity += quantity.returnedQuantity();
+        }
+        List<SalesOrderItemResponse> items = entity.getItems().stream()
+                .filter(itemFilter)
+                .map(item -> toItemResponse(item,
+                        quantities.getOrDefault(item.getId(), SalesOrderDerivedQuantityService.Quantities.ZERO)))
+                .toList();
         return new SalesOrderResponse(
                 response.id(),
                 response.orderNo(),
@@ -50,14 +76,18 @@ public class SalesOrderResponseAssembler {
                 response.status(),
                 response.deletedFlag(),
                 response.remark(),
-                entity.getItems().stream().filter(itemFilter).map(this::toItemResponse).toList(),
+                items,
                 documentChargeItemService.list("sales-order", entity.getId()),
                 response.referencedByFreightBill(),
-                response.referencedBySalesOutbound()
+                response.referencedBySalesOutbound(),
+                deliveredQuantity,
+                returnedQuantity,
+                deliveredQuantity - returnedQuantity
         );
     }
 
-    private SalesOrderItemResponse toItemResponse(SalesOrderItem item) {
+    private SalesOrderItemResponse toItemResponse(SalesOrderItem item,
+                                                  SalesOrderDerivedQuantityService.Quantities quantity) {
         return new SalesOrderItemResponse(
                 item.getId(),
                 item.getLineNo(),
@@ -84,7 +114,10 @@ public class SalesOrderResponseAssembler {
                 item.getWeightTon(),
                 item.getUnitPrice(),
                 item.getAmount(),
-                item.getOriginalWeightTon()
+                item.getOriginalWeightTon(),
+                quantity.deliveredQuantity(),
+                quantity.returnedQuantity(),
+                quantity.deliveredNetQuantity()
         );
     }
 }
