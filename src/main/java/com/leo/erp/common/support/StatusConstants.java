@@ -11,44 +11,51 @@ public final class StatusConstants {
     }
 
     // 通用状态
-    public static final String NORMAL = "正常";
-    public static final String DISABLED = "禁用";
+    public static final String NORMAL = DocumentStatus.NORMAL.label();
+    public static final String DISABLED = DocumentStatus.DISABLED.label();
 
     // 单据状态
-    public static final String DRAFT = "草稿";
+    public static final String DRAFT = DocumentStatus.DRAFT.label();
     /** 仅用于识别历史数据，新流程不得写入。 */
     @Deprecated
-    public static final String PRE_OUTBOUND = "预出库";
-    public static final String AUDITED = "已审核";
-    public static final String COMPLETED = "已完成";
+    public static final String PRE_OUTBOUND = DocumentStatus.PRE_OUTBOUND.label();
+    public static final String AUDITED = DocumentStatus.AUDITED.label();
+    public static final String COMPLETED = DocumentStatus.COMPLETED.label();
 
     // 财务状态
     /** 仅用于兼容迁移前的付款数据，新流程统一使用 {@link #AUDITED}。 */
     @Deprecated
-    public static final String PAID = "已付款";
+    public static final String PAID = DocumentStatus.LEGACY_PAID.label();
     /** 仅用于兼容迁移前的收款数据，新流程统一使用 {@link #AUDITED}。 */
     @Deprecated
-    public static final String RECEIVED = "已收款";
+    public static final String RECEIVED = DocumentStatus.LEGACY_RECEIVED.label();
     public static final String LEGACY_PAID = PAID;
     public static final String LEGACY_RECEIVED = RECEIVED;
 
     // 业务完成状态
-    public static final String PURCHASE_COMPLETED = "完成采购";
-    public static final String SALES_COMPLETED = "完成销售";
-    public static final String INBOUND_COMPLETED = "完成入库";
-    public static final String DELIVERY_VERIFICATION = "交付核定";
+    public static final String PURCHASE_COMPLETED = DocumentStatus.PURCHASE_COMPLETED.label();
+    public static final String SALES_COMPLETED = DocumentStatus.SALES_COMPLETED.label();
+    public static final String INBOUND_COMPLETED = DocumentStatus.INBOUND_COMPLETED.label();
+    public static final String DELIVERY_VERIFICATION = DocumentStatus.DELIVERY_VERIFICATION.label();
 
     // 签署状态
-    public static final String SIGNED = "已签署";
-    public static final String UNSIGNED = "未签署";
-    public static final String UNAUDITED = "未审核";
-    public static final String EXECUTING = "执行中";
-    public static final String ARCHIVED = "已归档";
+    public static final String SIGNED = DocumentStatus.SIGNED.label();
+    public static final String UNSIGNED = DocumentStatus.UNSIGNED.label();
+    public static final String UNAUDITED = DocumentStatus.UNAUDITED.label();
+    public static final String EXECUTING = DocumentStatus.EXECUTING.label();
+    public static final String ARCHIVED = DocumentStatus.ARCHIVED.label();
 
     // 待处理状态
-    public static final String PENDING_CONFIRM = "待确认";
-    public static final String CONFIRMED = "已确认";
-    public static final String PENDING_AUDIT = "待审核";
+    public static final String PENDING_CONFIRM = DocumentStatus.PENDING_CONFIRM.label();
+    public static final String CONFIRMED = DocumentStatus.CONFIRMED.label();
+    public static final String PENDING_AUDIT = DocumentStatus.PENDING_AUDIT.label();
+
+    /**
+     * 全部单据/业务状态中文值，由 {@link DocumentStatus} 派生，便于统一校验与断言。
+     */
+    public static Set<String> labels() {
+        return DocumentStatus.labels();
+    }
 
     public static final Set<String> ALLOWED_ACTIVE_STATUS = Set.of(NORMAL, DISABLED);
     public static final Set<String> ALLOWED_AUDIT_STATUS = Set.of(DRAFT, AUDITED);
