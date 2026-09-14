@@ -74,4 +74,18 @@ class SalesOrderDerivedQuantityServiceTest {
     void itemQuantities_shouldReturnEmptyWhenNoIds() {
         assertThat(service.itemQuantities(List.of())).isEmpty();
     }
+
+    @Test
+    void reservedOutboundQuantities_shouldSumNonDeletedOutbounds() {
+        stubAggregates("item_id", 1L, 7, 0);
+
+        Map<Long, Integer> reserved = service.reservedOutboundQuantities(List.of(1L));
+
+        assertThat(reserved).containsEntry(1L, 7);
+    }
+
+    @Test
+    void reservedOutboundQuantities_shouldReturnEmptyWhenNoIds() {
+        assertThat(service.reservedOutboundQuantities(List.of())).isEmpty();
+    }
 }

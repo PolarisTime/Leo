@@ -60,7 +60,6 @@ public class SalesOutboundApplyService {
                 sourceService.loadSourceSalesOrderItemMap(request.items(), items);
         Map<Long, Integer> requestSourceQuantityMap = new java.util.HashMap<>();
         LinkedHashSet<String> sourceSalesOrderNos = new LinkedHashSet<>();
-        LinkedHashSet<Long> sourceSalesOrderItemIds = new LinkedHashSet<>();
         LinkedHashSet<SettlementCompanySnapshot> salesSettlementCompanies = new LinkedHashSet<>();
         LinkedHashSet<Long> customerIds = new LinkedHashSet<>();
         LinkedHashSet<Long> projectIds = new LinkedHashSet<>();
@@ -80,7 +79,6 @@ public class SalesOutboundApplyService {
                     sourceSalesOrderItemMap,
                     requestSourceQuantityMap
             );
-            sourceSalesOrderItemIds.add(result.sourceSalesOrderItemId());
             sourceService.collectSourceSalesOrderNos(
                     sourceSalesOrderNos,
                     source,
@@ -101,7 +99,6 @@ public class SalesOutboundApplyService {
             totalAmount = totalAmount.add(result.amount());
         }
 
-        sourceService.assertSourceSalesOrderItemsNotOccupied(sourceSalesOrderItemIds, entity.getId());
         managedItems.clear();
         managedItems.addAll(items);
         managedItems.sort(java.util.Comparator.comparing(SalesOutboundItem::getLineNo));

@@ -84,7 +84,7 @@ public class SalesOutboundWorkflowService {
         entity.setRemark(request.remark());
         applyService.applyItems(entity, request, nextIdSupplier);
         if (coverageValidator != null) {
-            coverageValidator.assertExactCoverage(entity);
+            coverageValidator.assertCumulativeCoverage(entity);
         }
         if (StatusConstants.AUDITED.equals(nextStatus)) {
             purchaseInboundGuard.assertPurchaseInboundCompletedBeforeAudit(entity);
@@ -105,7 +105,7 @@ public class SalesOutboundWorkflowService {
         if (StatusConstants.AUDITED.equals(nextStatus)) {
             purchaseInboundGuard.assertPurchaseInboundCompletedBeforeAudit(entity);
             if (coverageValidator != null) {
-                coverageValidator.assertExactCoverage(entity);
+                coverageValidator.assertCumulativeCoverage(entity);
             }
         }
     }

@@ -154,32 +154,48 @@ public class SalesOutboundSourceService {
         );
     }
 
-    void assertSourceSalesOrderItemsNotOccupied(
+    /**
+     * 汇总其它未删除销售出库对来源销售订单明细的已用数量。
+     * 用于累计覆盖校验：允许同一来源明细被多张出库引用，但累计数量不得超过订单明细数量。
+     * 更新单张出库时通过 {@code currentOutboundId} 排除自身。
+     */
+    Map<Long, Integer> sumOtherOutboundQuantitiesBySourceSalesOrderItemIds(
             Collection<Long> sourceSalesOrderItemIds,
             Long currentOutboundId
     ) {
-        if (sourceSalesOrderItemIds.isEmpty()) {
-            return;
+        Map<Long, Integer> summary = new java.util.LinkedHashMap<>();
+        if (sourceSalesOrderItemIds == null || sourceSalesOrderItemIds.isEmpty()) {
+            return summary;
+        }
+        Collection<Long> requestedIds = sourceSalesOrderItemIds.stream()
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (requestedIds.isEmpty()) {
+            return summary;
         }
 
-        List<SalesOutbound> occupiedOutbounds =
+        List<SalesOutbound> otherOutbounds =
                 repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(
-                        sourceSalesOrderItemIds,
+                        requestedIds,
                         currentOutboundId
                 );
-        for (Long sourceSalesOrderItemId : sourceSalesOrderItemIds) {
-            for (SalesOutbound occupiedOutbound : occupiedOutbounds) {
-                boolean matched = occupiedOutbound.getItems().stream()
-                        .anyMatch(item -> sourceSalesOrderItemId.equals(item.getSourceSalesOrderItemId()));
-                if (!matched) {
-                    continue;
+        for (SalesOutbound otherOutbound : otherOutbounds) {
+            if (otherOutbound.getItems() == null) {
+                continue;
+            }
+            for (SalesOutboundItem item : otherOutbound.getItems()) {
+                Long sourceSalesOrderItemId = item.getSourceSalesOrderItemId();
+                if (sourceSalesOrderItemId != null && requestedIds.contains(sourceSalesOrderItemId)) {
+                    summary.merge(
+                            sourceSalesOrderItemId,
+                            item.getQuantity() == null ? 0 : item.getQuantity(),
+                            Integer::sum
+                    );
                 }
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_ERROR,
-                        "销售订单明细已被销售出库单" + occupiedOutbound.getOutboundNo() + "关联"
-                );
             }
         }
+        return summary;
     }
 
     void collectSourceSalesOrderNos(LinkedHashSet<String> sourceSalesOrderNos,

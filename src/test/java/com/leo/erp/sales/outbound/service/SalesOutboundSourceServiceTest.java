@@ -24,6 +24,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -306,43 +307,60 @@ class SalesOutboundSourceServiceTest {
         assertThat(qtyMap).containsEntry(11L, 5);
     }
 
-    // ---------- assertSourceSalesOrderItemsNotOccupied ----------
+    // ---------- sumOtherOutboundQuantitiesBySourceSalesOrderItemIds ----------
 
     @Test
-    void assertNotOccupied_shouldSkipEmpty() {
-        service.assertSourceSalesOrderItemsNotOccupied(List.of(), 5L);
+    void sumOtherOutboundQuantities_shouldReturnEmptyWhenNoIds() {
+        assertThat(service.sumOtherOutboundQuantitiesBySourceSalesOrderItemIds(List.of(), 5L)).isEmpty();
         verifyNoInteractions(repository);
     }
 
     @Test
-    void assertNotOccupied_shouldThrowWhenOccupied() {
-        SalesOutbound occupied = new SalesOutbound();
-        occupied.setOutboundNo("OB001");
-        occupied.setItems(List.of(outboundItem(11L)));
+    void sumOtherOutboundQuantities_shouldAggregateAcrossOutbounds() {
+        SalesOutbound first = new SalesOutbound();
+        SalesOutboundItem a = outboundItem(11L);
+        a.setQuantity(3);
+        SalesOutboundItem b = outboundItem(12L);
+        b.setQuantity(2);
+        first.setItems(List.of(a, b));
+        SalesOutbound second = new SalesOutbound();
+        SalesOutboundItem c = outboundItem(11L);
+        c.setQuantity(4);
+        second.setItems(List.of(c));
         when(repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(any(), any()))
-                .thenReturn(List.of(occupied));
+                .thenReturn(List.of(first, second));
 
-        assertThatThrownBy(() -> service.assertSourceSalesOrderItemsNotOccupied(List.of(11L), 5L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("OB001");
+        Map<Long, Integer> summary =
+                service.sumOtherOutboundQuantitiesBySourceSalesOrderItemIds(List.of(11L, 12L), 5L);
+
+        assertThat(summary).containsEntry(11L, 7).containsEntry(12L, 2);
     }
 
     @Test
-    void assertNotOccupied_shouldPassWhenNoItemMatch() {
-        SalesOutbound occupied = new SalesOutbound();
-        occupied.setItems(List.of(outboundItem(99L))); // 占用的是别的明细
+    void sumOtherOutboundQuantities_shouldTolerateNullQuantityAndNullItems() {
+        SalesOutbound first = new SalesOutbound();
+        SalesOutboundItem a = outboundItem(11L); // quantity null → 视为 0
+        SalesOutboundItem other = outboundItem(99L);
+        other.setQuantity(5);
+        first.setItems(List.of(a, other));
+        SalesOutbound noItems = new SalesOutbound();
+        noItems.setItems(null);
         when(repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(any(), any()))
-                .thenReturn(List.of(occupied));
+                .thenReturn(List.of(first, noItems));
 
-        service.assertSourceSalesOrderItemsNotOccupied(List.of(11L), 5L);
+        Map<Long, Integer> summary =
+                service.sumOtherOutboundQuantitiesBySourceSalesOrderItemIds(List.of(11L), 5L);
+
+        assertThat(summary).containsEntry(11L, 0);
     }
 
     @Test
-    void assertNotOccupied_shouldPassWhenRepositoryEmpty() {
-        when(repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(any(), any()))
-                .thenReturn(List.of());
-
-        service.assertSourceSalesOrderItemsNotOccupied(List.of(11L), 5L);
+    void sumOtherOutboundQuantities_shouldIgnoreNullSourceIds() {
+        assertThat(service.sumOtherOutboundQuantitiesBySourceSalesOrderItemIds(
+                java.util.Arrays.asList(null, 11L), 5L))
+                .doesNotContainKey(null);
+        verify(repository).findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(
+                org.mockito.ArgumentMatchers.eq(List.of(11L)), org.mockito.ArgumentMatchers.eq(5L));
     }
 
     // ---------- collectSourceSalesOrderNos ----------

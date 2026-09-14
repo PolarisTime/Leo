@@ -44,6 +44,8 @@ public class SalesOrderResponseAssembler {
                 .toList();
         Map<Long, SalesOrderDerivedQuantityService.Quantities> quantities =
                 derivedQuantityService.itemQuantities(itemIds);
+        Map<Long, Integer> reservedOutboundQuantities =
+                derivedQuantityService.reservedOutboundQuantities(itemIds);
         int deliveredQuantity = 0;
         int returnedQuantity = 0;
         for (SalesOrderItem item : entity.getItems()) {
@@ -55,7 +57,8 @@ public class SalesOrderResponseAssembler {
         List<SalesOrderItemResponse> items = entity.getItems().stream()
                 .filter(itemFilter)
                 .map(item -> toItemResponse(item,
-                        quantities.getOrDefault(item.getId(), SalesOrderDerivedQuantityService.Quantities.ZERO)))
+                        quantities.getOrDefault(item.getId(), SalesOrderDerivedQuantityService.Quantities.ZERO),
+                        reservedOutboundQuantities.getOrDefault(item.getId(), 0)))
                 .toList();
         return new SalesOrderResponse(
                 response.id(),
@@ -87,7 +90,10 @@ public class SalesOrderResponseAssembler {
     }
 
     private SalesOrderItemResponse toItemResponse(SalesOrderItem item,
-                                                  SalesOrderDerivedQuantityService.Quantities quantity) {
+                                                  SalesOrderDerivedQuantityService.Quantities quantity,
+                                                  int reservedOutboundQuantity) {
+        int orderQuantity = item.getQuantity() == null ? 0 : item.getQuantity();
+        int outboundRemainingQuantity = Math.max(orderQuantity - reservedOutboundQuantity, 0);
         return new SalesOrderItemResponse(
                 item.getId(),
                 item.getLineNo(),
@@ -117,7 +123,8 @@ public class SalesOrderResponseAssembler {
                 item.getOriginalWeightTon(),
                 quantity.deliveredQuantity(),
                 quantity.returnedQuantity(),
-                quantity.deliveredNetQuantity()
+                quantity.deliveredNetQuantity(),
+                outboundRemainingQuantity
         );
     }
 }

@@ -123,7 +123,7 @@ class SalesOutboundWorkflowServiceTest {
         assertThat(entity.getCustomerId()).isEqualTo(10L);
         assertThat(entity.getProjectName()).isEqualTo("项目A");
         verify(applyService).applyItems(any(), any(), any());
-        verify(coverageValidator).assertExactCoverage(entity);
+        verify(coverageValidator).assertCumulativeCoverage(entity);
         verifyNoInteractions(purchaseInboundGuard);
     }
 
@@ -180,7 +180,7 @@ class SalesOutboundWorkflowServiceTest {
         service.beforeStatusUpdate(entity, StatusConstants.DRAFT, StatusConstants.AUDITED);
 
         verify(purchaseInboundGuard).assertPurchaseInboundCompletedBeforeAudit(entity);
-        verify(coverageValidator).assertExactCoverage(entity);
+        verify(coverageValidator).assertCumulativeCoverage(entity);
         verify(downstreamMutationGuard, org.mockito.Mockito.never()).assertReverseAuditAllowed(any());
     }
 

@@ -122,8 +122,6 @@ class SalesOutboundApplyServiceTest {
         when(salesOrderItemQueryService.findActiveByIdIn(any())).thenReturn(List.of(item));
         when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
                 .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
-        when(repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(any(), any()))
-                .thenReturn(List.of());
     }
 
     // ---------- applyItems 正常路径 ----------
@@ -168,8 +166,6 @@ class SalesOutboundApplyServiceTest {
                 .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
         when(warehouseSelectionSupport.resolveWarehouse(any(), any(), anyInt(), anyBoolean()))
                 .thenReturn(new WarehouseSnapshot(9L, null, "选择仓库"));
-        when(repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(any(), any()))
-                .thenReturn(List.of());
         SalesOutbound entity = new SalesOutbound();
         entity.setId(5L);
 
@@ -193,8 +189,6 @@ class SalesOutboundApplyServiceTest {
                 .thenReturn(List.of(sourceItem(11L, 10, orderA), sourceItem(12L, 10, orderB)));
         when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
                 .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
-        when(repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(any(), any()))
-                .thenReturn(List.of());
 
         assertThatThrownBy(() -> service.applyItems(new SalesOutbound(),
                 request(null, "客户A", null, "项目A", null, null,
@@ -212,8 +206,6 @@ class SalesOutboundApplyServiceTest {
                 .thenReturn(List.of(sourceItem(11L, 10, orderA), sourceItem(12L, 10, orderB)));
         when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
                 .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
-        when(repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(any(), any()))
-                .thenReturn(List.of());
 
         assertThatThrownBy(() -> service.applyItems(new SalesOutbound(),
                 request(null, "客户A", null, "项目A", null, null,
@@ -233,8 +225,6 @@ class SalesOutboundApplyServiceTest {
         when(salesOrderItemQueryService.findActiveByIdIn(any())).thenReturn(List.of(itemA, itemB));
         when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
                 .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
-        when(repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(any(), any()))
-                .thenReturn(List.of());
         SalesOutbound entity = new SalesOutbound();
         entity.setId(5L);
 
@@ -245,30 +235,6 @@ class SalesOutboundApplyServiceTest {
 
         assertThat(entity.getWarehouseId()).isNull();   // 多仓库 → id null
         assertThat(entity.getWarehouseName()).isEqualTo("多仓库");
-    }
-
-    @Test
-    void applyItems_shouldRejectOccupiedSourceOrder() {
-        SalesOrder order = salesOrder(1L, "SO001", StatusConstants.AUDITED, 10L, "客户A", 20L, "项目A", 30L, "结算公司A");
-        SalesOrderItem item = sourceItem(11L, 10, order);
-        when(salesOrderItemQueryService.findActiveByIdIn(any())).thenReturn(List.of(item));
-        when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
-                .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
-        SalesOutbound occupied = new SalesOutbound();
-        occupied.setOutboundNo("OB999");
-        SalesOutboundItem occupiedItem = new SalesOutboundItem();
-        occupiedItem.setSourceSalesOrderItemId(11L);
-        occupied.setItems(List.of(occupiedItem));
-        when(repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(any(), any()))
-                .thenReturn(List.of(occupied));
-        SalesOutbound entity = new SalesOutbound();
-        entity.setId(5L);
-
-        assertThatThrownBy(() -> service.applyItems(entity,
-                request(10L, "客户A", 20L, "项目A", null, null, List.of(itemRequest(11L, 5, 1L))),
-                () -> 100L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("OB999");
     }
 
     // ---------- sourceSalesOrderIds ----------
@@ -332,8 +298,6 @@ class SalesOutboundApplyServiceTest {
                 .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
         when(warehouseSelectionSupport.resolveWarehouse(any(), any(), anyInt(), anyBoolean()))
                 .thenReturn(new WarehouseSnapshot(null, null, null)); // 未解析出仓库
-        when(repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(any(), any()))
-                .thenReturn(List.of());
         SalesOutbound entity = new SalesOutbound();
         entity.setId(5L);
 

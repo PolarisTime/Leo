@@ -101,6 +101,31 @@ class SalesOrderCompletionSyncServiceTest {
     }
 
     @Test
+    void syncBySourceIds_shouldKeepAuditedWhenPartiallyOutboundedAmongMultipleItems() {
+        SalesOrder order = order(1L, StatusConstants.AUDITED, List.of(item(11L, 10), item(12L, 5)));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any()))
+                .thenReturn(List.of(outbound(StatusConstants.AUDITED, List.of(obi(11L, 10), obi(12L, 4)))));
+
+        service.syncBySourceSalesOrderItemIds(List.of(11L, 12L));
+
+        assertThat(order.getStatus()).isEqualTo(StatusConstants.AUDITED);
+        verify(salesOrderRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void syncBySourceIds_shouldVerifyDeliveryWhenAllItemsFullyOutbounded() {
+        SalesOrder order = order(1L, StatusConstants.AUDITED, List.of(item(11L, 10), item(12L, 5)));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any()))
+                .thenReturn(List.of(outbound(StatusConstants.AUDITED, List.of(obi(11L, 10), obi(12L, 5)))));
+
+        service.syncBySourceSalesOrderItemIds(List.of(11L, 12L));
+
+        assertThat(order.getStatus()).isEqualTo(StatusConstants.DELIVERY_VERIFICATION);
+    }
+
+    @Test
     void syncBySourceIds_shouldKeepAuditedWhenNotFullyOutbounded() {
         SalesOrder order = order(1L, StatusConstants.AUDITED, List.of(item(11L, 10)));
         when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));

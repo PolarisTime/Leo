@@ -66,17 +66,15 @@ public class SalesOrderOutboundCandidateQueryRepository {
                       SELECT 1
                       FROM so_sales_order_item source_item
                       WHERE source_item.order_id = sales_order.id
-                  )
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM so_sales_order_item source_item
-                      JOIN so_sales_outbound_item outbound_item
-                        ON outbound_item.source_sales_order_item_id = source_item.id
-                      JOIN so_sales_outbound outbound
-                        ON outbound.id = outbound_item.outbound_id
-                       AND outbound.deleted_flag = FALSE
-                      WHERE source_item.order_id = sales_order.id
-                        AND (:currentRecordId IS NULL OR outbound.id <> :currentRecordId)
+                        AND COALESCE(source_item.quantity, 0) > COALESCE((
+                            SELECT SUM(outbound_item.quantity)
+                            FROM so_sales_outbound_item outbound_item
+                            JOIN so_sales_outbound outbound
+                              ON outbound.id = outbound_item.outbound_id
+                             AND outbound.deleted_flag = FALSE
+                             AND (:currentRecordId IS NULL OR outbound.id <> :currentRecordId)
+                            WHERE outbound_item.source_sales_order_item_id = source_item.id
+                        ), 0)
                   )
             )
             """;

@@ -30,6 +30,16 @@ public class SalesOrderDerivedQuantityService {
              WHERE item.source_sales_order_item_id IN (:ids)
              GROUP BY item.source_sales_order_item_id
             """;
+    private static final String ITEM_OUTBOUND_RESERVED_SQL = """
+            SELECT item.source_sales_order_item_id AS item_id,
+                   COALESCE(SUM(item.quantity), 0) AS total_quantity
+              FROM so_sales_outbound_item item
+              JOIN so_sales_outbound outbound
+                ON outbound.id = item.outbound_id
+               AND outbound.deleted_flag = FALSE
+             WHERE item.source_sales_order_item_id IN (:ids)
+             GROUP BY item.source_sales_order_item_id
+            """;
     private static final String ITEM_RETURNED_SQL = """
             SELECT item.source_sales_order_item_id AS item_id,
                    COALESCE(SUM(item.quantity), 0) AS total_quantity
@@ -83,6 +93,19 @@ public class SalesOrderDerivedQuantityService {
         return combine(
                 sumByKey(ITEM_DELIVERED_SQL, "item_id", ids),
                 sumByKey(ITEM_RETURNED_SQL, "item_id", ids));
+    }
+
+    /**
+     * 订单明细级“未删除出库已占用数量”：包含草稿出库在内的所有未删除销售出库数量之和。
+     * 用于计算剩余可出库数量，与销售出库累计覆盖校验口径一致。
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, Integer> reservedOutboundQuantities(Collection<Long> salesOrderItemIds) {
+        Set<Long> ids = normalize(salesOrderItemIds);
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return sumByKey(ITEM_OUTBOUND_RESERVED_SQL, "item_id", ids);
     }
 
     @Transactional(readOnly = true)

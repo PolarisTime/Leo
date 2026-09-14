@@ -34,7 +34,8 @@ public record SalesOrderItemResponse(
         BigDecimal originalWeightTon,
         Integer deliveredQuantity,
         Integer returnedQuantity,
-        Integer deliveredNetQuantity
+        Integer deliveredNetQuantity,
+        Integer outboundRemainingQuantity
 ) {
     public SalesOrderItemResponse(Long id,
                                   Integer lineNo,
@@ -62,7 +63,7 @@ public record SalesOrderItemResponse(
         this(id, lineNo, null, materialCode, brand, category, material, spec, length, unit,
                 sourceInboundItemId, sourcePurchaseOrderItemId, settlementCompanyId, settlementCompanyName,
                 null, warehouseName, batchNo, null, quantity, quantityUnit, pieceWeightTon, piecesPerBundle,
-                weightTon, unitPrice, amount, originalWeightTon, null, null, null);
+                weightTon, unitPrice, amount, originalWeightTon, null, null, null, null);
     }
 
     public SalesOrderItemResponse(Long id,
@@ -89,18 +90,19 @@ public record SalesOrderItemResponse(
         this(id, lineNo, null, materialCode, brand, category, material, spec, length, unit,
                 sourceInboundItemId, sourcePurchaseOrderItemId, null, null, null, warehouseName, batchNo, null,
                 quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount,
-                originalWeightTon, null, null, null);
+                originalWeightTon, null, null, null, null);
     }
 
     public SalesOrderItemResponse withDerivedQuantities(Integer deliveredQuantity,
                                                         Integer returnedQuantity,
-                                                        Integer deliveredNetQuantity) {
+                                                        Integer deliveredNetQuantity,
+                                                        Integer outboundRemainingQuantity) {
         return new SalesOrderItemResponse(
                 id, lineNo, materialId, materialCode, brand, category, material, spec, length, unit,
                 sourceInboundItemId, sourcePurchaseOrderItemId, settlementCompanyId, settlementCompanyName,
                 warehouseId, warehouseName, batchNo, batchNoNormalized, quantity, quantityUnit, pieceWeightTon,
                 piecesPerBundle, weightTon, unitPrice, amount, originalWeightTon, deliveredQuantity,
-                returnedQuantity, deliveredNetQuantity
+                returnedQuantity, deliveredNetQuantity, outboundRemainingQuantity
         );
     }
 }
