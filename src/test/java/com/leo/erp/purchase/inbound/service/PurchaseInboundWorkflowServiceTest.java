@@ -1,6 +1,9 @@
 package com.leo.erp.purchase.inbound.service;
 
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.inventory.api.InventorySourceDocumentType;
+import com.leo.erp.inventory.api.InventoryTransactionCommand;
+import com.leo.erp.inventory.api.InventoryTransactionInput;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
@@ -49,6 +52,9 @@ class PurchaseInboundWorkflowServiceTest {
 
     @Mock
     private BusinessOperationEventPublisher businessOperationEventPublisher;
+
+    @Mock
+    private InventoryTransactionCommand inventoryCommand;
 
     @InjectMocks
     private PurchaseInboundWorkflowService service;
@@ -182,6 +188,44 @@ class PurchaseInboundWorkflowServiceTest {
         verify(businessOperationEventPublisher).publish(
                 eq("PURCHASE_INBOUND_STATUS_CHANGED"), any(), any(),
                 eq("状态变更"), any(), eq(5L), any(), any());
+    }
+
+    @Test
+    void afterStatusChanged_shouldRecordPurchaseInWhenPosted() {
+        PurchaseInbound entity = inbound(StatusConstants.DRAFT);
+
+        service.afterStatusChanged(entity, StatusConstants.DRAFT, StatusConstants.AUDITED);
+
+        verify(inventoryCommand).recordPurchaseIn(any(InventoryTransactionInput.class));
+    }
+
+    @Test
+    void afterStatusChanged_shouldRecordPurchaseInWhenCompletedFromDraft() {
+        PurchaseInbound entity = inbound(StatusConstants.DRAFT);
+
+        service.afterStatusChanged(entity, StatusConstants.DRAFT, StatusConstants.INBOUND_COMPLETED);
+
+        verify(inventoryCommand).recordPurchaseIn(any(InventoryTransactionInput.class));
+    }
+
+    @Test
+    void afterStatusChanged_shouldNotReRecordWhenStillPosted() {
+        PurchaseInbound entity = inbound(StatusConstants.AUDITED);
+
+        service.afterStatusChanged(entity, StatusConstants.AUDITED, StatusConstants.INBOUND_COMPLETED);
+
+        verify(inventoryCommand, never()).recordPurchaseIn(any());
+        verify(inventoryCommand, never()).softDeleteBySource(any(), any());
+    }
+
+    @Test
+    void afterStatusChanged_shouldSoftDeleteWhenReversed() {
+        PurchaseInbound entity = inbound(StatusConstants.INBOUND_COMPLETED);
+
+        service.afterStatusChanged(entity, StatusConstants.INBOUND_COMPLETED, StatusConstants.DRAFT);
+
+        verify(inventoryCommand).softDeleteBySource(
+                InventorySourceDocumentType.PURCHASE_INBOUND.name(), 5L);
     }
 
     @Test

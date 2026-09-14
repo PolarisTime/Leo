@@ -103,6 +103,7 @@ public class SalesOutboundService {
         SalesOutboundResponse response = doUpdateStatus(id, status);
         if (!Objects.equals(currentStatus, response.status())) {
             workflowService.publishStatusChanged(outbound, currentStatus, response.status());
+            workflowService.afterStatusChanged(outbound, currentStatus, response.status());
         }
         return response;
     }

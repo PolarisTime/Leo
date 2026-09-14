@@ -3,6 +3,9 @@ package com.leo.erp.sales.outbound.service;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.inventory.api.InventorySourceDocumentType;
+import com.leo.erp.inventory.api.InventoryTransactionCommand;
+import com.leo.erp.inventory.api.InventoryTransactionInput;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundItemRequest;
@@ -29,6 +32,7 @@ public class SalesOutboundWorkflowService {
     private final SourceAllocationLockService sourceAllocationLockService;
     private final SalesOutboundDownstreamMutationGuard downstreamMutationGuard;
     private final BusinessOperationEventPublisher businessOperationEventPublisher;
+    private final InventoryTransactionCommand inventoryCommand;
     private SalesOutboundCoverageValidator coverageValidator;
 
     public SalesOutboundWorkflowService(SalesOutboundApplyService applyService,
@@ -36,13 +40,15 @@ public class SalesOutboundWorkflowService {
                                         SalesOutboundPurchaseInboundGuard purchaseInboundGuard,
                                         SourceAllocationLockService sourceAllocationLockService,
                                         SalesOutboundDownstreamMutationGuard downstreamMutationGuard,
-                                        BusinessOperationEventPublisher businessOperationEventPublisher) {
+                                        BusinessOperationEventPublisher businessOperationEventPublisher,
+                                        InventoryTransactionCommand inventoryCommand) {
         this.applyService = applyService;
         this.saveService = saveService;
         this.purchaseInboundGuard = purchaseInboundGuard;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.downstreamMutationGuard = downstreamMutationGuard;
         this.businessOperationEventPublisher = businessOperationEventPublisher;
+        this.inventoryCommand = inventoryCommand;
     }
 
     @Autowired(required = false)
@@ -132,8 +138,49 @@ public class SalesOutboundWorkflowService {
                 "销售出库状态 " + currentStatus + " -> " + nextStatus);
     }
 
+    /**
+     * 状态变更后的库存联动：审核后按移动加权平均成本记销售出库；反审核时软删事务。
+     */
+    void afterStatusChanged(SalesOutbound outbound, String currentStatus, String nextStatus) {
+        boolean auditedBefore = StatusConstants.AUDITED.equals(currentStatus);
+        boolean auditedAfter = StatusConstants.AUDITED.equals(nextStatus);
+        if (auditedAfter && !auditedBefore) {
+            inventoryCommand.recordSalesOut(toInventoryInput(outbound));
+        } else if (auditedBefore && !auditedAfter) {
+            inventoryCommand.softDeleteBySource(
+                    InventorySourceDocumentType.SALES_OUTBOUND.name(), outbound.getId());
+        }
+    }
+
     void publishDeleted(SalesOutbound entity) {
+        inventoryCommand.softDeleteBySource(
+                InventorySourceDocumentType.SALES_OUTBOUND.name(), entity.getId());
         publishEvent(entity, "SALES_OUTBOUND_DELETED", "删除", "删除销售出库 " + entity.getOutboundNo());
+    }
+
+    private InventoryTransactionInput toInventoryInput(SalesOutbound outbound) {
+        List<InventoryTransactionInput.Line> lines = outbound.getItems().stream()
+                .map(item -> new InventoryTransactionInput.Line(
+                        item.getId(),
+                        item.getMaterialId(),
+                        item.getMaterialCode(),
+                        item.getWarehouseId(),
+                        item.getWarehouseName(),
+                        item.getBatchNo(),
+                        item.getQuantity() == null ? 0 : item.getQuantity(),
+                        item.getQuantityUnit(),
+                        item.getUnitPrice()
+                ))
+                .toList();
+        return new InventoryTransactionInput(
+                InventorySourceDocumentType.SALES_OUTBOUND.name(),
+                outbound.getId(),
+                outbound.getOutboundNo(),
+                outbound.getOutboundDate(),
+                outbound.getWarehouseId(),
+                outbound.getWarehouseName(),
+                lines
+        );
     }
 
     private void publishEvent(SalesOutbound outbound, String eventType, String actionType, String remark) {

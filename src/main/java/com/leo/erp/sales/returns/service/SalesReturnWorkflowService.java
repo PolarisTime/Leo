@@ -2,6 +2,9 @@ package com.leo.erp.sales.returns.service;
 
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.inventory.api.InventorySourceDocumentType;
+import com.leo.erp.inventory.api.InventoryTransactionCommand;
+import com.leo.erp.inventory.api.InventoryTransactionInput;
 import com.leo.erp.sales.api.SalesReturnReversalCommand;
 import com.leo.erp.sales.returns.domain.entity.SalesReturn;
 import com.leo.erp.sales.returns.domain.entity.SalesReturnItem;
@@ -26,17 +29,20 @@ public class SalesReturnWorkflowService {
     private final SalesReturnSaveService saveService;
     private final BusinessOperationEventPublisher businessOperationEventPublisher;
     private final SalesReturnReversalCommand salesReturnReversalCommand;
+    private final InventoryTransactionCommand inventoryCommand;
 
     public SalesReturnWorkflowService(SalesReturnApplyService applyService,
                                       SalesReturnCoverageValidator coverageValidator,
                                       SalesReturnSaveService saveService,
                                       BusinessOperationEventPublisher businessOperationEventPublisher,
-                                      SalesReturnReversalCommand salesReturnReversalCommand) {
+                                      SalesReturnReversalCommand salesReturnReversalCommand,
+                                      InventoryTransactionCommand inventoryCommand) {
         this.applyService = applyService;
         this.coverageValidator = coverageValidator;
         this.saveService = saveService;
         this.businessOperationEventPublisher = businessOperationEventPublisher;
         this.salesReturnReversalCommand = salesReturnReversalCommand;
+        this.inventoryCommand = inventoryCommand;
     }
 
     void apply(SalesReturn entity, SalesReturnRequest request, LongSupplier nextIdSupplier) {
@@ -85,17 +91,51 @@ public class SalesReturnWorkflowService {
     }
 
     /**
-     * 退货状态变更后的下游联动：审核通过时生成红字对账单（同一退货单幂等）。
+     * 退货状态变更后的下游联动：
+     * 审核通过时生成红字对账单（同一退货单幂等）并按移动加权平均成本记退货入库；
+     * 反审核时软删库存事务。
      */
     void afterStatusChanged(SalesReturn salesReturn, String currentStatus, String nextStatus) {
-        if (StatusConstants.AUDITED.equals(nextStatus)
-                && !StatusConstants.AUDITED.equals(currentStatus)) {
+        boolean auditedBefore = StatusConstants.AUDITED.equals(currentStatus);
+        boolean auditedAfter = StatusConstants.AUDITED.equals(nextStatus);
+        if (auditedAfter && !auditedBefore) {
             salesReturnReversalCommand.reverseForAuditedReturn(salesReturn.getId());
+            inventoryCommand.recordSalesReturnIn(toInventoryInput(salesReturn));
+        } else if (auditedBefore && !auditedAfter) {
+            inventoryCommand.softDeleteBySource(
+                    InventorySourceDocumentType.SALES_RETURN.name(), salesReturn.getId());
         }
     }
 
     void publishDeleted(SalesReturn entity) {
+        inventoryCommand.softDeleteBySource(
+                InventorySourceDocumentType.SALES_RETURN.name(), entity.getId());
         publishEvent(entity, "SALES_RETURN_DELETED", "删除", "删除销售退货单 " + entity.getReturnNo());
+    }
+
+    private InventoryTransactionInput toInventoryInput(SalesReturn salesReturn) {
+        List<InventoryTransactionInput.Line> lines = salesReturn.getItems().stream()
+                .map(item -> new InventoryTransactionInput.Line(
+                        item.getId(),
+                        item.getMaterialId(),
+                        item.getMaterialCode(),
+                        item.getWarehouseId(),
+                        item.getWarehouseName(),
+                        item.getBatchNo(),
+                        item.getQuantity() == null ? 0 : item.getQuantity(),
+                        item.getQuantityUnit(),
+                        item.getUnitPrice()
+                ))
+                .toList();
+        return new InventoryTransactionInput(
+                InventorySourceDocumentType.SALES_RETURN.name(),
+                salesReturn.getId(),
+                salesReturn.getReturnNo(),
+                salesReturn.getReturnDate(),
+                salesReturn.getWarehouseId(),
+                salesReturn.getWarehouseName(),
+                lines
+        );
     }
 
     List<Long> sourceOutboundItemIds(SalesReturn entity) {

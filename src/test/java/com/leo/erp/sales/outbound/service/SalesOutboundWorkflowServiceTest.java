@@ -4,6 +4,9 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.inventory.api.InventorySourceDocumentType;
+import com.leo.erp.inventory.api.InventoryTransactionCommand;
+import com.leo.erp.inventory.api.InventoryTransactionInput;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundItemRequest;
@@ -62,6 +65,9 @@ class SalesOutboundWorkflowServiceTest {
 
     @Mock
     private BusinessOperationEventPublisher businessOperationEventPublisher;
+
+    @Mock
+    private InventoryTransactionCommand inventoryCommand;
 
     @InjectMocks
     private SalesOutboundWorkflowService service;
@@ -263,10 +269,38 @@ class SalesOutboundWorkflowServiceTest {
     }
 
     @Test
+    void afterStatusChanged_shouldRecordInventoryOnAudit() {
+        SalesOutbound entity = entity(StatusConstants.DRAFT);
+
+        service.afterStatusChanged(entity, StatusConstants.DRAFT, StatusConstants.AUDITED);
+
+        verify(inventoryCommand).recordSalesOut(any(InventoryTransactionInput.class));
+    }
+
+    @Test
+    void afterStatusChanged_shouldSoftDeleteInventoryOnReverseAudit() {
+        SalesOutbound entity = entity(StatusConstants.AUDITED);
+
+        service.afterStatusChanged(entity, StatusConstants.AUDITED, StatusConstants.DRAFT);
+
+        verify(inventoryCommand).softDeleteBySource(
+                InventorySourceDocumentType.SALES_OUTBOUND.name(), 5L);
+    }
+
+    @Test
+    void afterStatusChanged_shouldIgnoreUnrelatedTransition() {
+        SalesOutbound entity = entity(StatusConstants.DRAFT);
+
+        service.afterStatusChanged(entity, StatusConstants.DRAFT, StatusConstants.DRAFT);
+
+        verifyNoInteractions(inventoryCommand);
+    }
+
+    @Test
     void apply_shouldTolerateNullCoverageValidator() {
         SalesOutboundWorkflowService bareService = new SalesOutboundWorkflowService(
                 applyService, saveService, purchaseInboundGuard, sourceAllocationLockService,
-                downstreamMutationGuard, businessOperationEventPublisher);
+                downstreamMutationGuard, businessOperationEventPublisher, inventoryCommand);
         SalesOutbound entity = entity(null);
 
         assertThatCode(() -> bareService.apply(entity, request(StatusConstants.DRAFT), () -> 99L))

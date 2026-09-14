@@ -113,6 +113,7 @@ public class PurchaseInboundService {
         PurchaseInboundResponse response = doUpdateStatus(id, status);
         if (!Objects.equals(currentStatus, response.status())) {
             workflowService.publishStatusChanged(inbound, currentStatus, response.status());
+            workflowService.afterStatusChanged(inbound, currentStatus, response.status());
         }
         return response;
     }

@@ -28,6 +28,8 @@ public final class PageSortFieldCatalog {
             Map.entry("cash-ledger", Set.of("businessDate")),
             Map.entry("finance-overview", Set.of("counterpartyName", "recognizedAmount", "settledAmount", "outstandingAmount", "advanceAmount")),
             Map.entry("project", Set.of("id", "projectCode", "projectName", "projectNameAbbr", "customerCode", "projectManager", "status")),
+            Map.entry("inventory-balance", Set.of("materialId", "materialCode", "warehouseId", "warehouseName", "batchNo", "quantity", "amount", "avgUnitCost")),
+            Map.entry("inventory-transaction", Set.of("id", "transactionNo", "transactionType", "materialCode", "warehouseName", "batchNo", "quantity", "unitCost", "amount", "occurredAt")),
             Map.entry("steel-quote", Set.of("id", "quoteDate", "period", "breed", "spec", "material", "factory", "price", "scrapedAt")),
             Map.entry("quote-sheet", Set.of("id", "sheetNo", "name", "orderDate", "refDate", "refPeriod", "status"))
     );
