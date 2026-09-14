@@ -41,7 +41,8 @@ class InventoryBalanceQueryServiceTest {
         when(jdbcTemplate.queryForObject(anyString(), any(SqlParameterSource.class), eq(Long.class)))
                 .thenReturn(3L);
         InventoryBalanceResponse row = new InventoryBalanceResponse(
-                100L, "M001", 3L, "库房B", "B001",
+                100L, "M001", "宝钢", "钢", "Φ20", "12m", "吨",
+                3L, "库房B", "B001",
                 12L, new BigDecimal("36000.00"), new BigDecimal("3000.00"));
         when(jdbcTemplate.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
                 .thenReturn(List.of(row));

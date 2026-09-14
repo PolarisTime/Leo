@@ -22,9 +22,12 @@ import java.util.Map;
 @Service
 public class InventoryBalanceQueryService {
 
-    private static final String BASE_FROM = " FROM inv_transaction t WHERE t.deleted_flag = false";
+    private static final String BASE_FROM = " FROM inv_transaction t"
+            + " LEFT JOIN md_material m ON m.id = t.material_id"
+            + " WHERE t.deleted_flag = false";
     private static final String GROUP_BY =
-            " GROUP BY t.material_id, t.material_code, t.warehouse_id, t.warehouse_name, t.batch_no";
+            " GROUP BY t.material_id, t.material_code, m.brand, m.material, m.spec, m.length, m.unit,"
+            + " t.warehouse_id, t.warehouse_name, t.batch_no";
     private static final String TIE_BREAKER =
             ", t.warehouse_id ASC NULLS FIRST, t.batch_no ASC NULLS FIRST, t.material_code ASC";
     private static final Map<String, String> SORT_EXPRESSIONS = Map.of(
@@ -59,7 +62,9 @@ public class InventoryBalanceQueryService {
                 Long.class
         );
         long totalElements = total == null ? 0L : total;
-        String dataSql = "SELECT t.material_id, t.material_code, t.warehouse_id, t.warehouse_name, t.batch_no,"
+        String dataSql = "SELECT t.material_id, t.material_code,"
+                + " m.brand, m.material, m.spec, m.length, m.unit,"
+                + " t.warehouse_id, t.warehouse_name, t.batch_no,"
                 + " COALESCE(SUM(t.quantity * t.direction), 0) AS quantity,"
                 + " COALESCE(SUM(t.amount), 0) AS amount,"
                 + " CASE WHEN COALESCE(SUM(t.quantity * t.direction), 0) <> 0"
@@ -116,6 +121,11 @@ public class InventoryBalanceQueryService {
         return new InventoryBalanceResponse(
                 nullableLong(rs, "material_id"),
                 rs.getString("material_code"),
+                rs.getString("brand"),
+                rs.getString("material"),
+                rs.getString("spec"),
+                rs.getString("length"),
+                rs.getString("unit"),
                 nullableLong(rs, "warehouse_id"),
                 rs.getString("warehouse_name"),
                 rs.getString("batch_no"),

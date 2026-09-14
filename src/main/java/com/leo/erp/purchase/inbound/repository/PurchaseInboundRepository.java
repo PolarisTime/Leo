@@ -44,6 +44,9 @@ public interface PurchaseInboundRepository extends JpaRepository<PurchaseInbound
     Optional<PurchaseInbound> findByIdAndDeletedFlagFalse(Long id);
 
     @EntityGraph(attributePaths = "items")
+    List<PurchaseInbound> findAllByStatusInAndDeletedFlagFalse(Collection<String> statuses);
+
+    @EntityGraph(attributePaths = "items")
     @Query("""
             select distinct inbound
             from PurchaseInbound inbound

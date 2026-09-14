@@ -11,6 +11,11 @@ import java.math.BigDecimal;
 public record InventoryBalanceResponse(
         @JsonSerialize(using = ToStringSerializer.class) Long materialId,
         String materialCode,
+        String brand,
+        String material,
+        String spec,
+        String length,
+        String unit,
         @JsonSerialize(using = ToStringSerializer.class) Long warehouseId,
         String warehouseName,
         String batchNo,

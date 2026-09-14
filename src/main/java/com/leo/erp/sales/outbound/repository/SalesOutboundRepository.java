@@ -45,6 +45,9 @@ public interface SalesOutboundRepository extends JpaRepository<SalesOutbound, Lo
     @EntityGraph(attributePaths = "items")
     Optional<SalesOutbound> findByIdAndDeletedFlagFalse(Long id);
 
+    @EntityGraph(attributePaths = "items")
+    List<SalesOutbound> findAllByStatusAndDeletedFlagFalse(String status);
+
     @Query("""
             select count(distinct outbound.id)
             from SalesOutbound outbound

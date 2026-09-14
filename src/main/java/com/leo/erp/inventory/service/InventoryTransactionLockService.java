@@ -13,6 +13,7 @@ public class InventoryTransactionLockService {
 
     private static final String LOCK_SQL =
             "SELECT pg_advisory_xact_lock(CAST(hashtext(:lockKey) AS bigint))";
+    private static final String BACKFILL_LOCK_KEY = "inv:backfill";
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -25,6 +26,18 @@ public class InventoryTransactionLockService {
      */
     public void lock(Long materialId, Long warehouseId) {
         String lockKey = "inv:" + materialId + ":" + (warehouseId == null ? "0" : warehouseId);
+        acquire(lockKey);
+    }
+
+    /**
+     * 库存期初回填全局串行锁：保证同一时刻只有一个回填事务扫描/记账，
+     * 避免并发回填对同一来源明细重复记账。
+     */
+    public void lockBackfill() {
+        acquire(BACKFILL_LOCK_KEY);
+    }
+
+    private void acquire(String lockKey) {
         MapSqlParameterSource params = new MapSqlParameterSource("lockKey", lockKey);
         jdbcTemplate.query(LOCK_SQL, params, rs -> null);
     }

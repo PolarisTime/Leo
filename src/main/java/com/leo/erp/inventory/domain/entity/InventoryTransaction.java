@@ -1,9 +1,13 @@
 package com.leo.erp.inventory.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.master.material.domain.entity.Material;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
@@ -31,6 +35,14 @@ public class InventoryTransaction extends AbstractAuditableEntity {
 
     @Column(name = "material_id", nullable = false)
     private Long materialId;
+
+    /**
+     * 物料主数据只读关联，仅用于查询富集品牌/材质/规格/长度/单位快照。
+     * 不作为写入关联（insertable/updatable=false），历史物料即使已停用也照常返回。
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "material_id", insertable = false, updatable = false)
+    private Material material;
 
     @Column(name = "material_code", length = 64)
     private String materialCode;
