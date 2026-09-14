@@ -4,6 +4,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.inventory.api.InventorySourceDocumentType;
 import com.leo.erp.inventory.api.InventoryTransactionInput;
 import com.leo.erp.inventory.domain.entity.InventoryTransaction;
+import com.leo.erp.inventory.repository.InventoryBalanceSnapshotRepository;
 import com.leo.erp.inventory.repository.InventoryTransactionRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +21,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -43,6 +45,9 @@ class InventoryTransactionServiceTest {
 
     @Mock
     private InventoryBalanceReader balanceReader;
+
+    @Mock
+    private InventoryBalanceSnapshotRepository snapshotRepository;
 
     @InjectMocks
     private InventoryTransactionService service;
@@ -91,6 +96,9 @@ class InventoryTransactionServiceTest {
         assertThat(saved.getAmount()).isEqualByComparingTo("20000.00");
         assertThat(saved.getWarehouseId()).isEqualTo(3L);
         verify(repository).flush();
+        verify(snapshotRepository).applyDelta(
+                eq(100L), eq(3L), eq("M001"), eq("库房B"), eq("B001"), eq(5),
+                argThat(value -> value.compareTo(new BigDecimal("20000.00")) == 0));
     }
 
     @Test
@@ -107,6 +115,9 @@ class InventoryTransactionServiceTest {
         assertThat(saved.getUnitCost()).isEqualByComparingTo("3000.00");
         assertThat(saved.getAmount()).isEqualByComparingTo("-12000.00");
         verify(lockService).lockAll(List.of(new InventoryTransactionLockService.Dimension(100L, 3L)));
+        verify(snapshotRepository).applyDelta(
+                eq(100L), eq(3L), eq("M001"), eq("库房B"), eq("B001"), eq(-4),
+                argThat(value -> value.compareTo(new BigDecimal("-12000.00")) == 0));
     }
 
     @Test
@@ -134,6 +145,9 @@ class InventoryTransactionServiceTest {
         assertThat(saved.getDirection()).isEqualTo((short) 1);
         assertThat(saved.getUnitCost()).isEqualByComparingTo("3000.00");
         assertThat(saved.getAmount()).isEqualByComparingTo("6000.00");
+        verify(snapshotRepository).applyDelta(
+                eq(100L), eq(3L), eq("M001"), eq("库房B"), eq("B001"), eq(2),
+                argThat(value -> value.compareTo(new BigDecimal("6000.00")) == 0));
     }
 
     @Test
@@ -148,6 +162,9 @@ class InventoryTransactionServiceTest {
         assertThat(saved.getWarehouseId()).isEqualTo(7L);
         assertThat(saved.getWarehouseName()).isEqualTo("库房A");
         verify(lockService).lockAll(java.util.List.of(new InventoryTransactionLockService.Dimension(100L, 7L)));
+        verify(snapshotRepository).applyDelta(
+                eq(100L), eq(7L), eq("M001"), eq("库房A"), eq(null), eq(5),
+                argThat(value -> value.compareTo(new BigDecimal("20000.00")) == 0));
     }
 
     @Test
@@ -161,12 +178,24 @@ class InventoryTransactionServiceTest {
     void softDeleteBySource_shouldFlagActiveTransactions() {
         InventoryTransaction transaction = new InventoryTransaction();
         transaction.setId(9L);
+        transaction.setMaterialId(100L);
+        transaction.setMaterialCode("M001");
+        transaction.setWarehouseId(3L);
+        transaction.setWarehouseName("库房B");
+        transaction.setBatchNo("B001");
+        transaction.setDirection((short) 1);
+        transaction.setQuantity(5);
+        transaction.setAmount(new BigDecimal("20000.00"));
         when(repository.findBySourceDocumentTypeAndSourceDocumentIdAndDeletedFlagFalse(
                 "PURCHASE_INBOUND", 5L)).thenReturn(List.of(transaction));
 
         service.softDeleteBySource("PURCHASE_INBOUND", 5L);
 
         assertThat(transaction.isDeletedFlag()).isTrue();
+        verify(lockService).lockAll(List.of(new InventoryTransactionLockService.Dimension(100L, 3L)));
+        verify(snapshotRepository).applyDelta(
+                eq(100L), eq(3L), eq("M001"), eq("库房B"), eq("B001"), eq(-5),
+                argThat(value -> value.compareTo(new BigDecimal("-20000.00")) == 0));
         verify(repository).saveAll(List.of(transaction));
         verify(repository).flush();
     }

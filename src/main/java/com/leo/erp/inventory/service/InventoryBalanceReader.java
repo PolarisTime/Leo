@@ -1,26 +1,27 @@
 package com.leo.erp.inventory.service;
 
+import com.leo.erp.inventory.repository.InventoryBalanceSnapshotRepository;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 /**
- * 库存余额聚合读取器：按 (material_id, warehouse_id) 聚合未删除库存事务。
- * 余额不落表，出库/退货记账前实时读取。
+ * 库存余额读取器：直接读取 inv_balance 增量快照的 (material_id, warehouse_id) 维度余额。
+ *
+ * <p>不再对 inv_transaction 做全历史 SUM 聚合；快照由记账/软删在同一事务内维护，
+ * 无快照行表示该维度余额为零。
  */
 @Component
 public class InventoryBalanceReader {
 
-    private static final String BALANCE_SELECT = """
-            SELECT COALESCE(SUM(quantity * direction), 0) AS quantity,
-                   COALESCE(SUM(amount), 0) AS amount
-            FROM inv_transaction
-            WHERE deleted_flag = false
-              AND material_id = :materialId
+    private static final String BALANCE_SQL = """
+            SELECT quantity, amount
+            FROM inv_balance
+            WHERE material_id = :materialId
+              AND warehouse_id = :warehouseId
             """;
-
-    private static final String BALANCE_BY_WAREHOUSE_SQL = BALANCE_SELECT + " AND warehouse_id = :warehouseId";
-    private static final String BALANCE_NO_WAREHOUSE_SQL = BALANCE_SELECT + " AND warehouse_id IS NULL";
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -29,24 +30,19 @@ public class InventoryBalanceReader {
     }
 
     /**
-     * 读取当前库存余额；无任何事务时返回 {@link InventoryBalanceTotals#EMPTY}。
+     * 读取当前库存余额；无快照行时返回 {@link InventoryBalanceTotals#EMPTY}。
      *
-     * @param warehouseId 仓库ID，可为空表示无仓库维度
+     * @param warehouseId 仓库ID，null 表示无仓库维度（落哨兵 0）
      */
     public InventoryBalanceTotals currentBalance(Long materialId, Long warehouseId) {
-        MapSqlParameterSource params = new MapSqlParameterSource("materialId", materialId);
-        String sql = BALANCE_NO_WAREHOUSE_SQL;
-        if (warehouseId != null) {
-            sql = BALANCE_BY_WAREHOUSE_SQL;
-            params.addValue("warehouseId", warehouseId);
-        }
-        return jdbcTemplate.queryForObject(
-                sql,
+        MapSqlParameterSource params = new MapSqlParameterSource("materialId", materialId)
+                .addValue("warehouseId", warehouseId == null
+                        ? InventoryBalanceSnapshotRepository.NO_WAREHOUSE
+                        : warehouseId);
+        List<InventoryBalanceTotals> rows = jdbcTemplate.query(
+                BALANCE_SQL,
                 params,
-                (rs, rowNum) -> new InventoryBalanceTotals(
-                        rs.getLong("quantity"),
-                        rs.getBigDecimal("amount")
-                )
-        );
+                (rs, rowNum) -> new InventoryBalanceTotals(rs.getLong("quantity"), rs.getBigDecimal("amount")));
+        return rows.isEmpty() ? InventoryBalanceTotals.EMPTY : rows.get(0);
     }
 }

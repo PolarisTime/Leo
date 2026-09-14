@@ -87,4 +87,73 @@ class InventoryBalanceQueryServiceTest {
         assertThat(captor.getValue().hasValue("warehouseId")).isFalse();
         assertThat(captor.getValue().hasValue("keyword")).isFalse();
     }
+
+    @Test
+    void keyset_shouldBindCompositeCursorAndTrimOverflow() {
+        InventoryBalanceResponse first = row(1L, 10L);
+        InventoryBalanceResponse second = row(2L, 10L);
+        InventoryBalanceResponse overflow = row(3L, 10L);
+        when(jdbcTemplate.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
+                .thenReturn(List.of(first, second, overflow));
+
+        InventoryBalanceCursorPage result = service.keyset(null, null, null, 3L, 10L, 2);
+
+        assertThat(result.content()).containsExactly(first, second);
+        assertThat(result.hasMore()).isTrue();
+        assertThat(result.nextMaterialId()).isEqualTo(2L);
+        assertThat(result.nextWarehouseId()).isEqualTo(10L);
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<MapSqlParameterSource> captor = ArgumentCaptor.forClass(MapSqlParameterSource.class);
+        verify(jdbcTemplate).query(sqlCaptor.capture(), captor.capture(), any(RowMapper.class));
+        assertThat(sqlCaptor.getValue())
+                .contains("(b.material_id, b.warehouse_id) > (:afterMaterialId, :afterWarehouseId)");
+        assertThat(captor.getValue().getValue("afterMaterialId")).isEqualTo(3L);
+        assertThat(captor.getValue().getValue("afterWarehouseId")).isEqualTo(10L);
+        assertThat(captor.getValue().getValue("limit")).isEqualTo(3);
+    }
+
+    @Test
+    void keyset_shouldNotBindCursorOnFirstPage() {
+        InventoryBalanceResponse only = row(1L, 5L);
+        when(jdbcTemplate.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
+                .thenReturn(List.of(only));
+
+        InventoryBalanceCursorPage result = service.keyset("m001", 5L, 1L, null, null, 10);
+
+        assertThat(result.content()).containsExactly(only);
+        assertThat(result.hasMore()).isFalse();
+        assertThat(result.nextMaterialId()).isEqualTo(1L);
+        assertThat(result.nextWarehouseId()).isEqualTo(5L);
+
+        ArgumentCaptor<MapSqlParameterSource> captor = ArgumentCaptor.forClass(MapSqlParameterSource.class);
+        verify(jdbcTemplate).query(anyString(), captor.capture(), any(RowMapper.class));
+        assertThat(captor.getValue().hasValue("afterMaterialId")).isFalse();
+        assertThat(captor.getValue().hasValue("afterWarehouseId")).isFalse();
+        assertThat(captor.getValue().getValue("limit")).isEqualTo(11);
+    }
+
+    @Test
+    void keyset_shouldReturnNullCursorWhenEmpty() {
+        when(jdbcTemplate.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
+                .thenReturn(List.of());
+
+        InventoryBalanceCursorPage result = service.keyset(null, null, null, null, null, 0);
+
+        assertThat(result.content()).isEmpty();
+        assertThat(result.hasMore()).isFalse();
+        assertThat(result.nextMaterialId()).isNull();
+        assertThat(result.nextWarehouseId()).isNull();
+
+        ArgumentCaptor<MapSqlParameterSource> captor = ArgumentCaptor.forClass(MapSqlParameterSource.class);
+        verify(jdbcTemplate).query(anyString(), captor.capture(), any(RowMapper.class));
+        assertThat(captor.getValue().getValue("limit")).isEqualTo(2);
+    }
+
+    private static InventoryBalanceResponse row(long materialId, long warehouseId) {
+        return new InventoryBalanceResponse(
+                materialId, "M" + materialId, "宝钢", "钢", "Φ20", "12m", "吨",
+                warehouseId, "库房" + warehouseId, "B001",
+                12L, new BigDecimal("36000.00"), new BigDecimal("3000.00"));
+    }
 }

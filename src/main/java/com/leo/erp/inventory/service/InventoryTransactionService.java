@@ -5,6 +5,7 @@ import com.leo.erp.inventory.api.InventoryTransactionCommand;
 import com.leo.erp.inventory.api.InventoryTransactionInput;
 import com.leo.erp.inventory.api.InventoryTransactionType;
 import com.leo.erp.inventory.domain.entity.InventoryTransaction;
+import com.leo.erp.inventory.repository.InventoryBalanceSnapshotRepository;
 import com.leo.erp.inventory.repository.InventoryTransactionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,15 +38,18 @@ public class InventoryTransactionService implements InventoryTransactionCommand 
     private final SnowflakeIdGenerator idGenerator;
     private final InventoryTransactionLockService lockService;
     private final InventoryBalanceReader balanceReader;
+    private final InventoryBalanceSnapshotRepository snapshotRepository;
 
     public InventoryTransactionService(InventoryTransactionRepository repository,
                                        SnowflakeIdGenerator idGenerator,
                                        InventoryTransactionLockService lockService,
-                                       InventoryBalanceReader balanceReader) {
+                                       InventoryBalanceReader balanceReader,
+                                       InventoryBalanceSnapshotRepository snapshotRepository) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.lockService = lockService;
         this.balanceReader = balanceReader;
+        this.snapshotRepository = snapshotRepository;
     }
 
     @Override
@@ -77,9 +81,40 @@ public class InventoryTransactionService implements InventoryTransactionCommand 
         if (active.isEmpty()) {
             return;
         }
-        active.forEach(transaction -> transaction.setDeletedFlag(true));
+        // 与记账共用加锁协议：先按 (materialId, warehouseId) 升序锁定待回补维度，
+        // 再在同一事务内反向更新快照，保证软删与快照守恒。
+        lockService.lockAll(active.stream()
+                .filter(transaction -> transaction.getMaterialId() != null)
+                .map(transaction -> new InventoryTransactionLockService.Dimension(
+                        transaction.getMaterialId(), transaction.getWarehouseId()))
+                .toList());
+        for (InventoryTransaction transaction : active) {
+            reverseSnapshot(transaction);
+            transaction.setDeletedFlag(true);
+        }
         repository.saveAll(active);
         repository.flush();
+    }
+
+    /**
+     * 软删时将账本行以负增量回补到快照，保持 Σ账本 == 快照。
+     */
+    private void reverseSnapshot(InventoryTransaction transaction) {
+        if (transaction.getMaterialId() == null
+                || transaction.getDirection() == null
+                || transaction.getQuantity() == null
+                || transaction.getAmount() == null) {
+            return;
+        }
+        int quantityDelta = -transaction.getDirection() * transaction.getQuantity();
+        snapshotRepository.applyDelta(
+                transaction.getMaterialId(),
+                transaction.getWarehouseId(),
+                transaction.getMaterialCode(),
+                transaction.getWarehouseName(),
+                transaction.getBatchNo(),
+                quantityDelta,
+                transaction.getAmount().negate());
     }
 
     private void record(InventoryTransactionInput input, InventoryTransactionType type) {
@@ -119,6 +154,15 @@ public class InventoryTransactionService implements InventoryTransactionCommand 
                     .setScale(COST_SCALE, RoundingMode.HALF_UP);
             repository.save(buildTransaction(input, type, line, warehouseId, warehouseName, unitCost, amount));
             repository.flush();
+            // 与账本同事务、同维度锁内增量维护余额快照：+direction*quantity、+带符号金额。
+            snapshotRepository.applyDelta(
+                    line.materialId(),
+                    warehouseId,
+                    line.materialCode(),
+                    warehouseName,
+                    line.batchNo(),
+                    type.direction() * line.quantity(),
+                    amount);
         }
     }
 
