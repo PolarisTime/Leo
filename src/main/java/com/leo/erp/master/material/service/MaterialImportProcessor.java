@@ -4,6 +4,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.master.material.domain.MaterialSnapshot;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.repository.MaterialRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -20,17 +21,22 @@ class MaterialImportProcessor {
     private final MaterialRepository materialRepository;
     private final SnowflakeIdGenerator idGenerator;
     private final MaterialIdentityService identityService;
+    private final MaterialHistoryRecorder historyRecorder;
 
     MaterialImportProcessor(MaterialRepository materialRepository,
                             SnowflakeIdGenerator idGenerator,
-                            MaterialIdentityService identityService) {
+                            MaterialIdentityService identityService,
+                            MaterialHistoryRecorder historyRecorder) {
         this.materialRepository = materialRepository;
         this.idGenerator = idGenerator;
         this.identityService = identityService;
+        this.historyRecorder = historyRecorder;
     }
 
     ImportSession start(Collection<MaterialIdentityService.Identity> identities) {
-        return new ImportSession(identityService.activeIndex(identities));
+        // 一次导入生成一个批次号，用于写入历史并在需要时按批次回滚。
+        String batchNo = String.valueOf(idGenerator.nextId());
+        return new ImportSession(identityService.activeIndex(identities), batchNo);
     }
 
     ImportRowResult importRow(ImportSession session, MaterialImportData data, int rowNumber) {
@@ -50,6 +56,7 @@ class MaterialImportProcessor {
             material = newMaterial();
         }
         MaterialIdentityService.Identity previousIdentity = identityService.identity(material);
+        MaterialSnapshot before = exists ? MaterialSnapshot.of(material) : null;
         identityService.validateImport(material, identity, session.identityIndex(), rowNumber);
         material.setDeletedFlag(false);
         apply(material, data);
@@ -59,7 +66,46 @@ class MaterialImportProcessor {
             throw identityService.mapViolation(exception, ErrorCode.VALIDATION_ERROR, rowNumber);
         }
         identityService.registerImport(session.identityIndex(), previousIdentity, identity, material);
+        historyRecorder.record(material.getId(), MaterialHistoryRecorder.SOURCE_IMPORT,
+                exists ? MaterialHistoryRecorder.TYPE_UPDATED : MaterialHistoryRecorder.TYPE_CREATED,
+                before, MaterialSnapshot.of(material), session.batchNo(), null);
         return new ImportRowResult(exists ? ImportOutcome.UPDATED : ImportOutcome.CREATED, material);
+    }
+
+    /**
+     * 预览单行导入结果：不落库、不写历史，只返回判定结果与前后字段差异。
+     * 为与正式导入行为一致，预览同样按顺序在会话索引中登记工作副本，但不触碰数据库实体。
+     */
+    MaterialPreview previewRow(ImportSession session, MaterialImportData data, int rowNumber) {
+        String providedMaterialCode = normalizeText(data.materialCode());
+        Optional<Material> materialByCode = providedMaterialCode.isBlank()
+                ? Optional.empty()
+                : materialRepository.findByMaterialCode(providedMaterialCode);
+        MaterialIdentityService.Identity identity = identityService.identity(data);
+        Material existing = materialByCode.orElse(session.identityIndex().get(identity));
+        if (identityService.isExactImportMatch(existing, data, materialByCode.isPresent())) {
+            MaterialSnapshot current = MaterialSnapshot.of(existing);
+            return new MaterialPreview(ImportOutcome.SKIPPED, current, current, existing.getId());
+        }
+
+        boolean exists = existing != null;
+        Material working = new Material();
+        if (exists) {
+            MaterialSnapshot.of(existing).applyTo(working);
+        } else {
+            working.setId(idGenerator.nextId());
+        }
+        MaterialIdentityService.Identity previousIdentity = identityService.identity(working);
+        identityService.validateImport(working, identity, session.identityIndex(), rowNumber);
+        working.setDeletedFlag(false);
+        apply(working, data);
+        identityService.registerImport(session.identityIndex(), previousIdentity, identity, working);
+        return new MaterialPreview(
+                exists ? ImportOutcome.UPDATED : ImportOutcome.CREATED,
+                exists ? MaterialSnapshot.of(existing) : null,
+                MaterialSnapshot.of(working),
+                exists ? existing.getId() : null
+        );
     }
 
     MaterialIdentityService.Identity identity(MaterialImportData data) {
@@ -108,10 +154,13 @@ class MaterialImportProcessor {
         return value == null ? "" : value.trim();
     }
 
-    record ImportSession(Map<MaterialIdentityService.Identity, Material> identityIndex) {
+    record ImportSession(Map<MaterialIdentityService.Identity, Material> identityIndex, String batchNo) {
     }
 
     record ImportRowResult(ImportOutcome outcome, Material material) {
+    }
+
+    record MaterialPreview(ImportOutcome outcome, MaterialSnapshot before, MaterialSnapshot after, Long materialId) {
     }
 
     enum ImportOutcome {

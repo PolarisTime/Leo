@@ -33,6 +33,8 @@ class MaterialImportProcessorTest {
 
     @Mock
     private MaterialRepository materialRepository;
+    @Mock
+    private MaterialHistoryRecorder historyRecorder;
 
     private MaterialImportProcessor processor;
 
@@ -40,7 +42,7 @@ class MaterialImportProcessorTest {
     void setUp() {
         MaterialIdentityService identityService = new MaterialIdentityService(materialRepository);
         processor = new MaterialImportProcessor(
-                materialRepository, new SnowflakeIdGenerator(1), identityService);
+                materialRepository, new SnowflakeIdGenerator(1), identityService, historyRecorder);
     }
 
     @Test
@@ -151,6 +153,57 @@ class MaterialImportProcessorTest {
         assertThat(second.material().getId()).isEqualTo(first.material().getId());
         assertThat(second.material().getPiecesPerBundle()).isEqualTo(120);
         verify(materialRepository, times(2)).save(any(Material.class));
+    }
+
+    @Test
+    void previewNewIdentityShouldNotPersistOrRecordHistory() {
+        when(materialRepository.findActiveIdentityCandidates(anyCollection(), anyCollection(), anyCollection()))
+                .thenReturn(List.of());
+
+        MaterialImportProcessor.ImportSession session = startSession("新品牌", "HRB400", "8", "9米");
+        MaterialImportProcessor.MaterialPreview preview = processor.previewRow(
+                session, importData(null, "新品牌", "HRB400", "8", "9米", 100), 2);
+
+        assertThat(preview.outcome()).isEqualTo(MaterialImportProcessor.ImportOutcome.CREATED);
+        assertThat(preview.before()).isNull();
+        assertThat(preview.after()).isNotNull();
+        assertThat(preview.after().brand()).isEqualTo("新品牌");
+        assertThat(preview.materialId()).isNull();
+        verify(materialRepository, never()).save(any(Material.class));
+        verify(historyRecorder, never()).record(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void previewExactMatchShouldSkip() {
+        Material existing = dbMaterial(100L, "100", "中天", "HRB400E", "12", "9米", 1);
+        when(materialRepository.findActiveIdentityCandidates(anyCollection(), anyCollection(), anyCollection()))
+                .thenReturn(List.of(existing));
+
+        MaterialImportProcessor.ImportSession session = startSession("中天", "HRB400E", "12", "9米");
+        MaterialImportProcessor.MaterialPreview preview = processor.previewRow(
+                session, importData(null, "中天", "HRB400E", "12", "9米", 1), 2);
+
+        assertThat(preview.outcome()).isEqualTo(MaterialImportProcessor.ImportOutcome.SKIPPED);
+        assertThat(preview.materialId()).isEqualTo(100L);
+        verify(materialRepository, never()).save(any(Material.class));
+    }
+
+    @Test
+    void previewIdentityHitShouldReturnUpdatedDiffWithoutSaving() {
+        Material existing = dbMaterial(100L, "100", "中天", "HRB400E", "12", "9米", 1);
+        when(materialRepository.findActiveIdentityCandidates(anyCollection(), anyCollection(), anyCollection()))
+                .thenReturn(List.of(existing));
+
+        MaterialImportProcessor.ImportSession session = startSession("中天", "HRB400E", "12", "9米");
+        MaterialImportProcessor.MaterialPreview preview = processor.previewRow(
+                session, importData(null, "中天", "HRB400E", "12", "9米", 250), 2);
+
+        assertThat(preview.outcome()).isEqualTo(MaterialImportProcessor.ImportOutcome.UPDATED);
+        assertThat(preview.before().piecesPerBundle()).isEqualTo(1);
+        assertThat(preview.after().piecesPerBundle()).isEqualTo(250);
+        assertThat(preview.materialId()).isEqualTo(100L);
+        verify(materialRepository, never()).save(any(Material.class));
+        verify(historyRecorder, never()).record(any(), any(), any(), any(), any(), any(), any());
     }
 
     private MaterialImportProcessor.ImportSession startSession(String brand, String material, String spec, String length) {

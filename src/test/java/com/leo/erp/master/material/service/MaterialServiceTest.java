@@ -4,12 +4,12 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
+import com.leo.erp.master.material.domain.MaterialSnapshot;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.mapper.MaterialMapper;
 import com.leo.erp.master.material.repository.MaterialRepository;
 import com.leo.erp.master.material.web.dto.MaterialRequest;
 import com.leo.erp.master.material.web.dto.MaterialResponse;
-import com.leo.erp.master.service.ReferenceSnapshotSyncService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -21,7 +21,6 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -45,11 +44,11 @@ class MaterialServiceTest {
     @Mock
     private MaterialIdentityService identityService;
     @Mock
-    private ReferenceSnapshotSyncService referenceSnapshotSyncService;
+    private MaterialHistoryRecorder materialHistoryRecorder;
 
     private MaterialService service() {
         return new MaterialService(materialRepository, snowflakeIdGenerator, materialMapper,
-                materialReferenceGuard, codeIssuanceService, identityService, referenceSnapshotSyncService);
+                materialReferenceGuard, codeIssuanceService, identityService, materialHistoryRecorder);
     }
 
     private MaterialRequest physicalRequest(String brand) {
@@ -180,7 +179,7 @@ class MaterialServiceTest {
     }
 
     @Test
-    void update_brandChanged_syncsReferenceSnapshot() {
+    void update_brandChanged_recordsHistoryAndFreezesSnapshots() {
         Material entity = new Material();
         entity.setId(5L);
         entity.setBrand("旧品牌");
@@ -191,12 +190,14 @@ class MaterialServiceTest {
 
         service().update(5L, physicalRequest("新品牌"));
 
-        verify(referenceSnapshotSyncService).syncMaterialName(5L, "新品牌");
+        verify(materialHistoryRecorder).record(eq(5L), eq(MaterialHistoryRecorder.SOURCE_MANUAL),
+                eq(MaterialHistoryRecorder.TYPE_UPDATED), any(MaterialSnapshot.class), any(MaterialSnapshot.class),
+                isNull(), isNull());
         verify(codeIssuanceService, never()).consume(anyString(), anyString());
     }
 
     @Test
-    void update_expenseType_neverSyncsReferenceSnapshot() {
+    void update_expenseType_recordsHistory() {
         Material entity = new Material();
         entity.setId(5L);
         entity.setBrand("旧品牌");
@@ -209,7 +210,9 @@ class MaterialServiceTest {
 
         service().update(5L, request);
 
-        verify(referenceSnapshotSyncService, never()).syncMaterialName(anyLong(), any());
+        verify(materialHistoryRecorder).record(eq(5L), eq(MaterialHistoryRecorder.SOURCE_MANUAL),
+                eq(MaterialHistoryRecorder.TYPE_UPDATED), any(MaterialSnapshot.class), any(MaterialSnapshot.class),
+                isNull(), isNull());
         assertThat(entity.getBrand()).isEmpty();
         assertThat(entity.getMaterialType()).isEqualTo(MaterialRequest.TYPE_EXPENSE);
     }

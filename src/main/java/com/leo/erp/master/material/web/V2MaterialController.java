@@ -4,7 +4,9 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.master.material.service.MaterialDocumentService;
+import com.leo.erp.master.material.service.MaterialHistoryQueryService;
 import com.leo.erp.master.material.service.MaterialService;
+import com.leo.erp.master.material.web.dto.MaterialHistoryResponse;
 import com.leo.erp.master.material.web.dto.MaterialRequest;
 import com.leo.erp.master.material.web.dto.MaterialResponse;
 import jakarta.validation.Valid;
@@ -43,11 +45,14 @@ public class V2MaterialController {
 
     private final MaterialService materialService;
     private final MaterialDocumentService materialDocumentService;
+    private final MaterialHistoryQueryService materialHistoryQueryService;
 
     public V2MaterialController(MaterialService materialService,
-                                MaterialDocumentService materialDocumentService) {
+                                MaterialDocumentService materialDocumentService,
+                                MaterialHistoryQueryService materialHistoryQueryService) {
         this.materialService = materialService;
         this.materialDocumentService = materialDocumentService;
+        this.materialHistoryQueryService = materialHistoryQueryService;
     }
 
     @GetMapping
@@ -58,6 +63,13 @@ public class V2MaterialController {
     @GetMapping("/{id}")
     public MaterialResponse detail(@PathVariable Long id) {
         return materialService.detail(id);
+    }
+
+    @GetMapping("/{id}/histories")
+    public PageResponse<MaterialHistoryResponse> histories(
+            @PathVariable Long id,
+            @BindPageQuery(sortFieldKey = "material") PageQuery query) {
+        return PageResponse.from(materialHistoryQueryService.page(id, query));
     }
 
     @PostMapping

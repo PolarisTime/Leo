@@ -1,6 +1,7 @@
 package com.leo.erp.master.material.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.master.material.domain.MaterialSnapshot;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -44,6 +45,63 @@ public class MaterialCsvImportService {
         }
 
         return counters.toResult(failures, rows);
+    }
+
+    @Transactional(readOnly = true)
+    public MaterialImportPreviewResult previewBytes(byte[] raw) throws IOException {
+        MaterialCsvFileReader.CsvTable table = fileReader.read(raw);
+        MaterialImportProcessor.ImportSession session = importProcessor.start(collectIdentities(table));
+        int totalRows = 0;
+        int createdCount = 0;
+        int updatedCount = 0;
+        int skippedCount = 0;
+        int failCount = 0;
+        List<MaterialImportPreviewResult.Row> results = new ArrayList<>();
+
+        for (int index = 1; index < table.rows().size(); index++) {
+            List<String> row = table.rows().get(index);
+            if (rowMapper.isBlank(row)) {
+                continue;
+            }
+            totalRows++;
+            int rowNumber = index + 1;
+            String materialCode = rowMapper.materialCode(row, table.headerIndexes());
+            // 预览不落库：失败行同样只记录并继续，保证结果与正式导入一致。
+            try {
+                MaterialImportData data = rowMapper.toImportData(row, table.headerIndexes(), rowNumber);
+                MaterialImportProcessor.MaterialPreview preview =
+                        importProcessor.previewRow(session, data, rowNumber);
+                switch (preview.outcome()) {
+                    case CREATED -> createdCount++;
+                    case UPDATED -> updatedCount++;
+                    case SKIPPED -> skippedCount++;
+                }
+                MaterialSnapshot after = preview.after();
+                results.add(new MaterialImportPreviewResult.Row(
+                        rowNumber,
+                        after == null ? materialCode : after.materialCode(),
+                        after == null ? null : after.brand(),
+                        after == null ? null : after.material(),
+                        after == null ? null : after.spec(),
+                        after == null ? null : after.length(),
+                        preview.outcome().name(),
+                        preview.materialId(),
+                        MaterialSnapshot.diff(preview.before(), after),
+                        null
+                ));
+            } catch (BusinessException exception) {
+                failCount++;
+                results.add(MaterialImportPreviewResult.Row.failed(rowNumber, materialCode, exception.getMessage()));
+            } catch (DataIntegrityViolationException exception) {
+                failCount++;
+                results.add(MaterialImportPreviewResult.Row.failed(rowNumber, materialCode, "保存失败，请检查该行数据"));
+            } catch (DataAccessException exception) {
+                failCount++;
+                results.add(MaterialImportPreviewResult.Row.failed(rowNumber, materialCode, "保存失败，请检查该行数据"));
+            }
+        }
+        return new MaterialImportPreviewResult(
+                totalRows, createdCount, updatedCount, skippedCount, failCount, List.copyOf(results));
     }
 
     private void importRow(MaterialImportProcessor.ImportSession session,

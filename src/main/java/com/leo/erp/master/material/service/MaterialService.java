@@ -9,6 +9,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
+import com.leo.erp.master.material.domain.MaterialSnapshot;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.mapper.MaterialMapper;
 import com.leo.erp.master.material.repository.MaterialRepository;
@@ -39,7 +40,7 @@ public class MaterialService {
     private final MaterialReferenceGuard materialReferenceGuard;
     private final MasterDataCodeIssuanceService codeIssuanceService;
     private final MaterialIdentityService identityService;
-    private final com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService;
+    private final MaterialHistoryRecorder materialHistoryRecorder;
 
     public MaterialService(MaterialRepository materialRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
@@ -47,14 +48,14 @@ public class MaterialService {
                            MaterialReferenceGuard materialReferenceGuard,
                            MasterDataCodeIssuanceService codeIssuanceService,
                            MaterialIdentityService identityService,
-                           com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
+                           MaterialHistoryRecorder materialHistoryRecorder) {
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.materialRepository = materialRepository;
         this.materialMapper = materialMapper;
         this.materialReferenceGuard = materialReferenceGuard;
         this.codeIssuanceService = codeIssuanceService;
         this.identityService = identityService;
-        this.referenceSnapshotSyncService = referenceSnapshotSyncService;
+        this.materialHistoryRecorder = materialHistoryRecorder;
     }
 
     @Transactional(readOnly = true)
@@ -71,23 +72,23 @@ public class MaterialService {
         apply(entity, request);
         Material saved = saveCreatedMaterial(entity);
         operationLogger.created(entity, entityId);
+        materialHistoryRecorder.record(saved.getId(), MaterialHistoryRecorder.SOURCE_MANUAL,
+                MaterialHistoryRecorder.TYPE_CREATED, null, MaterialSnapshot.of(saved), null, null);
         return toResponse(saved);
     }
 
     @Transactional
     public MaterialResponse update(Long id, MaterialRequest request) {
         Material entity = requireActiveMaterial(id);
-        String currentBrand = entity.getBrand();
         validateUpdate(entity, request);
+        MaterialSnapshot before = MaterialSnapshot.of(entity);
         apply(entity, request);
-        String nextBrand = entity.getBrand();
         Material saved = saveMaterial(entity);
         MaterialResponse response = toResponse(saved);
         operationLogger.updated(entity, id);
-        // 品牌变更同步引用快照；附加费用类无品牌语义，不触发。
-        if (!request.isExpense() && !currentBrand.equals(nextBrand)) {
-            referenceSnapshotSyncService.syncMaterialName(id, nextBrand);
-        }
+        // 快照冻结：主数据改名不追溯改写历史单据的名称快照。
+        materialHistoryRecorder.record(saved.getId(), MaterialHistoryRecorder.SOURCE_MANUAL,
+                MaterialHistoryRecorder.TYPE_UPDATED, before, MaterialSnapshot.of(saved), null, null);
         return response;
     }
 

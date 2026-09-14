@@ -1,5 +1,6 @@
 package com.leo.erp.master.material.web;
 
+import com.leo.erp.master.material.service.MaterialBatchRollbackService;
 import com.leo.erp.master.material.web.dto.MaterialImportResultResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,13 +27,16 @@ class V2MaterialImportControllerTest {
 
     @Mock
     private MaterialImportFileAdapter materialImportFileAdapter;
+    @Mock
+    private MaterialBatchRollbackService materialBatchRollbackService;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new V2MaterialImportController(materialImportFileAdapter))
+                .standaloneSetup(new V2MaterialImportController(
+                        materialImportFileAdapter, materialBatchRollbackService))
                 .build();
     }
 

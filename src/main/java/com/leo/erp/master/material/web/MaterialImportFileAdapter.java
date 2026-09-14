@@ -6,9 +6,13 @@ import com.leo.erp.common.excel.service.ExcelImportService;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.service.MaterialCsvImportResult;
 import com.leo.erp.master.material.service.MaterialCsvImportService;
+import com.leo.erp.master.material.service.MaterialImportPreviewResult;
 import com.leo.erp.master.material.service.MaterialSpreadsheetImportService;
+import com.leo.erp.master.material.web.dto.MaterialFieldChangeResponse;
 import com.leo.erp.master.material.web.dto.MaterialImportDTO;
 import com.leo.erp.master.material.web.dto.MaterialImportFailureResponse;
+import com.leo.erp.master.material.web.dto.MaterialImportPreviewResponse;
+import com.leo.erp.master.material.web.dto.MaterialImportPreviewRowResponse;
 import com.leo.erp.master.material.web.dto.MaterialImportResultResponse;
 import com.leo.erp.master.material.web.dto.MaterialImportRowResultResponse;
 import org.springframework.stereotype.Component;
@@ -87,6 +91,46 @@ public class MaterialImportFileAdapter {
                                 trace.reason()
                         ))
                         .toList()
+        );
+    }
+
+    public MaterialImportPreviewResponse previewSpreadsheet(MultipartFile file) throws IOException {
+        List<MaterialImportDTO> rows = excelImportService.parseAndValidate(file, MaterialImportDTO.class);
+        return toPreviewResponse(spreadsheetImportService.previewRows(rows));
+    }
+
+    public MaterialImportPreviewResponse previewCsv(MultipartFile file) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件不能为空");
+        }
+        return toPreviewResponse(csvImportService.previewBytes(file.getBytes()));
+    }
+
+    private MaterialImportPreviewResponse toPreviewResponse(MaterialImportPreviewResult result) {
+        List<MaterialImportPreviewRowResponse> rows = result.rows().stream()
+                .map(row -> new MaterialImportPreviewRowResponse(
+                        row.rowNumber(),
+                        row.materialCode(),
+                        row.brand(),
+                        row.material(),
+                        row.spec(),
+                        row.length(),
+                        row.outcome(),
+                        row.materialId(),
+                        row.changes().stream()
+                                .map(change -> new MaterialFieldChangeResponse(
+                                        change.field(), change.label(), change.before(), change.after()))
+                                .toList(),
+                        row.reason()
+                ))
+                .toList();
+        return new MaterialImportPreviewResponse(
+                result.totalRows(),
+                result.createdCount(),
+                result.updatedCount(),
+                result.skippedCount(),
+                result.failedCount(),
+                rows
         );
     }
 
