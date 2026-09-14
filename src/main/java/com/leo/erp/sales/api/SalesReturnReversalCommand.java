@@ -9,9 +9,22 @@ package com.leo.erp.sales.api;
 public interface SalesReturnReversalCommand {
 
     /**
-     * 为已审核销售退货单生成红字对账单；同一退货单幂等（已存在则跳过）。
+     * 为已审核销售退货单生成红字对账单。
+     * <p>
+     * 幂等重建：先软删该退货单已有的有效红字（含异常残留），再按最新明细重新生成，
+     * 保证同一退货单同一时刻至多存在一条有效红字。
      *
      * @param salesReturnId 已审核销售退货单ID
      */
     void reverseForAuditedReturn(Long salesReturnId);
+
+    /**
+     * 撤销由该销售退货单生成的有效红字对账单（软删）。
+     * <p>
+     * 退货反审核、删除时调用；若红字已被收款核销引用则拒绝撤销并抛出业务异常，
+     * 防止账面冲销脱离实际收款。
+     *
+     * @param salesReturnId 销售退货单ID
+     */
+    void revertForReturn(Long salesReturnId);
 }

@@ -40,6 +40,14 @@ public class SourceAllocationLockService {
             ORDER BY source_parent.id, source_item.id
             FOR UPDATE OF source_parent, source_item
             """;
+    private static final String LOCK_SALES_OUTBOUND_ITEMS_SQL = """
+            SELECT source_item.id
+            FROM so_sales_outbound source_parent
+            JOIN so_sales_outbound_item source_item ON source_item.outbound_id = source_parent.id
+            WHERE source_item.id IN (:sourceIds)
+            ORDER BY source_parent.id, source_item.id
+            FOR UPDATE OF source_parent, source_item
+            """;
     private static final String LOCK_PURCHASE_INBOUNDS_SQL = lockDocumentSql("po_purchase_inbound");
     private static final String LOCK_SALES_ORDERS_SQL = lockDocumentSql("so_sales_order");
     private static final String LOCK_SALES_OUTBOUNDS_SQL = lockDocumentSql("so_sales_outbound");
@@ -60,6 +68,14 @@ public class SourceAllocationLockService {
         lockRows(LOCK_PURCHASE_ORDER_ITEMS_SQL, purchaseOrderItemIds, "采购订单明细");
         lockRows(LOCK_PURCHASE_INBOUND_ITEMS_SQL, purchaseInboundItemIds, "采购入库明细");
         lockRows(LOCK_SALES_ORDER_ITEMS_SQL, salesOrderItemIds, "销售订单明细");
+    }
+
+    /**
+     * 锁定销售出库明细及其父出库单行。用于销售退货审核前封死并发超退窗口。
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockSalesOutboundItemSources(Collection<Long> salesOutboundItemIds) {
+        lockRows(LOCK_SALES_OUTBOUND_ITEMS_SQL, salesOutboundItemIds, "销售出库明细");
     }
 
     @Transactional(propagation = Propagation.MANDATORY)

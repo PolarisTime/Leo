@@ -108,9 +108,12 @@ public class MaterialService {
     public void delete(Long id) {
         Material entity = requireActiveMaterial(id);
         materialReferenceGuard.assertNoReferences(entity);
+        MaterialSnapshot before = MaterialSnapshot.of(entity);
         entity.setDeletedFlag(true);
         saveMaterial(entity);
         operationLogger.deleted(entity, id);
+        materialHistoryRecorder.record(entity.getId(), MaterialHistoryRecorder.SOURCE_MANUAL,
+                MaterialHistoryRecorder.TYPE_DELETED, before, null, null, null);
     }
 
     @Transactional(readOnly = true)

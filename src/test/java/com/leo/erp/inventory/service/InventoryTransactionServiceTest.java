@@ -106,7 +106,7 @@ class InventoryTransactionServiceTest {
         assertThat(saved.getDirection()).isEqualTo((short) -1);
         assertThat(saved.getUnitCost()).isEqualByComparingTo("3000.00");
         assertThat(saved.getAmount()).isEqualByComparingTo("-12000.00");
-        verify(lockService).lock(100L, 3L);
+        verify(lockService).lockAll(List.of(new InventoryTransactionLockService.Dimension(100L, 3L)));
     }
 
     @Test
@@ -147,7 +147,7 @@ class InventoryTransactionServiceTest {
         InventoryTransaction saved = captureSaved();
         assertThat(saved.getWarehouseId()).isEqualTo(7L);
         assertThat(saved.getWarehouseName()).isEqualTo("库房A");
-        verify(lockService).lock(100L, 7L);
+        verify(lockService).lockAll(java.util.List.of(new InventoryTransactionLockService.Dimension(100L, 7L)));
     }
 
     @Test

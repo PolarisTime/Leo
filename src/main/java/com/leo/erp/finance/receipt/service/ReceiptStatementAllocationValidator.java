@@ -101,6 +101,7 @@ public class ReceiptStatementAllocationValidator {
     }
 
     private CustomerStatementApi.Snapshot requireAccessibleCustomerStatement(Long statementId) {
-        return customerStatementApi.requireActiveById(statementId);
+        // 可核销候选显式排除红字对账单：红字为退货冲销，不参与收款核销。
+        return customerStatementApi.requireActiveAllocatableById(statementId);
     }
 }

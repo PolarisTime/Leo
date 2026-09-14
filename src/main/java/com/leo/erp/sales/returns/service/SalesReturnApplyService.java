@@ -134,6 +134,9 @@ public class SalesReturnApplyService {
         item.setBatchNo(sourceOutbound.getBatchNo());
 
         int quantity = source.quantity() == null ? 0 : source.quantity();
+        if (quantity <= 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行退货数量必须大于0");
+        }
         item.setQuantity(quantity);
         item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
         BigDecimal pieceWeightTon = TradeItemCalculator.scaleWeightTon(source.pieceWeightTon());

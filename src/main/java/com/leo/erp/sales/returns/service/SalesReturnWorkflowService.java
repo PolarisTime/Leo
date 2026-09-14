@@ -1,5 +1,6 @@
 package com.leo.erp.sales.returns.service;
 
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.inventory.api.InventorySourceDocumentType;
@@ -27,6 +28,7 @@ public class SalesReturnWorkflowService {
     private final SalesReturnApplyService applyService;
     private final SalesReturnCoverageValidator coverageValidator;
     private final SalesReturnSaveService saveService;
+    private final SourceAllocationLockService sourceAllocationLockService;
     private final BusinessOperationEventPublisher businessOperationEventPublisher;
     private final SalesReturnReversalCommand salesReturnReversalCommand;
     private final InventoryTransactionCommand inventoryCommand;
@@ -34,12 +36,14 @@ public class SalesReturnWorkflowService {
     public SalesReturnWorkflowService(SalesReturnApplyService applyService,
                                       SalesReturnCoverageValidator coverageValidator,
                                       SalesReturnSaveService saveService,
+                                      SourceAllocationLockService sourceAllocationLockService,
                                       BusinessOperationEventPublisher businessOperationEventPublisher,
                                       SalesReturnReversalCommand salesReturnReversalCommand,
                                       InventoryTransactionCommand inventoryCommand) {
         this.applyService = applyService;
         this.coverageValidator = coverageValidator;
         this.saveService = saveService;
+        this.sourceAllocationLockService = sourceAllocationLockService;
         this.businessOperationEventPublisher = businessOperationEventPublisher;
         this.salesReturnReversalCommand = salesReturnReversalCommand;
         this.inventoryCommand = inventoryCommand;
@@ -58,12 +62,14 @@ public class SalesReturnWorkflowService {
         entity.setRemark(request.remark());
         applyService.applyItems(entity, request, nextIdSupplier);
         if (StatusConstants.AUDITED.equals(nextStatus)) {
+            lockSourceOutboundItems(entity);
             coverageValidator.assertCoverage(entity);
         }
     }
 
     void beforeStatusUpdate(SalesReturn entity, String currentStatus, String nextStatus) {
         if (StatusConstants.AUDITED.equals(nextStatus)) {
+            lockSourceOutboundItems(entity);
             coverageValidator.assertCoverage(entity);
         }
     }
@@ -92,8 +98,8 @@ public class SalesReturnWorkflowService {
 
     /**
      * 退货状态变更后的下游联动：
-     * 审核通过时生成红字对账单（同一退货单幂等）并按移动加权平均成本记退货入库；
-     * 反审核时软删库存事务。
+     * 审核通过时生成红字对账单（同一退货单幂等重建）并按移动加权平均成本记退货入库；
+     * 反审核时对称撤销红字对账单并软删库存事务。
      */
     void afterStatusChanged(SalesReturn salesReturn, String currentStatus, String nextStatus) {
         boolean auditedBefore = StatusConstants.AUDITED.equals(currentStatus);
@@ -102,15 +108,24 @@ public class SalesReturnWorkflowService {
             salesReturnReversalCommand.reverseForAuditedReturn(salesReturn.getId());
             inventoryCommand.recordSalesReturnIn(toInventoryInput(salesReturn));
         } else if (auditedBefore && !auditedAfter) {
+            salesReturnReversalCommand.revertForReturn(salesReturn.getId());
             inventoryCommand.softDeleteBySource(
                     InventorySourceDocumentType.SALES_RETURN.name(), salesReturn.getId());
         }
     }
 
     void publishDeleted(SalesReturn entity) {
+        salesReturnReversalCommand.revertForReturn(entity.getId());
         inventoryCommand.softDeleteBySource(
                 InventorySourceDocumentType.SALES_RETURN.name(), entity.getId());
         publishEvent(entity, "SALES_RETURN_DELETED", "删除", "删除销售退货单 " + entity.getReturnNo());
+    }
+
+    /**
+     * 审核前锁定退货明细的来源销售出库明细及其父出库单，配合覆盖校验封死并发超退窗口。
+     */
+    private void lockSourceOutboundItems(SalesReturn entity) {
+        sourceAllocationLockService.lockSalesOutboundItemSources(sourceOutboundItemIds(entity));
     }
 
     private InventoryTransactionInput toInventoryInput(SalesReturn salesReturn) {

@@ -21,6 +21,7 @@ public class MaterialHistoryRecorder {
 
     public static final String TYPE_CREATED = "CREATED";
     public static final String TYPE_UPDATED = "UPDATED";
+    public static final String TYPE_DELETED = "DELETED";
     public static final String TYPE_ROLLBACK = "ROLLBACK";
 
     private final MaterialHistoryRepository repository;

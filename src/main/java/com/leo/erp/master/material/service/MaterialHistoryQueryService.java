@@ -3,6 +3,7 @@ package com.leo.erp.master.material.service;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.master.material.domain.MaterialSnapshot;
 import com.leo.erp.master.material.domain.entity.MaterialHistory;
 import com.leo.erp.master.material.repository.MaterialHistoryRepository;
 import com.leo.erp.master.material.repository.MaterialRepository;
@@ -42,12 +43,34 @@ public class MaterialHistoryQueryService {
                 history.getMaterialId(),
                 history.getChangeSource(),
                 history.getChangeType(),
-                recorder.parse(history.getBeforeSnapshot()),
-                recorder.parse(history.getAfterSnapshot()),
+                toSnapshot(recorder.parse(history.getBeforeSnapshot())),
+                toSnapshot(recorder.parse(history.getAfterSnapshot())),
                 history.getImportBatchNo(),
                 history.getRemark(),
                 history.getCreatedBy(),
                 history.getCreatedAt()
+        );
+    }
+
+    private MaterialHistoryResponse.Snapshot toSnapshot(MaterialSnapshot snapshot) {
+        if (snapshot == null) {
+            return null;
+        }
+        return new MaterialHistoryResponse.Snapshot(
+                snapshot.id(),
+                snapshot.materialCode(),
+                snapshot.brand(),
+                snapshot.material(),
+                snapshot.category(),
+                snapshot.spec(),
+                snapshot.length(),
+                snapshot.unit(),
+                snapshot.quantityUnit(),
+                snapshot.pieceWeightTon(),
+                snapshot.piecesPerBundle(),
+                snapshot.unitPrice(),
+                snapshot.remark(),
+                snapshot.materialType()
         );
     }
 }

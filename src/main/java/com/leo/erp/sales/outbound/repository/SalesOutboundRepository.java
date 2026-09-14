@@ -8,8 +8,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -40,13 +42,35 @@ public interface SalesOutboundRepository extends JpaRepository<SalesOutbound, Lo
 
     boolean existsByOutboundNoAndDeletedFlagFalse(String outboundNo);
 
-    List<SalesOutbound> findByDeletedFlagFalse();
-
     @EntityGraph(attributePaths = "items")
     Optional<SalesOutbound> findByIdAndDeletedFlagFalse(Long id);
 
     @EntityGraph(attributePaths = "items")
     List<SalesOutbound> findAllByStatusAndDeletedFlagFalse(String status);
+
+    /**
+     * 按 (outboundDate, id) 升序 keyset 分页扫描已审核出库单，供库存期初回填分批装载。
+     * 不 join fetch 明细，确保 LIMIT 下推数据库；明细由 {@link #findAllByIdIn(Collection)} 批量初始化。
+     */
+    @Query("""
+            select outbound
+            from SalesOutbound outbound
+            where outbound.deletedFlag = false
+              and outbound.status = :status
+              and (outbound.outboundDate > :afterDate
+                   or (outbound.outboundDate = :afterDate and outbound.id > :afterId))
+            order by outbound.outboundDate asc, outbound.id asc
+            """)
+    List<SalesOutbound> findPostedAfter(@Param("status") String status,
+                                        @Param("afterDate") LocalDate afterDate,
+                                        @Param("afterId") long afterId,
+                                        Pageable pageable);
+
+    /**
+     * 按 ID 批量装载出库单及明细，供回填分页后批量初始化 items，避免逐单懒加载 N+1。
+     */
+    @EntityGraph(attributePaths = "items")
+    List<SalesOutbound> findAllByIdIn(Collection<Long> ids);
 
     @Query("""
             select count(distinct outbound.id)

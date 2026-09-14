@@ -60,4 +60,33 @@ class CustomerStatementQueryServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.NOT_FOUND);
     }
+
+    @Test
+    void requireActiveAllocatableById_shouldReturnBlueStatement() {
+        CustomerStatement stmt = new CustomerStatement();
+        when(repository.findActiveBlueById(1L)).thenReturn(Optional.of(stmt));
+
+        assertThat(service.requireActiveAllocatableById(1L)).isSameAs(stmt);
+    }
+
+    @Test
+    void requireActiveAllocatableById_shouldRejectRedStatement() {
+        when(repository.findActiveBlueById(1L)).thenReturn(Optional.empty());
+        when(repository.existsByIdAndDeletedFlagFalse(1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.requireActiveAllocatableById(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("红字对账单不参与收款核销");
+    }
+
+    @Test
+    void requireActiveAllocatableById_shouldThrowNotFoundWhenMissing() {
+        when(repository.findActiveBlueById(1L)).thenReturn(Optional.empty());
+        when(repository.existsByIdAndDeletedFlagFalse(1L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.requireActiveAllocatableById(1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.NOT_FOUND);
+    }
 }

@@ -119,6 +119,15 @@ class SalesReturnCoverageValidatorTest {
     }
 
     @Test
+    void shouldRejectNonPositiveQuantity() {
+        SalesReturn salesReturn = salesReturn(1L, item(11L, 0));
+
+        assertThatThrownBy(() -> validator().assertCoverage(salesReturn))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("退货数量必须大于0");
+    }
+
+    @Test
     void shouldRejectUnknownSourceOutboundItem() {
         SalesReturn salesReturn = salesReturn(1L, item(99L, 1));
         when(sourceService.loadSourceOutboundItemMap(any())).thenReturn(Map.of());

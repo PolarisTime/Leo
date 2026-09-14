@@ -88,5 +88,26 @@ public interface CustomerStatementRepository extends JpaRepository<CustomerState
             @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds
     );
 
-    boolean existsBySourceSalesReturnIdAndDeletedFlagFalse(Long sourceSalesReturnId);
+    @Query("""
+            select statement
+            from CustomerStatement statement
+            where statement.sourceSalesReturnId = :sourceSalesReturnId
+              and statement.direction = '红字'
+              and statement.deletedFlag = false
+            """)
+    List<CustomerStatement> findBySourceSalesReturnIdAndDeletedFlagFalse(
+            @Param("sourceSalesReturnId") Long sourceSalesReturnId);
+
+    /**
+     * 收款核销可分配候选：仅未删除的蓝字对账单。
+     * 红字为退货冲销，不参与收款核销。
+     */
+    @Query("""
+            select statement
+            from CustomerStatement statement
+            where statement.id = :id
+              and statement.deletedFlag = false
+              and statement.direction = '蓝字'
+            """)
+    Optional<CustomerStatement> findActiveBlueById(@Param("id") Long id);
 }

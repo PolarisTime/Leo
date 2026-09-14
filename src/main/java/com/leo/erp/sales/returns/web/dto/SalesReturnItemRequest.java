@@ -30,7 +30,7 @@ public record SalesReturnItemRequest(
         Long warehouseId,
         String warehouseName,
         String batchNo,
-        @NotNull @Min(0) Integer quantity,
+        @NotNull @Min(value = 1, message = "退货数量必须大于0") Integer quantity,
         String quantityUnit,
         @NotNull @DecimalMin("0.000")
         @Digits(integer = 10, fraction = 8, message = "件重整数位不能超过10位，小数位不能超过8位")

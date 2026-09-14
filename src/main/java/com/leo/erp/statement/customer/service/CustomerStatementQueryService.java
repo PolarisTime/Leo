@@ -28,4 +28,19 @@ public class CustomerStatementQueryService {
         return findActiveById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "客户对账单不存在"));
     }
+
+    /**
+     * 收款核销可分配候选：仅未删除的蓝字对账单，红字对账单明确拒绝。
+     */
+    @Transactional(readOnly = true)
+    public CustomerStatement requireActiveAllocatableById(Long id) {
+        Optional<CustomerStatement> allocatable = repository.findActiveBlueById(id);
+        if (allocatable.isPresent()) {
+            return allocatable.get();
+        }
+        if (repository.existsByIdAndDeletedFlagFalse(id)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "红字对账单不参与收款核销");
+        }
+        throw new BusinessException(ErrorCode.NOT_FOUND, "客户对账单不存在");
+    }
 }

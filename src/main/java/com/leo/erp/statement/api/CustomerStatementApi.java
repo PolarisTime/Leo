@@ -9,6 +9,11 @@ public interface CustomerStatementApi {
 
     Snapshot requireActiveById(Long statementId);
 
+    /**
+     * 收款核销可分配候选：要求未删除且为蓝字对账单；红字为退货冲销，不参与收款核销。
+     */
+    Snapshot requireActiveAllocatableById(Long statementId);
+
     record Snapshot(
             Long id,
             String statementNo,
@@ -21,7 +26,8 @@ public interface CustomerStatementApi {
             String settlementCompanyName,
             BigDecimal salesAmount,
             BigDecimal closingAmount,
-            String status
+            String status,
+            String direction
     ) {
     }
 }

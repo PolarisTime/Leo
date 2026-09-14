@@ -54,9 +54,19 @@ public class StatementSettlementSyncService implements StatementSettlementSyncCo
 
     @Transactional
     public CustomerStatement syncCustomerStatement(CustomerStatement statement) {
-        BigDecimal receiptAmount = resolveCustomerReceiptAmount(statement.getId());
-        statement.setReceiptAmount(receiptAmount);
-        statement.setClosingAmount(statement.getSalesAmount().subtract(receiptAmount).max(BigDecimal.ZERO));
+        // 红字对账单不参与收款核销：收款金额恒为 0，closing 保持负销售额，不做 max(ZERO) 截断。
+        BigDecimal receiptAmount = StatusConstants.STATEMENT_DIRECTION_RED.equals(statement.getDirection())
+                ? TradeItemCalculator.scaleAmount(BigDecimal.ZERO)
+                : resolveCustomerReceiptAmount(statement.getId());
+        StatementBalanceRule.Balance balance = StatementBalanceRule.resolveForDirection(
+                statement.getDirection(),
+                statement.getSalesAmount(),
+                receiptAmount,
+                "客户对账单收款金额",
+                "客户对账单累计收款金额不能超过销售金额"
+        );
+        statement.setReceiptAmount(balance.settledAmount());
+        statement.setClosingAmount(balance.closingAmount());
         return customerStatementRepository.save(statement);
     }
 

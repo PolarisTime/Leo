@@ -90,8 +90,15 @@ public class InventoryTransactionService implements InventoryTransactionCommand 
                 .filter(Objects::nonNull)
                 .sorted(Comparator
                         .comparing((InventoryTransactionInput.Line line) -> sortKey(line.materialId()))
-                        .thenComparing(line -> sortKey(line.warehouseId())))
+                        .thenComparing(line -> sortKey(resolveWarehouseId(line, input))))
                 .toList();
+        // 统一锁顺序：同一事务内先按 (materialId, warehouseId) 升序一次性获取本单全部维度锁，
+        // 与期初回填的批次加锁协议一致，避免 AB-BA 死锁。
+        lockService.lockAll(lines.stream()
+                .filter(line -> line.materialId() != null && line.quantity() > 0)
+                .map(line -> new InventoryTransactionLockService.Dimension(
+                        line.materialId(), resolveWarehouseId(line, input)))
+                .toList());
         for (InventoryTransactionInput.Line line : lines) {
             if (line.materialId() == null || line.quantity() <= 0) {
                 log.warn("跳过非法库存明细行: materialId={}, quantity={}", line.materialId(), line.quantity());
@@ -101,11 +108,10 @@ public class InventoryTransactionService implements InventoryTransactionCommand 
                     input.sourceDocumentType(), line.sourceItemId(), type.name())) {
                 continue;
             }
-            Long warehouseId = line.warehouseId() != null ? line.warehouseId() : input.defaultWarehouseId();
+            Long warehouseId = resolveWarehouseId(line, input);
             String warehouseName = line.warehouseName() != null
                     ? line.warehouseName()
                     : input.defaultWarehouseName();
-            lockService.lock(line.materialId(), warehouseId);
             BigDecimal unitCost = resolveUnitCost(type, line, warehouseId);
             BigDecimal amount = BigDecimal.valueOf(type.direction())
                     .multiply(unitCost)
@@ -114,6 +120,10 @@ public class InventoryTransactionService implements InventoryTransactionCommand 
             repository.save(buildTransaction(input, type, line, warehouseId, warehouseName, unitCost, amount));
             repository.flush();
         }
+    }
+
+    private static Long resolveWarehouseId(InventoryTransactionInput.Line line, InventoryTransactionInput input) {
+        return line.warehouseId() != null ? line.warehouseId() : input.defaultWarehouseId();
     }
 
     private InventoryTransaction buildTransaction(InventoryTransactionInput input,

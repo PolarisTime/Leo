@@ -198,13 +198,14 @@ class SalesOrderQueryServiceTest {
         when(outboundCandidateQueryRepository.pageIds(any(), any()))
                 .thenReturn(new PageImpl<>(List.of(5L), PageRequest.of(0, 10), 1));
         when(repository.findByIdInAndDeletedFlagFalse(anyList())).thenReturn(List.of(order));
-        when(responseAssembler.toDetailResponse(order)).thenReturn(response);
+        when(responseAssembler.toDetailResponses(List.of(order))).thenReturn(List.of(response));
 
         Page<SalesOrderResponse> result = service.outboundImportCandidates(
                 mock(PageQuery.class), mock(PageFilter.class));
 
         assertThat(result.getContent()).containsExactly(response);
         assertThat(result.getTotalElements()).isEqualTo(1);
+        verify(responseAssembler).toDetailResponses(List.of(order));
     }
 
     @Test
@@ -218,15 +219,17 @@ class SalesOrderQueryServiceTest {
         assertThat(result.getContent()).isEmpty();
         assertThat(result.getTotalElements()).isZero();
         verifyNoInteractions(repository);
+        verifyNoInteractions(responseAssembler);
     }
 
     @Test
     void outboundImportCandidates_shouldSkipMissingOrders() {
         when(outboundCandidateQueryRepository.pageIds(any(), any()))
                 .thenReturn(new PageImpl<>(List.of(5L, 6L), PageRequest.of(0, 10), 2));
-        when(repository.findByIdInAndDeletedFlagFalse(anyList())).thenReturn(List.of(entity()));
+        SalesOrder order = entity();
+        when(repository.findByIdInAndDeletedFlagFalse(anyList())).thenReturn(List.of(order));
         SalesOrderResponse response = mock(SalesOrderResponse.class);
-        when(responseAssembler.toDetailResponse(any(SalesOrder.class))).thenReturn(response);
+        when(responseAssembler.toDetailResponses(List.of(order))).thenReturn(List.of(response));
 
         Page<SalesOrderResponse> result = service.outboundImportCandidates(
                 mock(PageQuery.class), mock(PageFilter.class));

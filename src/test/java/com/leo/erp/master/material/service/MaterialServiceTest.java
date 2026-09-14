@@ -265,6 +265,8 @@ class MaterialServiceTest {
 
         assertThat(entity.isDeletedFlag()).isTrue();
         verify(materialRepository).save(entity);
+        verify(materialHistoryRecorder).record(eq(5L), eq(MaterialHistoryRecorder.SOURCE_MANUAL),
+                eq(MaterialHistoryRecorder.TYPE_DELETED), any(MaterialSnapshot.class), isNull(), isNull(), isNull());
     }
 
     @Test

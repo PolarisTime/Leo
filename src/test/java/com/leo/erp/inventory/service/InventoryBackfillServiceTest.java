@@ -23,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -32,14 +33,17 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * InventoryBackfillService 幂等、状态过滤与统计行为测试。
+ * InventoryBackfillService 幂等差集、分批扫描、排序加锁与统计行为测试。
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -69,11 +73,10 @@ class InventoryBackfillServiceTest {
     @Test
     void backfill_shouldSkipSourcesWithActiveTransactionAndNotRecord() {
         PurchaseInbound inbound = purchaseInbound(5L, LocalDate.of(2026, 9, 1), purchaseItem(11L, 100L, 5));
-        when(purchaseInboundRepository.findAllByStatusInAndDeletedFlagFalse(any()))
+        when(purchaseInboundRepository.findPostedAfter(any(), any(), anyLong(), any(Pageable.class)))
                 .thenReturn(List.of(inbound));
-        when(transactionRepository
-                .existsBySourceDocumentTypeAndSourceItemIdAndTransactionTypeAndDeletedFlagFalse(
-                        "PURCHASE_INBOUND", 11L, "PURCHASE_IN")).thenReturn(true);
+        when(transactionRepository.findActiveSourceKeysBySourceItemIdIn(any()))
+                .thenReturn(List.of(activeKey("PURCHASE_INBOUND", 11L, "PURCHASE_IN")));
 
         InventoryBackfillResponse response = service.backfill();
 
@@ -84,6 +87,8 @@ class InventoryBackfillServiceTest {
         verify(inventoryCommand, never()).recordPurchaseIn(any());
         verify(inventoryCommand, never()).recordSalesOut(any());
         verify(inventoryCommand, never()).recordSalesReturnIn(any());
+        verify(transactionRepository, never())
+                .existsBySourceDocumentTypeAndSourceItemIdAndTransactionTypeAndDeletedFlagFalse(any(), any(), any());
     }
 
     @Test
@@ -92,12 +97,16 @@ class InventoryBackfillServiceTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Collection<String>> statusesCaptor = ArgumentCaptor.forClass(Collection.class);
-        verify(purchaseInboundRepository).findAllByStatusInAndDeletedFlagFalse(statusesCaptor.capture());
+        verify(purchaseInboundRepository).findPostedAfter(
+                statusesCaptor.capture(), any(), anyLong(), any(Pageable.class));
         assertThat(statusesCaptor.getValue())
                 .containsExactlyInAnyOrder(StatusConstants.AUDITED, StatusConstants.INBOUND_COMPLETED);
 
-        verify(salesOutboundRepository).findAllByStatusAndDeletedFlagFalse(StatusConstants.AUDITED);
-        verify(salesReturnRepository).findByStatus(StatusConstants.AUDITED);
+        verify(salesOutboundRepository).findPostedAfter(
+                eq(StatusConstants.AUDITED), any(), anyLong(), any(Pageable.class));
+        verify(salesReturnRepository).findPostedAfter(
+                eq(StatusConstants.AUDITED), any(), anyLong(), any(Pageable.class));
+        verify(lockService).lockBackfill();
     }
 
     @Test
@@ -106,11 +115,11 @@ class InventoryBackfillServiceTest {
         SalesOutbound outbound = salesOutbound(6L, LocalDate.of(2026, 9, 2),
                 salesOutboundItem(21L, 100L, 2), salesOutboundItem(22L, 101L, 3));
         SalesReturn salesReturn = salesReturn(7L, LocalDate.of(2026, 9, 3), salesReturnItem(31L, 100L, 1));
-        when(purchaseInboundRepository.findAllByStatusInAndDeletedFlagFalse(any()))
+        when(purchaseInboundRepository.findPostedAfter(any(), any(), anyLong(), any(Pageable.class)))
                 .thenReturn(List.of(inbound));
-        when(salesOutboundRepository.findAllByStatusAndDeletedFlagFalse(anyString()))
+        when(salesOutboundRepository.findPostedAfter(any(), any(), anyLong(), any(Pageable.class)))
                 .thenReturn(List.of(outbound));
-        when(salesReturnRepository.findByStatus(anyString()))
+        when(salesReturnRepository.findPostedAfter(any(), any(), anyLong(), any(Pageable.class)))
                 .thenReturn(List.of(salesReturn));
 
         InventoryBackfillResponse response = service.backfill();
@@ -131,13 +140,13 @@ class InventoryBackfillServiceTest {
     }
 
     @Test
-    void backfill_shouldProcessDocumentsInBusinessDateOrder() {
+    void backfill_shouldProcessDocumentsInBusinessDateOrderAcrossSources() {
         PurchaseInbound laterInbound = purchaseInbound(5L, LocalDate.of(2026, 9, 10), purchaseItem(11L, 100L, 5));
         SalesOutbound earlierOutbound = salesOutbound(6L, LocalDate.of(2026, 9, 1),
                 salesOutboundItem(21L, 100L, 2));
-        when(purchaseInboundRepository.findAllByStatusInAndDeletedFlagFalse(any()))
+        when(purchaseInboundRepository.findPostedAfter(any(), any(), anyLong(), any(Pageable.class)))
                 .thenReturn(List.of(laterInbound));
-        when(salesOutboundRepository.findAllByStatusAndDeletedFlagFalse(anyString()))
+        when(salesOutboundRepository.findPostedAfter(any(), any(), anyLong(), any(Pageable.class)))
                 .thenReturn(List.of(earlierOutbound));
 
         service.backfill();
@@ -151,7 +160,7 @@ class InventoryBackfillServiceTest {
     void backfill_shouldCountInvalidLinesAsSkipped() {
         PurchaseInbound inbound = purchaseInbound(5L, LocalDate.of(2026, 9, 1),
                 purchaseItem(11L, 100L, 0), purchaseItem(12L, null, 5));
-        when(purchaseInboundRepository.findAllByStatusInAndDeletedFlagFalse(any()))
+        when(purchaseInboundRepository.findPostedAfter(any(), any(), anyLong(), any(Pageable.class)))
                 .thenReturn(List.of(inbound));
 
         InventoryBackfillResponse response = service.backfill();
@@ -159,6 +168,69 @@ class InventoryBackfillServiceTest {
         assertThat(response.purchaseInCreated()).isZero();
         assertThat(response.skipped()).isEqualTo(2);
         verify(inventoryCommand, never()).recordPurchaseIn(any());
+    }
+
+    @Test
+    void backfill_shouldLockBatchDimensionsBeforeRecording() {
+        PurchaseInbound inbound = purchaseInbound(5L, LocalDate.of(2026, 9, 1),
+                purchaseItem(11L, 100L, 5), purchaseItem(12L, 50L, 2));
+        when(purchaseInboundRepository.findPostedAfter(any(), any(), anyLong(), any(Pageable.class)))
+                .thenReturn(List.of(inbound));
+
+        service.backfill();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Collection<InventoryTransactionLockService.Dimension>> captor =
+                ArgumentCaptor.forClass(Collection.class);
+        verify(lockService).lockAll(captor.capture());
+        assertThat(captor.getValue())
+                .containsExactlyInAnyOrder(
+                        new InventoryTransactionLockService.Dimension(100L, 9L),
+                        new InventoryTransactionLockService.Dimension(50L, 9L));
+        verify(lockService).lockBackfill();
+        InOrder order = inOrder(lockService, inventoryCommand);
+        order.verify(lockService).lockBackfill();
+        order.verify(lockService).lockAll(any());
+        order.verify(inventoryCommand).recordPurchaseIn(any());
+    }
+
+    @Test
+    void backfill_shouldScanSourcesInKeysetBatches() {
+        List<PurchaseInbound> firstPage = new ArrayList<>();
+        for (long i = 1; i <= 500; i++) {
+            firstPage.add(purchaseInbound(i, LocalDate.of(2026, 9, 1), purchaseItem(1000L + i, 100L, (int) i)));
+        }
+        PurchaseInbound overflow = purchaseInbound(501L, LocalDate.of(2026, 9, 2), purchaseItem(2000L, 100L, 1));
+        when(purchaseInboundRepository.findPostedAfter(any(), any(), anyLong(), any(Pageable.class)))
+                .thenReturn(firstPage)
+                .thenReturn(List.of(overflow));
+
+        InventoryBackfillResponse response = service.backfill();
+
+        verify(purchaseInboundRepository, times(2))
+                .findPostedAfter(any(), any(), anyLong(), any(Pageable.class));
+        assertThat(response.purchaseInCreated()).isEqualTo(501);
+    }
+
+    private InventoryTransactionRepository.ActiveSourceKey activeKey(String sourceDocumentType,
+                                                                     Long sourceItemId,
+                                                                     String transactionType) {
+        return new InventoryTransactionRepository.ActiveSourceKey() {
+            @Override
+            public String getSourceDocumentType() {
+                return sourceDocumentType;
+            }
+
+            @Override
+            public Long getSourceItemId() {
+                return sourceItemId;
+            }
+
+            @Override
+            public String getTransactionType() {
+                return transactionType;
+            }
+        };
     }
 
     private PurchaseInbound purchaseInbound(long id, LocalDate date, PurchaseInboundItem... items) {

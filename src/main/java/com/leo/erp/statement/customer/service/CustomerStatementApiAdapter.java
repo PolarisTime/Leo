@@ -25,6 +25,11 @@ public class CustomerStatementApiAdapter implements CustomerStatementApi {
         return toSnapshot(queryService.requireActiveById(statementId));
     }
 
+    @Override
+    public Snapshot requireActiveAllocatableById(Long statementId) {
+        return toSnapshot(queryService.requireActiveAllocatableById(statementId));
+    }
+
     private Snapshot toSnapshot(CustomerStatement statement) {
         return new Snapshot(
                 statement.getId(),
@@ -38,7 +43,8 @@ public class CustomerStatementApiAdapter implements CustomerStatementApi {
                 statement.getSettlementCompanyName(),
                 statement.getSalesAmount(),
                 statement.getClosingAmount(),
-                statement.getStatus()
+                statement.getStatus(),
+                statement.getDirection()
         );
     }
 }

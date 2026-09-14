@@ -68,6 +68,9 @@ public class SalesReturnCoverageValidator {
             if (outboundItemId == null) {
                 throw business("第" + lineNo + "行来源销售出库明细不能为空");
             }
+            if (quantity(item.getQuantity()) <= 0) {
+                throw business("第" + lineNo + "行退货数量必须大于0");
+            }
             if (!lineOutboundItemId.containsValue(outboundItemId)) {
                 lineOutboundItemId.put(lineNo, outboundItemId);
             }

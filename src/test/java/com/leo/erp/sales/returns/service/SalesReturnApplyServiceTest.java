@@ -1,5 +1,6 @@
 package com.leo.erp.sales.returns.service;
 
+import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -113,6 +115,38 @@ class SalesReturnApplyServiceTest {
         assertThat(entity.getProjectName()).isEqualTo("来源项目");
         assertThat(entity.getWarehouseId()).isEqualTo(30L);
         assertThat(entity.getWarehouseName()).isEqualTo("库房A");
+    }
+
+    @Test
+    void applyItems_shouldRejectZeroQuantity() {
+        SalesOutboundItem outboundItem = outboundItem(100L, 500L, 5, "库房A", 30L);
+        when(salesOutboundItemRepository.findAllByIdInWithOutbound(any())).thenReturn(List.of(outboundItem));
+        when(salesOrderItemQueryService.findActiveByIdIn(any()))
+                .thenReturn(List.of(orderItem(500L, "客户A", 10L, "项目A", 20L)));
+        SalesReturn entity = new SalesReturn();
+        entity.setId(1L);
+        SalesReturnRequest request = request(List.of(itemRequest(100L, 0, "1.25", "0", "4000")),
+                "客户A", "项目A", "库房A");
+
+        assertThatThrownBy(() -> service.applyItems(entity, request, new AtomicLong(1000)::incrementAndGet))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("退货数量必须大于0");
+    }
+
+    @Test
+    void applyItems_shouldRejectNegativeQuantity() {
+        SalesOutboundItem outboundItem = outboundItem(100L, 500L, 5, "库房A", 30L);
+        when(salesOutboundItemRepository.findAllByIdInWithOutbound(any())).thenReturn(List.of(outboundItem));
+        when(salesOrderItemQueryService.findActiveByIdIn(any()))
+                .thenReturn(List.of(orderItem(500L, "客户A", 10L, "项目A", 20L)));
+        SalesReturn entity = new SalesReturn();
+        entity.setId(1L);
+        SalesReturnRequest request = request(List.of(itemRequest(100L, -3, "1.25", "-3.75", "4000")),
+                "客户A", "项目A", "库房A");
+
+        assertThatThrownBy(() -> service.applyItems(entity, request, new AtomicLong(1000)::incrementAndGet))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("退货数量必须大于0");
     }
 
     private SalesOutboundItem outboundItem(Long id, Long orderItemId, int quantity,

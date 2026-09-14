@@ -9,6 +9,8 @@ import com.leo.erp.master.material.service.MaterialService;
 import com.leo.erp.master.material.web.dto.MaterialHistoryResponse;
 import com.leo.erp.master.material.web.dto.MaterialRequest;
 import com.leo.erp.master.material.web.dto.MaterialResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -34,6 +36,7 @@ import com.leo.erp.common.api.V2NoContent;
 @RestController
 @Validated
 @IdempotencyRequired
+@Tag(name = "商品资料")
 @RequestMapping(ApiVersion.V2_PREFIX + "/materials")
 public class V2MaterialController {
 
@@ -56,16 +59,19 @@ public class V2MaterialController {
     }
 
     @GetMapping
+    @Operation(summary = "分页查询商品资料")
     public PageResponse<MaterialResponse> page(@BindPageQuery(sortFieldKey = "material") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String category, @RequestParam(required = false) String material, @RequestParam(required = false) String materialType) {
         return PageResponse.from(materialService.page(query, keyword, category, material, materialType));
     }
 
     @GetMapping("/{id}")
+    @Operation(summary = "查询商品资料详情")
     public MaterialResponse detail(@PathVariable Long id) {
         return materialService.detail(id);
     }
 
     @GetMapping("/{id}/histories")
+    @Operation(summary = "分页查询商品资料版本历史")
     public PageResponse<MaterialHistoryResponse> histories(
             @PathVariable Long id,
             @BindPageQuery(sortFieldKey = "material") PageQuery query) {
@@ -74,39 +80,46 @@ public class V2MaterialController {
 
     @PostMapping
     @V2Created
+    @Operation(summary = "创建商品资料")
     public ResponseEntity<MaterialResponse> create(@Valid @RequestBody MaterialRequest request) {
         return V2ResponseSupport.created("/materials", materialService.create(request));
     }
 
     @GetMapping("/template")
+    @Operation(summary = "下载商品资料导入模板（XLSX）")
     public ResponseEntity<byte[]> downloadTemplate() {
         return toDownloadResponse(
                 "商品资料导入模板.xlsx", XLSX_MEDIA_TYPE, materialDocumentService.spreadsheetTemplate());
     }
 
     @GetMapping("/template/csv")
+    @Operation(summary = "下载商品资料导入模板（CSV）")
     public ResponseEntity<byte[]> downloadCsvTemplate() {
         return toDownloadResponse(
                 "商品资料导入模板.csv", CSV_MEDIA_TYPE, materialDocumentService.csvTemplate());
     }
 
     @GetMapping("/grades")
+    @Operation(summary = "查询商品材质（品名）选项")
     public java.util.List<String> materialGrades() {
         return materialService.materialGrades();
     }
 
     @GetMapping("/brands")
+    @Operation(summary = "查询商品品牌选项")
     public java.util.List<String> materialBrands() {
         return materialService.materialBrands();
     }
 
     @PutMapping("/{id}")
+    @Operation(summary = "更新商品资料")
     public MaterialResponse update(@PathVariable Long id, @Valid @RequestBody MaterialRequest request) {
         return materialService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
+    @Operation(summary = "删除商品资料")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         materialService.delete(id);
         return V2ResponseSupport.noContent();

@@ -107,6 +107,22 @@ class StatementSettlementSyncServiceTest {
     }
 
     @Test
+    void syncCustomerEntity_shouldIgnoreReceiptAllocationsForRedStatement() {
+        CustomerStatement stmt = new CustomerStatement();
+        stmt.setId(1L);
+        stmt.setDirection(StatusConstants.STATEMENT_DIRECTION_RED);
+        stmt.setSalesAmount(new BigDecimal("-5000"));
+        when(customerStatementRepository.save(stmt)).thenReturn(stmt);
+
+        CustomerStatement result = service.syncCustomerStatement(stmt);
+
+        assertThat(result.getReceiptAmount()).isEqualByComparingTo("0");
+        assertThat(result.getClosingAmount()).isEqualByComparingTo("-5000");
+        verifyNoInteractions(settlementAllocationPort);
+        verify(customerStatementRepository).save(stmt);
+    }
+
+    @Test
     void syncFreightEntity_shouldSetPaidAndUnpaidAndSave() {
         FreightStatement stmt = new FreightStatement();
         stmt.setId(2L);

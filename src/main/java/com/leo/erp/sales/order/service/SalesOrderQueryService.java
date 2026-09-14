@@ -126,16 +126,18 @@ public class SalesOrderQueryService {
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Page<SalesOrderResponse> outboundImportCandidates(PageQuery query, PageFilter filter) {
         Page<Long> candidateIds = outboundCandidateQueryRepository.pageIds(query, filter);
-        List<SalesOrder> orders = candidateIds.isEmpty()
-                ? List.of()
-                : repository.findByIdInAndDeletedFlagFalse(candidateIds.getContent());
+        if (candidateIds.isEmpty()) {
+            return new PageImpl<>(List.of(), candidateIds.getPageable(), candidateIds.getTotalElements());
+        }
+        List<SalesOrder> orders = repository.findByIdInAndDeletedFlagFalse(candidateIds.getContent());
         java.util.Map<Long, SalesOrder> orderById = orders.stream()
                 .collect(java.util.stream.Collectors.toMap(SalesOrder::getId, order -> order));
-        List<SalesOrderResponse> candidates = candidateIds.getContent().stream()
+        List<SalesOrder> ordered = candidateIds.getContent().stream()
                 .map(orderById::get)
                 .filter(Objects::nonNull)
-                .map(responseAssembler::toDetailResponse)
                 .toList();
+        // 页级批量装配：本页全部明细的派生数量/占用与附加费用一次性聚合，避免逐单 N+1。
+        List<SalesOrderResponse> candidates = responseAssembler.toDetailResponses(ordered);
         return new PageImpl<>(
                 candidates,
                 candidateIds.getPageable(),

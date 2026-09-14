@@ -49,6 +49,19 @@ class InventoryTransactionQueryServiceTest {
     }
 
     @Test
+    void page_shouldAcceptAllDatabaseTransactionTypes() {
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        for (String type : List.of("PURCHASE_IN", "SALES_OUT", "SALES_RETURN_IN",
+                "PURCHASE_RETURN_OUT", "TRANSFER", "COUNT_ADJUST")) {
+            assertThat(service.page(
+                    new PageQuery(0, 10, null, null), null, null, null, type, null, null)
+                    .content()).isEmpty();
+        }
+    }
+
+    @Test
     void page_shouldMapEntitiesToResponse() {
         InventoryTransaction entity = new InventoryTransaction();
         entity.setId(1L);
