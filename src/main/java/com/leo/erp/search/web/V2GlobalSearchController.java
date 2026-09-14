@@ -4,6 +4,8 @@ import org.springframework.validation.annotation.Validated;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.leo.erp.search.service.GlobalSearchService;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,6 +27,7 @@ public class V2GlobalSearchController {
 
     @Operation(summary = "聚合搜索业务单据")
     @GetMapping
+    @RequirePermission(PermissionCodes.GLOBAL_SEARCH_READ)
     public List<GlobalSearchResponse> search(@RequestParam(required = false) String keyword, @RequestParam(defaultValue = "20") int limit, @RequestParam(required = false) List<String> moduleKeys) {
         return globalSearchService.search(keyword != null ? keyword : "", limit, moduleKeys);
     }

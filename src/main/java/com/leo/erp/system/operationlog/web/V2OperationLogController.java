@@ -7,6 +7,8 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.system.operationlog.web.dto.OperationLogResponse;
 import com.leo.erp.system.operationlog.service.OperationLogService;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,6 +29,7 @@ public class V2OperationLogController {
     }
 
     @GetMapping
+    @RequirePermission(PermissionCodes.OPERATION_LOGS_READ)
     public PageResponse<OperationLogResponse> page(@BindPageQuery(sortFieldKey = "operation-log") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String moduleName, @RequestParam(required = false) String actionType, @RequestParam(required = false) String resultStatus, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startTime, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endTime, @RequestParam(required = false) Long recordId, @RequestParam(required = false) String authType) {
         PageFilter filter = new PageFilter(keyword, null, startTime, endTime,
                 null, null, null, moduleName, actionType, resultStatus, null, recordId, null, authType);

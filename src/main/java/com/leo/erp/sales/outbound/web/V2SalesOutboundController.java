@@ -9,6 +9,8 @@ import com.leo.erp.sales.outbound.service.SalesOutboundService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
@@ -47,6 +49,7 @@ public class V2SalesOutboundController {
 
     @GetMapping
     @Operation(summary = "分页查询销售出库")
+    @RequirePermission(PermissionCodes.SALES_OUTBOUNDS_READ)
     public PageResponse<SalesOutboundResponse> page(@BindPageQuery(sortFieldKey = "sales-outbound") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String productKeyword, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return PageResponse.from(service.page(
                 query,
@@ -58,6 +61,7 @@ public class V2SalesOutboundController {
 
     @GetMapping("/{id}")
     @Operation(summary = "查询销售出库详情")
+    @RequirePermission(PermissionCodes.SALES_OUTBOUNDS_READ)
     public SalesOutboundResponse detail(@PathVariable Long id) {
         return service.detail(id);
     }
@@ -66,6 +70,7 @@ public class V2SalesOutboundController {
     @Operation(summary = "创建销售出库")
     @DomainEventAudited
     @V2Created
+    @RequirePermission(PermissionCodes.SALES_OUTBOUNDS_CREATE)
     public ResponseEntity<SalesOutboundResponse> create(@Valid @RequestBody SalesOutboundRequest request) {
         return V2ResponseSupport.created("/sales-outbounds", service.create(request));
     }
@@ -73,6 +78,7 @@ public class V2SalesOutboundController {
     @PutMapping("/{id}")
     @Operation(summary = "更新销售出库")
     @DomainEventAudited
+    @RequirePermission(PermissionCodes.SALES_OUTBOUNDS_UPDATE)
     public SalesOutboundResponse update(@PathVariable Long id, @Valid @RequestBody SalesOutboundRequest request) {
         return service.update(id, request);
     }
@@ -87,6 +93,7 @@ public class V2SalesOutboundController {
     @PostMapping("/{id}/audits")
     @DomainEventAudited
     @V2Created
+    @RequirePermission(PermissionCodes.SALES_OUTBOUNDS_AUDIT)
     public ResponseEntity<SalesOutboundResponse> createAudit(@PathVariable Long id,
                                                              @Valid @RequestBody(required = false) SalesOutboundRequest request) {
         SalesOutboundResponse response = request == null
@@ -98,6 +105,7 @@ public class V2SalesOutboundController {
     @PatchMapping("/{id}/status")
     @Operation(summary = "更新销售出库状态")
     @DomainEventAudited
+    @RequirePermission(PermissionCodes.SALES_OUTBOUNDS_UPDATE)
     public SalesOutboundResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return service.updateStatus(id, request.status());
     }
@@ -106,6 +114,7 @@ public class V2SalesOutboundController {
     @Operation(summary = "删除销售出库")
     @DomainEventAudited
     @V2NoContent
+    @RequirePermission(PermissionCodes.SALES_OUTBOUNDS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return V2ResponseSupport.noContent();

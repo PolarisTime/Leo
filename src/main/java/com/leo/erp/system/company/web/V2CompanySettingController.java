@@ -8,6 +8,8 @@ import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.company.web.dto.CompanySettingOptionResponse;
 import com.leo.erp.system.company.web.dto.CompanySettingRequest;
 import com.leo.erp.system.company.web.dto.CompanySettingResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
@@ -41,44 +43,52 @@ public class V2CompanySettingController {
     }
 
     @GetMapping
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_READ)
     public PageResponse<CompanySettingResponse> page(@BindPageQuery(sortFieldKey = "company-setting") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String status) {
         return PageResponse.from(companySettingService.page(query, keyword, status));
     }
 
     @GetMapping("/options")
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_READ)
     public List<CompanySettingOptionResponse> options() {
         return OptionLimits.cap(companySettingService.listActiveOptions());
     }
 
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_READ)
     public CompanySettingResponse detail(@PathVariable Long id) {
         return companySettingService.detail(id);
     }
 
     @GetMapping("/current")
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_READ)
     public CompanySettingResponse current() {
         return companySettingService.current();
     }
 
     @PutMapping("/current")
     @OperationLoggable(moduleName = "结算主体", actionType = "保存")
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_UPDATE)
     public CompanySettingResponse saveCurrent(@Valid @RequestBody CompanySettingRequest request) {
         return companySettingService.saveCurrent(request);
     }
 
     @PostMapping
     @V2Created
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_CREATE)
     public ResponseEntity<CompanySettingResponse> create(@Valid @RequestBody CompanySettingRequest request) {
         return V2ResponseSupport.created("/company-settings", companySettingService.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_UPDATE)
     public CompanySettingResponse update(@PathVariable Long id, @Valid @RequestBody CompanySettingRequest request) {
         return companySettingService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         companySettingService.delete(id);
         return V2ResponseSupport.noContent();

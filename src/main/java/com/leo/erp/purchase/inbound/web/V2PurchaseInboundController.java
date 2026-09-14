@@ -9,6 +9,8 @@ import com.leo.erp.purchase.inbound.service.PurchaseInboundService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -47,6 +49,7 @@ public class V2PurchaseInboundController {
 
     @GetMapping
     @Operation(summary = "分页查询采购入库")
+    @RequirePermission(PermissionCodes.PURCHASE_INBOUNDS_READ)
     public PageResponse<PurchaseInboundResponse> page(@BindPageQuery(sortFieldKey = "purchase-inbound") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long supplierId, @RequestParam(required = false) String supplierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return PageResponse.from(service.page(
                 query,
@@ -57,6 +60,7 @@ public class V2PurchaseInboundController {
 
     @GetMapping("/{id}")
     @Operation(summary = "查询采购入库详情")
+    @RequirePermission(PermissionCodes.PURCHASE_INBOUNDS_READ)
     public PurchaseInboundResponse detail(@PathVariable Long id) {
         return service.detail(id);
     }
@@ -65,6 +69,7 @@ public class V2PurchaseInboundController {
     @Operation(summary = "创建采购入库")
     @DomainEventAudited
     @V2Created
+    @RequirePermission(PermissionCodes.PURCHASE_INBOUNDS_CREATE)
     public ResponseEntity<PurchaseInboundResponse> create(@Valid @RequestBody PurchaseInboundRequest request) {
         return V2ResponseSupport.created("/purchase-inbounds", service.create(request));
     }
@@ -72,6 +77,7 @@ public class V2PurchaseInboundController {
     @PutMapping("/{id}")
     @Operation(summary = "更新采购入库")
     @DomainEventAudited
+    @RequirePermission(PermissionCodes.PURCHASE_INBOUNDS_UPDATE)
     public PurchaseInboundResponse update(@PathVariable Long id, @Valid @RequestBody PurchaseInboundRequest request) {
         return service.update(id, request);
     }
@@ -86,6 +92,7 @@ public class V2PurchaseInboundController {
     @PostMapping("/{id}/audits")
     @DomainEventAudited
     @V2Created
+    @RequirePermission(PermissionCodes.PURCHASE_INBOUNDS_AUDIT)
     public ResponseEntity<PurchaseInboundResponse> createAudit(@PathVariable Long id,
                                                                @Valid @RequestBody(required = false) PurchaseInboundRequest request) {
         PurchaseInboundResponse response = request == null
@@ -97,6 +104,7 @@ public class V2PurchaseInboundController {
     @PatchMapping("/{id}/status")
     @Operation(summary = "更新采购入库状态")
     @DomainEventAudited
+    @RequirePermission(PermissionCodes.PURCHASE_INBOUNDS_UPDATE)
     public PurchaseInboundResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return service.updateStatus(id, request.status());
     }
@@ -105,6 +113,7 @@ public class V2PurchaseInboundController {
     @Operation(summary = "删除采购入库")
     @DomainEventAudited
     @V2NoContent
+    @RequirePermission(PermissionCodes.PURCHASE_INBOUNDS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return V2ResponseSupport.noContent();

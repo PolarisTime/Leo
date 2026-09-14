@@ -3,6 +3,8 @@ package com.leo.erp.system.printtemplate.web;
 import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2ResponseSupport;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.system.printtemplate.service.PrintOutput;
 import com.leo.erp.system.printtemplate.service.PrintOutputService;
@@ -55,6 +57,7 @@ public class V2PrintExportController {
             recordIdField = "recordId",
             moduleKeyField = "moduleKey"
     )
+    @RequirePermission(PermissionCodes.PRINT_EXPORTS_PRINT)
     public ResponseEntity<?> create(@Valid @RequestBody @NotNull PrintRecordRequest payload) {
         PrintOutput output = printOutputService.generateFromRecord(
                 payload.templateId(),

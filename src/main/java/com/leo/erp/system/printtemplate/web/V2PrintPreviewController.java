@@ -5,6 +5,8 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.system.printtemplate.service.PrintScriptService;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.system.printtemplate.web.dto.PrintItemRowResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,6 +40,7 @@ public class V2PrintPreviewController {
 
     @Operation(summary = "分页查询打印明细（打印预览数据）")
     @GetMapping("/items")
+    @RequirePermission(PermissionCodes.PRINT_PREVIEWS_READ)
     public PageResponse<PrintItemRowResponse> items(
             @BindPageQuery PageQuery query,
             @RequestParam @NotBlank @Size(max = 64) String moduleKey,

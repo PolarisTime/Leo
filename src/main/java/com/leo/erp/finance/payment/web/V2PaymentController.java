@@ -9,6 +9,8 @@ import com.leo.erp.finance.payment.service.PaymentService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -46,6 +48,7 @@ public class V2PaymentController {
 
     @Operation(summary = "分页查询付款单")
     @GetMapping
+    @RequirePermission(PermissionCodes.PAYMENTS_READ)
     public PageResponse<PaymentResponse> page(@BindPageQuery(sortFieldKey = "payment") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String businessType, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return PageResponse.from(paymentService.page(
                 query,
@@ -56,6 +59,7 @@ public class V2PaymentController {
 
     @Operation(summary = "查询付款单详情")
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.PAYMENTS_READ)
     public PaymentResponse detail(@PathVariable Long id) {
         return paymentService.detail(id);
     }
@@ -63,18 +67,21 @@ public class V2PaymentController {
     @Operation(summary = "创建付款单")
     @PostMapping
     @V2Created
+    @RequirePermission(PermissionCodes.PAYMENTS_CREATE)
     public ResponseEntity<PaymentResponse> create(@Valid @RequestBody PaymentRequest request) {
         return V2ResponseSupport.created("/payments", paymentService.create(request));
     }
 
     @Operation(summary = "更新付款单")
     @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.PAYMENTS_UPDATE)
     public PaymentResponse update(@PathVariable Long id, @Valid @RequestBody PaymentRequest request) {
         return paymentService.update(id, request);
     }
 
     @Operation(summary = "更新付款单状态")
     @PatchMapping("/{id}/status")
+    @RequirePermission(PermissionCodes.PAYMENTS_UPDATE)
     public PaymentResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return paymentService.updateStatus(id, request.status());
     }
@@ -82,6 +89,7 @@ public class V2PaymentController {
     @Operation(summary = "删除付款单")
     @DeleteMapping("/{id}")
     @V2NoContent
+    @RequirePermission(PermissionCodes.PAYMENTS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         paymentService.delete(id);
         return V2ResponseSupport.noContent();

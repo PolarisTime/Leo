@@ -21,6 +21,7 @@ import org.springframework.util.ClassUtils;
  *   <li>未标注 {@link RequirePermission} 的调用直接放行，保证拦截器只影响显式标注的端点；</li>
  *   <li>未认证或认证未通过则拒绝；</li>
  *   <li>拥有 {@link PermissionCodes#WILDCARD} 的超级管理员一律通过；</li>
+ *   <li>持有 {@code 资源:*} 资源级通配时，可通过该资源的任意动作权限码；</li>
  *   <li>否则当前主体拥有注解中任意一个权限码即通过（OR 语义）。</li>
  * </ul>
  */
@@ -46,8 +47,28 @@ public final class PermissionAuthorizationManager implements AuthorizationManage
             return new AuthorizationDecision(true);
         }
 
-        boolean allowed = Arrays.stream(annotation.value()).anyMatch(granted::contains);
+        boolean allowed = Arrays.stream(annotation.value())
+                .anyMatch(required -> isGranted(required, granted));
         return new AuthorizationDecision(allowed);
+    }
+
+    /**
+     * 判断所需权限码是否被授予。
+     *
+     * <p>除精确匹配外，支持 {@code 资源:*} 资源级通配：例如持有 {@code sales-returns:*}
+     * 即可通过 {@code sales-returns:read}、{@code sales-returns:audit} 等该资源下的任意动作，
+     * 也包括 {@code sales-returns:read:amount} 这类字段级权限码。</p>
+     */
+    private boolean isGranted(String required, Set<String> granted) {
+        if (granted.contains(required)) {
+            return true;
+        }
+        int separator = required.indexOf(':');
+        if (separator <= 0) {
+            return false;
+        }
+        String resource = required.substring(0, separator);
+        return granted.contains(resource + ":" + PermissionCodes.Actions.WILDCARD);
     }
 
     private RequirePermission findAnnotation(MethodInvocation invocation) {

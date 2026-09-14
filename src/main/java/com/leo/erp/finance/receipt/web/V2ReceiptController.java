@@ -9,6 +9,8 @@ import com.leo.erp.finance.receipt.service.ReceiptService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -46,6 +48,7 @@ public class V2ReceiptController {
 
     @Operation(summary = "分页查询收款单")
     @GetMapping
+    @RequirePermission(PermissionCodes.RECEIPTS_READ)
     public PageResponse<ReceiptResponse> page(@BindPageQuery(sortFieldKey = "receipt") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String customerName, @RequestParam(required = false) String counterpartyType, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return PageResponse.from(receiptService.page(
                 query,
@@ -56,6 +59,7 @@ public class V2ReceiptController {
 
     @Operation(summary = "查询收款单详情")
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.RECEIPTS_READ)
     public ReceiptResponse detail(@PathVariable Long id) {
         return receiptService.detail(id);
     }
@@ -63,18 +67,21 @@ public class V2ReceiptController {
     @Operation(summary = "创建收款单")
     @PostMapping
     @V2Created
+    @RequirePermission(PermissionCodes.RECEIPTS_CREATE)
     public ResponseEntity<ReceiptResponse> create(@Valid @RequestBody ReceiptRequest request) {
         return V2ResponseSupport.created("/receipts", receiptService.create(request));
     }
 
     @Operation(summary = "更新收款单")
     @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.RECEIPTS_UPDATE)
     public ReceiptResponse update(@PathVariable Long id, @Valid @RequestBody ReceiptRequest request) {
         return receiptService.update(id, request);
     }
 
     @Operation(summary = "更新收款单状态")
     @PatchMapping("/{id}/status")
+    @RequirePermission(PermissionCodes.RECEIPTS_UPDATE)
     public ReceiptResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return receiptService.updateStatus(id, request.status());
     }
@@ -82,6 +89,7 @@ public class V2ReceiptController {
     @Operation(summary = "删除收款单")
     @DeleteMapping("/{id}")
     @V2NoContent
+    @RequirePermission(PermissionCodes.RECEIPTS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         receiptService.delete(id);
         return V2ResponseSupport.noContent();

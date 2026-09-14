@@ -3,6 +3,8 @@ package com.leo.erp.system.printtemplate.web;
 import com.leo.erp.system.printtemplate.service.PrintTemplateService;
 import com.leo.erp.system.printtemplate.web.dto.PrintTemplateRequest;
 import com.leo.erp.system.printtemplate.web.dto.PrintTemplateResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -45,6 +47,7 @@ public class V2PrintTemplateController {
     }
 
     @GetMapping
+    @RequirePermission(PermissionCodes.PRINT_TEMPLATES_READ)
     public List<PrintTemplateResponse> list(@RequestParam @NotBlank @Size(max = 64) String billType) {
         return printTemplateService.listByBillType(billType);
     }
@@ -52,18 +55,21 @@ public class V2PrintTemplateController {
     @PostMapping
     @OperationLoggable(moduleName = "打印模板", actionType = "新增", businessNoFields = {"billType", "templateName"})
     @V2Created
+    @RequirePermission(PermissionCodes.PRINT_TEMPLATES_CREATE)
     public ResponseEntity<PrintTemplateResponse> create(@Valid @RequestBody PrintTemplateRequest request) {
         return V2ResponseSupport.created("/print-templates", printTemplateService.create(request));
     }
 
     @PutMapping("/{id}")
     @OperationLoggable(moduleName = "打印模板", actionType = "编辑", businessNoFields = {"billType", "templateName"})
+    @RequirePermission(PermissionCodes.PRINT_TEMPLATES_UPDATE)
     public PrintTemplateResponse update(@PathVariable @Positive Long id, @Valid @RequestBody PrintTemplateRequest request) {
         return printTemplateService.update(id, request);
     }
 
     @PutMapping(value = "/{id}/content", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @OperationLoggable(moduleName = "打印模板", actionType = "替换内容", businessNoFields = {"id"})
+    @RequirePermission(PermissionCodes.PRINT_TEMPLATES_UPDATE)
     public PrintTemplateResponse replaceContent(@PathVariable @Positive Long id, @RequestParam("file") MultipartFile file) {
         // 全局 multipart 限额为 20MB，本端点业务上限 1MB：入口早拒，避免超限文件完整传输后才被拒。
         if (file != null && file.getSize() > MAX_UPLOAD_JSON_BYTES) {
@@ -75,6 +81,7 @@ public class V2PrintTemplateController {
     @DeleteMapping("/{id}")
     @OperationLoggable(moduleName = "打印模板", actionType = "删除")
     @V2NoContent
+    @RequirePermission(PermissionCodes.PRINT_TEMPLATES_DELETE)
     public ResponseEntity<Void> delete(@PathVariable @Positive Long id) {
         printTemplateService.delete(id);
         return V2ResponseSupport.noContent();

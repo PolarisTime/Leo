@@ -6,6 +6,8 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.market.service.SteelQuoteQueryService;
 import com.leo.erp.market.web.dto.SteelQuoteResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
@@ -31,6 +33,7 @@ public class V2SteelQuoteController {
 
     @Operation(summary = "分页查询行情明细", description = "按日期/时段/品名/规格/材质/钢厂筛选; 时段为 上午/中午/下午")
     @GetMapping
+    @RequirePermission(PermissionCodes.STEEL_QUOTES_READ)
     public PageResponse<SteelQuoteResponse> page(
             @BindPageQuery(sortFieldKey = "steel-quote") PageQuery query,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate quoteDate,

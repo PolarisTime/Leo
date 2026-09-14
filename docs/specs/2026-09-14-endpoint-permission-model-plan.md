@@ -16,6 +16,7 @@ scope: Leo 后端、Spring Security、方法级安全、权限目录
 - 权限来源通过 `AuthorityProvider` 接口插拔；默认实现 `GrantAllAuthorityProvider` 为任意登录用户返回全部权限码，保证现有功能零回归。
 - 认证过滤器 `JwtAuthenticationFilter` 调用 `AuthorityProvider`，把权限码转成 `GrantedAuthority` 注入安全上下文。
 - 在 6 个试点控制器共 33 处标注 `@RequirePermission`，失败时由既有 `GlobalExceptionHandler` 统一映射为 403。
+- **全量铺开（本轮完成）**：除 6 个公开/无鉴权控制器外，其余 44 个 `@RestController` 的 191 个端点全部标注 `@RequirePermission`（试点 33 + 本轮新增 158）；权限决策器新增 `资源:*` 前缀通配支持。
 
 本设计**不恢复** `V94__retire_rbac_permissions_and_mcp.sql` 已退役的 `sys_role` / `sys_menu_action` / `casbin_rule` 表结构，也不需要新增 Flyway 迁移；RBAC0 落库为后续路线，表名见第 7 节。
 
@@ -78,14 +79,15 @@ scope: Leo 后端、Spring Security、方法级安全、权限目录
      → GlobalExceptionHandler → 403 ProblemDetail
 ```
 
-`PermissionAuthorizationManager` 规则（本轮不变）：
+`PermissionAuthorizationManager` 规则：
 
 1. 未标注 `@RequirePermission` 的调用直接放行；
 2. 未认证或认证未通过则拒绝；
 3. 持有通配权限 `*`（`PermissionCodes.WILDCARD`）一律通过；
-4. 否则拥有注解中任意一个权限码即通过（OR 语义）。
+4. 持有 `资源:*`（`PermissionCodes.ofResourceWildcard(resource)`）时，可通过该资源下的任意动作权限码，含 `资源:动作:字段` 字段级权限码；
+5. 否则拥有注解中任意一个权限码即通过（OR 语义）。
 
-> `资源:*` 资源级通配已在目录层提供构造助手；当前决策器尚未做前缀匹配。若启用该通配，需要扩展决策器的匹配逻辑，并同步补充测试。
+> `资源:*` 前缀通配已在本轮实现于决策器 `isGranted`，并补充了 `PermissionAuthorizationManagerTest` 的正反用例。
 
 ## 5. 默认 Provider 行为（临时实现）
 
@@ -130,6 +132,15 @@ scope: Leo 后端、Spring Security、方法级安全、权限目录
 5. **门禁**：把 `@PublicAccess` 白名单、端点-权限映射纳入代码评审；对无权限声明的新写接口默认拒绝接入。
 6. **缓存与失效**：角色/权限变更后，结合既有 `AuthenticatedUserCacheService` 的失效机制清理快照，避免过期权限。
 
+### 全量铺开结果（本轮）
+
+- **覆盖范围**：仓库内共 50 个 `@RestController`，其中 6 个为公开/无鉴权端点（`V2AuthController`、`HealthController`、`VersionController`、`HealthPageController`、`V2InitialSetupController`、`V2RuntimeConfigController`，均带 `@PublicAccess` 或由 `SecurityConfig` 白名单放行），不标注 `@RequirePermission`；其余 **44 个控制器、191 个端点** 全部标注。
+- **按 HTTP 语义映射**：`GET → 资源:read`；`POST` 创建 `→ 资源:create`，受控子资源动作按语义映射为 `:audit`/`:confirm`/`:complete`/`:print`/`:export`/`:import`/`:preview`/`:backfill`/`:rollback`/`:sync`；`PUT`/`PATCH → 资源:update`；`DELETE → 资源:delete`。
+- **新增资源目录**：`attachment-upload-sessions`、`attachment-manifest-exports`、`freight-statements`、`material-categories`、`material-exports`、`steel-quote-syncs`、`steel-quote-backfills`、`steel-quote-calendars`、`material-price-matches`、`cash-ledger`、`print-templates`、`print-exports`、`print-previews`、`company-settings`、`dashboard`、`operation-logs`、`global-search`、`meta`、`code-issuances`、`user-accounts`；新增动作 `sync`；补齐 `sales-orders:confirm`、`sales-orders:complete` 及上述资源的 CRUD/业务动作权限码，全部加入 `all()`。
+- **资源名对齐路径**：以路径末段复数 kebab-case 作为资源名；`/finance/overview` 归入既有 `finance:read`，`/account` 归入 `user-accounts:*`，`/attachments/bindings` 归入 `attachments:*`。
+- **通配**：`资源:*` 前缀匹配已启用，持有 `sales-returns:*` 即可通过该资源任意动作（含字段级）。
+- **测试**：`PermissionCodesTest` 反射完整性校验覆盖新增常量；`PermissionAuthorizationManagerTest` 新增通配正反用例；新增 `V2CustomerControllerPermissionTest`、`V2CashLedgerControllerPermissionTest` 验证有权限通过、无权限 403、资源通配通过；默认 `GrantAllAuthorityProvider` 下全量测试零回归。
+
 ### RBAC0 落库路线
 
 引入多角色时使用 RBAC0 标准表结构（**新表，不复用 V94 已退役结构**）：
@@ -158,4 +169,5 @@ scope: Leo 后端、Spring Security、方法级安全、权限目录
 ## 9. 验证
 
 - `mvn -q -DskipTests compile`
-- `mvn -q -Dtest='*Permission*Test,*Security*Test,*SalesReturn*Test,*Inventory*Test,*Material*Test,*CustomerStatement*Test' test`
+- `mvn -q test`（全量，确保默认 Provider 下无回归）
+- 定向：`mvn -q -Dtest='*Permission*Test,*Security*Test' test`

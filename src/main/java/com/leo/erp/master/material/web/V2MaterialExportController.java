@@ -1,10 +1,12 @@
 package com.leo.erp.master.material.web;
 
 import com.leo.erp.common.api.ApiVersion;
-import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.master.material.service.MaterialDocumentService;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ContentDisposition;
@@ -48,6 +50,7 @@ public class V2MaterialExportController {
 
     @PostMapping
     @Operation(summary = "创建商品资料导出文件")
+    @RequirePermission(PermissionCodes.MATERIAL_EXPORTS_EXPORT)
     public ResponseEntity<byte[]> create(@RequestParam(required = false) String keyword,
                                          @RequestParam(defaultValue = FORMAT_XLSX) String format) {
         String normalizedFormat = format == null ? FORMAT_XLSX : format.trim().toLowerCase(Locale.ROOT);

@@ -3,6 +3,8 @@ package com.leo.erp.market.web;
 import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.market.service.SteelArticleQueryService;
 import com.leo.erp.market.web.dto.SteelQuoteCalendarResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -28,6 +30,7 @@ public class V2SteelQuoteCalendarController {
 
     @Operation(summary = "行情日历", description = "返回指定日期区间内有行情的日期及各日可用时段(上午/中午/下午)与时段行数")
     @GetMapping
+    @RequirePermission(PermissionCodes.STEEL_QUOTE_CALENDARS_READ)
     public List<SteelQuoteCalendarResponse> list(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {

@@ -7,6 +7,8 @@ import com.leo.erp.master.carrier.service.CarrierService;
 import com.leo.erp.master.carrier.web.dto.CarrierOptionResponse;
 import com.leo.erp.master.carrier.web.dto.CarrierRequest;
 import com.leo.erp.master.carrier.web.dto.CarrierResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -39,33 +41,39 @@ public class V2CarrierController {
     }
 
     @GetMapping("/options")
+    @RequirePermission(PermissionCodes.CARRIERS_READ)
     public List<CarrierOptionResponse> options() {
         return carrierService.listActiveOptions();
     }
 
     @GetMapping
+    @RequirePermission(PermissionCodes.CARRIERS_READ)
     public PageResponse<CarrierResponse> page(@BindPageQuery(sortFieldKey = "carrier") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String status) {
         return PageResponse.from(carrierService.page(query, keyword, status));
     }
 
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.CARRIERS_READ)
     public CarrierResponse detail(@PathVariable Long id) {
         return carrierService.detail(id);
     }
 
     @PostMapping
     @V2Created
+    @RequirePermission(PermissionCodes.CARRIERS_CREATE)
     public ResponseEntity<CarrierResponse> create(@Valid @RequestBody CarrierRequest request) {
         return V2ResponseSupport.created("/carriers", carrierService.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.CARRIERS_UPDATE)
     public CarrierResponse update(@PathVariable Long id, @Valid @RequestBody CarrierRequest request) {
         return carrierService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
+    @RequirePermission(PermissionCodes.CARRIERS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         carrierService.delete(id);
         return V2ResponseSupport.noContent();

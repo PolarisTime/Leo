@@ -4,6 +4,8 @@ import com.leo.erp.attachment.api.AttachmentManifestArchive;
 import com.leo.erp.attachment.api.AttachmentManifestExporter;
 import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -41,6 +43,7 @@ public class V2AttachmentManifestExportController {
     @IdempotencyRequired
     @PostMapping
     @OperationLoggable(moduleName = "附件管理", actionType = "导出附件恢复清单")
+    @RequirePermission(PermissionCodes.ATTACHMENT_MANIFEST_EXPORTS_EXPORT)
     public ResponseEntity<byte[]> create() {
         AttachmentManifestArchive archive = exportService.exportDailyArchive();
         ContentDisposition disposition = ContentDisposition.attachment()

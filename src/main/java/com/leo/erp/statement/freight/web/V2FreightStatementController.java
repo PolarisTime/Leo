@@ -11,6 +11,8 @@ import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidatesCriteria;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import com.leo.erp.statement.freight.web.dto.FreightStatementSummaryResponse;
@@ -52,6 +54,7 @@ public class V2FreightStatementController {
 
     @Operation(summary = "分页查询物流对账单")
     @GetMapping
+    @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_READ)
     public PageResponse<FreightStatementResponse> page(@BindPageQuery(sortFieldKey = "freight-statement") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long carrierId, @RequestParam(required = false) String carrierCode, @RequestParam(required = false) String carrierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
         return PageResponse.from(freightStatementService.responsePage(
                 query,
@@ -62,6 +65,7 @@ public class V2FreightStatementController {
 
     @Operation(summary = "汇总物流对账单")
     @GetMapping("/summary")
+    @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_READ)
     public FreightStatementSummaryResponse summary(@RequestParam(required = false) String keyword, @RequestParam(required = false) Long carrierId, @RequestParam(required = false) String carrierCode, @RequestParam(required = false) String carrierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
         return freightStatementService.summary(
                 pageFilter(keyword, carrierId, carrierName, settlementCompanyId, status, periodStart, periodEnd),
@@ -71,6 +75,7 @@ public class V2FreightStatementController {
 
     @Operation(summary = "分页查询物流对账单候选物流单")
     @GetMapping("/candidates")
+    @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_READ)
     public PageResponse<FreightStatementCandidateResponse> candidates(@BindPageQuery(sortFieldKey = "freight-bill") PageQuery query, @ModelAttribute FreightStatementCandidatesCriteria criteria) {
         return PageResponse.from(freightStatementService.candidatePage(
                 query,
@@ -82,6 +87,7 @@ public class V2FreightStatementController {
 
     @Operation(summary = "查询物流对账单详情")
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_READ)
     public FreightStatementResponse detail(@PathVariable Long id) {
         return freightStatementService.responseDetail(id);
     }
@@ -90,6 +96,7 @@ public class V2FreightStatementController {
     @PostMapping
     @DomainEventAudited
     @V2Created
+    @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_CREATE)
     public ResponseEntity<FreightStatementResponse> create(@Valid @RequestBody FreightStatementRequest request) {
         return V2ResponseSupport.created(
                 "/freight-statements", freightStatementService.responseCreate(request));
@@ -98,6 +105,7 @@ public class V2FreightStatementController {
     @Operation(summary = "更新物流对账单")
     @PutMapping("/{id}")
     @DomainEventAudited
+    @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_UPDATE)
     public FreightStatementResponse update(@PathVariable Long id, @Valid @RequestBody FreightStatementRequest request) {
         return freightStatementService.responseUpdate(id, request);
     }
@@ -105,6 +113,7 @@ public class V2FreightStatementController {
     @Operation(summary = "更新物流对账单状态")
     @PatchMapping("/{id}/status")
     @DomainEventAudited
+    @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_UPDATE)
     public FreightStatementResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return freightStatementService.responseUpdateStatus(id, request.status());
     }
@@ -119,6 +128,7 @@ public class V2FreightStatementController {
     @PostMapping("/{id}/audits")
     @DomainEventAudited
     @V2Created
+    @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_AUDIT)
     public ResponseEntity<FreightStatementResponse> createAudit(@PathVariable Long id) {
         return V2ResponseSupport.created(
                 "/freight-statements", freightStatementService.responseUpdateStatus(id, StatusConstants.AUDITED));
@@ -128,6 +138,7 @@ public class V2FreightStatementController {
     @DeleteMapping("/{id}")
     @DomainEventAudited
     @V2NoContent
+    @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         freightStatementService.delete(id);
         return V2ResponseSupport.noContent();

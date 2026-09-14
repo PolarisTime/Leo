@@ -6,6 +6,8 @@ import com.leo.erp.attachment.service.AttachmentService;
 import com.leo.erp.attachment.service.AttachmentWebService;
 import com.leo.erp.attachment.web.dto.AttachmentAccessUrlResponse;
 import com.leo.erp.attachment.web.dto.AttachmentUploadResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.constraints.NotBlank;
@@ -53,6 +55,7 @@ public class V2AttachmentController {
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @OperationLoggable(moduleName = "附件管理", actionType = "上传附件")
     @V2Created
+    @RequirePermission(PermissionCodes.ATTACHMENTS_CREATE)
     public ResponseEntity<AttachmentUploadResponse> upload(@AuthenticationPrincipal SecurityPrincipal principal, @RequestParam @NotBlank(message = "模块标识不能为空") String moduleKey, @RequestParam("file") MultipartFile file, @RequestParam(required = false) String sourceType) throws IOException {
         String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
         return V2ResponseSupport.created(
@@ -62,6 +65,7 @@ public class V2AttachmentController {
     }
 
     @GetMapping("/{id}/access-url")
+    @RequirePermission(PermissionCodes.ATTACHMENTS_READ)
     public AttachmentAccessUrlResponse accessUrl(@AuthenticationPrincipal SecurityPrincipal principal, @PathVariable Long id, @RequestParam String moduleKey, @RequestParam String accessKey, @RequestParam(defaultValue = "false") boolean inline) {
         String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
         attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, id);
@@ -80,6 +84,7 @@ public class V2AttachmentController {
     @GetMapping("/{id}/content")
     @Operation(summary = "获取附件内容",
             description = "读取附件二进制内容。disposition=attachment 触发浏览器下载（默认），disposition=inline 用于内联预览；非法的 disposition 返回 400。")
+    @RequirePermission(PermissionCodes.ATTACHMENTS_READ)
     public ResponseEntity<Resource> content(@AuthenticationPrincipal SecurityPrincipal principal,
                                             @PathVariable Long id,
                                             @RequestParam String moduleKey,

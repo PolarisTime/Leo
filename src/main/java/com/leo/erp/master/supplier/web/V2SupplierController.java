@@ -8,6 +8,8 @@ import com.leo.erp.master.supplier.service.SupplierService;
 import com.leo.erp.master.supplier.web.dto.SupplierRequest;
 import com.leo.erp.master.supplier.web.dto.SupplierOptionResponse;
 import com.leo.erp.master.supplier.web.dto.SupplierResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,33 +40,39 @@ public class V2SupplierController {
     }
 
     @GetMapping("/options")
+    @RequirePermission(PermissionCodes.SUPPLIERS_READ)
     public java.util.List<SupplierOptionResponse> options() {
         return supplierService.listActiveOptions();
     }
 
     @GetMapping
+    @RequirePermission(PermissionCodes.SUPPLIERS_READ)
     public PageResponse<SupplierResponse> page(@BindPageQuery(sortFieldKey = "supplier") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String status) {
         return PageResponse.from(supplierService.page(query, keyword, status));
     }
 
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.SUPPLIERS_READ)
     public SupplierResponse detail(@PathVariable Long id) {
         return supplierService.detail(id);
     }
 
     @PostMapping
     @V2Created
+    @RequirePermission(PermissionCodes.SUPPLIERS_CREATE)
     public ResponseEntity<SupplierResponse> create(@Valid @RequestBody SupplierRequest request) {
         return V2ResponseSupport.created("/suppliers", supplierService.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.SUPPLIERS_UPDATE)
     public SupplierResponse update(@PathVariable Long id, @Valid @RequestBody SupplierRequest request) {
         return supplierService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
+    @RequirePermission(PermissionCodes.SUPPLIERS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         supplierService.delete(id);
         return V2ResponseSupport.noContent();

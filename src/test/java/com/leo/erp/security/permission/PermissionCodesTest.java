@@ -43,8 +43,43 @@ class PermissionCodesTest {
     void resourcesAndActions_shouldStayAlignedWithPaths() {
         assertThat(PermissionCodes.Resources.SALES_RETURNS).isEqualTo("sales-returns");
         assertThat(PermissionCodes.Resources.CUSTOMER_STATEMENTS).isEqualTo("customer-statements");
+        assertThat(PermissionCodes.Resources.FREIGHT_STATEMENTS).isEqualTo("freight-statements");
+        assertThat(PermissionCodes.Resources.PRINT_TEMPLATES).isEqualTo("print-templates");
+        assertThat(PermissionCodes.Resources.ATTACHMENT_UPLOAD_SESSIONS).isEqualTo("attachment-upload-sessions");
+        assertThat(PermissionCodes.Resources.CASH_LEDGER).isEqualTo("cash-ledger");
+        assertThat(PermissionCodes.Resources.USER_ACCOUNTS).isEqualTo("user-accounts");
         assertThat(PermissionCodes.Actions.AUDIT).isEqualTo("audit");
         assertThat(PermissionCodes.Actions.BACKFILL).isEqualTo("backfill");
+        assertThat(PermissionCodes.Actions.SYNC).isEqualTo("sync");
+    }
+
+    @Test
+    void catalog_shouldCoverFullRolloutResources() {
+        assertThat(PermissionCodes.SALES_ORDERS_CONFIRM).isEqualTo("sales-orders:confirm");
+        assertThat(PermissionCodes.SALES_ORDERS_COMPLETE).isEqualTo("sales-orders:complete");
+        assertThat(PermissionCodes.FREIGHT_STATEMENTS_AUDIT).isEqualTo("freight-statements:audit");
+        assertThat(PermissionCodes.MATERIAL_CATEGORIES_UPDATE).isEqualTo("material-categories:update");
+        assertThat(PermissionCodes.MATERIAL_EXPORTS_EXPORT).isEqualTo("material-exports:export");
+        assertThat(PermissionCodes.CASH_LEDGER_READ).isEqualTo("cash-ledger:read");
+        assertThat(PermissionCodes.CASH_LEDGER_EXPORT).isEqualTo("cash-ledger:export");
+        assertThat(PermissionCodes.STEEL_QUOTE_SYNCS_SYNC).isEqualTo("steel-quote-syncs:sync");
+        assertThat(PermissionCodes.STEEL_QUOTE_BACKFILLS_BACKFILL).isEqualTo("steel-quote-backfills:backfill");
+        assertThat(PermissionCodes.PRINT_EXPORTS_PRINT).isEqualTo("print-exports:print");
+        assertThat(PermissionCodes.PRINT_PREVIEWS_READ).isEqualTo("print-previews:read");
+        assertThat(PermissionCodes.ATTACHMENT_UPLOAD_SESSIONS_COMPLETE)
+                .isEqualTo("attachment-upload-sessions:complete");
+        assertThat(PermissionCodes.ATTACHMENT_MANIFEST_EXPORTS_EXPORT)
+                .isEqualTo("attachment-manifest-exports:export");
+        assertThat(PermissionCodes.CODE_ISSUANCES_CREATE).isEqualTo("code-issuances:create");
+        assertThat(PermissionCodes.USER_ACCOUNTS_UPDATE).isEqualTo("user-accounts:update");
+    }
+
+    @Test
+    void catalog_shouldContainEveryResourceWildcardHelperResult() {
+        assertThat(PermissionCodes.ofResourceWildcard("sales-returns"))
+                .isEqualTo(PermissionCodes.Resources.SALES_RETURNS + ":*");
+        assertThat(PermissionCodes.ofResourceWildcard("freight-statements"))
+                .isEqualTo(PermissionCodes.Resources.FREIGHT_STATEMENTS + ":*");
     }
 
     @Test

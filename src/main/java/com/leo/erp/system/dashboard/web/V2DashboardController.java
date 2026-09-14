@@ -1,6 +1,8 @@
 package com.leo.erp.system.dashboard.web;
 
 import org.springframework.validation.annotation.Validated;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.dashboard.service.DashboardSummaryService;
 import com.leo.erp.system.dashboard.web.dto.DashboardSummaryResponse;
@@ -22,6 +24,7 @@ public class V2DashboardController {
     }
 
     @GetMapping("/summary")
+    @RequirePermission(PermissionCodes.DASHBOARD_READ)
     public DashboardSummaryResponse summary(@AuthenticationPrincipal SecurityPrincipal principal) {
         return dashboardSummaryService.getSummary(principal.id());
     }

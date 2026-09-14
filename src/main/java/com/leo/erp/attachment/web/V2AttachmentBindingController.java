@@ -5,6 +5,8 @@ import com.leo.erp.attachment.service.AttachmentWebService;
 import com.leo.erp.attachment.web.dto.AttachmentBindingRequest;
 import com.leo.erp.attachment.web.dto.AttachmentBindingCountResponse;
 import com.leo.erp.attachment.web.dto.AttachmentBindingResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
@@ -41,6 +43,7 @@ public class V2AttachmentBindingController {
     }
 
     @GetMapping
+    @RequirePermission(PermissionCodes.ATTACHMENTS_READ)
     public AttachmentBindingResponse detail(@RequestParam @NotBlank @Size(max = 64) String moduleKey, @RequestParam @Positive Long recordId) {
         String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
         attachmentRecordAccessService.assertRecordExists(normalizedModuleKey, recordId);
@@ -48,6 +51,7 @@ public class V2AttachmentBindingController {
     }
 
     @GetMapping("/counts")
+    @RequirePermission(PermissionCodes.ATTACHMENTS_READ)
     public AttachmentBindingCountResponse counts(@RequestParam @NotBlank @Size(max = 64) String moduleKey, @RequestParam @NotBlank String recordIds) {
         String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
         List<Long> normalizedRecordIds = parseRecordIds(recordIds);
@@ -61,6 +65,7 @@ public class V2AttachmentBindingController {
     }
 
     @PutMapping
+    @RequirePermission(PermissionCodes.ATTACHMENTS_UPDATE)
     public AttachmentBindingResponse update(@Valid @RequestBody AttachmentBindingRequest request) {
         String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(request.moduleKey());
         attachmentRecordAccessService.assertRecordExists(normalizedModuleKey, request.recordId());

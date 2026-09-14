@@ -8,6 +8,8 @@ import com.leo.erp.market.service.SteelQuoteBackfillService;
 import com.leo.erp.market.web.dto.SteelQuoteBackfillRequest;
 import com.leo.erp.market.web.dto.SteelQuoteBackfillResponse;
 import com.leo.erp.market.web.dto.SteelQuoteBackfillStatusResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -45,6 +47,7 @@ public class V2SteelQuoteBackfillController {
 
     @Operation(summary = "补数任务状态", description = "返回当前/最近一次补数任务状态")
     @GetMapping("/current")
+    @RequirePermission(PermissionCodes.STEEL_QUOTE_BACKFILLS_READ)
     public SteelQuoteBackfillStatusResponse current() {
         return backfillService.status();
     }
@@ -53,6 +56,7 @@ public class V2SteelQuoteBackfillController {
     @ApiResponse(responseCode = "202", description = "已受理, 后台执行")
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
+    @RequirePermission(PermissionCodes.STEEL_QUOTE_BACKFILLS_BACKFILL)
     public ResponseEntity<SteelQuoteBackfillResponse> create(
             @Valid @RequestBody SteelQuoteBackfillRequest request) {
         LocalDate today = LocalDate.now(zone);

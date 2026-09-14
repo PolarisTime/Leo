@@ -10,6 +10,8 @@ import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.market.quotation.service.QuoteSheetService;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -42,6 +44,7 @@ public class V2QuoteSheetController {
 
     @Operation(summary = "分页查询报价单")
     @GetMapping
+    @RequirePermission(PermissionCodes.QUOTE_SHEETS_READ)
     public PageResponse<QuoteSheetResponse> page(
             @BindPageQuery(sortFieldKey = "quote-sheet") PageQuery query,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate orderDate,
@@ -52,6 +55,7 @@ public class V2QuoteSheetController {
 
     @Operation(summary = "报价单详情")
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.QUOTE_SHEETS_READ)
     public QuoteSheetResponse detail(@PathVariable Long id) {
         return quoteSheetService.detail(id);
     }
@@ -59,12 +63,14 @@ public class V2QuoteSheetController {
     @Operation(summary = "创建报价单")
     @PostMapping
     @V2Created
+    @RequirePermission(PermissionCodes.QUOTE_SHEETS_CREATE)
     public ResponseEntity<QuoteSheetResponse> create(@Valid @RequestBody QuoteSheetRequest request) {
         return V2ResponseSupport.created("/quote-sheets", quoteSheetService.create(request));
     }
 
     @Operation(summary = "更新报价单(整体替换)")
     @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public QuoteSheetResponse update(@PathVariable Long id, @Valid @RequestBody QuoteSheetRequest request) {
         return quoteSheetService.update(id, request);
     }
@@ -72,6 +78,7 @@ public class V2QuoteSheetController {
     @Operation(summary = "删除报价单")
     @DeleteMapping("/{id}")
     @V2NoContent
+    @RequirePermission(PermissionCodes.QUOTE_SHEETS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         quoteSheetService.delete(id);
         return V2ResponseSupport.noContent();

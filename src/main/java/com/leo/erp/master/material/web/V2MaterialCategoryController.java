@@ -8,6 +8,8 @@ import com.leo.erp.master.material.service.MaterialCategoryService;
 import com.leo.erp.master.material.web.dto.MaterialCategoryOptionResponse;
 import com.leo.erp.master.material.web.dto.MaterialCategoryRequest;
 import com.leo.erp.master.material.web.dto.MaterialCategoryResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;
@@ -41,34 +43,40 @@ public class V2MaterialCategoryController {
     }
 
     @GetMapping
+    @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_READ)
     public PageResponse<MaterialCategoryResponse> page(@BindPageQuery(sortFieldKey = "material-category") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String status) {
         return PageResponse.from(service.page(query, keyword, status));
     }
 
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_READ)
     public MaterialCategoryResponse detail(@PathVariable @Positive Long id) {
         return service.detail(id);
     }
 
     @PostMapping
     @V2Created
+    @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_CREATE)
     public ResponseEntity<MaterialCategoryResponse> create(@Valid @RequestBody MaterialCategoryRequest request) {
         return V2ResponseSupport.created("/material-categories", service.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_UPDATE)
     public MaterialCategoryResponse update(@PathVariable @Positive Long id, @Valid @RequestBody MaterialCategoryRequest request) {
         return service.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
+    @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_DELETE)
     public ResponseEntity<Void> delete(@PathVariable @Positive Long id) {
         service.delete(id);
         return V2ResponseSupport.noContent();
     }
 
     @GetMapping("/options")
+    @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_READ)
     public List<MaterialCategoryOptionResponse> options() {
         return OptionLimits.cap(service.options());
     }

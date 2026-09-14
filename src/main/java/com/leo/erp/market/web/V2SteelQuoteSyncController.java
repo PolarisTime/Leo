@@ -13,6 +13,8 @@ import com.leo.erp.market.service.SteelQuoteSyncService.SyncResult;
 import com.leo.erp.market.web.dto.SteelQuoteSyncRequest;
 import com.leo.erp.market.web.dto.SteelQuoteSyncRecordResponse;
 import com.leo.erp.market.web.dto.SteelQuoteSyncResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -52,6 +54,7 @@ public class V2SteelQuoteSyncController {
 
     @Operation(summary = "同步记录分页", description = "按抓取时间倒序返回已入库的行情文章记录")
     @GetMapping
+    @RequirePermission(PermissionCodes.STEEL_QUOTE_SYNCS_READ)
     public PageResponse<SteelQuoteSyncRecordResponse> page(@BindPageQuery(sortFieldKey = "steel-quote") PageQuery query) {
         Page<SteelQuoteSyncRecordResponse> page = articleQueryService.pageSyncRecords(query);
         return PageResponse.from(page);
@@ -61,6 +64,7 @@ public class V2SteelQuoteSyncController {
     @ApiResponse(responseCode = "202", description = "同步完成")
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
+    @RequirePermission(PermissionCodes.STEEL_QUOTE_SYNCS_SYNC)
     public ResponseEntity<SteelQuoteSyncResponse> create(@Valid @RequestBody(required = false)
                                                          SteelQuoteSyncRequest request) {
         LocalDate date = request != null && request.date() != null ? request.date() : LocalDate.now(zone);

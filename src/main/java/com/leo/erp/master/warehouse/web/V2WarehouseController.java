@@ -8,6 +8,8 @@ import com.leo.erp.master.warehouse.service.WarehouseService;
 import com.leo.erp.master.warehouse.web.dto.WarehouseOptionResponse;
 import com.leo.erp.master.warehouse.web.dto.WarehouseRequest;
 import com.leo.erp.master.warehouse.web.dto.WarehouseResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -40,33 +42,39 @@ public class V2WarehouseController {
     }
 
     @GetMapping("/options")
+    @RequirePermission(PermissionCodes.WAREHOUSES_READ)
     public List<WarehouseOptionResponse> options() {
         return OptionLimits.cap(warehouseService.listActiveOptions());
     }
 
     @GetMapping
+    @RequirePermission(PermissionCodes.WAREHOUSES_READ)
     public PageResponse<WarehouseResponse> page(@BindPageQuery(sortFieldKey = "warehouse") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String warehouseType, @RequestParam(required = false) String status) {
         return PageResponse.from(warehouseService.page(query, keyword, warehouseType, status));
     }
 
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.WAREHOUSES_READ)
     public WarehouseResponse detail(@PathVariable Long id) {
         return warehouseService.detail(id);
     }
 
     @PostMapping
     @V2Created
+    @RequirePermission(PermissionCodes.WAREHOUSES_CREATE)
     public ResponseEntity<WarehouseResponse> create(@Valid @RequestBody WarehouseRequest request) {
         return V2ResponseSupport.created("/warehouses", warehouseService.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.WAREHOUSES_UPDATE)
     public WarehouseResponse update(@PathVariable Long id, @Valid @RequestBody WarehouseRequest request) {
         return warehouseService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
+    @RequirePermission(PermissionCodes.WAREHOUSES_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         warehouseService.delete(id);
         return V2ResponseSupport.noContent();

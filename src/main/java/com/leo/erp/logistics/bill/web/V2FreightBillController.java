@@ -11,6 +11,8 @@ import com.leo.erp.logistics.bill.service.FreightBillSalesOrderCandidateService;
 import com.leo.erp.logistics.bill.service.FreightBillService;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import com.leo.erp.logistics.bill.web.dto.FreightBillSalesOrderCandidateResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -53,6 +55,7 @@ public class V2FreightBillController {
     }
 
     @GetMapping("/sales-order-candidates")
+    @RequirePermission(PermissionCodes.FREIGHT_BILLS_READ)
     public PageResponse<FreightBillSalesOrderCandidateResponse> salesOrderCandidates(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Long currentRecordId) {
         return candidateResponseAssembler.toPageResponse(candidateService.page(
                 query,
@@ -62,6 +65,7 @@ public class V2FreightBillController {
     }
 
     @GetMapping
+    @RequirePermission(PermissionCodes.FREIGHT_BILLS_READ)
     public PageResponse<FreightBillResponse> page(@BindPageQuery(sortFieldKey = "freight-bill") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long carrierId, @RequestParam(required = false) String carrierCode, @RequestParam(required = false) String carrierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return PageResponse.from(service.page(
                 query,
@@ -72,6 +76,7 @@ public class V2FreightBillController {
     }
 
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.FREIGHT_BILLS_READ)
     public FreightBillResponse detail(@PathVariable Long id) {
         return service.detail(id);
     }
@@ -79,18 +84,21 @@ public class V2FreightBillController {
     @PostMapping
     @DomainEventAudited
     @V2Created
+    @RequirePermission(PermissionCodes.FREIGHT_BILLS_CREATE)
     public ResponseEntity<FreightBillResponse> create(@Valid @RequestBody FreightBillRequest request) {
         return V2ResponseSupport.created("/freight-bills", service.create(request));
     }
 
     @PutMapping("/{id}")
     @DomainEventAudited
+    @RequirePermission(PermissionCodes.FREIGHT_BILLS_UPDATE)
     public FreightBillResponse update(@PathVariable Long id, @Valid @RequestBody FreightBillRequest request) {
         return service.update(id, request);
     }
 
     @PatchMapping("/{id}/status")
     @DomainEventAudited
+    @RequirePermission(PermissionCodes.FREIGHT_BILLS_UPDATE)
     public FreightBillResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return service.updateStatus(id, request.status());
     }
@@ -105,6 +113,7 @@ public class V2FreightBillController {
     @PostMapping("/{id}/audits")
     @DomainEventAudited
     @V2Created
+    @RequirePermission(PermissionCodes.FREIGHT_BILLS_AUDIT)
     public ResponseEntity<FreightBillResponse> createAudit(@PathVariable Long id) {
         return V2ResponseSupport.created("/freight-bills", service.updateStatus(id, StatusConstants.AUDITED));
     }
@@ -112,6 +121,7 @@ public class V2FreightBillController {
     @DeleteMapping("/{id}")
     @DomainEventAudited
     @V2NoContent
+    @RequirePermission(PermissionCodes.FREIGHT_BILLS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return V2ResponseSupport.noContent();

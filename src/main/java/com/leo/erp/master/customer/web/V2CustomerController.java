@@ -7,6 +7,8 @@ import com.leo.erp.master.customer.service.CustomerService;
 import com.leo.erp.master.customer.web.dto.CustomerOptionResponse;
 import com.leo.erp.master.customer.web.dto.CustomerRequest;
 import com.leo.erp.master.customer.web.dto.CustomerResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -39,33 +41,39 @@ public class V2CustomerController {
     }
 
     @GetMapping("/options")
+    @RequirePermission(PermissionCodes.CUSTOMERS_READ)
     public List<CustomerOptionResponse> options() {
         return customerService.listActiveOptions();
     }
 
     @GetMapping
+    @RequirePermission(PermissionCodes.CUSTOMERS_READ)
     public PageResponse<CustomerResponse> page(@BindPageQuery(sortFieldKey = "customer") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String status) {
         return PageResponse.from(customerService.page(query, keyword, status));
     }
 
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.CUSTOMERS_READ)
     public CustomerResponse detail(@PathVariable Long id) {
         return customerService.detail(id);
     }
 
     @PostMapping
     @V2Created
+    @RequirePermission(PermissionCodes.CUSTOMERS_CREATE)
     public ResponseEntity<CustomerResponse> create(@Valid @RequestBody CustomerRequest request) {
         return V2ResponseSupport.created("/customers", customerService.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.CUSTOMERS_UPDATE)
     public CustomerResponse update(@PathVariable Long id, @Valid @RequestBody CustomerRequest request) {
         return customerService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
+    @RequirePermission(PermissionCodes.CUSTOMERS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         customerService.delete(id);
         return V2ResponseSupport.noContent();

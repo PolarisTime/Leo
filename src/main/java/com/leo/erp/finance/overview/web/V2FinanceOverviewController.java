@@ -4,6 +4,8 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.finance.overview.service.FinanceOverviewService;
 import com.leo.erp.finance.overview.web.dto.FinanceOverviewResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -29,6 +31,7 @@ public class V2FinanceOverviewController {
 
     @GetMapping
     @Operation(summary = "查询应收应付概览")
+    @RequirePermission(PermissionCodes.FINANCE_READ)
     public FinanceOverviewResponse overview(@BindPageQuery(sortFieldKey = "finance-overview") PageQuery query, @RequestParam Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOfDate, @RequestParam(required = false) String balanceDirection, @RequestParam(required = false) String counterpartyType, @RequestParam(required = false) String keyword, @RequestParam(defaultValue = "false") boolean onlyOpen) {
         return financeOverviewService.overview(
                 query, settlementCompanyId, asOfDate, balanceDirection, counterpartyType, keyword, onlyOpen);

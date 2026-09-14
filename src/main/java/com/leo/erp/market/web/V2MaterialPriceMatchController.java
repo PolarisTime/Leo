@@ -5,6 +5,8 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.market.service.SteelQuoteMatchService;
 import com.leo.erp.market.web.dto.MaterialPriceMatchResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -33,6 +35,7 @@ public class V2MaterialPriceMatchController {
     @Operation(summary = "商品行情匹配查询",
             description = "按商品资料(品牌/材质/类别/规格/长度)匹配对应时段行情; 无对应价格时状态为\"无网价\"; 未传日期/时段时取最新文章")
     @GetMapping
+    @RequirePermission(PermissionCodes.MATERIAL_PRICE_MATCHES_READ)
     public List<MaterialPriceMatchResponse> match(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate quoteDate,
             @RequestParam(required = false) String period,

@@ -19,6 +19,8 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderPickupListResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderWarehouseRecommendationResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
@@ -69,6 +71,7 @@ public class V2PurchaseOrderController {
 
     @Operation(summary = "采购订单下拉选项(单号/供应商/订货吨数/状态)")
     @GetMapping("/options")
+    @RequirePermission(PermissionCodes.PURCHASE_ORDERS_READ)
     public List<PurchaseOrderOptionResponse> options(@RequestParam(required = false) String keyword,
                                                               @RequestParam(required = false) String status) {
         return OptionLimits.cap(purchaseOrderOptionService.listOptions(keyword, status));
@@ -76,6 +79,7 @@ public class V2PurchaseOrderController {
 
     @Operation(summary = "分页查询采购入库来源候选")
     @GetMapping("/inbound-import-candidates")
+    @RequirePermission(PermissionCodes.PURCHASE_ORDERS_READ)
     public PageResponse<PurchaseOrderImportCandidateResponse> inboundImportCandidates(@BindPageQuery(sortFieldKey = "purchase-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long supplierId, @RequestParam(required = false) String supplierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Long currentRecordId) {
         return PageResponse.from(purchaseOrderService.inboundImportCandidates(
                 query,
@@ -86,6 +90,7 @@ public class V2PurchaseOrderController {
 
     @Operation(summary = "分页查询采购订单")
     @GetMapping
+    @RequirePermission(PermissionCodes.PURCHASE_ORDERS_READ)
     public PageResponse<PurchaseOrderResponse> page(@BindPageQuery(sortFieldKey = "purchase-order") PageQuery query, @ModelAttribute PurchaseOrderPageCriteria criteria) {
         return PageResponse.from(purchaseOrderService.page(
                 query,
@@ -99,6 +104,7 @@ public class V2PurchaseOrderController {
 
     @Operation(summary = "按供应商和商品推荐采购仓库")
     @GetMapping("/warehouse-recommendations")
+    @RequirePermission(PermissionCodes.PURCHASE_ORDERS_READ)
     public List<PurchaseOrderWarehouseRecommendationResponse> warehouseRecommendations(@RequestParam @Positive Long supplierId, @RequestParam @Size(min = 1, max = 200) List<@Positive Long> materialIds) {
         return warehouseRecommendationService.recommend(supplierId, materialIds).stream()
                 .map(PurchaseOrderWarehouseRecommendationResponse::from)
@@ -107,12 +113,14 @@ public class V2PurchaseOrderController {
 
     @Operation(summary = "预览采购订单提货清单")
     @GetMapping("/pickup-list-preview")
+    @RequirePermission(PermissionCodes.PURCHASE_ORDERS_READ)
     public PurchaseOrderPickupListResponse pickupListPreview(@RequestParam @Size(min = 1, max = 50) List<@Positive Long> orderIds) {
         return pickupListService.preview(orderIds);
     }
 
     @Operation(summary = "查询采购订单详情")
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.PURCHASE_ORDERS_READ)
     public PurchaseOrderResponse detail(@PathVariable Long id) {
         return purchaseOrderService.detail(id);
     }
@@ -121,6 +129,7 @@ public class V2PurchaseOrderController {
     @PostMapping
     @DomainEventAudited
     @V2Created
+    @RequirePermission(PermissionCodes.PURCHASE_ORDERS_CREATE)
     public ResponseEntity<PurchaseOrderResponse> create(@Valid @RequestBody PurchaseOrderRequest request) {
         return V2ResponseSupport.created("/purchase-orders", purchaseOrderService.create(request));
     }
@@ -128,6 +137,7 @@ public class V2PurchaseOrderController {
     @Operation(summary = "更新采购订单")
     @PutMapping("/{id}")
     @DomainEventAudited
+    @RequirePermission(PermissionCodes.PURCHASE_ORDERS_UPDATE)
     public PurchaseOrderResponse update(@PathVariable Long id, @Valid @RequestBody PurchaseOrderRequest request) {
         return purchaseOrderService.update(id, request);
     }
@@ -135,6 +145,7 @@ public class V2PurchaseOrderController {
     @Operation(summary = "更新采购订单状态")
     @PatchMapping("/{id}/status")
     @DomainEventAudited
+    @RequirePermission(PermissionCodes.PURCHASE_ORDERS_UPDATE)
     public PurchaseOrderResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return purchaseOrderService.updateStatus(id, request.status());
     }
@@ -143,6 +154,7 @@ public class V2PurchaseOrderController {
     @DeleteMapping("/{id}")
     @DomainEventAudited
     @V2NoContent
+    @RequirePermission(PermissionCodes.PURCHASE_ORDERS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         purchaseOrderService.delete(id);
         return V2ResponseSupport.noContent();

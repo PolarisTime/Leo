@@ -5,6 +5,8 @@ import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.code.web.dto.MasterDataCodeIssuanceResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -37,6 +39,7 @@ public class V2MasterDataCodeIssuanceController {
     @Operation(summary = "签发基础资料编码")
     @PostMapping("/{moduleKey}")
     @V2Created
+    @RequirePermission(PermissionCodes.CODE_ISSUANCES_CREATE)
     public ResponseEntity<MasterDataCodeIssuanceResponse> issue(@PathVariable String moduleKey) {
         String code = codeIssuanceService.issue(moduleKey);
         return ResponseEntity.created(ServletUriComponentsBuilder.fromCurrentContextPath()
@@ -50,6 +53,7 @@ public class V2MasterDataCodeIssuanceController {
 
     @Operation(summary = "查询基础资料编码签发记录")
     @GetMapping("/{moduleKey}/{code}")
+    @RequirePermission(PermissionCodes.CODE_ISSUANCES_READ)
     public MasterDataCodeIssuanceResponse detail(@PathVariable String moduleKey, @PathVariable String code) {
         return new MasterDataCodeIssuanceResponse(codeIssuanceService.get(moduleKey, code));
     }

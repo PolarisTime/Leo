@@ -2,6 +2,8 @@ package com.leo.erp.common.web;
 
 import com.leo.erp.common.web.dto.MetaCodeResponse;
 import com.leo.erp.common.web.service.MetaService;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.validation.annotation.Validated;
@@ -24,6 +26,7 @@ public class V2MetaController {
 
     @Operation(summary = "获取错误码和系统元数据")
     @GetMapping("/codes")
+    @RequirePermission(PermissionCodes.META_READ)
     public MetaCodeResponse codes() {
         return metaService.codes();
     }

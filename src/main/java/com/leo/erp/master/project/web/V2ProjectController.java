@@ -8,6 +8,8 @@ import com.leo.erp.master.project.service.ProjectService;
 import com.leo.erp.master.project.web.dto.ProjectOptionResponse;
 import com.leo.erp.master.project.web.dto.ProjectRequest;
 import com.leo.erp.master.project.web.dto.ProjectResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -40,33 +42,39 @@ public class V2ProjectController {
     }
 
     @GetMapping("/options")
+    @RequirePermission(PermissionCodes.PROJECTS_READ)
     public List<ProjectOptionResponse> options(@RequestParam Long customerId) {
         return OptionLimits.cap(projectService.listActiveOptions(customerId));
     }
 
     @GetMapping
+    @RequirePermission(PermissionCodes.PROJECTS_READ)
     public PageResponse<ProjectResponse> page(@BindPageQuery(sortFieldKey = "project") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String status, @RequestParam(required = false) Long customerId) {
         return PageResponse.from(projectService.page(query, keyword, status, customerId));
     }
 
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.PROJECTS_READ)
     public ProjectResponse detail(@PathVariable Long id) {
         return projectService.detail(id);
     }
 
     @PostMapping
     @V2Created
+    @RequirePermission(PermissionCodes.PROJECTS_CREATE)
     public ResponseEntity<ProjectResponse> create(@Valid @RequestBody ProjectRequest request) {
         return V2ResponseSupport.created("/projects", projectService.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.PROJECTS_UPDATE)
     public ProjectResponse update(@PathVariable Long id, @Valid @RequestBody ProjectRequest request) {
         return projectService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
+    @RequirePermission(PermissionCodes.PROJECTS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         projectService.delete(id);
         return V2ResponseSupport.noContent();

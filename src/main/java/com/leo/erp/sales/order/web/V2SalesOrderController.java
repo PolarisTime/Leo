@@ -22,6 +22,8 @@ import com.leo.erp.sales.order.web.dto.SalesOrderPageCriteria;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.sales.order.web.dto.SalesOrderSourceCandidateResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -73,6 +75,7 @@ public class V2SalesOrderController {
 
     @Operation(summary = "分页查询销售订单采购来源候选")
     @GetMapping("/source-candidates")
+    @RequirePermission(PermissionCodes.SALES_ORDERS_READ)
     public PageResponse<SalesOrderSourceCandidateResponse> sourceCandidates(@BindPageQuery(sortFieldKey = "purchase-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long supplierId, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Long currentSalesOrderId) {
         return sourceCandidateService.page(
                 keyword, supplierId, settlementCompanyId,
@@ -81,6 +84,7 @@ public class V2SalesOrderController {
 
     @Operation(summary = "分页查询销售订单")
     @GetMapping
+    @RequirePermission(PermissionCodes.SALES_ORDERS_READ)
     public PageResponse<SalesOrderResponse> page(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @ModelAttribute SalesOrderPageCriteria criteria) {
         return PageResponse.from(service.page(
                 query,
@@ -108,6 +112,7 @@ public class V2SalesOrderController {
 
     @Operation(summary = "分页查询销售订单出库导入候选")
     @GetMapping("/outbound-import-candidates")
+    @RequirePermission(PermissionCodes.SALES_ORDERS_READ)
     public PageResponse<SalesOrderResponse> outboundImportCandidates(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @ModelAttribute SalesOrderOutboundImportCandidatesCriteria criteria) {
         return PageResponse.from(service.outboundImportCandidates(
                 query,
@@ -118,12 +123,14 @@ public class V2SalesOrderController {
 
     @Operation(summary = "查询销售订单详情")
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.SALES_ORDERS_READ)
     public SalesOrderResponse detail(@PathVariable Long id) {
         return service.detail(id);
     }
 
     @Operation(summary = "查询销售订单单据流")
     @GetMapping("/{id}/document-flow")
+    @RequirePermission(PermissionCodes.SALES_ORDERS_READ)
     public SalesOrderDocumentFlowResponse documentFlow(@PathVariable Long id) {
         return documentFlowService.documentFlow(id);
     }
@@ -131,6 +138,7 @@ public class V2SalesOrderController {
     @Operation(summary = "创建销售订单套打 Excel 导出（同步返回文件）")
     @PostMapping("/{id}/xlsx-exports")
     @OperationLoggable(moduleName = "销售订单", actionType = "打印", businessNoFields = {"id"}, recordIdField = "id")
+    @RequirePermission(PermissionCodes.SALES_ORDERS_EXPORT)
     public ResponseEntity<byte[]> createXlsxExport(@PathVariable Long id, @Valid @RequestBody(required = false) SalesOrderPrintXlsxRequest payload, HttpServletRequest request) {
         SalesOrderPrintXlsxOptions options = payload == null
                 ? SalesOrderPrintXlsxOptions.defaults()
@@ -143,6 +151,7 @@ public class V2SalesOrderController {
     @PostMapping
     @DomainEventAudited
     @V2Created
+    @RequirePermission(PermissionCodes.SALES_ORDERS_CREATE)
     public ResponseEntity<SalesOrderResponse> create(@Valid @RequestBody SalesOrderRequest request) {
         return V2ResponseSupport.created("/sales-orders", service.create(request));
     }
@@ -151,6 +160,7 @@ public class V2SalesOrderController {
     @IdempotencyRequired
     @PutMapping("/{id}")
     @DomainEventAudited
+    @RequirePermission(PermissionCodes.SALES_ORDERS_UPDATE)
     public SalesOrderResponse update(@PathVariable Long id, @Valid @RequestBody SalesOrderRequest request) {
         return service.update(id, request);
     }
@@ -164,6 +174,7 @@ public class V2SalesOrderController {
     @PostMapping("/{id}/delivery-verifications")
     @DomainEventAudited
     @V2Created
+    @RequirePermission(PermissionCodes.SALES_ORDERS_CONFIRM)
     public ResponseEntity<SalesOrderResponse> createDeliveryVerification(@PathVariable Long id,
                                                                          @Valid @RequestBody SalesOrderRequest request) {
         return V2ResponseSupport.created("/sales-orders", service.updateAndComplete(id, request));
@@ -173,6 +184,7 @@ public class V2SalesOrderController {
     @IdempotencyRequired
     @PatchMapping("/{id}/status")
     @DomainEventAudited
+    @RequirePermission(PermissionCodes.SALES_ORDERS_UPDATE)
     public SalesOrderResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return service.updateStatus(id, request.status());
     }
@@ -186,6 +198,7 @@ public class V2SalesOrderController {
     @PostMapping("/{id}/completions")
     @DomainEventAudited
     @V2Created
+    @RequirePermission(PermissionCodes.SALES_ORDERS_COMPLETE)
     public ResponseEntity<SalesOrderResponse> createCompletion(@PathVariable Long id) {
         return V2ResponseSupport.created("/sales-orders", service.completeSalesOrder(id));
     }
@@ -194,6 +207,7 @@ public class V2SalesOrderController {
     @DeleteMapping("/{id}")
     @DomainEventAudited
     @V2NoContent
+    @RequirePermission(PermissionCodes.SALES_ORDERS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return V2ResponseSupport.noContent();

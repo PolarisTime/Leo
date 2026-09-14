@@ -5,6 +5,8 @@ import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.finance.cashledger.service.CashLedgerService;
 import com.leo.erp.finance.cashledger.web.dto.CashLedgerPageResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -34,6 +36,7 @@ public class V2CashLedgerController {
 
     @GetMapping
     @Operation(summary = "分页查询资金流水")
+    @RequirePermission(PermissionCodes.CASH_LEDGER_READ)
     public CashLedgerPageResponse page(@BindPageQuery(sortFieldKey = "cash-ledger", directionParam = "sortDirection") PageQuery query, @RequestParam Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) String counterpartyType, @RequestParam(required = false) Long counterpartyId, @RequestParam(required = false) String flowType, @RequestParam(required = false) String keyword) {
         return cashLedgerService.page(
                 query, settlementCompanyId, startDate, endDate,
@@ -42,6 +45,7 @@ public class V2CashLedgerController {
 
     @GetMapping("/export")
     @Operation(summary = "导出资金流水")
+    @RequirePermission(PermissionCodes.CASH_LEDGER_EXPORT)
     public ResponseEntity<byte[]> export(@RequestParam Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) String counterpartyType, @RequestParam(required = false) Long counterpartyId, @RequestParam(required = false) String flowType, @RequestParam(required = false) String keyword) {
         return toDownloadResponse(cashLedgerService.exportExcel(
                 settlementCompanyId, startDate, endDate,

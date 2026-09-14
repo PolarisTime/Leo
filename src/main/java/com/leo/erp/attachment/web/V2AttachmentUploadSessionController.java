@@ -10,6 +10,8 @@ import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import io.swagger.v3.oas.annotations.Operation;
@@ -55,6 +57,7 @@ public class V2AttachmentUploadSessionController {
     @PostMapping
     @V2Created
     @OperationLoggable(moduleName = "附件管理", actionType = "创建附件直传会话")
+    @RequirePermission(PermissionCodes.ATTACHMENT_UPLOAD_SESSIONS_CREATE)
     public ResponseEntity<AttachmentDirectUploadPrepareResponse> create(
             @AuthenticationPrincipal SecurityPrincipal principal,
             @RequestParam @NotBlank(message = "模块标识不能为空") String moduleKey,
@@ -77,6 +80,7 @@ public class V2AttachmentUploadSessionController {
     @PostMapping("/{sessionId}/completions")
     @V2Created
     @OperationLoggable(moduleName = "附件管理", actionType = "完成附件直传")
+    @RequirePermission(PermissionCodes.ATTACHMENT_UPLOAD_SESSIONS_COMPLETE)
     public ResponseEntity<AttachmentUploadResponse> complete(
             @AuthenticationPrincipal SecurityPrincipal principal,
             @PathVariable Long sessionId,

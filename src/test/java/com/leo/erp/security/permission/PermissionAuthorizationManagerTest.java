@@ -19,6 +19,8 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
  */
 class PermissionAuthorizationManagerTest {
 
+    private static final String SALES_RETURNS_WILDCARD = "sales-returns:*";
+
     private final PermissionAuthorizationManager manager = new PermissionAuthorizationManager();
 
     @Test
@@ -72,6 +74,42 @@ class PermissionAuthorizationManagerTest {
     }
 
     @Test
+    void check_shouldAllowResourceWildcardForAnyActionOfSameResource() throws Exception {
+        AuthorizationDecision decision = authorize(
+                authentication(PermissionCodes.ofResourceWildcard("sales-returns")),
+                method(Guarded.class, "write"));
+
+        assertThat(decision.isGranted()).isTrue();
+    }
+
+    @Test
+    void check_shouldAllowResourceWildcardForFieldLevelPermission() throws Exception {
+        AuthorizationDecision decision = authorize(
+                authentication(PermissionCodes.ofResourceWildcard("inventory")),
+                method(Guarded.class, "fieldLevel"));
+
+        assertThat(decision.isGranted()).isTrue();
+    }
+
+    @Test
+    void check_shouldDenyResourceWildcardOfAnotherResource() throws Exception {
+        AuthorizationDecision decision = authorize(
+                authentication(PermissionCodes.ofResourceWildcard("materials")),
+                method(Guarded.class, "write"));
+
+        assertThat(decision.isGranted()).isFalse();
+    }
+
+    @Test
+    void check_shouldDenyFineGrainedAuthorityWhenResourceWildcardRequired() throws Exception {
+        AuthorizationDecision decision = authorize(
+                authentication(PermissionCodes.SALES_RETURNS_READ),
+                method(Guarded.class, "resourceWildcardOnly"));
+
+        assertThat(decision.isGranted()).isFalse();
+    }
+
+    @Test
     void check_shouldAllowClassLevelAnnotation() throws Exception {
         MethodInvocation invocation = mock(MethodInvocation.class);
         when(invocation.getMethod()).thenReturn(method(AdminGuarded.class, "manage"));
@@ -109,6 +147,14 @@ class PermissionAuthorizationManagerTest {
 
         @RequirePermission({PermissionCodes.MATERIALS_UPDATE, PermissionCodes.INVENTORY_BACKFILL})
         public void either() {
+        }
+
+        @RequirePermission(PermissionCodes.INVENTORY_READ_COST)
+        public void fieldLevel() {
+        }
+
+        @RequirePermission(SALES_RETURNS_WILDCARD)
+        public void resourceWildcardOnly() {
         }
 
         public void open() {

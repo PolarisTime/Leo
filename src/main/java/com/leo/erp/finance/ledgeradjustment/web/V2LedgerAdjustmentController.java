@@ -8,6 +8,8 @@ import com.leo.erp.finance.ledgeradjustment.service.LedgerAdjustmentService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.finance.ledgeradjustment.web.dto.LedgerAdjustmentRequest;
 import com.leo.erp.finance.ledgeradjustment.web.dto.LedgerAdjustmentResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -44,6 +46,7 @@ public class V2LedgerAdjustmentController {
 
     @Operation(summary = "分页查询台账调整单")
     @GetMapping
+    @RequirePermission(PermissionCodes.LEDGER_ADJUSTMENTS_READ)
     public PageResponse<LedgerAdjustmentResponse> page(@BindPageQuery(sortFieldKey = "ledger-adjustment", directionParam = "sortDirection") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String direction, @RequestParam(required = false) String counterpartyType, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return PageResponse.from(ledgerAdjustmentService.page(
                 query,
@@ -55,6 +58,7 @@ public class V2LedgerAdjustmentController {
 
     @Operation(summary = "查询台账调整单详情")
     @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.LEDGER_ADJUSTMENTS_READ)
     public LedgerAdjustmentResponse detail(@PathVariable Long id) {
         return ledgerAdjustmentService.detail(id);
     }
@@ -62,18 +66,21 @@ public class V2LedgerAdjustmentController {
     @Operation(summary = "创建台账调整单")
     @PostMapping
     @V2Created
+    @RequirePermission(PermissionCodes.LEDGER_ADJUSTMENTS_CREATE)
     public ResponseEntity<LedgerAdjustmentResponse> create(@Valid @RequestBody LedgerAdjustmentRequest request) {
         return V2ResponseSupport.created("/ledger-adjustments", ledgerAdjustmentService.create(request));
     }
 
     @Operation(summary = "更新台账调整单")
     @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.LEDGER_ADJUSTMENTS_UPDATE)
     public LedgerAdjustmentResponse update(@PathVariable Long id, @Valid @RequestBody LedgerAdjustmentRequest request) {
         return ledgerAdjustmentService.update(id, request);
     }
 
     @Operation(summary = "更新台账调整单状态")
     @PatchMapping("/{id}/status")
+    @RequirePermission(PermissionCodes.LEDGER_ADJUSTMENTS_UPDATE)
     public LedgerAdjustmentResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ledgerAdjustmentService.updateStatus(id, request.status());
     }
@@ -81,6 +88,7 @@ public class V2LedgerAdjustmentController {
     @Operation(summary = "删除台账调整单")
     @DeleteMapping("/{id}")
     @V2NoContent
+    @RequirePermission(PermissionCodes.LEDGER_ADJUSTMENTS_DELETE)
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         ledgerAdjustmentService.delete(id);
         return V2ResponseSupport.noContent();
