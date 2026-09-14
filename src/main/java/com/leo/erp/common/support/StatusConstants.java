@@ -65,6 +65,14 @@ public final class StatusConstants {
     public static final Set<String> ALLOWED_SALES_RETURN_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_CONTRACT_STATUS = Set.of(DRAFT, EXECUTING, SIGNED, ARCHIVED);
     public static final Set<String> ALLOWED_STATEMENT_STATUS = Set.of(PENDING_CONFIRM, CONFIRMED);
+
+    // 客户对账单方向：蓝字=正常对账（正数），红字=退货冲销（负数）
+    public static final String STATEMENT_DIRECTION_BLUE = "蓝字";
+    public static final String STATEMENT_DIRECTION_RED = "红字";
+    public static final Set<String> ALLOWED_STATEMENT_DIRECTION = Set.of(
+            STATEMENT_DIRECTION_BLUE,
+            STATEMENT_DIRECTION_RED
+    );
     public static final Set<String> ALLOWED_FREIGHT_STATEMENT_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_SIGN_STATUS = Set.of(UNSIGNED, SIGNED);
     public static final Set<String> ALLOWED_FREIGHT_BILL_STATUS = Set.of(DRAFT, AUDITED);

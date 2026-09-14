@@ -71,6 +71,15 @@ public class CustomerStatement extends AbstractAuditableEntity implements Status
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 
+    @Column(name = "direction", nullable = false, length = 8)
+    private String direction = "蓝字";
+
+    @Column(name = "source_sales_return_id")
+    private Long sourceSalesReturnId;
+
+    @Column(name = "source_sales_return_no", length = 64)
+    private String sourceSalesReturnNo;
+
     @Column(name = "remark", length = 255)
     private String remark;
 

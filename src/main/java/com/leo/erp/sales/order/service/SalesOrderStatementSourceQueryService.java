@@ -10,6 +10,7 @@ import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
+import com.leo.erp.sales.returns.repository.SalesReturnItemRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -38,11 +39,14 @@ public class SalesOrderStatementSourceQueryService implements SalesOrderStatemen
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("id", "orderNo", "purchaseInboundNo", "purchaseOrderNo", "customerName", "projectName", "deliveryDate", "salesName", "totalWeight", "totalAmount", "status");
     private final SalesOutboundRepository salesOutboundRepository;
+    private final SalesReturnItemRepository salesReturnItemRepository;
 
     public SalesOrderStatementSourceQueryService(SalesOrderRepository salesOrderRepository,
-                                                 SalesOutboundRepository salesOutboundRepository) {
+                                                 SalesOutboundRepository salesOutboundRepository,
+                                                 SalesReturnItemRepository salesReturnItemRepository) {
         this.salesOrderRepository = salesOrderRepository;
         this.salesOutboundRepository = salesOutboundRepository;
+        this.salesReturnItemRepository = salesReturnItemRepository;
     }
 
     @Override
@@ -101,12 +105,47 @@ public class SalesOrderStatementSourceQueryService implements SalesOrderStatemen
                 .flatMap(outbound -> outbound.getItems().stream())
                 .filter(item -> item.getSourceSalesOrderItemId() != null)
                 .filter(item -> sourceItemIds.contains(item.getSourceSalesOrderItemId()))
-                .forEach(item -> result.merge(
-                        item.getSourceSalesOrderItemId(),
-                        toActualSnapshot(item),
-                        this::mergeActuals
-                ));
+            .forEach(item -> result.merge(
+                    item.getSourceSalesOrderItemId(),
+                    toActualSnapshot(item),
+                    this::mergeActuals
+            ));
+        loadAuditedReturnActuals(sourceItemIds).forEach((sourceItemId, returned) -> result.computeIfPresent(
+                sourceItemId,
+                (id, actual) -> subtractActuals(actual, returned)
+        ));
         return Map.copyOf(result);
+    }
+
+    private Map<Long, AuditedOutboundActualSnapshot> loadAuditedReturnActuals(Set<Long> sourceItemIds) {
+        Map<Long, AuditedOutboundActualSnapshot> result = new HashMap<>();
+        salesReturnItemRepository.summarizeAuditedReturnBySourceSalesOrderItemIds(
+                        sourceItemIds.stream().sorted().toList(),
+                        StatusConstants.AUDITED
+                )
+                .forEach(row -> {
+                    if (row.getSourceSalesOrderItemId() == null) {
+                        return;
+                    }
+                    result.put(
+                            row.getSourceSalesOrderItemId(),
+                            new AuditedOutboundActualSnapshot(
+                                    row.getTotalQuantity() == null ? 0L : row.getTotalQuantity(),
+                                    TradeItemCalculator.scaleWeightTon(row.getTotalWeightTon()),
+                                    TradeItemCalculator.scaleAmount(row.getTotalAmount())
+                            )
+                    );
+                });
+        return result;
+    }
+
+    private AuditedOutboundActualSnapshot subtractActuals(AuditedOutboundActualSnapshot actual,
+                                                          AuditedOutboundActualSnapshot returned) {
+        return new AuditedOutboundActualSnapshot(
+                actual.quantity() - returned.quantity(),
+                TradeItemCalculator.scaleWeightTon(actual.weightTon().subtract(returned.weightTon())),
+                TradeItemCalculator.scaleAmount(actual.amount().subtract(returned.amount()))
+        );
     }
 
     private AuditedOutboundActualSnapshot toActualSnapshot(SalesOutboundItem item) {

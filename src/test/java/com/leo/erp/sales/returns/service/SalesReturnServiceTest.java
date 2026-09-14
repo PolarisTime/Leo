@@ -120,6 +120,33 @@ class SalesReturnServiceTest {
     }
 
     @Test
+    void updateStatus_shouldTriggerReversalOnAudit() {
+        SalesReturn entity = entity(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(workflowService.save(entity)).thenReturn(entity);
+        SalesReturnResponse response = mock(SalesReturnResponse.class);
+        when(response.status()).thenReturn(StatusConstants.AUDITED);
+        when(responseAssembler.toDetailResponse(entity)).thenReturn(response);
+
+        service.updateStatus(5L, StatusConstants.AUDITED);
+
+        verify(workflowService).afterStatusChanged(entity, StatusConstants.DRAFT, StatusConstants.AUDITED);
+    }
+
+    @Test
+    void updateStatus_shouldNotTriggerReversalWhenUnchanged() {
+        SalesReturn entity = entity(StatusConstants.DRAFT);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        SalesReturnResponse response = mock(SalesReturnResponse.class);
+        when(response.status()).thenReturn(StatusConstants.DRAFT);
+        when(responseAssembler.toDetailResponse(entity)).thenReturn(response);
+
+        service.updateStatus(5L, StatusConstants.DRAFT);
+
+        verify(workflowService, never()).afterStatusChanged(any(), any(), any());
+    }
+
+    @Test
     void updateStatus_shouldNotPublishWhenUnchanged() {
         SalesReturn entity = entity(StatusConstants.DRAFT);
         when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));

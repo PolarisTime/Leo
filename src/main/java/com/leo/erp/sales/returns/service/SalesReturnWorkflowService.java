@@ -2,6 +2,7 @@ package com.leo.erp.sales.returns.service;
 
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.sales.api.SalesReturnReversalCommand;
 import com.leo.erp.sales.returns.domain.entity.SalesReturn;
 import com.leo.erp.sales.returns.domain.entity.SalesReturnItem;
 import com.leo.erp.sales.returns.web.dto.SalesReturnRequest;
@@ -24,15 +25,18 @@ public class SalesReturnWorkflowService {
     private final SalesReturnCoverageValidator coverageValidator;
     private final SalesReturnSaveService saveService;
     private final BusinessOperationEventPublisher businessOperationEventPublisher;
+    private final SalesReturnReversalCommand salesReturnReversalCommand;
 
     public SalesReturnWorkflowService(SalesReturnApplyService applyService,
                                       SalesReturnCoverageValidator coverageValidator,
                                       SalesReturnSaveService saveService,
-                                      BusinessOperationEventPublisher businessOperationEventPublisher) {
+                                      BusinessOperationEventPublisher businessOperationEventPublisher,
+                                      SalesReturnReversalCommand salesReturnReversalCommand) {
         this.applyService = applyService;
         this.coverageValidator = coverageValidator;
         this.saveService = saveService;
         this.businessOperationEventPublisher = businessOperationEventPublisher;
+        this.salesReturnReversalCommand = salesReturnReversalCommand;
     }
 
     void apply(SalesReturn entity, SalesReturnRequest request, LongSupplier nextIdSupplier) {
@@ -78,6 +82,16 @@ public class SalesReturnWorkflowService {
         String actionType = StatusConstants.DRAFT.equals(nextStatus) ? "反审核" : "审核";
         publishEvent(salesReturn, "SALES_RETURN_STATUS_CHANGED", actionType,
                 "销售退货单状态 " + currentStatus + " -> " + nextStatus);
+    }
+
+    /**
+     * 退货状态变更后的下游联动：审核通过时生成红字对账单（同一退货单幂等）。
+     */
+    void afterStatusChanged(SalesReturn salesReturn, String currentStatus, String nextStatus) {
+        if (StatusConstants.AUDITED.equals(nextStatus)
+                && !StatusConstants.AUDITED.equals(currentStatus)) {
+            salesReturnReversalCommand.reverseForAuditedReturn(salesReturn.getId());
+        }
     }
 
     void publishDeleted(SalesReturn entity) {

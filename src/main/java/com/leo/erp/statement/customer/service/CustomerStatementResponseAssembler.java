@@ -57,7 +57,10 @@ public class CustomerStatementResponseAssembler {
                 entity.getItems().stream()
                         .map(item -> toItemResponse(item, deliveryDateByItemId))
                         .toList(),
-                entity.getCustomerId()
+                entity.getCustomerId(),
+                response.direction(),
+                response.sourceSalesReturnId(),
+                response.sourceSalesReturnNo()
         );
     }
 

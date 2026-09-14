@@ -1,7 +1,6 @@
 package com.leo.erp.statement.customer.web.dto;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
@@ -19,15 +18,38 @@ public record CustomerStatementRequest(
         String settlementCompanyName,
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
-        @NotNull @DecimalMin("0.00") BigDecimal salesAmount,
-        @DecimalMin("0.00") BigDecimal receiptAmount,
-        @DecimalMin("0.00") BigDecimal closingAmount,
+        @NotNull BigDecimal salesAmount,
+        BigDecimal receiptAmount,
+        BigDecimal closingAmount,
         String status,
         String remark,
         @Valid @NotEmpty List<CustomerStatementItemRequest> items,
         Long customerId,
-        boolean audit
+        boolean audit,
+        String direction
 ) {
+    public CustomerStatementRequest(String statementNo,
+                                    String customerCode,
+                                    String customerName,
+                                    Long projectId,
+                                    String projectName,
+                                    Long settlementCompanyId,
+                                    String settlementCompanyName,
+                                    LocalDate startDate,
+                                    LocalDate endDate,
+                                    BigDecimal salesAmount,
+                                    BigDecimal receiptAmount,
+                                    BigDecimal closingAmount,
+                                    String status,
+                                    String remark,
+                                    List<CustomerStatementItemRequest> items,
+                                    Long customerId,
+                                    boolean audit) {
+        this(statementNo, customerCode, customerName, projectId, projectName, settlementCompanyId,
+                settlementCompanyName, startDate, endDate, salesAmount, receiptAmount, closingAmount, status,
+                remark, items, customerId, audit, null);
+    }
+
     public CustomerStatementRequest(String statementNo,
                                     String customerCode,
                                     String customerName,

@@ -41,6 +41,26 @@ public class FinanceOverviewQueryRepository {
 
                 UNION ALL
 
+                -- 已审核销售退货扣减客户维度应收：应收净额 = 已审核出库金额 − 已审核退货金额
+                SELECT
+                    'RECEIVABLE'::text,
+                    '客户'::text,
+                    ret.customer_id,
+                    MAX(customer.customer_code),
+                    MAX(ret.customer_name),
+                    -SUM(item.amount),
+                    CAST(0 AS NUMERIC)
+                FROM so_sales_return ret
+                JOIN so_sales_return_item item ON item.return_id = ret.id
+                LEFT JOIN md_customer customer ON customer.id = ret.customer_id
+                WHERE ret.deleted_flag = FALSE
+                  AND ret.status = '已审核'
+                  AND ret.settlement_company_id = :settlementCompanyId
+                  AND ret.return_date < :asOfDate + INTERVAL '1 day'
+                GROUP BY ret.customer_id
+
+                UNION ALL
+
                 SELECT
                     'PAYABLE'::text,
                     '供应商'::text,

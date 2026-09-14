@@ -22,8 +22,34 @@ public record CustomerStatementResponse(
         boolean deletedFlag,
         String remark,
         List<CustomerStatementItemResponse> items,
-        Long customerId
+        Long customerId,
+        String direction,
+        Long sourceSalesReturnId,
+        String sourceSalesReturnNo
 ) {
+    public CustomerStatementResponse(Long id,
+                                     String statementNo,
+                                     String customerCode,
+                                     String customerName,
+                                     Long projectId,
+                                     String projectName,
+                                     Long settlementCompanyId,
+                                     String settlementCompanyName,
+                                     LocalDate startDate,
+                                     LocalDate endDate,
+                                     BigDecimal salesAmount,
+                                     BigDecimal receiptAmount,
+                                     BigDecimal closingAmount,
+                                     String status,
+                                     boolean deletedFlag,
+                                     String remark,
+                                     List<CustomerStatementItemResponse> items,
+                                     Long customerId) {
+        this(id, statementNo, customerCode, customerName, projectId, projectName, settlementCompanyId,
+                settlementCompanyName, startDate, endDate, salesAmount, receiptAmount, closingAmount, status,
+                deletedFlag, remark, items, customerId, null, null, null);
+    }
+
     public CustomerStatementResponse(Long id,
                                      String statementNo,
                                      String customerCode,
@@ -65,24 +91,6 @@ public record CustomerStatementResponse(
         this(id, statementNo, customerCode, customerName, projectId, projectName, settlementCompanyId,
                 settlementCompanyName, startDate, endDate, salesAmount, receiptAmount, closingAmount,
                 status, false, remark, items, null);
-    }
-
-    public CustomerStatementResponse(Long id,
-                                     String statementNo,
-                                     String customerCode,
-                                     String customerName,
-                                     Long projectId,
-                                     String projectName,
-                                     LocalDate startDate,
-                                     LocalDate endDate,
-                                     BigDecimal salesAmount,
-                                     BigDecimal receiptAmount,
-                                     BigDecimal closingAmount,
-                                     String status,
-                                     String remark,
-                                     List<CustomerStatementItemResponse> items) {
-        this(id, statementNo, customerCode, customerName, projectId, projectName, null, null,
-                startDate, endDate, salesAmount, receiptAmount, closingAmount, status, false, remark, items, null);
     }
 
     public CustomerStatementResponse(Long id,

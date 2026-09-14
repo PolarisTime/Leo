@@ -13,12 +13,14 @@ import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
+import com.leo.erp.sales.returns.repository.SalesReturnItemRepository;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -66,8 +68,17 @@ class SalesOrderStatementSourceQueryServiceTest {
     @Mock
     private SalesOutboundRepository salesOutboundRepository;
 
+    @Mock
+    private SalesReturnItemRepository salesReturnItemRepository;
+
     @InjectMocks
     private SalesOrderStatementSourceQueryService service;
+
+    @BeforeEach
+    void stubAuditedReturnSummary() {
+        lenient().when(salesReturnItemRepository.summarizeAuditedReturnBySourceSalesOrderItemIds(any(), any()))
+                .thenReturn(List.of());
+    }
 
     // ---------- 测试数据 ----------
 
@@ -131,6 +142,19 @@ class SalesOrderStatementSourceQueryServiceTest {
         outbound.setStatus("AUDITED");
         outbound.setItems(items);
         return outbound;
+    }
+
+    private SalesReturnItemRepository.SourceOrderReturnSummary returnSummary(Long sourceSalesOrderItemId,
+                                                                            Long quantity,
+                                                                            String weightTon,
+                                                                            String amount) {
+        SalesReturnItemRepository.SourceOrderReturnSummary summary =
+                mock(SalesReturnItemRepository.SourceOrderReturnSummary.class);
+        when(summary.getSourceSalesOrderItemId()).thenReturn(sourceSalesOrderItemId);
+        when(summary.getTotalQuantity()).thenReturn(quantity);
+        when(summary.getTotalWeightTon()).thenReturn(new BigDecimal(weightTon));
+        when(summary.getTotalAmount()).thenReturn(new BigDecimal(amount));
+        return summary;
     }
 
     private CandidateCriteria criteria(int page, int size) {
@@ -410,6 +434,43 @@ class SalesOrderStatementSourceQueryServiceTest {
 
         assertThat(result.get(0).items().get(0).auditedOutboundActual().quantity())
                 .isEqualTo(2L * Integer.MAX_VALUE);
+    }
+
+    // ---------- 净额 = 已审核出库 − 已审核退货 ----------
+
+    @Test
+    void findBySourceItemIds_shouldSubtractAuditedReturnsFromOutboundActual() {
+        SalesOrderItem orderItem = orderItem(11L, "M001");
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any()))
+                .thenReturn(List.of(order(1L, "SO001", List.of(orderItem))));
+        when(salesOutboundRepository.findAllWithItemsByStatusAndSourceSalesOrderItemIds(anyString(), any()))
+                .thenReturn(List.of(outbound(List.of(outboundItem(11L, 100, "100.00", "5000.00")))));
+        SalesReturnItemRepository.SourceOrderReturnSummary summary = returnSummary(11L, 30L, "30.00", "1500.00");
+        when(salesReturnItemRepository.summarizeAuditedReturnBySourceSalesOrderItemIds(any(), any()))
+                .thenReturn(List.of(summary));
+
+        List<OrderSnapshot> result = service.findBySourceItemIds(List.of(11L));
+
+        AuditedOutboundActualSnapshot actual = result.get(0).items().get(0).auditedOutboundActual();
+        assertThat(actual.quantity()).isEqualTo(70L);
+        assertThat(actual.weightTon()).isEqualByComparingTo("70.00");
+        assertThat(actual.amount()).isEqualByComparingTo("3500.00");
+    }
+
+    @Test
+    void findBySourceItemIds_shouldIgnoreReturnsWithoutAuditedOutbound() {
+        SalesOrderItem orderItem = orderItem(11L, "M001");
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any()))
+                .thenReturn(List.of(order(1L, "SO001", List.of(orderItem))));
+        when(salesOutboundRepository.findAllWithItemsByStatusAndSourceSalesOrderItemIds(anyString(), any()))
+                .thenReturn(List.of());
+        SalesReturnItemRepository.SourceOrderReturnSummary summary = returnSummary(11L, 5L, "5.00", "250.00");
+        when(salesReturnItemRepository.summarizeAuditedReturnBySourceSalesOrderItemIds(any(), any()))
+                .thenReturn(List.of(summary));
+
+        List<OrderSnapshot> result = service.findBySourceItemIds(List.of(11L));
+
+        assertThat(result.get(0).items().get(0).auditedOutboundActual()).isNull();
     }
 
     // ---------- Specification 执行级 ----------

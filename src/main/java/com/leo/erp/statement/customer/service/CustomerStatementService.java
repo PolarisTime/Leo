@@ -78,7 +78,13 @@ public class CustomerStatementService {
 
     @Transactional(readOnly = true)
     public Page<CustomerStatementResponse> page(PageQuery query, PageFilter filter) {
-        return pageEntities(query, pageSpecification(filter)).map(this::toResponse);
+        return page(query, filter, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CustomerStatementResponse> page(PageQuery query, PageFilter filter, String direction) {
+        return pageEntities(query, pageSpecification(filter, normalizeDirection(direction)))
+                .map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -103,6 +109,21 @@ public class CustomerStatementService {
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()));
+    }
+
+    private Specification<CustomerStatement> pageSpecification(PageFilter filter, String direction) {
+        return pageSpecification(filter).and(Specs.equalIfPresent("direction", direction));
+    }
+
+    private String normalizeDirection(String direction) {
+        if (direction == null || direction.isBlank()) {
+            return null;
+        }
+        String normalized = direction.trim();
+        if (!StatusConstants.ALLOWED_STATEMENT_DIRECTION.contains(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "对账单方向不合法");
+        }
+        return normalized;
     }
 
     @Transactional(readOnly = true)
@@ -244,7 +265,8 @@ public class CustomerStatementService {
                 request.remark(),
                 request.items(),
                 request.customerId(),
-                request.audit()
+                request.audit(),
+                request.direction()
         );
     }
 
@@ -266,7 +288,8 @@ public class CustomerStatementService {
                 request.remark(),
                 request.items(),
                 request.customerId(),
-                request.audit()
+                request.audit(),
+                request.direction()
         );
     }
 
@@ -288,7 +311,8 @@ public class CustomerStatementService {
                 request.remark(),
                 request.items(),
                 request.customerId(),
-                request.audit()
+                request.audit(),
+                request.direction()
         );
     }
 

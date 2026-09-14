@@ -54,6 +54,7 @@ public interface CustomerStatementRepository extends JpaRepository<CustomerState
             from CustomerStatement statement
             join statement.items item
             where statement.deletedFlag = false
+              and statement.direction = '蓝字'
               and item.sourceSalesOrderItemId is not null
               and (:currentStatementId is null or statement.id <> :currentStatementId)
             """)
@@ -66,6 +67,7 @@ public interface CustomerStatementRepository extends JpaRepository<CustomerState
             from CustomerStatement statement
             join statement.items item
             where statement.deletedFlag = false
+              and statement.direction = '蓝字'
               and item.sourceSalesOrderItemId in :sourceSalesOrderItemIds
               and (:currentStatementId is null or statement.id <> :currentStatementId)
             """)
@@ -79,9 +81,12 @@ public interface CustomerStatementRepository extends JpaRepository<CustomerState
             from CustomerStatement statement
             join statement.items item
             where statement.deletedFlag = false
+              and statement.direction = '蓝字'
               and item.sourceSalesOrderItemId in :sourceSalesOrderItemIds
             """)
     List<Long> findActiveStatementIdsBySourceSalesOrderItemIds(
             @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds
     );
+
+    boolean existsBySourceSalesReturnIdAndDeletedFlagFalse(Long sourceSalesReturnId);
 }

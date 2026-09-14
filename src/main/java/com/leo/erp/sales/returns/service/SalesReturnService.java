@@ -92,6 +92,7 @@ public class SalesReturnService {
         SalesReturnResponse response = doUpdateStatus(id, status);
         if (!Objects.equals(currentStatus, response.status())) {
             workflowService.publishStatusChanged(salesReturn, currentStatus, response.status());
+            workflowService.afterStatusChanged(salesReturn, currentStatus, response.status());
         }
         return response;
     }

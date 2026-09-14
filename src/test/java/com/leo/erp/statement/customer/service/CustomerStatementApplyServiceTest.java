@@ -18,6 +18,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -78,6 +79,19 @@ class CustomerStatementApplyServiceTest {
 
         assertThatThrownBy(() -> service.apply(entity, request, () -> 100L))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void apply_shouldRejectNegativeSalesAmountForBlueDirection() {
+        CustomerStatement entity = entity();
+        CustomerStatementRequest request = new CustomerStatementRequest(
+                "CS001", null, "客户A", null, "项目A", null, null,
+                LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31),
+                new BigDecimal("-1"), null, null, StatusConstants.PENDING_CONFIRM, null, List.of(), null, false, null);
+
+        assertThatThrownBy(() -> service.apply(entity, request, () -> 100L))
+                .isInstanceOf(BusinessException.class);
+        verifyNoInteractions(sourceService);
     }
 
     @Test

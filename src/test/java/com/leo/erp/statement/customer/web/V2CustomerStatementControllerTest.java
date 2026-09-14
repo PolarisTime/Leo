@@ -67,11 +67,11 @@ class V2CustomerStatementControllerTest {
 
     @Test
     void page_shouldDelegate() {
-        when(customerStatementService.page(any(PageQuery.class), any(PageFilter.class)))
+        when(customerStatementService.page(any(PageQuery.class), any(PageFilter.class), any()))
                 .thenReturn(mock(org.springframework.data.domain.Page.class));
 
         var result = controller.page(mock(PageQuery.class), "kw", 10L, "客户A", 20L, "项目A", 30L,
-                "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+                "DRAFT", "蓝字", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
 
         assertThat(result).isNotNull();
     }
