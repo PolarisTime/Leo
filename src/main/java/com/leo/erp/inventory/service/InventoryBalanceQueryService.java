@@ -32,7 +32,8 @@ public class InventoryBalanceQueryService {
     private static final String SELECT_LIST = "SELECT b.material_id, b.material_code,"
             + " m.brand, m.material, m.spec, m.length, m.unit,"
             + " b.warehouse_id, b.warehouse_name, b.batch_no,"
-            + " b.quantity AS quantity, b.amount AS amount,"
+            + " b.quantity AS quantity,"
+            + " CASE WHEN b.quantity <> 0 THEN b.amount ELSE 0 END AS amount,"
             + " CASE WHEN b.quantity <> 0 THEN ROUND(b.amount / b.quantity, 2) ELSE 0 END AS avg_unit_cost";
     private static final String DEFAULT_ORDER = " ORDER BY b.material_id ASC, b.warehouse_id ASC";
     private static final String KEYSET_PREDICATE =

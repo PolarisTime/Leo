@@ -43,6 +43,11 @@ public class InventoryBalanceReader {
                 BALANCE_SQL,
                 params,
                 (rs, rowNum) -> new InventoryBalanceTotals(rs.getLong("quantity"), rs.getBigDecimal("amount")));
-        return rows.isEmpty() ? InventoryBalanceTotals.EMPTY : rows.get(0);
+        if (rows.isEmpty()) {
+            return InventoryBalanceTotals.EMPTY;
+        }
+        InventoryBalanceTotals row = rows.get(0);
+        // 数量归零即无余额，直接返回 EMPTY，避免把历史舍入残值带入移动加权成本。
+        return row.quantity() == 0L ? InventoryBalanceTotals.EMPTY : row;
     }
 }

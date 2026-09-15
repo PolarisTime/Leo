@@ -63,6 +63,16 @@ class InventoryBalanceReaderTest {
     }
 
     @Test
+    void currentBalance_shouldIgnoreResidualAmountWhenQuantityIsZero() {
+        when(jdbcTemplate.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
+                .thenReturn(List.of(new InventoryBalanceTotals(0L, new BigDecimal("0.01"))));
+
+        InventoryBalanceTotals result = reader.currentBalance(100L, 3L);
+
+        assertThat(result).isSameAs(InventoryBalanceTotals.EMPTY);
+    }
+
+    @Test
     void currentBalance_shouldUseNoWarehouseSentinelWhenWarehouseAbsent() {
         when(jdbcTemplate.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
                 .thenReturn(List.of());

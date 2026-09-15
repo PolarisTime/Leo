@@ -63,6 +63,16 @@ class InventoryBalanceSnapshotRepositoryTest {
     }
 
     @Test
+    void applyDelta_shouldZeroAmountWhenResultingQuantityIsZero() {
+        repository.applyDelta(100L, 9L, "M001", "库房A", "B1", -5, new BigDecimal("-40.01"));
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).update(sqlCaptor.capture(), any(MapSqlParameterSource.class));
+        assertThat(sqlCaptor.getValue())
+                .contains("WHEN inv_balance.quantity + EXCLUDED.quantity = 0 THEN 0");
+    }
+
+    @Test
     void rebuild_shouldUpsertThenDeleteStaleRows() {
         when(jdbcTemplate.getJdbcTemplate()).thenReturn(plainJdbcTemplate);
         when(plainJdbcTemplate.update(anyString())).thenReturn(4).thenReturn(1);
@@ -91,5 +101,23 @@ class InventoryBalanceSnapshotRepositoryTest {
         ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
         verify(jdbcTemplate).query(sqlCaptor.capture(), any(MapSqlParameterSource.class), any(RowMapper.class));
         assertThat(sqlCaptor.getValue()).contains("FULL OUTER JOIN inv_balance b");
+    }
+
+    @Test
+    void findMismatches_shouldTolerateTinyResidualOnlyWhenQuantityZero() {
+        when(jdbcTemplate.query(anyString(), any(MapSqlParameterSource.class), any(RowMapper.class)))
+                .thenReturn(List.of());
+
+        repository.findMismatches();
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<MapSqlParameterSource> paramsCaptor =
+                ArgumentCaptor.forClass(MapSqlParameterSource.class);
+        verify(jdbcTemplate).query(sqlCaptor.capture(), paramsCaptor.capture(), any(RowMapper.class));
+        assertThat(sqlCaptor.getValue())
+                .contains("ABS(COALESCE(l.amount, 0) - COALESCE(b.amount, 0)) > :zeroQtyAmountTolerance")
+                .contains("COALESCE(l.quantity, 0) = 0 AND COALESCE(b.quantity, 0) = 0");
+        assertThat(paramsCaptor.getValue().getValue("zeroQtyAmountTolerance"))
+                .isEqualTo(new BigDecimal("0.05"));
     }
 }

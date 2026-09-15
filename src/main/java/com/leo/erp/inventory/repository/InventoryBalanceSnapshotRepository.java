@@ -23,6 +23,12 @@ public class InventoryBalanceSnapshotRepository {
     /** 无仓库维度的哨兵值；雪花ID恒为正，0 永不与真实仓库冲突。 */
     public static final long NO_WAREHOUSE = 0L;
 
+    /**
+     * 零数量维度的极小金额容差：吸收历史 2 位移动加权舍入残值，使数量归零的维度判定为一致；
+     * 非零维度仍按 {@code numeric(14,2)} 精确比较。
+     */
+    private static final BigDecimal ZERO_QUANTITY_AMOUNT_TOLERANCE = new BigDecimal("0.05");
+
     private static final String UPSERT_SQL = """
             INSERT INTO inv_balance (
                 material_id, warehouse_id, material_code, warehouse_name, batch_no,
@@ -30,11 +36,16 @@ public class InventoryBalanceSnapshotRepository {
             )
             VALUES (
                 :materialId, :warehouseId, :materialCode, :warehouseName, :batchNo,
-                :quantityDelta, :amountDelta, CURRENT_TIMESTAMP
+                :quantityDelta,
+                CASE WHEN :quantityDelta = 0 THEN 0 ELSE :amountDelta END,
+                CURRENT_TIMESTAMP
             )
             ON CONFLICT (material_id, warehouse_id) DO UPDATE
             SET quantity = inv_balance.quantity + EXCLUDED.quantity,
-                amount = inv_balance.amount + EXCLUDED.amount,
+                amount = CASE
+                    WHEN inv_balance.quantity + EXCLUDED.quantity = 0 THEN 0
+                    ELSE inv_balance.amount + EXCLUDED.amount
+                END,
                 material_code = COALESCE(EXCLUDED.material_code, inv_balance.material_code),
                 warehouse_name = COALESCE(EXCLUDED.warehouse_name, inv_balance.warehouse_name),
                 batch_no = COALESCE(EXCLUDED.batch_no, inv_balance.batch_no),
@@ -51,7 +62,8 @@ public class InventoryBalanceSnapshotRepository {
                    MAX(t.warehouse_name) AS warehouse_name,
                    MAX(t.batch_no) AS batch_no,
                    COALESCE(SUM(t.quantity * t.direction), 0) AS quantity,
-                   COALESCE(SUM(t.amount), 0) AS amount
+                   CASE WHEN COALESCE(SUM(t.quantity * t.direction), 0) = 0 THEN 0
+                        ELSE COALESCE(SUM(t.amount), 0) END AS amount
             FROM inv_transaction t
             WHERE t.deleted_flag = false
             GROUP BY t.material_id, COALESCE(t.warehouse_id, 0)
@@ -94,7 +106,12 @@ public class InventoryBalanceSnapshotRepository {
             FULL OUTER JOIN inv_balance b
                 ON b.material_id = l.material_id AND b.warehouse_id = l.warehouse_id
             WHERE COALESCE(l.quantity, 0) <> COALESCE(b.quantity, 0)
-               OR COALESCE(l.amount, 0)::numeric(14,2) <> COALESCE(b.amount, 0)::numeric(14,2)
+               OR CASE
+                    WHEN COALESCE(l.quantity, 0) = 0 AND COALESCE(b.quantity, 0) = 0 THEN
+                        ABS(COALESCE(l.amount, 0) - COALESCE(b.amount, 0)) > :zeroQtyAmountTolerance
+                    ELSE
+                        COALESCE(l.amount, 0)::numeric(14,2) <> COALESCE(b.amount, 0)::numeric(14,2)
+                  END
             """;
 
     private static final RowMapper<BalanceMismatch> MISMATCH_MAPPER = (rs, rowNum) -> new BalanceMismatch(
@@ -150,7 +167,9 @@ public class InventoryBalanceSnapshotRepository {
      * 守恒校验：返回账本聚合与快照不一致的维度。
      */
     public List<BalanceMismatch> findMismatches() {
-        return jdbcTemplate.query(RECONCILE_SQL, new MapSqlParameterSource(), MISMATCH_MAPPER);
+        MapSqlParameterSource params = new MapSqlParameterSource(
+                "zeroQtyAmountTolerance", ZERO_QUANTITY_AMOUNT_TOLERANCE);
+        return jdbcTemplate.query(RECONCILE_SQL, params, MISMATCH_MAPPER);
     }
 
     /**

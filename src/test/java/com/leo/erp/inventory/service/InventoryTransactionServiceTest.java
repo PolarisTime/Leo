@@ -121,6 +121,35 @@ class InventoryTransactionServiceTest {
     }
 
     @Test
+    void recordSalesOut_shouldAbsorbRoundingResidualWhenClearingDimension() {
+        when(idGenerator.nextId()).thenReturn(2100L);
+        when(balanceReader.currentBalance(100L, 3L))
+                .thenReturn(new InventoryBalanceTotals(4L, new BigDecimal("40.01")));
+
+        service.recordSalesOut(input(line(11L, 4, "5000")));
+
+        InventoryTransaction saved = captureSaved();
+        assertThat(saved.getUnitCost()).isEqualByComparingTo("10.00");
+        assertThat(saved.getAmount()).isEqualByComparingTo("-40.01");
+        verify(snapshotRepository).applyDelta(
+                eq(100L), eq(3L), eq("M001"), eq("库房B"), eq("B001"), eq(-4),
+                argThat(value -> value.compareTo(new BigDecimal("-40.01")) == 0));
+    }
+
+    @Test
+    void recordSalesOut_shouldKeepRoundedAmountWhenPartial() {
+        when(idGenerator.nextId()).thenReturn(2101L);
+        when(balanceReader.currentBalance(100L, 3L))
+                .thenReturn(new InventoryBalanceTotals(4L, new BigDecimal("40.01")));
+
+        service.recordSalesOut(input(line(11L, 3, "5000")));
+
+        InventoryTransaction saved = captureSaved();
+        assertThat(saved.getUnitCost()).isEqualByComparingTo("10.00");
+        assertThat(saved.getAmount()).isEqualByComparingTo("-30.00");
+    }
+
+    @Test
     void recordSalesOut_shouldFallbackToSourcePriceWhenNoStock() {
         when(idGenerator.nextId()).thenReturn(2001L);
         when(balanceReader.currentBalance(100L, 3L)).thenReturn(InventoryBalanceTotals.EMPTY);

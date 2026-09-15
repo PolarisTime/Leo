@@ -89,6 +89,21 @@ class InventoryBalanceQueryServiceTest {
     }
 
     @Test
+    void page_shouldZeroAmountForZeroQuantityRows() {
+        when(jdbcTemplate.queryForObject(anyString(), any(SqlParameterSource.class), eq(Long.class)))
+                .thenReturn(0L);
+        when(jdbcTemplate.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
+                .thenReturn(List.of());
+
+        service.page(new PageQuery(0, 10, null, null), null, null, null);
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).query(sqlCaptor.capture(), any(SqlParameterSource.class), any(RowMapper.class));
+        assertThat(sqlCaptor.getValue())
+                .contains("CASE WHEN b.quantity <> 0 THEN b.amount ELSE 0 END AS amount");
+    }
+
+    @Test
     void keyset_shouldBindCompositeCursorAndTrimOverflow() {
         InventoryBalanceResponse first = row(1L, 10L);
         InventoryBalanceResponse second = row(2L, 10L);

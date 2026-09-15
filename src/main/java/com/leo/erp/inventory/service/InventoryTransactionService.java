@@ -147,11 +147,11 @@ public class InventoryTransactionService implements InventoryTransactionCommand 
             String warehouseName = line.warehouseName() != null
                     ? line.warehouseName()
                     : input.defaultWarehouseName();
-            BigDecimal unitCost = resolveUnitCost(type, line, warehouseId);
-            BigDecimal amount = BigDecimal.valueOf(type.direction())
-                    .multiply(unitCost)
-                    .multiply(BigDecimal.valueOf(line.quantity()))
-                    .setScale(COST_SCALE, RoundingMode.HALF_UP);
+            InventoryBalanceTotals balance = type == InventoryTransactionType.PURCHASE_IN
+                    ? InventoryBalanceTotals.EMPTY
+                    : balanceReader.currentBalance(line.materialId(), warehouseId);
+            BigDecimal unitCost = resolveUnitCost(type, line, warehouseId, balance);
+            BigDecimal amount = resolveAmount(type, line, balance, unitCost);
             repository.save(buildTransaction(input, type, line, warehouseId, warehouseName, unitCost, amount));
             repository.flush();
             // 与账本同事务、同维度锁内增量维护余额快照：+direction*quantity、+带符号金额。
@@ -200,16 +200,39 @@ public class InventoryTransactionService implements InventoryTransactionCommand 
         return entity;
     }
 
+    /**
+     * 计算本次带符号金额。
+     *
+     * <p>移动加权成本按 2 位舍入，出库把某 (material, warehouse) 维度数量恰好清零时，
+     * {@code 单价 * 数量} 与快照剩余金额往往差出 1 分以内的残值。此处对「恰好清零」的销售出库
+     * 做残值修正：金额直接取当前维度余额金额的相反数，使数量与金额同时归零，
+     * 账本 Σamount 与快照严格守恒，不再长期挂残值。
+     */
+    private BigDecimal resolveAmount(InventoryTransactionType type,
+                                     InventoryTransactionInput.Line line,
+                                     InventoryBalanceTotals balance,
+                                     BigDecimal unitCost) {
+        if (type == InventoryTransactionType.SALES_OUT
+                && balance.quantity() > 0
+                && balance.quantity() == line.quantity()) {
+            return balance.amount().negate();
+        }
+        return BigDecimal.valueOf(type.direction())
+                .multiply(unitCost)
+                .multiply(BigDecimal.valueOf(line.quantity()))
+                .setScale(COST_SCALE, RoundingMode.HALF_UP);
+    }
+
     private BigDecimal resolveUnitCost(InventoryTransactionType type,
                                        InventoryTransactionInput.Line line,
-                                       Long warehouseId) {
+                                       Long warehouseId,
+                                       InventoryBalanceTotals totals) {
         BigDecimal sourcePrice = line.sourceUnitPrice() == null
                 ? BigDecimal.ZERO
                 : line.sourceUnitPrice();
         if (type == InventoryTransactionType.PURCHASE_IN) {
             return sourcePrice.setScale(COST_SCALE, RoundingMode.HALF_UP);
         }
-        InventoryBalanceTotals totals = balanceReader.currentBalance(line.materialId(), warehouseId);
         if (totals.quantity() > 0) {
             if (type == InventoryTransactionType.SALES_OUT && totals.quantity() < line.quantity()) {
                 log.warn("库存存量不足，按当前移动平均成本出库: materialId={}, warehouseId={}, balanceQty={}, outQty={}",
