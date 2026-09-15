@@ -97,7 +97,29 @@ class PrintRuntimeFieldContractTest {
     void printableModules_shouldCoverAllTradeModules() {
         assertThat(runtimeProperties.printableModules())
                 .contains("sales-order", "purchase-order", "purchase-inbound",
-                        "sales-outbound", "customer-statement", "freight-statement");
+                        "sales-outbound", "sales-return", "customer-statement", "freight-statement");
+    }
+
+    @Test
+    void salesReturnEnrichers_shouldResolveSourceDocumentNumbers() {
+        List<String> targets = runtimeProperties.childObjects(runtimeProperties.enrichers("sales-return"))
+                .stream()
+                .flatMap(rule -> runtimeProperties.childFields(rule.path("targetFields")).keySet().stream())
+                .toList();
+
+        assertThat(targets)
+                .as("销售退货单打印必须回填来源出库号、来源订单号与来源物流单号")
+                .contains("sourceSalesOutboundNo", "sourceSalesOrderNo", "sourceFreightBillNo");
+    }
+
+    @Test
+    void salesReturn_shouldExposeBusinessNoAndDateParts() {
+        assertThat(runtimeProperties.childTextValues(
+                runtimeProperties.topLevelFields().path("businessNoKeys")))
+                .contains("returnNo");
+        assertThat(runtimeProperties.childTextValues(
+                runtimeProperties.topLevelFields().path("dateParts").path("sourceKeys")))
+                .contains("returnDate");
     }
 
     @Test

@@ -78,6 +78,26 @@
       "productPrintItems": true,
       "printItemAmount": true
     },
+    "sales-return": {
+      "tableName": "so_sales_return",
+      "printColumns": [
+        "id", "return_no", "sales_order_no", "customer_id", "customer_name", "project_id",
+        "project_name", "warehouse_id", "warehouse_name", "settlement_company_id",
+        "settlement_company_name", "return_date", "total_weight", "total_amount", "status", "remark"
+      ],
+      "itemTableName": "so_sales_return_item",
+      "itemFkColumn": "return_id",
+      "itemPrintColumns": [
+        "id", "return_id", "line_no", "material_id", "material_code", "brand", "category",
+        "material", "spec", "length", "unit", "source_sales_outbound_item_id",
+        "source_sales_order_item_id", "source_freight_bill_id", "settlement_company_id",
+        "settlement_company_name", "warehouse_id", "warehouse_name", "batch_no",
+        "batch_no_normalized", "quantity", "quantity_unit", "piece_weight_ton",
+        "pieces_per_bundle", "weight_ton", "unit_price", "amount"
+      ],
+      "productPrintItems": true,
+      "printItemAmount": true
+    },
     "freight-bill": {
       "tableName": "lg_freight_bill",
       "printColumns": [
@@ -185,14 +205,15 @@
       "statementNo",
       "receiptNo",
       "paymentNo",
-      "issueNo"
+      "issueNo",
+      "returnNo"
     ],
     "headerBusinessNo": {
       "target": "billNo",
-      "sourceKeys": ["outboundNo", "orderNo", "billNo", "statementNo"]
+      "sourceKeys": ["outboundNo", "orderNo", "billNo", "statementNo", "returnNo"]
     },
     "dateParts": {
-      "sourceKeys": ["deliveryDate", "outboundDate", "orderDate", "inboundDate", "billTime", "endDate"],
+      "sourceKeys": ["deliveryDate", "outboundDate", "orderDate", "inboundDate", "billTime", "endDate", "returnDate"],
       "targets": {"year": "dateYear", "month": "dateMonth", "day": "dateDay"}
     },
     "decimalFields": [
@@ -423,6 +444,22 @@
         "result": "list",
         "join": ", ",
         "sql": "WITH target_outbound AS (SELECT ?::bigint AS id), exact_plates AS (SELECT DISTINCT btrim(fb.vehicle_plate) AS vehicle_plate FROM target_outbound target JOIN so_sales_outbound_item outbound_item ON outbound_item.outbound_id = target.id JOIN lg_freight_bill_item freight_item ON freight_item.source_sales_outbound_item_id = outbound_item.id JOIN lg_freight_bill fb ON fb.id = freight_item.bill_id WHERE fb.deleted_flag = FALSE AND NULLIF(btrim(fb.vehicle_plate), '') IS NOT NULL), relation_plates AS (SELECT DISTINCT btrim(fb.vehicle_plate) AS vehicle_plate FROM target_outbound target JOIN so_sales_outbound_item outbound_item ON outbound_item.outbound_id = target.id JOIN so_sales_order_item order_item ON order_item.id = outbound_item.source_sales_order_item_id JOIN lg_freight_bill_source_order relation ON relation.source_sales_order_id = order_item.order_id JOIN lg_freight_bill fb ON fb.id = relation.freight_bill_id WHERE relation.active_flag = TRUE AND relation.deleted_flag = FALSE AND fb.deleted_flag = FALSE AND NULLIF(btrim(fb.vehicle_plate), '') IS NOT NULL) SELECT vehicle_plate FROM exact_plates UNION SELECT vehicle_plate FROM relation_plates WHERE NOT EXISTS (SELECT 1 FROM exact_plates) ORDER BY vehicle_plate"
+      }
+    ],
+    "sales-return": [
+      {
+        "type": "itemLookupByField",
+        "sourceField": "sourceSalesOutboundItemId",
+        "sql": "SELECT outbound_item.id AS source_item_id, outbound.outbound_no AS source_outbound_no, outbound.sales_order_no AS source_order_no FROM so_sales_outbound_item outbound_item JOIN so_sales_outbound outbound ON outbound.id = outbound_item.outbound_id WHERE outbound_item.id IN (:values)",
+        "lookupKeyColumn": "source_item_id",
+        "targetFields": {"sourceSalesOutboundNo": "source_outbound_no", "sourceSalesOrderNo": "source_order_no"}
+      },
+      {
+        "type": "itemLookupByField",
+        "sourceField": "sourceFreightBillId",
+        "sql": "SELECT id, bill_no FROM lg_freight_bill WHERE id IN (:values)",
+        "lookupKeyColumn": "id",
+        "targetFields": {"sourceFreightBillNo": "bill_no"}
       }
     ],
     "freight-bill": [
