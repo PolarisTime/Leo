@@ -172,10 +172,12 @@ public class UserAdminService {
         }
         UserAccount account = requireActiveUserForUpdate(id);
         assertAdminContinuity(account);
+        // 先吊销会话（其内部会以未删除条件重新查询账号），再置为已删除；
+        // 否则软删后该查询将命中不到账号并抛出 401。
+        sessionManagementService.revokeActiveSessionsForAccountStatusChange(id);
         account.setDeletedFlag(true);
         account.setStatus(UserStatus.DISABLED);
         userAccountRepository.saveAndFlush(account);
-        sessionManagementService.revokeActiveSessionsForAccountStatusChange(id);
         evictCaches(id);
     }
 
