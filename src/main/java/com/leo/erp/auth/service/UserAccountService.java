@@ -15,7 +15,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 单人模式下的当前账号资料与凭据服务，不承载角色或权限判断。 */
+/** 当前登录账号的资料与凭据自助服务，不承载角色或权限判断。 */
 @Service
 public class UserAccountService {
 

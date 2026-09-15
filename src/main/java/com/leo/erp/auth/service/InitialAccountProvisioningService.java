@@ -38,6 +38,12 @@ public class InitialAccountProvisioningService implements InitialAccountProvisio
         this.userRoleService = userRoleService;
     }
 
+    /**
+     * 首启判定：只要存在未删除账号即视为已完成初始化。
+     *
+     * <p>仅用于约束公开的初始化口令接口，使其在首启后自动关闭；不限制管理员通过
+     * {@link UserAdminService} 继续创建多用户账号，因此放开多用户不会影响既有首启语义。</p>
+     */
     @Override
     @Transactional(readOnly = true)
     public boolean isConfigured() {

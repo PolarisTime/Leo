@@ -390,7 +390,10 @@ public final class PermissionCodes {
 
     // 用户账号
     public static final String USER_ACCOUNTS_READ = Resources.USER_ACCOUNTS + ":" + Actions.READ;
+    /** 个人账号资料/密码维护（/account）。 */
     public static final String USER_ACCOUNTS_UPDATE = Resources.USER_ACCOUNTS + ":" + Actions.UPDATE;
+    /** 管理员用户管理写权限（建号/编辑/停用/重置密码/删除）。 */
+    public static final String USER_ACCOUNTS_WRITE = Resources.USER_ACCOUNTS + ":" + Actions.WRITE;
 
     // 角色管理（RBAC0）
     public static final String ROLES_READ = Resources.ROLES + ":" + Actions.READ;
@@ -469,7 +472,7 @@ public final class PermissionCodes {
             COMPANY_SETTINGS_READ, COMPANY_SETTINGS_CREATE, COMPANY_SETTINGS_UPDATE, COMPANY_SETTINGS_DELETE,
             DASHBOARD_READ, OPERATION_LOGS_READ, GLOBAL_SEARCH_READ, META_READ,
             CODE_ISSUANCES_READ, CODE_ISSUANCES_CREATE,
-            USER_ACCOUNTS_READ, USER_ACCOUNTS_UPDATE,
+            USER_ACCOUNTS_READ, USER_ACCOUNTS_UPDATE, USER_ACCOUNTS_WRITE,
             ROLES_READ, ROLES_WRITE, PERMISSIONS_READ,
             SYSTEM_ADMIN, SYSTEM_READ, SYSTEM_CREATE, SYSTEM_DELETE, SYSTEM_REBUILD,
             SALES_ORDERS_READ_AMOUNT, SALES_ORDERS_UPDATE_UNIT_PRICE, INVENTORY_READ_COST
