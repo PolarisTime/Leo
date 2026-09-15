@@ -87,6 +87,8 @@ public final class PermissionCodes {
         public static final String META = "meta";
         public static final String CODE_ISSUANCES = "code-issuances";
         public static final String USER_ACCOUNTS = "user-accounts";
+        public static final String ROLES = "roles";
+        public static final String PERMISSIONS = "permissions";
         public static final String SYSTEM = "system";
 
         private Resources() {
@@ -99,6 +101,8 @@ public final class PermissionCodes {
         public static final String CREATE = "create";
         public static final String UPDATE = "update";
         public static final String DELETE = "delete";
+        /** 写权限：用于以读写两档收敛角色/权限等管理资源。 */
+        public static final String WRITE = "write";
         public static final String AUDIT = "audit";
         public static final String UNAUDIT = "unaudit";
         public static final String COMPLETE = "complete";
@@ -388,6 +392,13 @@ public final class PermissionCodes {
     public static final String USER_ACCOUNTS_READ = Resources.USER_ACCOUNTS + ":" + Actions.READ;
     public static final String USER_ACCOUNTS_UPDATE = Resources.USER_ACCOUNTS + ":" + Actions.UPDATE;
 
+    // 角色管理（RBAC0）
+    public static final String ROLES_READ = Resources.ROLES + ":" + Actions.READ;
+    public static final String ROLES_WRITE = Resources.ROLES + ":" + Actions.WRITE;
+
+    // 权限目录（RBAC0）
+    public static final String PERMISSIONS_READ = Resources.PERMISSIONS + ":" + Actions.READ;
+
     // 系统
     /** 系统管理总权限（非标准动作，作为系统级伞形权限保留）。 */
     public static final String SYSTEM_ADMIN = "system:admin";
@@ -459,6 +470,7 @@ public final class PermissionCodes {
             DASHBOARD_READ, OPERATION_LOGS_READ, GLOBAL_SEARCH_READ, META_READ,
             CODE_ISSUANCES_READ, CODE_ISSUANCES_CREATE,
             USER_ACCOUNTS_READ, USER_ACCOUNTS_UPDATE,
+            ROLES_READ, ROLES_WRITE, PERMISSIONS_READ,
             SYSTEM_ADMIN, SYSTEM_READ, SYSTEM_CREATE, SYSTEM_DELETE, SYSTEM_REBUILD,
             SALES_ORDERS_READ_AMOUNT, SALES_ORDERS_UPDATE_UNIT_PRICE, INVENTORY_READ_COST
     );

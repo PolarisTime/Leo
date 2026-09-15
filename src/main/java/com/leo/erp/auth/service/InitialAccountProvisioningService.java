@@ -9,6 +9,7 @@ import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.security.rbac.service.UserRoleService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -23,15 +24,18 @@ public class InitialAccountProvisioningService implements InitialAccountProvisio
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
+    private final UserRoleService userRoleService;
 
     public InitialAccountProvisioningService(
             UserAccountRepository userAccountRepository,
             PasswordEncoder passwordEncoder,
-            SnowflakeIdGenerator snowflakeIdGenerator
+            SnowflakeIdGenerator snowflakeIdGenerator,
+            UserRoleService userRoleService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
+        this.userRoleService = userRoleService;
     }
 
     @Override
@@ -73,6 +77,8 @@ public class InitialAccountProvisioningService implements InitialAccountProvisio
 
         try {
             userAccountRepository.saveAndFlush(account);
+            // RBAC0：首个账号必须授予内置超级管理员角色，避免无任何权限导致全部接口 403。
+            userRoleService.grantSuperAdmin(account.getId());
             return new InitialAccountCreated(account.getId(), account.getLoginName(), account.getUserName());
         } catch (DataIntegrityViolationException ex) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "登录账号已存在");

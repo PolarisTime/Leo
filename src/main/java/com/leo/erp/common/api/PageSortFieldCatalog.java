@@ -31,7 +31,8 @@ public final class PageSortFieldCatalog {
             Map.entry("inventory-balance", Set.of("materialId", "materialCode", "warehouseId", "warehouseName", "batchNo", "quantity", "amount", "avgUnitCost")),
             Map.entry("inventory-transaction", Set.of("id", "transactionNo", "transactionType", "materialCode", "warehouseName", "batchNo", "quantity", "unitCost", "amount", "occurredAt")),
             Map.entry("steel-quote", Set.of("id", "quoteDate", "period", "breed", "spec", "material", "factory", "price", "scrapedAt")),
-            Map.entry("quote-sheet", Set.of("id", "sheetNo", "name", "orderDate", "refDate", "refPeriod", "status"))
+            Map.entry("quote-sheet", Set.of("id", "sheetNo", "name", "orderDate", "refDate", "refPeriod", "status")),
+            Map.entry("role", Set.of("id", "code", "name", "status", "builtin", "createdAt", "updatedAt"))
     );
 
     private PageSortFieldCatalog() {
