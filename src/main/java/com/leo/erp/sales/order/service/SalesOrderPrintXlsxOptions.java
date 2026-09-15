@@ -13,7 +13,8 @@ public record SalesOrderPrintXlsxOptions(
         Map<String, String> brandOverrides,
         Map<String, String> brandOverridesByItemId,
         List<String> itemOrder,
-        List<String> selectedItemIds
+        List<String> selectedItemIds,
+        Integer splitPieceCount
 ) {
 
     public SalesOrderPrintXlsxOptions {
@@ -28,10 +29,11 @@ public record SalesOrderPrintXlsxOptions(
         brandOverridesByItemId = itemOptions.brandOverridesByItemId();
         itemOrder = itemOptions.itemOrder();
         selectedItemIds = normalizeSelectedItemIds(selectedItemIds);
+        splitPieceCount = normalizeSplitPieceCount(splitPieceCount);
     }
 
     public static SalesOrderPrintXlsxOptions defaults() {
-        return new SalesOrderPrintXlsxOptions(false, false, "", Map.of(), Map.of(), List.of(), null);
+        return new SalesOrderPrintXlsxOptions(false, false, "", Map.of(), Map.of(), List.of(), null, null);
     }
 
     public PrintItemOptions itemOptions() {
@@ -48,5 +50,9 @@ public record SalesOrderPrintXlsxOptions(
                 .filter(value -> !value.isBlank())
                 .distinct()
                 .toList();
+    }
+
+    private static Integer normalizeSplitPieceCount(Integer value) {
+        return value == null || value < 1 ? null : value;
     }
 }

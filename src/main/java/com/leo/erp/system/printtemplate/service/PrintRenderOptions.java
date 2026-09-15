@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -12,7 +13,8 @@ public record PrintRenderOptions(
         Map<String, String> brandOverrides,
         Map<String, String> brandOverridesByItemId,
         List<String> itemOrder,
-        List<String> selectedItemIds
+        List<String> selectedItemIds,
+        Integer splitPieceCount
 ) {
 
     public PrintRenderOptions {
@@ -27,10 +29,11 @@ public record PrintRenderOptions(
         brandOverridesByItemId = itemOptions.brandOverridesByItemId();
         itemOrder = itemOptions.itemOrder();
         selectedItemIds = normalizeSelectedItemIds(selectedItemIds);
+        splitPieceCount = normalizeSplitPieceCount(splitPieceCount);
     }
 
     public static PrintRenderOptions defaults() {
-        return new PrintRenderOptions(false, false, true, "", Map.of(), Map.of(), List.of(), null);
+        return new PrintRenderOptions(false, false, true, "", Map.of(), Map.of(), List.of(), null, null);
     }
 
     public static PrintRenderOptions from(Object rawOptions) {
@@ -49,7 +52,8 @@ public record PrintRenderOptions(
                 itemOptions.brandOverrides(),
                 itemOptions.brandOverridesByItemId(),
                 itemOptions.itemOrder(),
-                options.containsKey("selectedItemIds") ? rawSelectedItemIds(options.get("selectedItemIds")) : null
+                options.containsKey("selectedItemIds") ? rawSelectedItemIds(options.get("selectedItemIds")) : null,
+                rawSplitPieceCount(options.get("splitPieceCount"))
         );
     }
 
@@ -74,5 +78,25 @@ public record PrintRenderOptions(
                 .filter(value -> !value.isBlank())
                 .distinct()
                 .toList();
+    }
+
+    private static Integer normalizeSplitPieceCount(Integer value) {
+        return value == null || value < 1 ? null : value;
+    }
+
+    /** 兼容 JSON 数字与字符串形式，非法或 &lt;1 一律视为不拆分（null）。 */
+    private static Integer rawSplitPieceCount(Object rawValue) {
+        if (rawValue == null) {
+            return null;
+        }
+        String text = String.valueOf(rawValue).trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            return normalizeSplitPieceCount(new BigDecimal(text).intValueExact());
+        } catch (ArithmeticException | NumberFormatException ignored) {
+            return null;
+        }
     }
 }

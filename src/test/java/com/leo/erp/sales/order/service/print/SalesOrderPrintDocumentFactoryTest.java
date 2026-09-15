@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -68,5 +69,71 @@ class SalesOrderPrintDocumentFactoryTest {
         SalesOrderPrintDocument document = factory.create(order, SalesOrderPrintXlsxOptions.defaults(), 7);
 
         assertThat(document.pages().get(0).lines().get(0).spec()).isEmpty();
+    }
+
+    private SalesOrderPrintXlsxOptions optionsWithSplit(Integer splitPieceCount) {
+        return new SalesOrderPrintXlsxOptions(
+                false, false, "", Map.of(), Map.of(), List.of(), null, splitPieceCount);
+    }
+
+    @Test
+    void create_shouldSplitLinesWhenSplitPieceCountConfigured() {
+        SalesOrderItem item = new SalesOrderItem();
+        item.setId(1L);
+        item.setLineNo(1);
+        item.setQuantity(100);
+        item.setPieceWeightTon(new BigDecimal("0.10000000"));
+        item.setWeightTon(new BigDecimal("10.00000000"));
+        SalesOrder order = new SalesOrder();
+        order.setItems(List.of(item));
+
+        SalesOrderPrintDocument document = factory.create(order, optionsWithSplit(25), 7);
+
+        List<SalesOrderPrintLine> lines = document.pages().get(0).lines();
+        assertThat(lines).hasSize(4);
+        assertThat(lines).extracting(SalesOrderPrintLine::quantity)
+                .containsExactly(25, 25, 25, 25);
+        BigDecimal weightSum = lines.stream()
+                .map(SalesOrderPrintLine::weightTon)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(weightSum).isEqualByComparingTo("10");
+        assertThat(document.pages().get(0).totalQuantity()).isEqualTo(100);
+    }
+
+    @Test
+    void create_shouldMergeRemainderIntoLastLineWhenSplitPieceCountConfigured() {
+        SalesOrderItem item = new SalesOrderItem();
+        item.setId(1L);
+        item.setLineNo(1);
+        item.setQuantity(103);
+        item.setWeightTon(new BigDecimal("12.50000000"));
+        SalesOrder order = new SalesOrder();
+        order.setItems(List.of(item));
+
+        SalesOrderPrintDocument document = factory.create(order, optionsWithSplit(25), 7);
+
+        List<SalesOrderPrintLine> lines = document.pages().get(0).lines();
+        assertThat(lines).extracting(SalesOrderPrintLine::quantity)
+                .containsExactly(25, 25, 25, 28);
+        BigDecimal weightSum = lines.stream()
+                .map(SalesOrderPrintLine::weightTon)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(weightSum).isEqualByComparingTo("12.5");
+    }
+
+    @Test
+    void create_shouldNotSplitWhenSplitPieceCountDisabled() {
+        SalesOrderItem item = new SalesOrderItem();
+        item.setId(1L);
+        item.setLineNo(1);
+        item.setQuantity(100);
+        item.setWeightTon(new BigDecimal("10.00000000"));
+        SalesOrder order = new SalesOrder();
+        order.setItems(List.of(item));
+
+        SalesOrderPrintDocument document = factory.create(order, optionsWithSplit(null), 7);
+
+        assertThat(document.pages().get(0).lines()).hasSize(1);
+        assertThat(document.pages().get(0).lines().get(0).quantity()).isEqualTo(100);
     }
 }

@@ -98,6 +98,8 @@ public class PrintScriptService {
         if (shouldMergeEquivalentItems(moduleKey, options)) {
             items = PrintRecordItemMerger.mergeEquivalentItems(items);
         }
+        // 拆分必须发生在合并之后：拆分行共享同一明细键，提前拆分会被合并回一行。
+        items = PrintItemSplitter.splitItems(items, options == null ? null : options.splitPieceCount());
         items = layoutPreparer.prepare(moduleKey, template.getTemplateName(), template.getTemplateHtml(), data, items);
         if (FREIGHT_STATEMENT_MODULE.equals(moduleKey)
                 && PDF_FORM_TEMPLATE_TYPE.equals(template.getTemplateType())) {

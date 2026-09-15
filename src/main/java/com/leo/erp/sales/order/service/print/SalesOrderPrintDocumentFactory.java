@@ -4,6 +4,7 @@ import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderPrintXlsxOptions;
 import com.leo.erp.system.printtemplate.service.PrintItemOptions;
+import com.leo.erp.system.printtemplate.service.PrintItemSplitter;
 import com.leo.erp.system.printtemplate.service.PrintSpecLengthRule;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +30,7 @@ public class SalesOrderPrintDocumentFactory {
         List<SalesOrderPrintLine> lines = items.stream()
                 .map(item -> toLine(item, safeOptions))
                 .toList();
+        lines = splitLines(lines, safeOptions.splitPieceCount());
 
         return new SalesOrderPrintDocument(
                 order.getOrderNo(),
@@ -53,6 +55,40 @@ public class SalesOrderPrintDocumentFactory {
                 item.getWeightTon(),
                 options.hideUnitPrice() ? null : item.getUnitPrice()
         );
+    }
+
+    private List<SalesOrderPrintLine> splitLines(List<SalesOrderPrintLine> lines, Integer splitPieceCount) {
+        if (splitPieceCount == null || splitPieceCount < 1 || lines.isEmpty()) {
+            return lines;
+        }
+        List<SalesOrderPrintLine> result = new ArrayList<>(lines.size());
+        for (SalesOrderPrintLine line : lines) {
+            BigDecimal quantity = line.quantity() == null ? null : BigDecimal.valueOf(line.quantity());
+            List<PrintItemSplitter.Part> parts = PrintItemSplitter.split(
+                    quantity,
+                    line.weightTon(),
+                    null,
+                    splitPieceCount
+            );
+            if (parts == null) {
+                result.add(line);
+                continue;
+            }
+            for (PrintItemSplitter.Part part : parts) {
+                result.add(new SalesOrderPrintLine(
+                        line.id(),
+                        line.brand(),
+                        line.category(),
+                        line.material(),
+                        line.spec(),
+                        part.quantity().intValueExact(),
+                        line.pieceWeightTon(),
+                        part.weight(),
+                        line.unitPrice()
+                ));
+            }
+        }
+        return result;
     }
 
     private List<SalesOrderPrintPage> pages(List<SalesOrderPrintLine> lines, int rowsPerPage) {
