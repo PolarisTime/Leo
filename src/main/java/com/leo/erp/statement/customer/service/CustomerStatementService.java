@@ -89,8 +89,13 @@ public class CustomerStatementService {
 
     @Transactional(readOnly = true)
     public CustomerStatementSummaryResponse summary(PageFilter filter) {
+        return summary(filter, null);
+    }
+
+    @Transactional(readOnly = true)
+    public CustomerStatementSummaryResponse summary(PageFilter filter, String billDirection) {
         CustomerStatementSummaryAggregate aggregate = summaryQueryRepository.summarize(
-                applyDeletedVisibilityPolicy(pageSpecification(filter))
+                applyDeletedVisibilityPolicy(pageSpecification(filter, normalizeBillDirection(billDirection)))
         );
         return new CustomerStatementSummaryResponse(
                 aggregate.documentCount(),

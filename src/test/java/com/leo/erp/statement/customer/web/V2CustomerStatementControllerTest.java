@@ -109,10 +109,28 @@ class V2CustomerStatementControllerTest {
     @Test
     void summary_shouldDelegate() {
         CustomerStatementSummaryResponse summary = mock(CustomerStatementSummaryResponse.class);
-        when(customerStatementService.summary(any(PageFilter.class))).thenReturn(summary);
+        when(customerStatementService.summary(any(PageFilter.class), any())).thenReturn(summary);
 
-        assertThat(controller.summary("kw", 10L, "客户A", 20L, "项目A", 30L, "DRAFT",
+        assertThat(controller.summary("kw", 10L, "客户A", 20L, "项目A", 30L, "DRAFT", "蓝字",
                 LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31))).isSameAs(summary);
+    }
+
+    @Test
+    void summary_shouldBindBillDirectionParamViaMvc() throws Exception {
+        when(customerStatementService.summary(any(PageFilter.class), anyString()))
+                .thenReturn(mock(CustomerStatementSummaryResponse.class));
+
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+
+        mockMvc.perform(get("/v2.0/customer-statements/summary")
+                        .param("billDirection", "红字"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        ArgumentCaptor<String> billDirectionCaptor = ArgumentCaptor.forClass(String.class);
+        verify(customerStatementService)
+                .summary(filterCaptor.capture(), billDirectionCaptor.capture());
+        assertThat(billDirectionCaptor.getValue()).isEqualTo("红字");
     }
 
     @Test

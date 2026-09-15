@@ -16,8 +16,15 @@ import com.leo.erp.statement.customer.web.dto.CustomerStatementItemRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
 import com.leo.erp.statement.service.StatementSettlementMutationGuard;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -36,6 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
@@ -111,6 +119,63 @@ class CustomerStatementServiceTest {
         assertThat(result.documentCount()).isEqualTo(3);
         assertThat(result.salesAmount()).isEqualByComparingTo("15000");
         assertThat(result.closingAmount()).isEqualByComparingTo("10000");
+    }
+
+    @Test
+    void summary_shouldRejectIllegalBillDirectionBeforeQuery() {
+        assertThatThrownBy(() -> service.summary(mock(PageFilter.class), "紫字"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("billDirection");
+
+        verify(summaryQueryRepository, never()).summarize(any());
+    }
+
+    @Test
+    void summary_shouldNormalizeBlankBillDirectionToNoDirectionFilter() {
+        when(summaryQueryRepository.summarize(any()))
+                .thenReturn(new CustomerStatementSummaryAggregate(0L, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
+
+        var result = service.summary(mock(PageFilter.class), "   ");
+
+        assertThat(result.documentCount()).isZero();
+        verify(summaryQueryRepository).summarize(any());
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void summary_shouldApplyBillDirectionFilterToSpecification() {
+        when(summaryQueryRepository.summarize(any()))
+                .thenReturn(new CustomerStatementSummaryAggregate(0L, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
+
+        service.summary(mock(PageFilter.class), "红字");
+
+        ArgumentCaptor<Specification<CustomerStatement>> specCaptor = ArgumentCaptor.forClass(Specification.class);
+        verify(summaryQueryRepository).summarize(specCaptor.capture());
+
+        CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class, org.mockito.Mockito.withSettings().lenient());
+        CriteriaQuery<?> query = mock(CriteriaQuery.class);
+        Root<CustomerStatement> root = mock(Root.class);
+        Path<Object> directionPath = mock(Path.class);
+        when(criteriaBuilder.conjunction()).thenReturn(mock(Predicate.class));
+        when(criteriaBuilder.isFalse(any(Expression.class))).thenReturn(mock(Predicate.class));
+        when(criteriaBuilder.and(any(Predicate[].class))).thenReturn(mock(Predicate.class));
+        when(criteriaBuilder.equal(any(Expression.class), any())).thenReturn(mock(Predicate.class));
+        when(root.get(anyString())).thenReturn(mock(Path.class));
+        when(root.get("direction")).thenReturn(directionPath);
+        when(criteriaBuilder.equal(directionPath, "红字")).thenReturn(mock(Predicate.class));
+
+        specCaptor.getValue().toPredicate(root, query, criteriaBuilder);
+
+        verify(criteriaBuilder).equal(directionPath, "红字");
+    }
+
+    @Test
+    void page_shouldRejectIllegalBillDirection() {
+        assertThatThrownBy(() -> service.page(mock(PageQuery.class), mock(PageFilter.class), "紫字"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("billDirection");
+
+        verify(repository, never()).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test
