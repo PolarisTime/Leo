@@ -8,6 +8,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.security.rbac.domain.entity.SysRole;
 import com.leo.erp.security.rbac.domain.entity.SysUserRole;
+import com.leo.erp.security.rbac.repository.SysRolePermissionRepository;
 import com.leo.erp.security.rbac.repository.SysRoleRepository;
 import com.leo.erp.security.rbac.repository.SysUserRoleRepository;
 import com.leo.erp.security.rbac.web.dto.RoleResponse;
@@ -29,15 +30,18 @@ public class UserRoleService {
 
     private final SysUserRoleRepository userRoleRepository;
     private final SysRoleRepository roleRepository;
+    private final SysRolePermissionRepository rolePermissionRepository;
     private final UserAccountRepository userAccountRepository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
 
     public UserRoleService(SysUserRoleRepository userRoleRepository,
                            SysRoleRepository roleRepository,
+                           SysRolePermissionRepository rolePermissionRepository,
                            UserAccountRepository userAccountRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator) {
         this.userRoleRepository = userRoleRepository;
         this.roleRepository = roleRepository;
+        this.rolePermissionRepository = rolePermissionRepository;
         this.userAccountRepository = userAccountRepository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
     }
@@ -126,7 +130,9 @@ public class UserRoleService {
                 role.getName(),
                 role.getDescription(),
                 role.isBuiltin(),
-                role.getStatus()
+                role.getStatus(),
+                rolePermissionRepository.countByRoleId(role.getId()),
+                userRoleRepository.countByRoleId(role.getId())
         );
     }
 }

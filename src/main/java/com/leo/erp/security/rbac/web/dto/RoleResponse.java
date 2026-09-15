@@ -6,6 +6,8 @@ public record RoleResponse(
         String name,
         String description,
         boolean builtin,
-        String status
+        String status,
+        long permissionCount,
+        long userCount
 ) {
 }

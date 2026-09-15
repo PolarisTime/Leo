@@ -13,6 +13,8 @@ public interface SysRolePermissionRepository extends JpaRepository<SysRolePermis
 
     List<SysRolePermission> findByRoleId(Long roleId);
 
+    long countByRoleId(Long roleId);
+
     List<SysRolePermission> findByRoleIdIn(Collection<Long> roleIds);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)

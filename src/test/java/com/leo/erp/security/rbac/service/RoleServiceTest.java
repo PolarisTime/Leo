@@ -15,6 +15,7 @@ import com.leo.erp.security.rbac.domain.entity.SysRole;
 import com.leo.erp.security.rbac.domain.entity.SysRolePermission;
 import com.leo.erp.security.rbac.repository.SysRolePermissionRepository;
 import com.leo.erp.security.rbac.repository.SysRoleRepository;
+import com.leo.erp.security.rbac.repository.SysUserRoleRepository;
 import com.leo.erp.security.rbac.web.dto.RoleDetailResponse;
 import com.leo.erp.security.rbac.web.dto.RoleRequest;
 import java.util.ArrayList;
@@ -41,6 +42,9 @@ class RoleServiceTest {
 
     @Mock
     private SysRolePermissionRepository rolePermissionRepository;
+
+    @Mock
+    private SysUserRoleRepository userRoleRepository;
 
     @Mock
     private SnowflakeIdGenerator snowflakeIdGenerator;

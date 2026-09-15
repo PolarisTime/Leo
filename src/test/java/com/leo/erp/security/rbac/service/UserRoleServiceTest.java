@@ -16,6 +16,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.security.rbac.domain.entity.SysRole;
 import com.leo.erp.security.rbac.domain.entity.SysUserRole;
+import com.leo.erp.security.rbac.repository.SysRolePermissionRepository;
 import com.leo.erp.security.rbac.repository.SysRoleRepository;
 import com.leo.erp.security.rbac.repository.SysUserRoleRepository;
 import com.leo.erp.security.rbac.web.dto.RoleResponse;
@@ -41,6 +42,9 @@ class UserRoleServiceTest {
 
     @Mock
     private SysRoleRepository roleRepository;
+
+    @Mock
+    private SysRolePermissionRepository rolePermissionRepository;
 
     @Mock
     private UserAccountRepository userAccountRepository;

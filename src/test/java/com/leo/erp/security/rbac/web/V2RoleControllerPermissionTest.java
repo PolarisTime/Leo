@@ -79,7 +79,7 @@ class V2RoleControllerPermissionTest {
 
     @Test
     void detail_withReadPermission_shouldSucceed() throws Exception {
-        when(roleService.detail(1L)).thenReturn(new RoleDetailResponse(1L, "SUPER_ADMIN", "超级管理员", null, true, "正常", List.of("*")));
+        when(roleService.detail(1L)).thenReturn(new RoleDetailResponse(1L, "SUPER_ADMIN", "超级管理员", null, true, "正常", 1L, 1L, List.of("*")));
         authenticate(PermissionCodes.ROLES_READ);
 
         mockMvc.perform(get("/v2.0/roles/1"))

@@ -10,8 +10,10 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.rbac.domain.entity.SysRole;
 import com.leo.erp.security.rbac.domain.entity.SysRolePermission;
+import com.leo.erp.security.rbac.domain.entity.SysUserRole;
 import com.leo.erp.security.rbac.repository.SysRolePermissionRepository;
 import com.leo.erp.security.rbac.repository.SysRoleRepository;
+import com.leo.erp.security.rbac.repository.SysUserRoleRepository;
 import com.leo.erp.security.rbac.web.dto.RoleDetailResponse;
 import com.leo.erp.security.rbac.web.dto.RoleRequest;
 import com.leo.erp.security.rbac.web.dto.RoleResponse;
@@ -22,7 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * RBAC0 角色服务。
@@ -36,14 +40,17 @@ public class RoleService {
 
     private final SysRoleRepository roleRepository;
     private final SysRolePermissionRepository rolePermissionRepository;
+    private final SysUserRoleRepository userRoleRepository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(RoleService.class);
 
     public RoleService(SysRoleRepository roleRepository,
                        SysRolePermissionRepository rolePermissionRepository,
+                       SysUserRoleRepository userRoleRepository,
                        SnowflakeIdGenerator snowflakeIdGenerator) {
         this.roleRepository = roleRepository;
         this.rolePermissionRepository = rolePermissionRepository;
+        this.userRoleRepository = userRoleRepository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
     }
 
@@ -52,7 +59,21 @@ public class RoleService {
         Specification<SysRole> spec = Specs.<SysRole>notDeleted()
                 .and(Specs.keywordLike(keyword, "code", "name"))
                 .and(Specs.equalIfPresent("status", normalizeOptionalStatus(status)));
-        return roleRepository.findAll(spec, query.toPageable("id")).map(this::toResponse);
+        Page<SysRole> roles = roleRepository.findAll(spec, query.toPageable("id"));
+        List<Long> roleIds = roles.getContent().stream().map(SysRole::getId).toList();
+        Map<Long, Long> permissionCounts = roleIds.isEmpty()
+                ? Map.of()
+                : rolePermissionRepository.findByRoleIdIn(roleIds).stream()
+                        .collect(Collectors.groupingBy(SysRolePermission::getRoleId, Collectors.counting()));
+        Map<Long, Long> userCounts = roleIds.isEmpty()
+                ? Map.of()
+                : userRoleRepository.findByRoleIdIn(roleIds).stream()
+                        .collect(Collectors.groupingBy(SysUserRole::getRoleId, Collectors.counting()));
+        return roles.map(role -> toResponse(
+                role,
+                permissionCounts.getOrDefault(role.getId(), 0L),
+                userCounts.getOrDefault(role.getId(), 0L)
+        ));
     }
 
     @Transactional(readOnly = true)
@@ -196,13 +217,23 @@ public class RoleService {
     }
 
     private RoleResponse toResponse(SysRole role) {
+        return toResponse(
+                role,
+                rolePermissionRepository.countByRoleId(role.getId()),
+                userRoleRepository.countByRoleId(role.getId())
+        );
+    }
+
+    private RoleResponse toResponse(SysRole role, long permissionCount, long userCount) {
         return new RoleResponse(
                 role.getId(),
                 role.getCode(),
                 role.getName(),
                 role.getDescription(),
                 role.isBuiltin(),
-                role.getStatus()
+                role.getStatus(),
+                permissionCount,
+                userCount
         );
     }
 
@@ -220,6 +251,8 @@ public class RoleService {
                 role.getDescription(),
                 role.isBuiltin(),
                 role.getStatus(),
+                rolePermissionRepository.countByRoleId(role.getId()),
+                userRoleRepository.countByRoleId(role.getId()),
                 permissions
         );
     }

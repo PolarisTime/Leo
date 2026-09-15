@@ -13,6 +13,8 @@ public interface SysUserRoleRepository extends JpaRepository<SysUserRole, Long> 
 
     List<SysUserRole> findByUserId(Long userId);
 
+    long countByRoleId(Long roleId);
+
     List<SysUserRole> findByRoleIdIn(Collection<Long> roleIds);
 
     boolean existsByUserIdAndRoleId(Long userId, Long roleId);

@@ -9,6 +9,8 @@ public record RoleDetailResponse(
         String description,
         boolean builtin,
         String status,
+        long permissionCount,
+        long userCount,
         List<String> permissions
 ) {
 }
