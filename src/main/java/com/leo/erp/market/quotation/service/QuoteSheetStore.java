@@ -239,12 +239,18 @@ public class QuoteSheetStore {
         }
         Set<String> brandNames = new LinkedHashSet<>();
         for (QuoteSheetRequest.BrandRequest brand : request.brands()) {
+            if (brand == null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "品牌不能为空");
+            }
             String brandName = normalizeBrandName(brand.brandName());
             if (!brandNames.add(brandName)) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "品牌重复: " + brandName);
             }
         }
         for (QuoteSheetRequest.ItemRequest item : request.items()) {
+            if (item == null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "商品行不能为空");
+            }
             validateItemPrices(item, brandNames);
         }
     }
@@ -254,13 +260,16 @@ public class QuoteSheetStore {
      * 未通过时抛 422(VALIDATION_ERROR), 避免落库触发 {@code uk_quote_item_price} 唯一键 409。
      */
     private void validateItemPrices(QuoteSheetRequest.ItemRequest item, Set<String> brandNames) {
-        if (item == null || item.prices() == null) {
+        if (item == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "商品行不能为空");
+        }
+        if (item.prices() == null) {
             return;
         }
         Set<String> priceBrandNames = new LinkedHashSet<>();
         for (QuoteSheetRequest.ItemPriceRequest price : item.prices()) {
             if (price == null) {
-                continue;
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "现货价不能为空");
             }
             String brandName = normalizeBrandName(price.brandName());
             if (!priceBrandNames.add(brandName)) {
