@@ -1,3 +1,10 @@
+## [11.0.1](https://github.com/PolarisTime/Leo/compare/v11.0.0...v11.0.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **market:** 报单比价改为按名称协调子实体避免唯一键 409 ([7d6ed7c](https://github.com/PolarisTime/Leo/commit/7d6ed7cbe71f0873dfe83669abca420ad43fb10c))
+
 # [11.0.0](https://github.com/PolarisTime/Leo/compare/v10.13.0...v11.0.0) (2026-09-16)
 
 
