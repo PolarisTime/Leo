@@ -19,7 +19,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -51,7 +50,7 @@ class QuoteSheetServiceTest {
     @Test
     void update_propagatesVersionConflictWithoutRetry() {
         when(store.update(eq(9L), any(), eq(2L)))
-                .thenThrow(new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "版本不匹配"));
+                .thenThrow(new BusinessException(ErrorCode.PRECONDITION_FAILED, "版本不匹配"));
 
         assertThatThrownBy(() -> service.update(9L, request(), 2L, 7L))
                 .isInstanceOf(BusinessException.class)
@@ -84,21 +83,23 @@ class QuoteSheetServiceTest {
 
     @Test
     void addItem_checksEditLockThenDelegates() {
-        QuoteSheetResponse.ItemResponse item = itemResponse();
-        when(store.addItem(eq(9L), any(), eq(3L))).thenReturn(item);
+        QuoteSheetItemWrite write = new QuoteSheetItemWrite(itemResponse(), 4L);
+        when(store.addItem(eq(9L), any(), eq(3L))).thenReturn(write);
 
-        QuoteSheetResponse.ItemResponse result = service.addItem(9L, itemRequest(), 3L, 7L);
+        QuoteSheetItemWrite result = service.addItem(9L, itemRequest(), 3L, 7L);
 
-        assertThat(result).isEqualTo(item);
+        assertThat(result).isEqualTo(write);
+        assertThat(result.version()).isEqualTo(4L);
         verify(editLockService).ensureWritable(9L, 7L);
     }
 
     @Test
     void deleteItem_delegatesAfterEditLockCheck() {
-        doNothing().when(store).deleteItem(9L, 301L, 3L);
+        when(store.deleteItem(9L, 301L, 3L)).thenReturn(4L);
 
-        service.deleteItem(9L, 301L, 3L, 7L);
+        Long version = service.deleteItem(9L, 301L, 3L, 7L);
 
+        assertThat(version).isEqualTo(4L);
         verify(editLockService).ensureWritable(9L, 7L);
         verify(store).deleteItem(9L, 301L, 3L);
     }

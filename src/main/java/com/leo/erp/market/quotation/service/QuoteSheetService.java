@@ -17,7 +17,7 @@ import java.util.function.Supplier;
 
 /**
  * 比价报价单门面: 读直连 {@link QuoteSheetStore}, 写按单据 id 在进程内串行化并对
- * 唯一键/乐观锁冲突做有限重试; 版本不匹配的 409 由存储层直接抛出, 不参与重试。
+ * 唯一键/乐观锁冲突做有限重试; 版本不匹配的 412(PRECONDITION_FAILED)由存储层直接抛出, 不参与重试。
  * <p>编辑签出锁由 {@link QuoteSheetEditLockService} 在写前校验(他人未过期锁 -> 409)。</p>
  */
 @Slf4j
@@ -56,25 +56,22 @@ public class QuoteSheetService {
         return withLock(id, () -> store.update(id, request, expectedVersion));
     }
 
-    public QuoteSheetResponse.ItemResponse addItem(Long sheetId, QuoteSheetRequest.ItemRequest request,
-                                                   Long expectedVersion, Long ownerId) {
+    public QuoteSheetItemWrite addItem(Long sheetId, QuoteSheetRequest.ItemRequest request,
+                                       Long expectedVersion, Long ownerId) {
         editLockService.ensureWritable(sheetId, ownerId);
         return withLock(sheetId, () -> store.addItem(sheetId, request, expectedVersion));
     }
 
-    public QuoteSheetResponse.ItemResponse updateItem(Long sheetId, Long itemId,
-                                                      QuoteSheetRequest.ItemRequest request,
-                                                      Long expectedVersion, Long ownerId) {
+    public QuoteSheetItemWrite updateItem(Long sheetId, Long itemId,
+                                          QuoteSheetRequest.ItemRequest request,
+                                          Long expectedVersion, Long ownerId) {
         editLockService.ensureWritable(sheetId, ownerId);
         return withLock(sheetId, () -> store.updateItem(sheetId, itemId, request, expectedVersion));
     }
 
-    public void deleteItem(Long sheetId, Long itemId, Long expectedVersion, Long ownerId) {
+    public Long deleteItem(Long sheetId, Long itemId, Long expectedVersion, Long ownerId) {
         editLockService.ensureWritable(sheetId, ownerId);
-        withLock(sheetId, () -> {
-            store.deleteItem(sheetId, itemId, expectedVersion);
-            return null;
-        });
+        return withLock(sheetId, () -> store.deleteItem(sheetId, itemId, expectedVersion));
     }
 
     private <T> T withLock(Long sheetId, Supplier<T> action) {

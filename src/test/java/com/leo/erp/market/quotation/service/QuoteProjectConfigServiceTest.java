@@ -74,11 +74,11 @@ class QuoteProjectConfigServiceTest {
     @Test
     void save_propagatesVersionConflictWithoutRetry() {
         when(store.save(eq(88L), any(QuoteProjectConfigRequest.class), any()))
-                .thenThrow(new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "数据已被他人修改，请刷新后重试"));
+                .thenThrow(new BusinessException(ErrorCode.PRECONDITION_FAILED, "项目配置版本已变更，请刷新后重试"));
 
         assertThatThrownBy(() -> service().save(88L, request(), 1L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("数据已被他人修改");
+                .hasMessageContaining("版本已变更");
         verify(store, times(1)).save(eq(88L), any(QuoteProjectConfigRequest.class), any());
     }
 }

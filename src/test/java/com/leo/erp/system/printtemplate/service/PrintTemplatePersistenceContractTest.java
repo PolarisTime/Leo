@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <ul>
  *   <li>乐观锁：{@link PrintTemplate#version} 标注 {@code @Version}，由 JPA 自动管理；
  *       两个事务并发更新同一模板时，后提交者抛 {@code ObjectOptimisticLockingFailureException}，
- *       经 GlobalExceptionHandler 映射为 409 CONCURRENT_MODIFICATION。</li>
+ *       经 GlobalExceptionHandler 映射为 412 PRECONDITION_FAILED（资源版本前置条件失败）。</li>
  *   <li>唯一约束：未删除模板中 (bill_type, template_code) 全局唯一（跨结算主体也唯一），
  *       由 V121 部分唯一索引 uk_print_template_bill_type_code_active 保证；重复插入抛
  *       DataIntegrityViolationException；软删除行不占用编码，可复用。</li>

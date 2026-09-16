@@ -123,10 +123,10 @@ public class QuoteSheetStore {
         repository.save(entity);
     }
 
-    /** 新增商品行: 追加到单据末尾, 返回新行(触发单据版本递增)。 */
+    /** 新增商品行: 追加到单据末尾, 返回新行与单据最新版本(触发单据版本递增)。 */
     @Transactional
-    public QuoteSheetResponse.ItemResponse addItem(Long sheetId, QuoteSheetRequest.ItemRequest request,
-                                                   Long expectedVersion) {
+    public QuoteSheetItemWrite addItem(Long sheetId, QuoteSheetRequest.ItemRequest request,
+                                       Long expectedVersion) {
         QuoteSheet sheet = requireSheet(sheetId);
         checkVersion(sheet.getVersion(), expectedVersion);
         int nextLineNo = sheet.getItems().stream()
@@ -138,31 +138,32 @@ public class QuoteSheetStore {
         QuoteSheetItem item = buildItem(sheet, request, nextLineNo, supplierNames);
         sheet.getItems().add(item);
         repository.saveAndFlush(sheet);
-        return toItemResponse(item);
+        return new QuoteSheetItemWrite(toItemResponse(item), sheet.getVersion());
     }
 
-    /** 整行替换商品字段、吨位与行×品牌现货价(触发单据版本递增)。 */
+    /** 整行替换商品字段、吨位与行×品牌现货价, 返回新行与单据最新版本(触发单据版本递增)。 */
     @Transactional
-    public QuoteSheetResponse.ItemResponse updateItem(Long sheetId, Long itemId,
-                                                      QuoteSheetRequest.ItemRequest request,
-                                                      Long expectedVersion) {
+    public QuoteSheetItemWrite updateItem(Long sheetId, Long itemId,
+                                          QuoteSheetRequest.ItemRequest request,
+                                          Long expectedVersion) {
         QuoteSheet sheet = requireSheet(sheetId);
         checkVersion(sheet.getVersion(), expectedVersion);
         QuoteSheetItem item = requireItem(sheet, itemId);
         Map<Long, String> supplierNames = resolveSupplierNames(List.of(request));
         applyItem(item, request, supplierNames);
         repository.saveAndFlush(sheet);
-        return toItemResponse(item);
+        return new QuoteSheetItemWrite(toItemResponse(item), sheet.getVersion());
     }
 
-    /** 删除商品行(触发单据版本递增)。 */
+    /** 删除商品行, 返回单据最新版本(触发单据版本递增)。 */
     @Transactional
-    public void deleteItem(Long sheetId, Long itemId, Long expectedVersion) {
+    public Long deleteItem(Long sheetId, Long itemId, Long expectedVersion) {
         QuoteSheet sheet = requireSheet(sheetId);
         checkVersion(sheet.getVersion(), expectedVersion);
         QuoteSheetItem item = requireItem(sheet, itemId);
         sheet.getItems().remove(item);
         repository.saveAndFlush(sheet);
+        return sheet.getVersion();
     }
 
     private QuoteSheet requireSheet(Long id) {
@@ -177,10 +178,10 @@ public class QuoteSheetStore {
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "商品行不存在"));
     }
 
-    /** 乐观并发校验: expectedVersion 为空表示不做校验(兼容旧调用)。 */
+    /** 乐观并发校验: 版本不匹配抛 412(PRECONDITION_FAILED); expectedVersion 为空表示不做校验。 */
     private void checkVersion(Long currentVersion, Long expectedVersion) {
         if (expectedVersion != null && !expectedVersion.equals(currentVersion)) {
-            throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "数据已被他人修改，请刷新后重试");
+            throw new BusinessException(ErrorCode.PRECONDITION_FAILED, "报价单版本已变更，请刷新后重试");
         }
     }
 

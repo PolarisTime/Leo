@@ -7,6 +7,7 @@ import com.leo.erp.market.quotation.domain.entity.QuoteSheetEditLock;
 import com.leo.erp.market.quotation.repository.QuoteSheetEditLockRepository;
 import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetEditLockResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,7 +18,9 @@ import java.util.Objects;
 /**
  * 报价单编辑签出锁: 金额敏感单据的悲观编辑保护。
  * <p>TTL 默认 120 秒, 到期后可被他人抢占; 本人续约幂等。</p>
+ * <p>签出/续约通过数据库行级排他锁({@code SELECT ... FOR UPDATE})串行化, 多副本部署下同样正确。</p>
  */
+@Slf4j
 @Service
 public class QuoteSheetEditLockService {
 
@@ -48,16 +51,30 @@ public class QuoteSheetEditLockService {
      */
     @Transactional
     public QuoteSheetEditLockResponse acquire(Long sheetId, Long ownerId, String ownerName) {
+        return acquire(sheetId, ownerId, ownerName, false);
+    }
+
+    /**
+     * 签出或续约, 支持显式强制接管。
+     *
+     * @param force 为 true 时即使他人锁未过期也强制接管, 并在服务端记录操作日志
+     */
+    @Transactional
+    public QuoteSheetEditLockResponse acquire(Long sheetId, Long ownerId, String ownerName, boolean force) {
         requireSheet(sheetId);
         LocalDateTime now = LocalDateTime.now();
-        QuoteSheetEditLock lock = repository.findBySheetId(sheetId).orElse(null);
+        QuoteSheetEditLock lock = repository.findBySheetIdForUpdate(sheetId).orElse(null);
         if (lock == null) {
             lock = new QuoteSheetEditLock();
             lock.setId(snowflakeIdGenerator.nextId());
             lock.setSheetId(sheetId);
         } else if (!lock.expiredAt(now) && !Objects.equals(lock.getOwnerId(), ownerId)) {
-            throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION,
-                    "单据已被 " + lock.getOwnerName() + " 签出编辑");
+            if (!force) {
+                throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION,
+                        "单据已被 " + lock.getOwnerName() + " 签出编辑");
+            }
+            log.info("报价单编辑锁强制接管: sheetId={} previousOwnerId={} previousOwner={} newOwnerId={} newOwner={}",
+                    sheetId, lock.getOwnerId(), lock.getOwnerName(), ownerId, ownerName);
         }
         lock.setOwnerId(ownerId);
         lock.setOwnerName(ownerName);

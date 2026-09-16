@@ -173,7 +173,7 @@ class QuoteSheetStoreTest {
 
         assertThatThrownBy(() -> store().update(9L, request(), 2L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("数据已被他人修改");
+                .hasMessageContaining("版本已变更");
         verify(repository, never()).saveAndFlush(any());
     }
 
@@ -209,14 +209,15 @@ class QuoteSheetStoreTest {
                 .thenReturn(Optional.of(new SupplierQuery.SupplierSnapshot(
                         77L, "S001", "杭州物资有限公司", "杭州物资")));
 
-        QuoteSheetResponse.ItemResponse added = store().addItem(9L,
+        QuoteSheetItemWrite added = store().addItem(9L,
                 new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", new BigDecimal("5"),
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3300"), 77L))),
                 1L);
 
-        assertThat(added.id()).isEqualTo(777L);
-        assertThat(added.lineNo()).isEqualTo(2);
-        assertThat(added.prices().get(0).supplierName()).isEqualTo("杭州物资");
+        assertThat(added.item().id()).isEqualTo(777L);
+        assertThat(added.item().lineNo()).isEqualTo(2);
+        assertThat(added.item().prices().get(0).supplierName()).isEqualTo("杭州物资");
+        assertThat(added.version()).isEqualTo(1L);
         assertThat(existing.getItems()).hasSize(2);
     }
 
@@ -229,7 +230,7 @@ class QuoteSheetStoreTest {
         assertThatThrownBy(() -> store().addItem(9L,
                 new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE, List.of()), 1L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("数据已被他人修改");
+                .hasMessageContaining("版本已变更");
         verify(repository, never()).saveAndFlush(any());
     }
 
@@ -241,15 +242,16 @@ class QuoteSheetStoreTest {
         when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
         when(snowflakeIdGenerator.nextId()).thenReturn(555L);
 
-        QuoteSheetResponse.ItemResponse updated = store().updateItem(9L, 301L,
+        QuoteSheetItemWrite updated = store().updateItem(9L, 301L,
                 new QuoteSheetRequest.ItemRequest("高线", "HPB300", 10, "12米", new BigDecimal("2.5"),
                         List.of(new QuoteSheetRequest.ItemPriceRequest("亚新", new BigDecimal("3400"), null))),
                 4L);
 
-        assertThat(updated.category()).isEqualTo("高线");
-        assertThat(updated.ton()).isEqualByComparingTo("2.5");
-        assertThat(updated.prices()).hasSize(1);
-        assertThat(updated.prices().get(0).brandName()).isEqualTo("亚新");
+        assertThat(updated.item().category()).isEqualTo("高线");
+        assertThat(updated.item().ton()).isEqualByComparingTo("2.5");
+        assertThat(updated.item().prices()).hasSize(1);
+        assertThat(updated.item().prices().get(0).brandName()).isEqualTo("亚新");
+        assertThat(updated.version()).isEqualTo(4L);
     }
 
     @Test
@@ -272,8 +274,9 @@ class QuoteSheetStoreTest {
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
         when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
 
-        store().deleteItem(9L, 301L, 1L);
+        Long version = store().deleteItem(9L, 301L, 1L);
 
+        assertThat(version).isEqualTo(1L);
         assertThat(existing.getItems()).isEmpty();
         verify(repository).saveAndFlush(existing);
     }

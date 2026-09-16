@@ -42,14 +42,15 @@ public class QuoteProjectConfigStore {
         return repository.findByProjectIdAndDeletedFlagFalse(projectId)
                 .map(this::toResponse)
                 .orElseGet(() -> new QuoteProjectConfigResponse(
-                        projectId, DEFAULT_LENGTH_PREMIUM, false, List.of(), List.of(), null, List.of(), null));
+                        projectId, DEFAULT_LENGTH_PREMIUM, false, List.of(), List.of(), null, List.of(), 0L));
     }
 
     /** 保存项目配置(不存在则创建, 存在则整体替换)。每次调用开启独立事务。 */
     @Transactional
     public QuoteProjectConfigResponse save(Long projectId, QuoteProjectConfigRequest request, Long expectedVersion) {
         Optional<QuoteProjectConfig> existing = repository.findByProjectIdAndDeletedFlagFalse(projectId);
-        checkVersion(existing.map(QuoteProjectConfig::getVersion).orElse(null), expectedVersion);
+        Long currentVersion = existing.map(QuoteProjectConfig::getVersion).orElse(0L);
+        checkVersion(currentVersion, expectedVersion);
         QuoteProjectConfig entity = existing.orElseGet(() -> {
             QuoteProjectConfig created = new QuoteProjectConfig();
             created.setId(snowflakeIdGenerator.nextId());
@@ -60,10 +61,10 @@ public class QuoteProjectConfigStore {
         return toResponse(repository.saveAndFlush(entity));
     }
 
-    /** 乐观并发校验: expectedVersion 为空表示不做校验(兼容旧调用)。 */
+    /** 乐观并发校验: 版本不匹配抛 412(PRECONDITION_FAILED); expectedVersion 为空表示不做校验。 */
     private void checkVersion(Long currentVersion, Long expectedVersion) {
         if (expectedVersion != null && !expectedVersion.equals(currentVersion)) {
-            throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "数据已被他人修改，请刷新后重试");
+            throw new BusinessException(ErrorCode.PRECONDITION_FAILED, "项目配置版本已变更，请刷新后重试");
         }
     }
 

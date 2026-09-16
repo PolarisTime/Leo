@@ -1,5 +1,9 @@
 package com.leo.erp.market.quotation.web;
 
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.market.quotation.QuotationProperties;
+import com.leo.erp.market.quotation.service.QuoteSheetItemWrite;
 import com.leo.erp.market.quotation.service.QuoteSheetService;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
@@ -7,7 +11,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -21,6 +24,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
@@ -32,11 +36,12 @@ class V2QuoteSheetControllerTest {
     @Mock
     private QuoteSheetService quoteSheetService;
 
-    @InjectMocks
     private V2QuoteSheetController controller;
 
     @BeforeEach
     void setUpServletContext() {
+        QuotationProperties properties = new QuotationProperties();
+        controller = new V2QuoteSheetController(quoteSheetService, properties);
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
     }
 
@@ -60,35 +65,68 @@ class V2QuoteSheetControllerTest {
     }
 
     @Test
-    void addItem_returnsCreatedWithLocation() {
+    void update_returnsVersionHeader() {
+        when(quoteSheetService.update(eq(5L), any(), eq(3L), eq(0L))).thenReturn(response());
+
+        ResponseEntity<QuoteSheetResponse> entity = controller.update(null, 5L, "3", null, request());
+
+        assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(entity.getHeaders().getFirst(ResourceVersionPrecondition.HEADER)).isEqualTo("3");
+    }
+
+    @Test
+    void update_missingVersionHeader_isRejectedWith428() {
+        assertThatThrownBy(() -> controller.update(null, 5L, null, null, request()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.PRECONDITION_REQUIRED);
+    }
+
+    @Test
+    void update_acceptsIfMatchAlias() {
+        when(quoteSheetService.update(eq(5L), any(), eq(3L), eq(0L))).thenReturn(response());
+
+        ResponseEntity<QuoteSheetResponse> entity = controller.update(null, 5L, null, "W/\"3\"", request());
+
+        assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void addItem_returnsCreatedWithLocationAndVersion() {
         QuoteSheetResponse.ItemResponse item = new QuoteSheetResponse.ItemResponse(
                 301L, 1, "螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN, List.of());
-        when(quoteSheetService.addItem(eq(5L), any(), eq(null), eq(0L))).thenReturn(item);
+        when(quoteSheetService.addItem(eq(5L), any(), eq(3L), eq(0L)))
+                .thenReturn(new QuoteSheetItemWrite(item, 4L));
 
         ResponseEntity<QuoteSheetResponse.ItemResponse> entity =
-                controller.addItem(null, 5L, null, itemRequest());
+                controller.addItem(null, 5L, "3", null, itemRequest());
 
         assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(entity.getHeaders().getLocation()).isNotNull();
         assertThat(entity.getHeaders().getLocation().getPath()).endsWith("/quote-sheets/5/items/301");
+        assertThat(entity.getHeaders().getFirst(ResourceVersionPrecondition.HEADER)).isEqualTo("4");
     }
 
     @Test
-    void updateItem_delegates() {
+    void updateItem_returnsVersionHeader() {
         QuoteSheetResponse.ItemResponse item = new QuoteSheetResponse.ItemResponse(
                 301L, 1, "螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN, List.of());
-        when(quoteSheetService.updateItem(eq(5L), eq(301L), any(), eq(3L), eq(0L))).thenReturn(item);
+        when(quoteSheetService.updateItem(eq(5L), eq(301L), any(), eq(3L), eq(0L)))
+                .thenReturn(new QuoteSheetItemWrite(item, 4L));
 
-        QuoteSheetResponse.ItemResponse result = controller.updateItem(null, 5L, 301L, "3", itemRequest());
+        ResponseEntity<QuoteSheetResponse.ItemResponse> entity =
+                controller.updateItem(null, 5L, 301L, "3", null, itemRequest());
 
-        assertThat(result).isEqualTo(item);
+        assertThat(entity.getBody()).isEqualTo(item);
+        assertThat(entity.getHeaders().getFirst(ResourceVersionPrecondition.HEADER)).isEqualTo("4");
     }
 
     @Test
-    void deleteItem_returnsNoContent() {
-        doNothing().when(quoteSheetService).deleteItem(eq(5L), eq(301L), eq(null), eq(0L));
-        assertThat(controller.deleteItem(null, 5L, 301L, null).getStatusCode())
-                .isEqualTo(HttpStatus.NO_CONTENT);
+    void deleteItem_returnsNoContentWithVersion() {
+        when(quoteSheetService.deleteItem(eq(5L), eq(301L), eq(3L), eq(0L))).thenReturn(4L);
+        ResponseEntity<Void> entity = controller.deleteItem(null, 5L, 301L, "3", null);
+        assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(entity.getHeaders().getFirst(ResourceVersionPrecondition.HEADER)).isEqualTo("4");
     }
 
     private QuoteSheetRequest.ItemRequest itemRequest() {
@@ -105,6 +143,6 @@ class V2QuoteSheetControllerTest {
     private QuoteSheetResponse response() {
         return new QuoteSheetResponse(100L, "100", "9月9日报单", null, "云潮筝鸣府",
                 LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30"),
-                false, "报价", null, List.of(), List.of(), null, null, 0L);
+                false, "报价", null, List.of(), List.of(), null, null, 3L);
     }
 }

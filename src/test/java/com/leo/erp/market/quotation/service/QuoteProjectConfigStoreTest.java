@@ -47,6 +47,7 @@ class QuoteProjectConfigStoreTest {
         assertThat(response.products()).isEmpty();
         assertThat(response.designatedBrands()).isEmpty();
         assertThat(response.brands()).isEmpty();
+        assertThat(response.version()).isEqualTo(0L);
     }
 
     @Test
@@ -69,6 +70,20 @@ class QuoteProjectConfigStoreTest {
         assertThat(response.designatedBrands()).containsExactly("沙钢", "中天");
         assertThat(response.brands()).hasSize(1);
         assertThat(response.brands().get(0).categories()).containsExactly("螺纹钢", "盘钢");
+        verify(repository).saveAndFlush(any(QuoteProjectConfig.class));
+    }
+
+    @Test
+    void save_absentConfigWithZeroExpectedVersion_creates() {
+        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
+        when(snowflakeIdGenerator.nextId()).thenReturn(1L, 2L, 3L);
+        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
+                .thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteProjectConfigResponse response = store().save(88L, new QuoteProjectConfigRequest(
+                new BigDecimal("30"), false, List.of(), List.of(), null, List.of()), 0L);
+
+        assertThat(response.projectId()).isEqualTo(88L);
         verify(repository).saveAndFlush(any(QuoteProjectConfig.class));
     }
 
@@ -108,7 +123,7 @@ class QuoteProjectConfigStoreTest {
         assertThatThrownBy(() -> store().save(88L, new QuoteProjectConfigRequest(
                 new BigDecimal("40"), false, List.of(), List.of(), null, List.of()), 4L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("数据已被他人修改");
+                .hasMessageContaining("版本已变更");
         verify(repository, never()).saveAndFlush(any());
     }
 

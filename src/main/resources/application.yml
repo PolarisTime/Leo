@@ -257,6 +257,9 @@ leo:
       enabled: ${LEO_MAINTENANCE_ATTACHMENT_MANIFEST_EXPORT_ENABLED:true}
       cron: ${LEO_MAINTENANCE_ATTACHMENT_MANIFEST_EXPORT_CRON:0 5 2 * * *}
   market:
+    quotation:
+      # 写接口是否强制要求资源版本前置条件头 X-Resource-Version(缺失返回 428); 灰度兼容期可临时关闭
+      require-resource-version: ${LEO_MARKET_QUOTATION_REQUIRE_RESOURCE_VERSION:true}
     steel-quote:
       # Mysteel 行情抓取总开关(含定时任务与手动同步接口)
       enabled: ${LEO_MARKET_STEEL_QUOTE_ENABLED:true}

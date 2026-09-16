@@ -45,7 +45,7 @@ class QuoteSheetEditLockServiceTest {
     @Test
     void acquire_newLock_returnsMineAndPersists() {
         sheetExists(9L);
-        when(repository.findBySheetId(9L)).thenReturn(Optional.empty());
+        when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.empty());
         when(snowflakeIdGenerator.nextId()).thenReturn(900L);
         when(repository.saveAndFlush(any(QuoteSheetEditLock.class)))
                 .thenAnswer((invocation) -> invocation.getArgument(0));
@@ -62,7 +62,7 @@ class QuoteSheetEditLockServiceTest {
     @Test
     void acquire_ownActiveLock_renewsWithoutConflict() {
         sheetExists(9L);
-        when(repository.findBySheetId(9L)).thenReturn(Optional.of(activeLock(7L, "张三")));
+        when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.of(activeLock(7L, "张三")));
         when(repository.saveAndFlush(any(QuoteSheetEditLock.class)))
                 .thenAnswer((invocation) -> invocation.getArgument(0));
 
@@ -75,7 +75,7 @@ class QuoteSheetEditLockServiceTest {
     @Test
     void acquire_otherActiveLock_conflicts() {
         sheetExists(9L);
-        when(repository.findBySheetId(9L)).thenReturn(Optional.of(activeLock(8L, "李四")));
+        when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.of(activeLock(8L, "李四")));
 
         assertThatThrownBy(() -> service.acquire(9L, 7L, "张三"))
                 .isInstanceOf(BusinessException.class)
@@ -84,11 +84,24 @@ class QuoteSheetEditLockServiceTest {
     }
 
     @Test
+    void acquire_forceTakeover_otherActiveLockSucceeds() {
+        sheetExists(9L);
+        when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.of(activeLock(8L, "李四")));
+        when(repository.saveAndFlush(any(QuoteSheetEditLock.class)))
+                .thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetEditLockResponse response = service.acquire(9L, 7L, "张三", true);
+
+        assertThat(response.mine()).isTrue();
+        assertThat(response.ownerName()).isEqualTo("张三");
+    }
+
+    @Test
     void acquire_expiredOtherLock_takesOver() {
         sheetExists(9L);
         QuoteSheetEditLock expired = activeLock(8L, "李四");
         expired.setExpiresAt(LocalDateTime.now().minusSeconds(5));
-        when(repository.findBySheetId(9L)).thenReturn(Optional.of(expired));
+        when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.of(expired));
         when(repository.saveAndFlush(any(QuoteSheetEditLock.class)))
                 .thenAnswer((invocation) -> invocation.getArgument(0));
 

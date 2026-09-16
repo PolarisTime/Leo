@@ -227,9 +227,9 @@ public class GlobalExceptionHandler {
     ) {
         return failure(
                 request,
-                HttpStatus.CONFLICT,
-                ErrorCode.CONCURRENT_MODIFICATION,
-                ErrorCode.CONCURRENT_MODIFICATION.getMessage()
+                HttpStatus.PRECONDITION_FAILED,
+                ErrorCode.PRECONDITION_FAILED,
+                ErrorCode.PRECONDITION_FAILED.getMessage()
         );
     }
 
@@ -332,6 +332,8 @@ public class GlobalExceptionHandler {
             case PAYLOAD_TOO_LARGE -> HttpStatus.PAYLOAD_TOO_LARGE;
             case UNSUPPORTED_MEDIA_TYPE -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;
             case CONCURRENT_MODIFICATION, REFRESH_TOKEN_REUSE_CONFLICT -> HttpStatus.CONFLICT;
+            case PRECONDITION_FAILED -> HttpStatus.PRECONDITION_FAILED;
+            case PRECONDITION_REQUIRED -> HttpStatus.PRECONDITION_REQUIRED;
             case BUSINESS_ERROR -> HttpStatus.UNPROCESSABLE_ENTITY;
             case TOO_MANY_REQUESTS -> HttpStatus.TOO_MANY_REQUESTS;
             case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;

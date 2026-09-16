@@ -7,6 +7,8 @@ import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2NoContent;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.market.quotation.QuotationProperties;
+import com.leo.erp.market.quotation.service.QuoteSheetItemWrite;
 import com.leo.erp.market.quotation.service.QuoteSheetService;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
@@ -14,9 +16,11 @@ import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.security.support.SecurityPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
@@ -39,10 +43,16 @@ import java.time.LocalDate;
 @RequestMapping(ApiVersion.V2_PREFIX + "/quote-sheets")
 public class V2QuoteSheetController {
 
-    private final QuoteSheetService quoteSheetService;
+    private static final String VERSION_HEADER = ResourceVersionPrecondition.HEADER;
+    private static final String VERSION_ALIAS_NOTE =
+            "也接受兼容别名 If-Match(非标准: 数据库版本号是弱验证器, 不符合 RFC 9110 强比较要求)。";
 
-    public V2QuoteSheetController(QuoteSheetService quoteSheetService) {
+    private final QuoteSheetService quoteSheetService;
+    private final QuotationProperties properties;
+
+    public V2QuoteSheetController(QuoteSheetService quoteSheetService, QuotationProperties properties) {
         this.quoteSheetService = quoteSheetService;
+        this.properties = properties;
     }
 
     @Operation(summary = "分页查询报价单")
@@ -72,14 +82,23 @@ public class V2QuoteSheetController {
     }
 
     @Operation(summary = "更新报价单",
-            description = "未携带 brands/items 时仅更新表头; 携带时按整体替换处理(向后兼容)")
+            description = "未携带 brands/items 时仅更新表头; 携带时按整体替换处理(向后兼容)。"
+                    + "写操作要求资源版本前置条件头 " + VERSION_HEADER + ", " + VERSION_ALIAS_NOTE
+                    + " 缺少版本返回 428, 版本不匹配返回 412; 响应头回传最新版本。")
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
-    public QuoteSheetResponse update(@AuthenticationPrincipal SecurityPrincipal principal,
-                                     @PathVariable Long id,
-                                     @RequestHeader(value = "If-Match", required = false) String ifMatch,
-                                     @Valid @RequestBody QuoteSheetRequest request) {
-        return quoteSheetService.update(id, request, IfMatchVersion.parse(ifMatch), ownerId(principal));
+    public ResponseEntity<QuoteSheetResponse> update(
+            @AuthenticationPrincipal SecurityPrincipal principal,
+            @PathVariable Long id,
+            @Parameter(description = "资源版本(强比较), 如 3")
+            @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
+            @Parameter(description = "兼容别名, 非标准弱验证器用法")
+            @RequestHeader(value = "If-Match", required = false) String ifMatch,
+            @Valid @RequestBody QuoteSheetRequest request) {
+        QuoteSheetResponse response = quoteSheetService.update(id, request,
+                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()),
+                ownerId(principal));
+        return withVersion(response, response.version());
     }
 
     @Operation(summary = "删除报价单")
@@ -91,33 +110,54 @@ public class V2QuoteSheetController {
         return V2ResponseSupport.noContent();
     }
 
-    @Operation(summary = "新增商品行")
+    @Operation(summary = "新增商品行",
+            description = "要求 " + VERSION_HEADER + ", " + VERSION_ALIAS_NOTE
+                    + " 缺少版本返回 428, 版本不匹配返回 412; 响应头回传单据最新版本。")
     @PostMapping("/{id}/items")
     @V2Created
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public ResponseEntity<QuoteSheetResponse.ItemResponse> addItem(
             @AuthenticationPrincipal SecurityPrincipal principal,
             @PathVariable Long id,
+            @Parameter(description = "资源版本(强比较), 如 3")
+            @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
+            @Parameter(description = "兼容别名, 非标准弱验证器用法")
             @RequestHeader(value = "If-Match", required = false) String ifMatch,
             @Valid @RequestBody QuoteSheetRequest.ItemRequest request) {
-        QuoteSheetResponse.ItemResponse item = quoteSheetService.addItem(
-                id, request, IfMatchVersion.parse(ifMatch), ownerId(principal));
-        return V2ResponseSupport.created("/quote-sheets/" + id + "/items", item);
+        QuoteSheetItemWrite write = quoteSheetService.addItem(id, request,
+                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()),
+                ownerId(principal));
+        ResponseEntity<QuoteSheetResponse.ItemResponse> created =
+                V2ResponseSupport.created("/quote-sheets/" + id + "/items", write.item());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .location(created.getHeaders().getLocation())
+                .header(VERSION_HEADER, String.valueOf(write.version()))
+                .body(write.item());
     }
 
-    @Operation(summary = "整行替换商品行")
+    @Operation(summary = "整行替换商品行",
+            description = "要求 " + VERSION_HEADER + ", " + VERSION_ALIAS_NOTE
+                    + " 缺少版本返回 428, 版本不匹配返回 412; 响应头回传单据最新版本。")
     @PutMapping("/{id}/items/{itemId}")
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
-    public QuoteSheetResponse.ItemResponse updateItem(
+    public ResponseEntity<QuoteSheetResponse.ItemResponse> updateItem(
             @AuthenticationPrincipal SecurityPrincipal principal,
             @PathVariable Long id,
             @PathVariable Long itemId,
+            @Parameter(description = "资源版本(强比较), 如 3")
+            @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
+            @Parameter(description = "兼容别名, 非标准弱验证器用法")
             @RequestHeader(value = "If-Match", required = false) String ifMatch,
             @Valid @RequestBody QuoteSheetRequest.ItemRequest request) {
-        return quoteSheetService.updateItem(id, itemId, request, IfMatchVersion.parse(ifMatch), ownerId(principal));
+        QuoteSheetItemWrite write = quoteSheetService.updateItem(id, itemId, request,
+                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()),
+                ownerId(principal));
+        return withVersion(write.item(), write.version());
     }
 
-    @Operation(summary = "删除商品行")
+    @Operation(summary = "删除商品行",
+            description = "要求 " + VERSION_HEADER + ", " + VERSION_ALIAS_NOTE
+                    + " 缺少版本返回 428, 版本不匹配返回 412; 响应头回传单据最新版本。")
     @DeleteMapping("/{id}/items/{itemId}")
     @V2NoContent
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
@@ -125,9 +165,22 @@ public class V2QuoteSheetController {
             @AuthenticationPrincipal SecurityPrincipal principal,
             @PathVariable Long id,
             @PathVariable Long itemId,
+            @Parameter(description = "资源版本(强比较), 如 3")
+            @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
+            @Parameter(description = "兼容别名, 非标准弱验证器用法")
             @RequestHeader(value = "If-Match", required = false) String ifMatch) {
-        quoteSheetService.deleteItem(id, itemId, IfMatchVersion.parse(ifMatch), ownerId(principal));
-        return V2ResponseSupport.noContent();
+        Long version = quoteSheetService.deleteItem(id, itemId,
+                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()),
+                ownerId(principal));
+        return ResponseEntity.noContent().header(VERSION_HEADER, String.valueOf(version)).build();
+    }
+
+    private static <T> ResponseEntity<T> withVersion(T body, Long version) {
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
+        if (version != null) {
+            builder.header(VERSION_HEADER, version.toString());
+        }
+        return builder.body(body);
     }
 
     private Long ownerId(SecurityPrincipal principal) {
