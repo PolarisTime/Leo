@@ -1,256 +1,100 @@
 package com.leo.erp.market.quotation.service;
 
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
-import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
-import com.leo.erp.market.quotation.domain.entity.QuoteSheetItem;
-import com.leo.erp.market.quotation.domain.entity.QuoteSheetItemPrice;
-import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
-import com.leo.erp.master.api.SupplierQuery;
-import jakarta.persistence.criteria.Predicate;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 
-/** 比价报价单: 单据头 + 品牌 + 商品行 + 行×品牌现货价(可标识供应商)。 */
+/**
+ * 比价报价单门面: 读直连 {@link QuoteSheetStore}, 写按单据 id 在进程内串行化并对
+ * 唯一键/乐观锁冲突做有限重试; 版本不匹配的 409 由存储层直接抛出, 不参与重试。
+ * <p>编辑签出锁由 {@link QuoteSheetEditLockService} 在写前校验(他人未过期锁 -> 409)。</p>
+ */
+@Slf4j
 @Service
 public class QuoteSheetService {
 
-    private static final BigDecimal DEFAULT_LENGTH_PREMIUM = new BigDecimal("30");
-    private static final String DEFAULT_STATUS = "报价";
+    private static final int MAX_ATTEMPTS = 3;
 
-    private final QuoteSheetRepository repository;
-    private final SnowflakeIdGenerator snowflakeIdGenerator;
-    private final SupplierQuery supplierQuery;
+    private final QuoteSheetStore store;
+    private final QuoteSheetEditLockService editLockService;
+    private final ConcurrentHashMap<Long, ReentrantLock> locks = new ConcurrentHashMap<>();
 
-    public QuoteSheetService(QuoteSheetRepository repository,
-                             SnowflakeIdGenerator snowflakeIdGenerator,
-                             SupplierQuery supplierQuery) {
-        this.repository = repository;
-        this.snowflakeIdGenerator = snowflakeIdGenerator;
-        this.supplierQuery = supplierQuery;
+    public QuoteSheetService(QuoteSheetStore store, QuoteSheetEditLockService editLockService) {
+        this.store = store;
+        this.editLockService = editLockService;
     }
 
-    @Transactional
     public QuoteSheetResponse create(QuoteSheetRequest request) {
-        validate(request);
-        QuoteSheet entity = new QuoteSheet();
-        long id = snowflakeIdGenerator.nextId();
-        entity.setId(id);
-        entity.setSheetNo(String.valueOf(id));
-        apply(entity, request);
-        return toResponse(repository.saveAndFlush(entity));
+        return store.create(request);
     }
 
-    @Transactional
-    public QuoteSheetResponse update(Long id, QuoteSheetRequest request, Long expectedVersion) {
-        validate(request);
-        QuoteSheet entity = requireSheet(id);
-        checkVersion(entity.getVersion(), expectedVersion);
-        if (entity.isLocked() && Boolean.TRUE.equals(request.locked())
-                && (!entity.getRefDate().equals(request.refDate())
-                    || !entity.getRefPeriod().equals(request.refPeriod()))) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "参照日期/时段已锁定, 请先解锁再修改");
-        }
-        apply(entity, request);
-        return toResponse(repository.saveAndFlush(entity));
-    }
-
-    @Transactional(readOnly = true)
     public QuoteSheetResponse detail(Long id) {
-        return toResponse(requireSheet(id));
+        return store.detail(id);
     }
 
-    @Transactional(readOnly = true)
     public Page<QuoteSheetResponse> page(PageQuery query, LocalDate orderDate, Long projectId, String keyword) {
-        Pageable pageable = query.toPageable("id");
-        Specification<QuoteSheet> specification = (root, criteriaQuery, builder) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            predicates.add(Specs.notDeletedPredicate(root, builder));
-            if (orderDate != null) {
-                predicates.add(builder.equal(root.get("orderDate"), orderDate));
-            }
-            if (projectId != null) {
-                predicates.add(builder.equal(root.get("projectId"), projectId));
-            }
-            if (keyword != null && !keyword.isBlank()) {
-                String like = "%" + keyword.trim() + "%";
-                predicates.add(builder.or(
-                        builder.like(root.get("name"), like),
-                        builder.like(root.get("sheetNo"), like),
-                        builder.like(root.get("projectName"), like)));
-            }
-            return builder.and(predicates.toArray(new Predicate[0]));
-        };
-        return repository.findAll(specification, pageable).map(this::toResponse);
+        return store.page(query, orderDate, projectId, keyword);
     }
 
-    @Transactional
     public void delete(Long id) {
-        QuoteSheet entity = requireSheet(id);
-        entity.setDeletedFlag(true);
-        repository.save(entity);
+        store.delete(id);
     }
 
-    private QuoteSheet requireSheet(Long id) {
-        return repository.findByIdAndDeletedFlagFalse(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "报价单不存在"));
+    public QuoteSheetResponse update(Long id, QuoteSheetRequest request, Long expectedVersion, Long ownerId) {
+        editLockService.ensureWritable(id, ownerId);
+        return withLock(id, () -> store.update(id, request, expectedVersion));
     }
 
-    /** 乐观并发校验: expectedVersion 为空表示不做校验(兼容旧调用)。 */
-    private void checkVersion(Long currentVersion, Long expectedVersion) {
-        if (expectedVersion != null && !expectedVersion.equals(currentVersion)) {
-            throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "数据已被他人修改，请刷新后重试");
-        }
+    public QuoteSheetResponse.ItemResponse addItem(Long sheetId, QuoteSheetRequest.ItemRequest request,
+                                                   Long expectedVersion, Long ownerId) {
+        editLockService.ensureWritable(sheetId, ownerId);
+        return withLock(sheetId, () -> store.addItem(sheetId, request, expectedVersion));
     }
 
-    private void validate(QuoteSheetRequest request) {
-        if (request.brands() == null || request.brands().isEmpty()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "至少需要一个品牌");
-        }
-        if (request.items() == null || request.items().isEmpty()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "至少需要一行商品");
-        }
-        Set<String> brandNames = new LinkedHashSet<>();
-        for (QuoteSheetRequest.BrandRequest brand : request.brands()) {
-            if (!brandNames.add(brand.brandName())) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "品牌重复: " + brand.brandName());
-            }
-        }
-        for (QuoteSheetRequest.ItemRequest item : request.items()) {
-            if (item.prices() != null) {
-                for (QuoteSheetRequest.ItemPriceRequest price : item.prices()) {
-                    if (!brandNames.contains(price.brandName())) {
-                        throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                                "现货价品牌不在品牌列表中: " + price.brandName());
-                    }
+    public QuoteSheetResponse.ItemResponse updateItem(Long sheetId, Long itemId,
+                                                      QuoteSheetRequest.ItemRequest request,
+                                                      Long expectedVersion, Long ownerId) {
+        editLockService.ensureWritable(sheetId, ownerId);
+        return withLock(sheetId, () -> store.updateItem(sheetId, itemId, request, expectedVersion));
+    }
+
+    public void deleteItem(Long sheetId, Long itemId, Long expectedVersion, Long ownerId) {
+        editLockService.ensureWritable(sheetId, ownerId);
+        withLock(sheetId, () -> {
+            store.deleteItem(sheetId, itemId, expectedVersion);
+            return null;
+        });
+    }
+
+    private <T> T withLock(Long sheetId, Supplier<T> action) {
+        ReentrantLock lock = locks.computeIfAbsent(sheetId, key -> new ReentrantLock());
+        lock.lock();
+        try {
+            RuntimeException lastError = null;
+            for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+                try {
+                    return action.get();
+                } catch (ObjectOptimisticLockingFailureException | DataIntegrityViolationException
+                         | CannotAcquireLockException ex) {
+                    lastError = ex;
+                    log.warn("比价报价单保存冲突, 重试 {}/{}: sheetId={}, {}",
+                            attempt, MAX_ATTEMPTS, sheetId, ex.getMessage());
                 }
             }
+            throw lastError == null ? new IllegalStateException("比价报价单保存失败") : lastError;
+        } finally {
+            lock.unlock();
         }
-    }
-
-    private void apply(QuoteSheet entity, QuoteSheetRequest request) {
-        entity.setName(request.name().trim());
-        entity.setProjectId(request.projectId());
-        entity.setProjectName(request.projectName());
-        entity.setOrderDate(request.orderDate());
-        entity.setRefDate(request.refDate());
-        entity.setRefPeriod(request.refPeriod());
-        entity.setLengthPremium(request.lengthPremium() == null ? DEFAULT_LENGTH_PREMIUM : request.lengthPremium());
-        entity.setLocked(Boolean.TRUE.equals(request.locked()));
-        entity.setStatus(request.status() == null || request.status().isBlank() ? DEFAULT_STATUS : request.status());
-        entity.setRemark(request.remark());
-        replaceBrands(entity, request.brands());
-        replaceItems(entity, request.items(), resolveSupplierNames(request.items()));
-    }
-
-    /** 批量解析现货价来源供应商名称, 任一不存在则拒绝。 */
-    private Map<Long, String> resolveSupplierNames(List<QuoteSheetRequest.ItemRequest> items) {
-        Set<Long> supplierIds = new LinkedHashSet<>();
-        if (items != null) {
-            for (QuoteSheetRequest.ItemRequest item : items) {
-                if (item == null || item.prices() == null) {
-                    continue;
-                }
-                for (QuoteSheetRequest.ItemPriceRequest price : item.prices()) {
-                    if (price != null && price.supplierId() != null) {
-                        supplierIds.add(price.supplierId());
-                    }
-                }
-            }
-        }
-        Map<Long, String> names = new HashMap<>();
-        for (Long supplierId : supplierIds) {
-            names.put(supplierId, supplierQuery.findActiveById(supplierId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR,
-                            "供应商不存在或已停用: " + supplierId))
-                    .displayName());
-        }
-        return names;
-    }
-
-    private void replaceBrands(QuoteSheet entity, List<QuoteSheetRequest.BrandRequest> requests) {
-        entity.getBrands().clear();
-        int index = 0;
-        for (QuoteSheetRequest.BrandRequest request : requests) {
-            QuoteSheetBrand brand = new QuoteSheetBrand();
-            brand.setId(snowflakeIdGenerator.nextId());
-            brand.setSheet(entity);
-            brand.setBrandName(request.brandName().trim());
-            brand.setFreight(request.freight() == null ? BigDecimal.ZERO : request.freight());
-            brand.setSortOrder(request.sortOrder() == null ? index : request.sortOrder());
-            entity.getBrands().add(brand);
-            index += 1;
-        }
-    }
-
-    private void replaceItems(QuoteSheet entity, List<QuoteSheetRequest.ItemRequest> requests,
-                              Map<Long, String> supplierNames) {
-        entity.getItems().clear();
-        int lineNo = 0;
-        for (QuoteSheetRequest.ItemRequest request : requests) {
-            lineNo += 1;
-            QuoteSheetItem item = new QuoteSheetItem();
-            item.setId(snowflakeIdGenerator.nextId());
-            item.setSheet(entity);
-            item.setLineNo(lineNo);
-            item.setCategory(request.category());
-            item.setMaterial(request.material());
-            item.setSpec(request.spec());
-            item.setLength(request.length());
-            item.setTon(request.ton());
-            if (request.prices() != null) {
-                for (QuoteSheetRequest.ItemPriceRequest priceRequest : request.prices()) {
-                    QuoteSheetItemPrice price = new QuoteSheetItemPrice();
-                    price.setId(snowflakeIdGenerator.nextId());
-                    price.setItem(item);
-                    price.setBrandName(priceRequest.brandName());
-                    price.setSpotPrice(priceRequest.spotPrice());
-                    price.setSupplierId(priceRequest.supplierId());
-                    price.setSupplierName(priceRequest.supplierId() == null
-                            ? null : supplierNames.get(priceRequest.supplierId()));
-                    item.getPrices().add(price);
-                }
-            }
-            entity.getItems().add(item);
-        }
-    }
-
-    private QuoteSheetResponse toResponse(QuoteSheet entity) {
-        List<QuoteSheetResponse.BrandResponse> brands = entity.getBrands().stream()
-                .map(brand -> new QuoteSheetResponse.BrandResponse(
-                        brand.getId(), brand.getBrandName(), brand.getFreight(), brand.getSortOrder()))
-                .toList();
-        List<QuoteSheetResponse.ItemResponse> items = entity.getItems().stream()
-                .map(item -> new QuoteSheetResponse.ItemResponse(
-                        item.getId(), item.getLineNo(), item.getCategory(), item.getMaterial(), item.getSpec(),
-                        item.getLength(), item.getTon(),
-                        item.getPrices().stream()
-                                .map(price -> new QuoteSheetResponse.ItemPriceResponse(
-                                        price.getId(), price.getBrandName(), price.getSpotPrice(),
-                                        price.getSupplierId(), price.getSupplierName()))
-                                .toList()))
-                .toList();
-        return new QuoteSheetResponse(entity.getId(), entity.getSheetNo(), entity.getName(), entity.getProjectId(),
-                entity.getProjectName(), entity.getOrderDate(), entity.getRefDate(), entity.getRefPeriod(),
-                entity.getLengthPremium(), entity.isLocked(), entity.getStatus(), entity.getRemark(),
-                brands, items, entity.getCreatedAt(), entity.getUpdatedAt(), entity.getVersion());
     }
 }

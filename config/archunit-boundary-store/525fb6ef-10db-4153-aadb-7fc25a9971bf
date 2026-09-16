@@ -2,7 +2,7 @@ unsanctioned entity status write: com.leo.erp.auth.service.InitialAccountProvisi
 unsanctioned entity status write: com.leo.erp.auth.service.UserAdminService -> com.leo.erp.auth.domain.entity.UserAccount.setStatus
 unsanctioned entity status write: com.leo.erp.auth.service.UserAdminService -> com.leo.erp.auth.domain.entity.UserAccount.setStatus
 unsanctioned entity status write: com.leo.erp.logistics.bill.service.FreightBillService -> com.leo.erp.logistics.bill.domain.entity.FreightBill.setStatus
-unsanctioned entity status write: com.leo.erp.market.quotation.service.QuoteSheetService -> com.leo.erp.market.quotation.domain.entity.QuoteSheet.setStatus
+unsanctioned entity status write: com.leo.erp.market.quotation.service.QuoteSheetStore -> com.leo.erp.market.quotation.domain.entity.QuoteSheet.setStatus
 unsanctioned entity status write: com.leo.erp.master.carrier.service.CarrierService -> com.leo.erp.master.carrier.domain.entity.Carrier.setStatus
 unsanctioned entity status write: com.leo.erp.master.customer.service.CustomerService -> com.leo.erp.master.customer.domain.entity.Customer.setStatus
 unsanctioned entity status write: com.leo.erp.master.material.service.MaterialCategoryService -> com.leo.erp.master.material.domain.entity.MaterialCategory.setStatus

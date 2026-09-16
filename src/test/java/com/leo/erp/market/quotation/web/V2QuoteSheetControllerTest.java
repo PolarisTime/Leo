@@ -59,6 +59,42 @@ class V2QuoteSheetControllerTest {
         assertThat(controller.delete(5L).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     }
 
+    @Test
+    void addItem_returnsCreatedWithLocation() {
+        QuoteSheetResponse.ItemResponse item = new QuoteSheetResponse.ItemResponse(
+                301L, 1, "螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN, List.of());
+        when(quoteSheetService.addItem(eq(5L), any(), eq(null), eq(0L))).thenReturn(item);
+
+        ResponseEntity<QuoteSheetResponse.ItemResponse> entity =
+                controller.addItem(null, 5L, null, itemRequest());
+
+        assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(entity.getHeaders().getLocation()).isNotNull();
+        assertThat(entity.getHeaders().getLocation().getPath()).endsWith("/quote-sheets/5/items/301");
+    }
+
+    @Test
+    void updateItem_delegates() {
+        QuoteSheetResponse.ItemResponse item = new QuoteSheetResponse.ItemResponse(
+                301L, 1, "螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN, List.of());
+        when(quoteSheetService.updateItem(eq(5L), eq(301L), any(), eq(3L), eq(0L))).thenReturn(item);
+
+        QuoteSheetResponse.ItemResponse result = controller.updateItem(null, 5L, 301L, "3", itemRequest());
+
+        assertThat(result).isEqualTo(item);
+    }
+
+    @Test
+    void deleteItem_returnsNoContent() {
+        doNothing().when(quoteSheetService).deleteItem(eq(5L), eq(301L), eq(null), eq(0L));
+        assertThat(controller.deleteItem(null, 5L, 301L, null).getStatusCode())
+                .isEqualTo(HttpStatus.NO_CONTENT);
+    }
+
+    private QuoteSheetRequest.ItemRequest itemRequest() {
+        return new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN, List.of());
+    }
+
     private QuoteSheetRequest request() {
         return new QuoteSheetRequest("9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
                 LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30"), false, "报价", null,

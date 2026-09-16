@@ -1,26 +1,27 @@
 package com.leo.erp.market.quotation.service;
 
 import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
-import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
-import com.leo.erp.master.api.SupplierQuery;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -28,201 +29,100 @@ import static org.mockito.Mockito.when;
 class QuoteSheetServiceTest {
 
     @Mock
-    private QuoteSheetRepository repository;
+    private QuoteSheetStore store;
 
     @Mock
-    private SnowflakeIdGenerator snowflakeIdGenerator;
+    private QuoteSheetEditLockService editLockService;
 
-    @Mock
-    private SupplierQuery supplierQuery;
+    @InjectMocks
+    private QuoteSheetService service;
 
-    private QuoteSheetService service() {
-        return new QuoteSheetService(repository, snowflakeIdGenerator, supplierQuery);
+    @Test
+    void update_checksEditLockThenDelegates() {
+        when(store.update(eq(9L), any(), eq(3L))).thenReturn(response());
+
+        QuoteSheetResponse result = service.update(9L, request(), 3L, 7L);
+
+        assertThat(result).isNotNull();
+        verify(editLockService).ensureWritable(9L, 7L);
+        verify(store).update(9L, request(), 3L);
     }
 
     @Test
-    void create_assignsSnowflakeIdAndSheetNo() {
-        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 202L, 301L, 302L);
-        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+    void update_propagatesVersionConflictWithoutRetry() {
+        when(store.update(eq(9L), any(), eq(2L)))
+                .thenThrow(new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "版本不匹配"));
 
-        QuoteSheetResponse response = service().create(request());
-
-        assertThat(response.id()).isEqualTo(100L);
-        assertThat(response.sheetNo()).isEqualTo("100");
-        assertThat(response.brands()).hasSize(1);
-        assertThat(response.items()).hasSize(1);
-        assertThat(response.items().get(0).prices()).hasSize(1);
-        assertThat(response.lengthPremium()).isEqualByComparingTo("30");
-        verify(repository).saveAndFlush(any(QuoteSheet.class));
-    }
-
-    @Test
-    void create_rejectsDuplicateBrand() {
-        QuoteSheetRequest base = request();
-        QuoteSheetRequest duplicated = new QuoteSheetRequest(
-                base.name(), base.projectId(), base.projectName(), base.orderDate(), base.refDate(), base.refPeriod(),
-                base.lengthPremium(), base.locked(), base.status(), base.remark(),
-                List.of(new QuoteSheetRequest.BrandRequest("中天", BigDecimal.TEN, 0),
-                        new QuoteSheetRequest.BrandRequest("中天", BigDecimal.TEN, 1)),
-                base.items());
-
-        assertThatThrownBy(() -> service().create(duplicated))
+        assertThatThrownBy(() -> service.update(9L, request(), 2L, 7L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("品牌重复");
-        verify(repository, never()).saveAndFlush(any());
+                .hasMessageContaining("版本不匹配");
+        verify(store, times(1)).update(eq(9L), any(), eq(2L));
     }
 
     @Test
-    void create_rejectsPriceBrandNotInBrandList() {
-        QuoteSheetRequest base = request();
-        QuoteSheetRequest invalid = new QuoteSheetRequest(
-                base.name(), base.projectId(), base.projectName(), base.orderDate(), base.refDate(), base.refPeriod(),
-                base.lengthPremium(), base.locked(), base.status(), base.remark(), base.brands(),
-                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
-                        List.of(new QuoteSheetRequest.ItemPriceRequest("亚新", new BigDecimal("3280"), null)))));
+    void update_retriesOnOptimisticLockFailureThenSucceeds() {
+        when(store.update(eq(9L), any(), eq(3L)))
+                .thenThrow(new ObjectOptimisticLockingFailureException("QuoteSheet", 9L))
+                .thenReturn(response());
 
-        assertThatThrownBy(() -> service().create(invalid))
+        QuoteSheetResponse result = service.update(9L, request(), 3L, 7L);
+
+        assertThat(result).isNotNull();
+        verify(store, times(2)).update(eq(9L), any(), eq(3L));
+    }
+
+    @Test
+    void update_blocksWhenOthersHoldEditLock() {
+        doThrow(new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "单据已被 张三 签出编辑"))
+                .when(editLockService).ensureWritable(9L, 7L);
+
+        assertThatThrownBy(() -> service.update(9L, request(), 3L, 7L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("现货价品牌不在品牌列表中");
-        verify(repository, never()).saveAndFlush(any());
+                .hasMessageContaining("签出编辑");
+        verify(store, times(0)).update(any(), any(), any());
     }
 
     @Test
-    void delete_softDeletesExistingSheet() {
-        QuoteSheet sheet = new QuoteSheet();
-        sheet.setId(9L);
-        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
-        when(repository.save(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+    void addItem_checksEditLockThenDelegates() {
+        QuoteSheetResponse.ItemResponse item = itemResponse();
+        when(store.addItem(eq(9L), any(), eq(3L))).thenReturn(item);
 
-        service().delete(9L);
+        QuoteSheetResponse.ItemResponse result = service.addItem(9L, itemRequest(), 3L, 7L);
 
-        assertThat(sheet.isDeletedFlag()).isTrue();
-        verify(repository).save(sheet);
+        assertThat(result).isEqualTo(item);
+        verify(editLockService).ensureWritable(9L, 7L);
     }
 
     @Test
-    void detail_rejectsMissingSheet() {
-        when(repository.findByIdAndDeletedFlagFalse(404L)).thenReturn(Optional.empty());
-        assertThatThrownBy(() -> service().detail(404L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("报价单不存在");
+    void deleteItem_delegatesAfterEditLockCheck() {
+        doNothing().when(store).deleteItem(9L, 301L, 3L);
+
+        service.deleteItem(9L, 301L, 3L, 7L);
+
+        verify(editLockService).ensureWritable(9L, 7L);
+        verify(store).deleteItem(9L, 301L, 3L);
     }
 
-    @Test
-    void update_rejectsRefChangeWhenLocked() {
-        QuoteSheet existing = lockedSheet();
-        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
-
-        QuoteSheetRequest changedRef = new QuoteSheetRequest(
-                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
-                LocalDate.of(2026, 9, 11), "9:30 上午",
-                new BigDecimal("30"), true, "报价", null,
-                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
-                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
-                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
-
-        assertThatThrownBy(() -> service().update(9L, changedRef, null))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("已锁定");
-        verify(repository, never()).saveAndFlush(any());
+    private QuoteSheetRequest.ItemRequest itemRequest() {
+        return new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN, List.of());
     }
 
-    @Test
-    void update_allowsRefChangeAfterUnlock() {
-        QuoteSheet existing = lockedSheet();
-        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
-        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
-
-        QuoteSheetRequest changedRef = new QuoteSheetRequest(
-                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
-                LocalDate.of(2026, 9, 11), "9:30 上午",
-                new BigDecimal("30"), false, "报价", null,
-                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
-                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
-                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
-
-        QuoteSheetResponse response = service().update(9L, changedRef, null);
-
-        assertThat(response.locked()).isFalse();
-        assertThat(response.refDate()).isEqualTo(LocalDate.of(2026, 9, 11));
-    }
-
-    @Test
-    void update_acceptsMatchingExpectedVersion() {
-        QuoteSheet existing = new QuoteSheet();
-        existing.setId(9L);
-        existing.setVersion(3L);
-        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
-        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
-
-        QuoteSheetResponse response = service().update(9L, request(), 3L);
-
-        assertThat(response.name()).isEqualTo("9月9日报单");
-        verify(repository).saveAndFlush(any(QuoteSheet.class));
-    }
-
-    @Test
-    void update_rejectsStaleExpectedVersion() {
-        QuoteSheet existing = new QuoteSheet();
-        existing.setId(9L);
-        existing.setVersion(3L);
-        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
-
-        assertThatThrownBy(() -> service().update(9L, request(), 2L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("数据已被他人修改");
-        verify(repository, never()).saveAndFlush(any());
-    }
-
-    @Test
-    void create_resolvesSupplierNameSnapshot() {
-        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 202L, 301L);
-        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
-        when(supplierQuery.findActiveById(77L))
-                .thenReturn(Optional.of(new SupplierQuery.SupplierSnapshot(
-                        77L, "S001", "杭州物资有限公司", "杭州物资")));
-
-        QuoteSheetResponse response = service().create(requestWithSupplier(77L));
-
-        QuoteSheetResponse.ItemPriceResponse price = response.items().get(0).prices().get(0);
-        assertThat(price.supplierId()).isEqualTo(77L);
-        assertThat(price.supplierName()).isEqualTo("杭州物资");
-    }
-
-    @Test
-    void create_rejectsUnknownSupplier() {
-        when(supplierQuery.findActiveById(404L)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service().create(requestWithSupplier(404L)))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("供应商不存在");
-        verify(repository, never()).saveAndFlush(any());
-    }
-
-    private QuoteSheet lockedSheet() {
-        QuoteSheet sheet = new QuoteSheet();
-        sheet.setId(9L);
-        sheet.setLocked(true);
-        sheet.setRefDate(LocalDate.of(2026, 9, 10));
-        sheet.setRefPeriod("9:30 上午");
-        return sheet;
-    }
-
-    private QuoteSheetRequest requestWithSupplier(Long supplierId) {
-        return new QuoteSheetRequest(
-                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, "报价", null,
-                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
-                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", new BigDecimal("10"),
-                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), supplierId)))));
+    private QuoteSheetResponse.ItemResponse itemResponse() {
+        return new QuoteSheetResponse.ItemResponse(301L, 1, "螺纹钢", "HRB400E", 12, "9米",
+                BigDecimal.TEN, List.of());
     }
 
     private QuoteSheetRequest request() {
-        return new QuoteSheetRequest(
-                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, "报价", null,
+        return new QuoteSheetRequest("9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
+                LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30"), false, "报价", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
-                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", new BigDecimal("10"),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
+    }
+
+    private QuoteSheetResponse response() {
+        return new QuoteSheetResponse(9L, "9", "9月9日报单", null, "云潮筝鸣府",
+                LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30"),
+                false, "报价", null, List.of(), List.of(), null, null, 3L);
     }
 }
