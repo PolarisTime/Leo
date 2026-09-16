@@ -1,5 +1,6 @@
 package com.leo.erp.master.supplier.service;
 
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.api.SupplierQuery.SupplierSnapshot;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
@@ -49,6 +50,24 @@ class SupplierQueryServiceTest {
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.empty());
 
         assertThat(service.findActiveById(1L)).isEmpty();
+    }
+
+    // ---------- findActiveNormalById ----------
+
+    @Test
+    void findActiveNormalById_shouldMapSnapshotWhenNormalStatus() {
+        when(repository.findByIdAndDeletedFlagFalseAndStatus(1L, StatusConstants.NORMAL))
+                .thenReturn(Optional.of(supplier()));
+
+        assertThat(service.findActiveNormalById(1L)).contains(new SupplierSnapshot(1L, "S001", "供应商甲"));
+    }
+
+    @Test
+    void findActiveNormalById_shouldReturnEmptyWhenDisabled() {
+        when(repository.findByIdAndDeletedFlagFalseAndStatus(1L, StatusConstants.NORMAL))
+                .thenReturn(Optional.empty());
+
+        assertThat(service.findActiveNormalById(1L)).isEmpty();
     }
 
     // ---------- findActiveByCode ----------

@@ -220,17 +220,38 @@ public class GlobalExceptionHandler {
         return failure(request, status, ex.getErrorCode(), ex.getMessage());
     }
 
+    /**
+     * 乐观锁冲突映射。
+     * <p>报价资源使用资源版本前置条件语义(412 PRECONDITION_FAILED); 其它模块沿用既有的并发冲突语义
+     * (409 CONCURRENT_MODIFICATION), 避免全局改变历史调用方契约。</p>
+     */
     @ExceptionHandler({ObjectOptimisticLockingFailureException.class, OptimisticLockException.class})
     public ResponseEntity<?> handleOptimisticLockingFailure(
             Exception ex,
             HttpServletRequest request
     ) {
+        if (isQuoteResource(request)) {
+            return failure(
+                    request,
+                    HttpStatus.PRECONDITION_FAILED,
+                    ErrorCode.PRECONDITION_FAILED,
+                    ErrorCode.PRECONDITION_FAILED.getMessage()
+            );
+        }
         return failure(
                 request,
-                HttpStatus.PRECONDITION_FAILED,
-                ErrorCode.PRECONDITION_FAILED,
-                ErrorCode.PRECONDITION_FAILED.getMessage()
+                HttpStatus.CONFLICT,
+                ErrorCode.CONCURRENT_MODIFICATION,
+                ErrorCode.CONCURRENT_MODIFICATION.getMessage()
         );
+    }
+
+    private boolean isQuoteResource(HttpServletRequest request) {
+        if (request == null || request.getRequestURI() == null) {
+            return false;
+        }
+        String uri = request.getRequestURI();
+        return uri.contains("/quote-sheets") || uri.contains("/quote-project-configs");
     }
 
     @ExceptionHandler({BadCredentialsException.class, JwtException.class})

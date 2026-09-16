@@ -50,5 +50,7 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long>, JpaSp
 
     Optional<Supplier> findByIdAndDeletedFlagFalse(Long id);
 
+    Optional<Supplier> findByIdAndDeletedFlagFalseAndStatus(Long id, String status);
+
     long countByDeletedFlagFalse();
 }

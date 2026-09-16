@@ -1,5 +1,6 @@
 package com.leo.erp.master.supplier.service;
 
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.api.SupplierQuery;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
@@ -22,6 +23,11 @@ public class SupplierQueryService implements SupplierQuery {
     @Override
     public Optional<SupplierSnapshot> findActiveById(Long id) {
         return repository.findByIdAndDeletedFlagFalse(id).map(this::toSnapshot);
+    }
+
+    @Override
+    public Optional<SupplierSnapshot> findActiveNormalById(Long id) {
+        return repository.findByIdAndDeletedFlagFalseAndStatus(id, StatusConstants.NORMAL).map(this::toSnapshot);
     }
 
     @Override

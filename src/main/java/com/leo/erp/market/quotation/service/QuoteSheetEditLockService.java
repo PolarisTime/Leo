@@ -8,6 +8,7 @@ import com.leo.erp.market.quotation.repository.QuoteSheetEditLockRepository;
 import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetEditLockResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,7 +62,8 @@ public class QuoteSheetEditLockService {
      */
     @Transactional
     public QuoteSheetEditLockResponse acquire(Long sheetId, Long ownerId, String ownerName, boolean force) {
-        requireSheet(sheetId);
+        // 先锁父单据行: 对尚不存在的锁行做 FOR UPDATE 不会加锁, 只有锁住父行才能让并发首插串行。
+        lockActiveSheet(sheetId);
         LocalDateTime now = LocalDateTime.now();
         QuoteSheetEditLock lock = repository.findBySheetIdForUpdate(sheetId).orElse(null);
         if (lock == null) {
@@ -80,7 +82,22 @@ public class QuoteSheetEditLockService {
         lock.setOwnerName(ownerName);
         lock.setAcquiredAt(now);
         lock.setExpiresAt(now.plus(DEFAULT_TTL));
-        return toResponse(repository.saveAndFlush(lock), ownerId);
+        try {
+            return toResponse(repository.saveAndFlush(lock), ownerId);
+        } catch (DataIntegrityViolationException ex) {
+            // 兜底: 唯一约束 uk_quote_sheet_edit_lock_sheet 冲突(并发首插)。事务已回滚, 重查实际持有者并上报,
+            // 避免直接暴露底层唯一键 409。
+            throw concurrentInsertConflict(sheetId, ownerId, now);
+        }
+    }
+
+    private BusinessException concurrentInsertConflict(Long sheetId, Long ownerId, LocalDateTime now) {
+        QuoteSheetEditLock concurrent = repository.findBySheetId(sheetId).orElse(null);
+        if (concurrent != null && !concurrent.expiredAt(now) && !Objects.equals(concurrent.getOwnerId(), ownerId)) {
+            return new BusinessException(ErrorCode.CONCURRENT_MODIFICATION,
+                    "单据已被 " + concurrent.getOwnerName() + " 签出编辑");
+        }
+        return new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "单据正在被签出，请稍后重试");
     }
 
     /** 查询当前锁; 无锁或已过期返回 {@code locked=false}。 */
@@ -98,7 +115,8 @@ public class QuoteSheetEditLockService {
     @Transactional
     public void release(Long sheetId, Long ownerId) {
         LocalDateTime now = LocalDateTime.now();
-        repository.findBySheetId(sheetId).ifPresent(lock -> {
+        // 加锁读后再删: 避免无锁读到旧 owner、删除时误删他人刚抢占的新锁。
+        repository.findBySheetIdForUpdate(sheetId).ifPresent(lock -> {
             if (!lock.expiredAt(now) && !Objects.equals(lock.getOwnerId(), ownerId)) {
                 throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION,
                         "单据已被 " + lock.getOwnerName() + " 签出编辑");
@@ -134,6 +152,13 @@ public class QuoteSheetEditLockService {
 
     private void requireSheet(Long sheetId) {
         if (sheetRepository.findByIdAndDeletedFlagFalse(sheetId).isEmpty()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "报价单不存在");
+        }
+    }
+
+    /** 加父单据行级排他锁, 串行化同一单据的签出首插。 */
+    private void lockActiveSheet(Long sheetId) {
+        if (sheetRepository.findActiveForUpdate(sheetId).isEmpty()) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "报价单不存在");
         }
     }

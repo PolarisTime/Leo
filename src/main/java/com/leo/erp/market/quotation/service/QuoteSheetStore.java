@@ -129,6 +129,7 @@ public class QuoteSheetStore {
                                        Long expectedVersion) {
         QuoteSheet sheet = requireSheet(sheetId);
         checkVersion(sheet.getVersion(), expectedVersion);
+        validateItemPrices(request, brandNamesOf(sheet));
         int nextLineNo = sheet.getItems().stream()
                 .map(QuoteSheetItem::getLineNo)
                 .filter(Objects::nonNull)
@@ -148,6 +149,7 @@ public class QuoteSheetStore {
                                           Long expectedVersion) {
         QuoteSheet sheet = requireSheet(sheetId);
         checkVersion(sheet.getVersion(), expectedVersion);
+        validateItemPrices(request, brandNamesOf(sheet));
         QuoteSheetItem item = requireItem(sheet, itemId);
         Map<Long, String> supplierNames = resolveSupplierNames(List.of(request));
         applyItem(item, request, supplierNames);
@@ -194,27 +196,59 @@ public class QuoteSheetStore {
         }
         Set<String> brandNames = new LinkedHashSet<>();
         for (QuoteSheetRequest.BrandRequest brand : request.brands()) {
-            if (!brandNames.add(brand.brandName())) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "品牌重复: " + brand.brandName());
+            String brandName = normalizeBrandName(brand.brandName());
+            if (!brandNames.add(brandName)) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "品牌重复: " + brandName);
             }
         }
         for (QuoteSheetRequest.ItemRequest item : request.items()) {
-            if (item.prices() != null) {
-                for (QuoteSheetRequest.ItemPriceRequest price : item.prices()) {
-                    if (!brandNames.contains(price.brandName())) {
-                        throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                                "现货价品牌不在品牌列表中: " + price.brandName());
-                    }
-                }
+            validateItemPrices(item, brandNames);
+        }
+    }
+
+    /**
+     * 校验单行现货价品牌: 按 trim 后名称去重, 且必须属于该单据的品牌列表。
+     * 未通过时抛 422(VALIDATION_ERROR), 避免落库触发 {@code uk_quote_item_price} 唯一键 409。
+     */
+    private void validateItemPrices(QuoteSheetRequest.ItemRequest item, Set<String> brandNames) {
+        if (item == null || item.prices() == null) {
+            return;
+        }
+        Set<String> priceBrandNames = new LinkedHashSet<>();
+        for (QuoteSheetRequest.ItemPriceRequest price : item.prices()) {
+            if (price == null) {
+                continue;
+            }
+            String brandName = normalizeBrandName(price.brandName());
+            if (!priceBrandNames.add(brandName)) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "现货价品牌重复: " + brandName);
+            }
+            if (!brandNames.contains(brandName)) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "现货价品牌不在品牌列表中: " + brandName);
             }
         }
     }
 
+    private Set<String> brandNamesOf(QuoteSheet sheet) {
+        Set<String> brandNames = new LinkedHashSet<>();
+        for (QuoteSheetBrand brand : sheet.getBrands()) {
+            brandNames.add(normalizeBrandName(brand.getBrandName()));
+        }
+        return brandNames;
+    }
+
+    private static String normalizeBrandName(String brandName) {
+        return brandName == null ? "" : brandName.trim();
+    }
+
     private void checkLockedRefChange(QuoteSheet entity, QuoteSheetRequest request) {
-        if (entity.isLocked() && Boolean.TRUE.equals(request.locked())
-                && request.refDate() != null && request.refPeriod() != null
-                && (!entity.getRefDate().equals(request.refDate())
-                    || !entity.getRefPeriod().equals(request.refPeriod()))) {
+        if (!entity.isLocked() || Boolean.FALSE.equals(request.locked())) {
+            return;
+        }
+        boolean refDateChanged = request.refDate() != null && !Objects.equals(request.refDate(), entity.getRefDate());
+        boolean refPeriodChanged = request.refPeriod() != null
+                && !Objects.equals(request.refPeriod(), entity.getRefPeriod());
+        if (refDateChanged || refPeriodChanged) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "参照日期/时段已锁定, 请先解锁再修改");
         }
     }
@@ -255,7 +289,7 @@ public class QuoteSheetStore {
         }
         Map<Long, String> names = new HashMap<>();
         for (Long supplierId : supplierIds) {
-            names.put(supplierId, supplierQuery.findActiveById(supplierId)
+            names.put(supplierId, supplierQuery.findActiveNormalById(supplierId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR,
                             "供应商不存在或已停用: " + supplierId))
                     .displayName());
@@ -353,7 +387,7 @@ public class QuoteSheetStore {
         List<QuoteSheetItemPrice> reconciled = new ArrayList<>();
         if (request.prices() != null) {
             for (QuoteSheetRequest.ItemPriceRequest priceRequest : request.prices()) {
-                String brandName = priceRequest.brandName();
+                String brandName = normalizeBrandName(priceRequest.brandName());
                 QuoteSheetItemPrice price = existingByBrandName.remove(brandName);
                 if (price == null) {
                     price = new QuoteSheetItemPrice();

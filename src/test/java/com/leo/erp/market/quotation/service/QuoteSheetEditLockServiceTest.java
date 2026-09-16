@@ -1,6 +1,7 @@
 package com.leo.erp.market.quotation.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetEditLock;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -42,9 +44,14 @@ class QuoteSheetEditLockServiceTest {
         when(sheetRepository.findByIdAndDeletedFlagFalse(sheetId)).thenReturn(Optional.of(new QuoteSheet()));
     }
 
+    /** 签出路径先对父单据行加锁, 使用独立的锁定读桩。 */
+    private void sheetLockable(Long sheetId) {
+        when(sheetRepository.findActiveForUpdate(sheetId)).thenReturn(Optional.of(new QuoteSheet()));
+    }
+
     @Test
     void acquire_newLock_returnsMineAndPersists() {
-        sheetExists(9L);
+        sheetLockable(9L);
         when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.empty());
         when(snowflakeIdGenerator.nextId()).thenReturn(900L);
         when(repository.saveAndFlush(any(QuoteSheetEditLock.class)))
@@ -61,7 +68,7 @@ class QuoteSheetEditLockServiceTest {
 
     @Test
     void acquire_ownActiveLock_renewsWithoutConflict() {
-        sheetExists(9L);
+        sheetLockable(9L);
         when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.of(activeLock(7L, "张三")));
         when(repository.saveAndFlush(any(QuoteSheetEditLock.class)))
                 .thenAnswer((invocation) -> invocation.getArgument(0));
@@ -74,7 +81,7 @@ class QuoteSheetEditLockServiceTest {
 
     @Test
     void acquire_otherActiveLock_conflicts() {
-        sheetExists(9L);
+        sheetLockable(9L);
         when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.of(activeLock(8L, "李四")));
 
         assertThatThrownBy(() -> service.acquire(9L, 7L, "张三"))
@@ -85,7 +92,7 @@ class QuoteSheetEditLockServiceTest {
 
     @Test
     void acquire_forceTakeover_otherActiveLockSucceeds() {
-        sheetExists(9L);
+        sheetLockable(9L);
         when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.of(activeLock(8L, "李四")));
         when(repository.saveAndFlush(any(QuoteSheetEditLock.class)))
                 .thenAnswer((invocation) -> invocation.getArgument(0));
@@ -98,7 +105,7 @@ class QuoteSheetEditLockServiceTest {
 
     @Test
     void acquire_expiredOtherLock_takesOver() {
-        sheetExists(9L);
+        sheetLockable(9L);
         QuoteSheetEditLock expired = activeLock(8L, "李四");
         expired.setExpiresAt(LocalDateTime.now().minusSeconds(5));
         when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.of(expired));
@@ -135,23 +142,35 @@ class QuoteSheetEditLockServiceTest {
     }
 
     @Test
-    void release_ownLock_deletes() {
+    void release_ownLock_deletesAfterLockedRead() {
         QuoteSheetEditLock lock = activeLock(7L, "张三");
-        when(repository.findBySheetId(9L)).thenReturn(Optional.of(lock));
+        when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.of(lock));
 
         service.release(9L, 7L);
 
+        verify(repository).findBySheetIdForUpdate(9L);
         verify(repository).delete(lock);
     }
 
     @Test
     void release_otherActiveLock_conflicts() {
-        when(repository.findBySheetId(9L)).thenReturn(Optional.of(activeLock(8L, "李四")));
+        when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.of(activeLock(8L, "李四")));
 
         assertThatThrownBy(() -> service.release(9L, 7L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("签出编辑");
         verify(repository, never()).delete(any());
+    }
+
+    @Test
+    void release_expiredOtherLock_deletes() {
+        QuoteSheetEditLock expired = activeLock(8L, "李四");
+        expired.setExpiresAt(LocalDateTime.now().minusSeconds(5));
+        when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.of(expired));
+
+        service.release(9L, 7L);
+
+        verify(repository).delete(expired);
     }
 
     @Test
@@ -174,11 +193,49 @@ class QuoteSheetEditLockServiceTest {
 
     @Test
     void acquire_missingSheet_notFound() {
-        when(sheetRepository.findByIdAndDeletedFlagFalse(404L)).thenReturn(Optional.empty());
+        when(sheetRepository.findActiveForUpdate(404L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.acquire(404L, 7L, "张三"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("报价单不存在");
+    }
+
+    /**
+     * 回归: 并发首次插入时唯一约束兜底冲突, 必须重查并上报实际持有者(业务语义),
+     * 不得把底层 DataIntegrityViolationException 直接抛给调用方。
+     */
+    @Test
+    void acquire_concurrentFirstInsert_reportsOtherHolder() {
+        sheetLockable(9L);
+        when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.empty());
+        when(snowflakeIdGenerator.nextId()).thenReturn(900L);
+        when(repository.saveAndFlush(any(QuoteSheetEditLock.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key value violates unique constraint"));
+        when(repository.findBySheetId(9L)).thenReturn(Optional.of(activeLock(8L, "李四")));
+
+        assertThatThrownBy(() -> service.acquire(9L, 7L, "张三"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("李四")
+                .hasMessageContaining("签出编辑")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.CONCURRENT_MODIFICATION);
+    }
+
+    /** 并发首插后若重查不到有效持有者, 仍返回 409 并发冲突而非底层唯一键异常。 */
+    @Test
+    void acquire_concurrentFirstInsertWithoutReadableHolder_conflicts() {
+        sheetLockable(9L);
+        when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.empty());
+        when(snowflakeIdGenerator.nextId()).thenReturn(900L);
+        when(repository.saveAndFlush(any(QuoteSheetEditLock.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key value violates unique constraint"));
+        when(repository.findBySheetId(9L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.acquire(9L, 7L, "张三"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("签出")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.CONCURRENT_MODIFICATION);
     }
 
     private QuoteSheetEditLock activeLock(Long ownerId, String ownerName) {

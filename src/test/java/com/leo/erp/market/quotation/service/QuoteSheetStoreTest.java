@@ -1,6 +1,7 @@
 package com.leo.erp.market.quotation.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
@@ -75,6 +76,65 @@ class QuoteSheetStoreTest {
         verify(repository, never()).saveAndFlush(any());
     }
 
+    /** 回归: 品牌名按 trim 后判重, ["中天"," 中天 "] 必须在入库前报 422, 不得落到唯一键 409。 */
+    @Test
+    void create_rejectsDuplicateBrandAfterTrim() {
+        QuoteSheetRequest base = request();
+        QuoteSheetRequest duplicated = new QuoteSheetRequest(
+                base.name(), base.projectId(), base.projectName(), base.orderDate(), base.refDate(), base.refPeriod(),
+                base.lengthPremium(), base.locked(), base.status(), base.remark(),
+                List.of(new QuoteSheetRequest.BrandRequest("中天", BigDecimal.TEN, 0),
+                        new QuoteSheetRequest.BrandRequest(" 中天 ", BigDecimal.TEN, 1)),
+                base.items());
+
+        assertThatThrownBy(() -> store().create(duplicated))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("品牌重复")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 回归: 同一行 prices 内 trim 后重名必须在入库前报 422, 不得落到 uk_quote_item_price 409。 */
+    @Test
+    void create_rejectsDuplicatePriceBrandAfterTrimWithinRow() {
+        QuoteSheetRequest base = request();
+        QuoteSheetRequest duplicated = new QuoteSheetRequest(
+                base.name(), base.projectId(), base.projectName(), base.orderDate(), base.refDate(), base.refPeriod(),
+                base.lengthPremium(), base.locked(), base.status(), base.remark(),
+                List.of(new QuoteSheetRequest.BrandRequest("中天", BigDecimal.TEN, 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null),
+                                new QuoteSheetRequest.ItemPriceRequest(" 中天 ", new BigDecimal("3290"), null)))));
+
+        assertThatThrownBy(() -> store().create(duplicated))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("现货价品牌重复")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** trim 后命中的现货价品牌属于品牌列表, 应通过并统一按 trim 后名称落库。 */
+    @Test
+    void create_normalizesTrimmedPriceBrandName() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 301L, 401L);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetRequest base = request();
+        QuoteSheetRequest trimmed = new QuoteSheetRequest(
+                base.name(), base.projectId(), base.projectName(), base.orderDate(), base.refDate(), base.refPeriod(),
+                base.lengthPremium(), base.locked(), base.status(), base.remark(),
+                List.of(new QuoteSheetRequest.BrandRequest("中天", BigDecimal.TEN, 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest(" 中天 ", new BigDecimal("3280"), null)))));
+
+        QuoteSheetResponse response = store().create(trimmed);
+
+        assertThat(response.items().get(0).prices()).hasSize(1);
+        assertThat(response.items().get(0).prices().get(0).brandName()).isEqualTo("中天");
+    }
+
     @Test
     void create_rejectsPriceBrandNotInBrandList() {
         QuoteSheetRequest base = request();
@@ -126,7 +186,53 @@ class QuoteSheetStoreTest {
 
         assertThatThrownBy(() -> store().update(9L, changedRef, null))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("已锁定");
+                .hasMessageContaining("已锁定")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 回归: 已锁定但请求未携带 locked(未显式解锁) 时, 仍改 refDate 必须 422, 不得被绕过。 */
+    @Test
+    void update_rejectsRefChangeWhenLockedAndLockFlagOmitted() {
+        QuoteSheet existing = lockedSheet();
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        QuoteSheetRequest changedRef = new QuoteSheetRequest(
+                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
+                LocalDate.of(2026, 9, 11), "9:30 上午",
+                new BigDecimal("30"), null, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
+
+        assertThatThrownBy(() -> store().update(9L, changedRef, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已锁定")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 回归: 已锁定且未显式解锁时, 仅修改 refPeriod 也必须 422。 */
+    @Test
+    void update_rejectsRefPeriodChangeWhenLockedAndLockFlagOmitted() {
+        QuoteSheet existing = lockedSheet();
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        QuoteSheetRequest changedPeriod = new QuoteSheetRequest(
+                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
+                LocalDate.of(2026, 9, 10), "10:00 上午",
+                new BigDecimal("30"), null, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
+
+        assertThatThrownBy(() -> store().update(9L, changedPeriod, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已锁定")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
         verify(repository, never()).saveAndFlush(any());
     }
 
@@ -205,7 +311,7 @@ class QuoteSheetStoreTest {
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
         when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
         when(snowflakeIdGenerator.nextId()).thenReturn(777L, 888L);
-        when(supplierQuery.findActiveById(77L))
+        when(supplierQuery.findActiveNormalById(77L))
                 .thenReturn(Optional.of(new SupplierQuery.SupplierSnapshot(
                         77L, "S001", "杭州物资有限公司", "杭州物资")));
 
@@ -240,18 +346,87 @@ class QuoteSheetStoreTest {
         existing.setVersion(4L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
         when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
-        when(snowflakeIdGenerator.nextId()).thenReturn(555L);
 
         QuoteSheetItemWrite updated = store().updateItem(9L, 301L,
                 new QuoteSheetRequest.ItemRequest("高线", "HPB300", 10, "12米", new BigDecimal("2.5"),
-                        List.of(new QuoteSheetRequest.ItemPriceRequest("亚新", new BigDecimal("3400"), null))),
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3400"), null))),
                 4L);
 
         assertThat(updated.item().category()).isEqualTo("高线");
         assertThat(updated.item().ton()).isEqualByComparingTo("2.5");
         assertThat(updated.item().prices()).hasSize(1);
-        assertThat(updated.item().prices().get(0).brandName()).isEqualTo("亚新");
+        assertThat(updated.item().prices().get(0).brandName()).isEqualTo("中天");
         assertThat(updated.version()).isEqualTo(4L);
+    }
+
+    /** 行级写: 现货价品牌不属于本单品牌列表时 422, 不得落库触发唯一键。 */
+    @Test
+    void addItem_rejectsPriceBrandNotInSheetBrands() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> store().addItem(9L,
+                new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("亚新", new BigDecimal("3300"), null))), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("现货价品牌不在品牌列表中")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 行级写: 同一行 prices 内 trim 后重名时 422, 不得落库触发唯一键。 */
+    @Test
+    void addItem_rejectsDuplicatePriceBrandWithinRow() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> store().addItem(9L,
+                new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3300"), null),
+                                new QuoteSheetRequest.ItemPriceRequest(" 中天 ", new BigDecimal("3310"), null))), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("现货价品牌重复")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 行级写: 整行替换时现货价品牌不属于本单品牌列表时 422。 */
+    @Test
+    void updateItem_rejectsPriceBrandNotInSheetBrands() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> store().updateItem(9L, 301L,
+                new QuoteSheetRequest.ItemRequest("高线", "HPB300", 10, "12米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("亚新", new BigDecimal("3400"), null))), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("现货价品牌不在品牌列表中")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 行级写: 整行替换时同一行 prices trim 后重名时 422。 */
+    @Test
+    void updateItem_rejectsDuplicatePriceBrandWithinRow() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> store().updateItem(9L, 301L,
+                new QuoteSheetRequest.ItemRequest("高线", "HPB300", 10, "12米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3400"), null),
+                                new QuoteSheetRequest.ItemPriceRequest(" 中天 ", new BigDecimal("3410"), null))), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("现货价品牌重复")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -297,7 +472,7 @@ class QuoteSheetStoreTest {
     void create_resolvesSupplierNameSnapshot() {
         when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 202L, 301L);
         when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
-        when(supplierQuery.findActiveById(77L))
+        when(supplierQuery.findActiveNormalById(77L))
                 .thenReturn(Optional.of(new SupplierQuery.SupplierSnapshot(
                         77L, "S001", "杭州物资有限公司", "杭州物资")));
 
@@ -310,7 +485,7 @@ class QuoteSheetStoreTest {
 
     @Test
     void create_rejectsUnknownSupplier() {
-        when(supplierQuery.findActiveById(404L)).thenReturn(Optional.empty());
+        when(supplierQuery.findActiveNormalById(404L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> store().create(requestWithSupplier(404L)))
                 .isInstanceOf(BusinessException.class)
