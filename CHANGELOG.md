@@ -1,3 +1,15 @@
+# [10.11.0](https://github.com/PolarisTime/Leo/compare/v10.10.0...v10.11.0) (2026-09-16)
+
+
+### Bug Fixes
+
+* **market:** 移除 QuoteSheetService 未使用的 Objects 导入以通过 checkstyle ([1e8b572](https://github.com/PolarisTime/Leo/commit/1e8b5726673ffeac1fb518b8176e3640efe00758))
+
+
+### Features
+
+* **market:** 比价单支持供应商标识、参照锁定与项目级配置持久化 ([c5dae99](https://github.com/PolarisTime/Leo/commit/c5dae99c822c0d888c8d85d23f1f3ffbe365dc2a))
+
 # [10.10.0](https://github.com/PolarisTime/Leo/compare/v10.9.0...v10.10.0) (2026-09-16)
 
 
