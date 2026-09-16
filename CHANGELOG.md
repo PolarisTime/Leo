@@ -1,3 +1,19 @@
+# [11.0.0](https://github.com/PolarisTime/Leo/compare/v10.13.0...v11.0.0) (2026-09-16)
+
+
+* fix(market)!: 报单比价乐观并发对齐 HTTP 规范并支持签出锁强制接管 ([4b5ead3](https://github.com/PolarisTime/Leo/commit/4b5ead3028e5510160a98a8cac2bb3ee9bed737b))
+
+
+### Features
+
+* **market:** 报价单支持行级保存与编辑签出锁 ([3b05583](https://github.com/PolarisTime/Leo/commit/3b055831ea53d9e42add8fc92a47c3d3c136444e))
+
+
+### BREAKING CHANGES
+
+* 报价单与项目配置写接口的版本不匹配由 409 改为 412，缺少版本
+前置条件默认返回 428；客户端必须改用 X-Resource-Version 携带版本（If-Match 仍兼容）。
+
 # [10.13.0](https://github.com/PolarisTime/Leo/compare/v10.12.1...v10.13.0) (2026-09-16)
 
 
