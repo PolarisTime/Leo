@@ -1,3 +1,12 @@
+## [11.1.1](https://github.com/PolarisTime/Leo/compare/v11.1.0...v11.1.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **quotation:** 修复报价版本回读、版本恒加一与行号空洞误拒 ([0b41b73](https://github.com/PolarisTime/Leo/commit/0b41b7385bfc4541a15b071747823ecd40752d7b))
+* **quotation:** 修复整体替换版本漏增、规格数量锁与锁冲突映射 ([7f44597](https://github.com/PolarisTime/Leo/commit/7f445974a06c46d154933f5ef88bafd69a605ed0))
+* **quotation:** 消除报价单查询多 bag 抓取导致的生产 500 ([9fc4b42](https://github.com/PolarisTime/Leo/commit/9fc4b42c0576afd3019430bffde68ef153bac7cc))
+
 # [11.1.0](https://github.com/PolarisTime/Leo/compare/v11.0.2...v11.1.0) (2026-09-16)
 
 
