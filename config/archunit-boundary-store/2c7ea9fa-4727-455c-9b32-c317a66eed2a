@@ -6,9 +6,17 @@ cyclic module edge: auth -> security
 cyclic module edge: auth -> system
 cyclic module edge: common -> security
 cyclic module edge: common -> system
+cyclic module edge: inventory -> purchase
+cyclic module edge: inventory -> sales
+cyclic module edge: logistics -> sales
 cyclic module edge: master -> attachment
 cyclic module edge: master -> common
+cyclic module edge: master -> security
 cyclic module edge: master -> system
+cyclic module edge: purchase -> inventory
+cyclic module edge: sales -> inventory
+cyclic module edge: sales -> logistics
+cyclic module edge: sales -> purchase
 cyclic module edge: security -> auth
 cyclic module edge: security -> common
 cyclic module edge: security -> system

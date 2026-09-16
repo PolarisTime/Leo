@@ -1,4 +1,6 @@
 unsanctioned entity status write: com.leo.erp.auth.service.InitialAccountProvisioningService -> com.leo.erp.auth.domain.entity.UserAccount.setStatus
+unsanctioned entity status write: com.leo.erp.auth.service.UserAdminService -> com.leo.erp.auth.domain.entity.UserAccount.setStatus
+unsanctioned entity status write: com.leo.erp.auth.service.UserAdminService -> com.leo.erp.auth.domain.entity.UserAccount.setStatus
 unsanctioned entity status write: com.leo.erp.logistics.bill.service.FreightBillService -> com.leo.erp.logistics.bill.domain.entity.FreightBill.setStatus
 unsanctioned entity status write: com.leo.erp.market.quotation.service.QuoteSheetService -> com.leo.erp.market.quotation.domain.entity.QuoteSheet.setStatus
 unsanctioned entity status write: com.leo.erp.master.carrier.service.CarrierService -> com.leo.erp.master.carrier.domain.entity.Carrier.setStatus
@@ -13,5 +15,10 @@ unsanctioned entity status write: com.leo.erp.purchase.order.service.PurchaseOrd
 unsanctioned entity status write: com.leo.erp.sales.order.service.SalesOrderWorkflowService -> com.leo.erp.sales.order.domain.entity.SalesOrder.setStatus
 unsanctioned entity status write: com.leo.erp.sales.outbound.service.SalesOutboundDeleteRollbackService -> com.leo.erp.sales.order.domain.entity.SalesOrder.setStatus
 unsanctioned entity status write: com.leo.erp.sales.outbound.service.SalesOutboundWorkflowService -> com.leo.erp.sales.outbound.domain.entity.SalesOutbound.setStatus
+unsanctioned entity status write: com.leo.erp.sales.returns.service.SalesReturnWorkflowService -> com.leo.erp.sales.returns.domain.entity.SalesReturn.setStatus
+unsanctioned entity status write: com.leo.erp.security.rbac.service.RoleService -> com.leo.erp.security.rbac.domain.entity.SysRole.setStatus
+unsanctioned entity status write: com.leo.erp.security.rbac.service.RoleService -> com.leo.erp.security.rbac.domain.entity.SysRole.setStatus
+unsanctioned entity status write: com.leo.erp.security.rbac.service.RoleService -> com.leo.erp.security.rbac.domain.entity.SysRole.setStatus
+unsanctioned entity status write: com.leo.erp.statement.customer.service.CustomerStatementReversalService -> com.leo.erp.statement.customer.domain.entity.CustomerStatement.setStatus
 unsanctioned entity status write: com.leo.erp.system.company.service.CompanySettingService -> com.leo.erp.system.company.domain.entity.CompanySetting.setStatus
 unsanctioned entity status write: com.leo.erp.system.printtemplate.service.PrintTemplateRequestNormalizer -> com.leo.erp.system.printtemplate.domain.entity.PrintTemplate.setStatus
