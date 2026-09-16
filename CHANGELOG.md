@@ -1,3 +1,10 @@
+# [10.10.0](https://github.com/PolarisTime/Leo/compare/v10.9.0...v10.10.0) (2026-09-16)
+
+
+### Features
+
+* **market:** 行情同步支持按时段(上午/中午/下午)选择性同步 ([301a170](https://github.com/PolarisTime/Leo/commit/301a1705601ac49797ddb845a5377aebfbd5bc50))
+
 # [10.9.0](https://github.com/PolarisTime/Leo/compare/v10.8.0...v10.9.0) (2026-09-16)
 
 
