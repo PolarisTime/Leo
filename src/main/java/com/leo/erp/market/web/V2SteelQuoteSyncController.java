@@ -60,7 +60,7 @@ public class V2SteelQuoteSyncController {
         return PageResponse.from(page);
     }
 
-    @Operation(summary = "手动同步行情", description = "抓取指定日期(默认今天)当天所有行情文章(上午/中午/下午)并解密入库; 重复同步同一文章幂等")
+    @Operation(summary = "手动同步行情", description = "抓取指定日期(默认今天)的行情文章并解密入库; 可传 periods(上午/中午/下午)只同步所选时段, 缺省同步当天全部时段; 重复同步同一文章幂等")
     @ApiResponse(responseCode = "202", description = "同步完成")
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
@@ -71,7 +71,8 @@ public class V2SteelQuoteSyncController {
         if (date.isAfter(LocalDate.now(zone))) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不能同步未来日期的行情");
         }
-        java.util.List<SyncResult> results = steelQuoteSyncService.syncAll(date);
+        java.util.List<String> requestedPeriods = request != null ? request.periods() : java.util.List.of();
+        java.util.List<SyncResult> results = steelQuoteSyncService.syncAll(date, requestedPeriods);
         SyncResult last = results.get(results.size() - 1);
         java.util.List<String> periods = results.stream().map(SyncResult::period).distinct().toList();
         int rowCount = results.stream().mapToInt(SyncResult::rowCount).sum();

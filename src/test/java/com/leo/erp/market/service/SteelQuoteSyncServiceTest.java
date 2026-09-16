@@ -11,12 +11,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -26,6 +28,7 @@ class SteelQuoteSyncServiceTest {
 
     private static final LocalDate DATE = LocalDate.of(2026, 9, 9);
     private static final String ARTICLE_URL = "https://jiancai.mysteel.com/m/26090915/X.html";
+    private static final String MORNING_URL = "https://jiancai.mysteel.com/m/26090910/M.html";
 
     @Mock
     private MysteelClient mysteelClient;
@@ -90,6 +93,83 @@ class SteelQuoteSyncServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("安全验证");
         verify(steelQuoteStore, never()).persistArticle(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void syncAll_withPeriods_onlyImportsRequestedPeriods() {
+        SteelQuoteSyncService service = service();
+        when(mysteelClient.findArticleUrls(DATE)).thenReturn(List.of(ARTICLE_URL, MORNING_URL));
+        when(articleRepository.findByArticleUrlAndDeletedFlagFalse(ARTICLE_URL)).thenReturn(Optional.empty());
+        when(articleRepository.findByArticleUrlAndDeletedFlagFalse(MORNING_URL)).thenReturn(Optional.empty());
+        when(mysteelClient.fetchArticle(ARTICLE_URL)).thenReturn(articleHtml("15:40"));
+        when(mysteelClient.fetchArticle(MORNING_URL)).thenReturn(articleHtml("10:30"));
+        when(steelQuoteStore.persistArticle(ARTICLE_URL, articleHtml("15:40"), "杭州")).thenReturn(article());
+
+        List<SteelQuoteSyncService.SyncResult> results = service.syncAll(DATE, List.of("下午"));
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).period()).isEqualTo("下午");
+        verify(steelQuoteStore, never()).persistArticle(eq(MORNING_URL), anyString(), anyString());
+    }
+
+    @Test
+    void syncAll_withPeriods_importsEveryRequestedPeriod() {
+        SteelQuoteSyncService service = service();
+        when(mysteelClient.findArticleUrls(DATE)).thenReturn(List.of(ARTICLE_URL, MORNING_URL));
+        when(articleRepository.findByArticleUrlAndDeletedFlagFalse(ARTICLE_URL)).thenReturn(Optional.empty());
+        when(articleRepository.findByArticleUrlAndDeletedFlagFalse(MORNING_URL)).thenReturn(Optional.empty());
+        when(mysteelClient.fetchArticle(ARTICLE_URL)).thenReturn(articleHtml("15:40"));
+        when(mysteelClient.fetchArticle(MORNING_URL)).thenReturn(articleHtml("10:30"));
+        SteelArticle morning = article();
+        morning.setPeriod("上午");
+        when(steelQuoteStore.persistArticle(eq(ARTICLE_URL), anyString(), anyString())).thenReturn(article());
+        when(steelQuoteStore.persistArticle(eq(MORNING_URL), anyString(), anyString())).thenReturn(morning);
+
+        List<SteelQuoteSyncService.SyncResult> results = service.syncAll(DATE, List.of("上午", "下午"));
+
+        assertThat(results).extracting(SteelQuoteSyncService.SyncResult::period)
+                .containsExactlyInAnyOrder("上午", "下午");
+    }
+
+    @Test
+    void syncAll_withPeriods_throwsWhenNoArticleMatches() {
+        SteelQuoteSyncService service = service();
+        when(mysteelClient.findArticleUrls(DATE)).thenReturn(List.of(MORNING_URL));
+        when(articleRepository.findByArticleUrlAndDeletedFlagFalse(MORNING_URL)).thenReturn(Optional.empty());
+        when(mysteelClient.fetchArticle(MORNING_URL)).thenReturn(articleHtml("10:30"));
+
+        assertThatThrownBy(() -> service.syncAll(DATE, List.of("下午")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("所选时段");
+        verify(steelQuoteStore, never()).persistArticle(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void syncAll_withPeriods_skipsExistingArticleOfOtherPeriod() {
+        SteelQuoteSyncService service = service();
+        SteelArticle morning = article();
+        morning.setPeriod("上午");
+        when(mysteelClient.findArticleUrls(DATE)).thenReturn(List.of(ARTICLE_URL));
+        when(articleRepository.findByArticleUrlAndDeletedFlagFalse(ARTICLE_URL)).thenReturn(Optional.of(morning));
+
+        assertThatThrownBy(() -> service.syncAll(DATE, List.of("下午")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("所选时段");
+        verify(mysteelClient, never()).fetchArticle(anyString());
+    }
+
+    @Test
+    void syncAll_rejectsUnknownPeriod() {
+        SteelQuoteSyncService service = service();
+
+        assertThatThrownBy(() -> service.syncAll(DATE, List.of("晚上")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未知时段");
+        verify(mysteelClient, never()).findArticleUrls(any(LocalDate.class));
+    }
+
+    private String articleHtml(String time) {
+        return "<html><title>2026年9月9日(" + time + ")杭州市场建筑钢材价格行情</title></html>";
     }
 
     private SteelQuoteSyncService service() {

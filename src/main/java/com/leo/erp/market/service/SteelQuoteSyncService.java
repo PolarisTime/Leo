@@ -3,17 +3,23 @@ package com.leo.erp.market.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.market.domain.entity.SteelArticle;
+import com.leo.erp.market.mysteel.MysteelArticleParser;
 import com.leo.erp.market.mysteel.MysteelClient;
 import com.leo.erp.market.mysteel.MysteelRateLimiter;
 import com.leo.erp.market.mysteel.MysteelProperties;
+import com.leo.erp.market.mysteel.TradingPeriod;
 import com.leo.erp.market.repository.SteelArticleRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 行情同步编排: 查找文章 -> 下载 -> 事务入库。
@@ -50,11 +56,24 @@ public class SteelQuoteSyncService {
         String articleUrl = mysteelClient.findLatestArticleUrl(date)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR,
                         String.format("%tF 未找到杭州市场建筑钢材价格行情文章", date)));
-        return syncArticle(articleUrl);
+        return syncArticle(articleUrl, Set.of());
     }
 
     /** 同步指定日期当天所有行情文章(覆盖上午/中午/下午), 返回各文章结果。 */
     public List<SyncResult> syncAll(LocalDate date) {
+        return syncAll(date, Set.of());
+    }
+
+    /**
+     * 同步指定日期当天行情文章, 可按时段过滤(上午/中午/下午), 返回命中文章结果。
+     * <p>
+     * {@code periods} 为空表示全部时段; 非空时仅入库命中时段的文章, 其余跳过。
+     * 时段由文章标题时间推导, 需抓取文章后才能判定。
+     *
+     * @throws BusinessException 当日无行情文章, 或所选时段均无对应文章
+     */
+    public List<SyncResult> syncAll(LocalDate date, Collection<String> periods) {
+        Set<String> requestedPeriods = normalizePeriods(periods);
         List<String> articleUrls = mysteelClient.findArticleUrls(date);
         if (articleUrls.isEmpty()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR,
@@ -62,8 +81,15 @@ public class SteelQuoteSyncService {
         }
         List<SyncResult> results = new ArrayList<>(articleUrls.size());
         for (String articleUrl : articleUrls) {
-            rateLimiter.acquire();
-            results.add(syncArticle(articleUrl));
+            SyncResult result = syncArticle(articleUrl, requestedPeriods);
+            if (result != null) {
+                results.add(result);
+            }
+        }
+        if (results.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    String.format("%tF 未找到所选时段(%s)的行情文章", date,
+                            String.join("/", requestedPeriods)));
         }
         return results;
     }
@@ -104,19 +130,62 @@ public class SteelQuoteSyncService {
                                  List<BackfillFailure> failures) {
     }
 
-    private SyncResult syncArticle(String articleUrl) {
+    private SyncResult syncArticle(String articleUrl, Set<String> requestedPeriods) {
         Optional<SteelArticle> existing = articleRepository.findByArticleUrlAndDeletedFlagFalse(articleUrl);
         if (existing.isPresent()) {
-            return toResult(existing.get(), false);
+            SteelArticle article = existing.get();
+            if (!matchesPeriod(article.getPeriod(), requestedPeriods)) {
+                return null;
+            }
+            return toResult(article, false);
         }
         rateLimiter.acquire();
         String articleHtml = mysteelClient.fetchArticle(articleUrl);
         if (articleHtml.contains("安全验证")) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文章页返回安全验证页(疑似触发IP风控), 请稍后再试");
         }
+        if (!requestedPeriods.isEmpty() && !matchesPeriod(resolvePeriod(articleHtml).label(), requestedPeriods)) {
+            return null;
+        }
         SteelArticle article = steelQuoteStore.persistArticle(articleUrl, articleHtml, properties.getMarket());
         log.info("行情同步完成: {} 行, 文章 {}", article.getRowCount(), articleUrl);
         return toResult(article, true);
+    }
+
+    private boolean matchesPeriod(String period, Set<String> requestedPeriods) {
+        return requestedPeriods.isEmpty() || requestedPeriods.contains(period);
+    }
+
+    private TradingPeriod resolvePeriod(String articleHtml) {
+        try {
+            MysteelArticleParser.TitleInfo title = MysteelArticleParser.parseTitle(articleHtml);
+            return TradingPeriod.from(LocalTime.of(
+                    Integer.parseInt(title.hhmm().substring(0, 2)),
+                    Integer.parseInt(title.hhmm().substring(2))));
+        } catch (RuntimeException ex) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "无法从行情文章解析发布时段");
+        }
+    }
+
+    /** 归一化并校验时段, 过滤空白; 未知时段抛 422。 */
+    private Set<String> normalizePeriods(Collection<String> periods) {
+        if (periods == null || periods.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> normalized = new LinkedHashSet<>();
+        for (String period : periods) {
+            if (period == null || period.isBlank()) {
+                continue;
+            }
+            String trimmed = period.trim();
+            try {
+                TradingPeriod.fromLabel(trimmed);
+            } catch (IllegalArgumentException ex) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "未知时段: " + trimmed);
+            }
+            normalized.add(trimmed);
+        }
+        return normalized;
     }
 
     private SyncResult toResult(SteelArticle article, boolean created) {
