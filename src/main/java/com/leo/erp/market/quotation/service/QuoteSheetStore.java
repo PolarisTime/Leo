@@ -13,6 +13,8 @@ import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
 import com.leo.erp.master.api.SupplierQuery;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -45,13 +47,16 @@ public class QuoteSheetStore {
     private final QuoteSheetRepository repository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final SupplierQuery supplierQuery;
+    private final EntityManager entityManager;
 
     public QuoteSheetStore(QuoteSheetRepository repository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
-                           SupplierQuery supplierQuery) {
+                           SupplierQuery supplierQuery,
+                           EntityManager entityManager) {
         this.repository = repository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.supplierQuery = supplierQuery;
+        this.entityManager = entityManager;
     }
 
     @Transactional
@@ -123,12 +128,11 @@ public class QuoteSheetStore {
         repository.save(entity);
     }
 
-    /** 新增商品行: 追加到单据末尾, 返回新行与单据最新版本(触发单据版本递增)。 */
+    /** 新增商品行: 追加到单据末尾, 返回新行与单据最新版本(显式 FORCE_INCREMENT 父单据版本)。 */
     @Transactional
     public QuoteSheetItemWrite addItem(Long sheetId, QuoteSheetRequest.ItemRequest request,
                                        Long expectedVersion) {
-        QuoteSheet sheet = requireSheet(sheetId);
-        checkVersion(sheet.getVersion(), expectedVersion);
+        QuoteSheet sheet = requireSheetForRowWrite(sheetId, expectedVersion);
         validateItemPrices(request, brandNamesOf(sheet));
         int nextLineNo = sheet.getItems().stream()
                 .map(QuoteSheetItem::getLineNo)
@@ -142,13 +146,12 @@ public class QuoteSheetStore {
         return new QuoteSheetItemWrite(toItemResponse(item), sheet.getVersion());
     }
 
-    /** 整行替换商品字段、吨位与行×品牌现货价, 返回新行与单据最新版本(触发单据版本递增)。 */
+    /** 整行替换商品字段、吨位与行×品牌现货价, 返回新行与单据最新版本(显式 FORCE_INCREMENT 父单据版本)。 */
     @Transactional
     public QuoteSheetItemWrite updateItem(Long sheetId, Long itemId,
                                           QuoteSheetRequest.ItemRequest request,
                                           Long expectedVersion) {
-        QuoteSheet sheet = requireSheet(sheetId);
-        checkVersion(sheet.getVersion(), expectedVersion);
+        QuoteSheet sheet = requireSheetForRowWrite(sheetId, expectedVersion);
         validateItemPrices(request, brandNamesOf(sheet));
         QuoteSheetItem item = requireItem(sheet, itemId);
         Map<Long, String> supplierNames = resolveSupplierNames(List.of(request));
@@ -157,15 +160,30 @@ public class QuoteSheetStore {
         return new QuoteSheetItemWrite(toItemResponse(item), sheet.getVersion());
     }
 
-    /** 删除商品行, 返回单据最新版本(触发单据版本递增)。 */
+    /** 删除商品行, 返回单据最新版本(显式 FORCE_INCREMENT 父单据版本)。 */
     @Transactional
     public Long deleteItem(Long sheetId, Long itemId, Long expectedVersion) {
-        QuoteSheet sheet = requireSheet(sheetId);
-        checkVersion(sheet.getVersion(), expectedVersion);
+        QuoteSheet sheet = requireSheetForRowWrite(sheetId, expectedVersion);
         QuoteSheetItem item = requireItem(sheet, itemId);
         sheet.getItems().remove(item);
         repository.saveAndFlush(sheet);
         return sheet.getVersion();
+    }
+
+    /**
+     * 行级写入口: 读取父单据、做版本前置校验, 并显式强制自增父版本。
+     * <p>
+     * {@code QuoteSheet.brands/items} 是 {@code mappedBy} 反向集合, 仅变更子集合时 Hibernate
+     * 不会把父行标脏, 父 {@code @Version} 不递增; 这会让两台设备各自改一行却能同时通过旧版本校验。
+     * 因此在 flush 前对父实体加 {@link LockModeType#OPTIMISTIC_FORCE_INCREMENT} 锁,
+     * 保证任一子集合写都会推进父版本, 与既有 {@code @Version}、{@code checkVersion}、
+     * If-Match/412 语义一致。表头-only 更新不经过本入口, 由 {@code @Version} 自然递增一次, 不会重复自增。
+     */
+    private QuoteSheet requireSheetForRowWrite(Long sheetId, Long expectedVersion) {
+        QuoteSheet sheet = requireSheet(sheetId);
+        checkVersion(sheet.getVersion(), expectedVersion);
+        entityManager.lock(sheet, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+        return sheet;
     }
 
     private QuoteSheet requireSheet(Long id) {

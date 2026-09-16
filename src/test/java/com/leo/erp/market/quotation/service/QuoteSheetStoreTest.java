@@ -11,6 +11,8 @@ import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
 import com.leo.erp.master.api.SupplierQuery;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -24,8 +26,11 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,8 +45,11 @@ class QuoteSheetStoreTest {
     @Mock
     private SupplierQuery supplierQuery;
 
+    @Mock
+    private EntityManager entityManager;
+
     private QuoteSheetStore store() {
-        return new QuoteSheetStore(repository, snowflakeIdGenerator, supplierQuery);
+        return new QuoteSheetStore(repository, snowflakeIdGenerator, supplierQuery, entityManager);
     }
 
     @Test
@@ -302,6 +310,86 @@ class QuoteSheetStoreTest {
         assertThat(response.brands()).hasSize(1);
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).prices()).hasSize(1);
+    }
+
+    /**
+     * 回归(并发保护): 行级写必须显式对父单据加 {@code OPTIMISTIC_FORCE_INCREMENT} 锁。
+     * <p>覆盖边界: 本仓库未引入 H2/Testcontainers, 无法真实执行 PostgreSQL 版本推进,
+     * 故用 mock {@link EntityManager} 模拟 Hibernate 在 force increment 时自增版本,
+     * 仅验证调用契约与返回 version 递增, 不验证真实数据库行版本变化。
+     */
+    @Test
+    void addItem_forcesParentVersionIncrement() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(5L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(snowflakeIdGenerator.nextId()).thenReturn(777L);
+        stubForceIncrement();
+
+        QuoteSheetItemWrite added = store().addItem(9L,
+                new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE, List.of()), 5L);
+
+        assertThat(added.version()).isEqualTo(6L);
+        verify(entityManager).lock(existing, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+    }
+
+    @Test
+    void updateItem_forcesParentVersionIncrement() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(5L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        stubForceIncrement();
+
+        QuoteSheetItemWrite updated = store().updateItem(9L, 301L,
+                new QuoteSheetRequest.ItemRequest("高线", "HPB300", 10, "12米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3400"), null))), 5L);
+
+        assertThat(updated.version()).isEqualTo(6L);
+        verify(entityManager).lock(existing, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+    }
+
+    @Test
+    void deleteItem_forcesParentVersionIncrement() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(5L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        stubForceIncrement();
+
+        Long version = store().deleteItem(9L, 301L, 5L);
+
+        assertThat(version).isEqualTo(6L);
+        verify(entityManager).lock(existing, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+    }
+
+    /** 表头-only 更新由 {@code @Version} 自然递增一次, 不得再走 FORCE_INCREMENT, 避免重复自增。 */
+    @Test
+    void update_headerOnly_doesNotForceIncrement() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(3L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        store().update(9L, headerOnlyRequest(), 3L);
+
+        verifyNoInteractions(entityManager);
+    }
+
+    private void stubForceIncrement() {
+        doAnswer(invocation -> {
+            QuoteSheet sheet = invocation.getArgument(0);
+            sheet.setVersion(sheet.getVersion() + 1);
+            return null;
+        }).when(entityManager).lock(any(QuoteSheet.class), eq(LockModeType.OPTIMISTIC_FORCE_INCREMENT));
+    }
+
+    private QuoteSheetRequest headerOnlyRequest() {
+        return new QuoteSheetRequest(
+                "改名后的报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
+                LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("35"), true, "报价", "备注", null, null);
     }
 
     @Test

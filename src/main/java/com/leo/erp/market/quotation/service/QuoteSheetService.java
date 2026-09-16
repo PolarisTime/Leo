@@ -1,6 +1,7 @@
 package com.leo.erp.market.quotation.service;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.support.KeyedLockRegistry;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -11,8 +12,6 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
 /**
@@ -28,7 +27,7 @@ public class QuoteSheetService {
 
     private final QuoteSheetStore store;
     private final QuoteSheetEditLockService editLockService;
-    private final ConcurrentHashMap<Long, ReentrantLock> locks = new ConcurrentHashMap<>();
+    private final KeyedLockRegistry locks = new KeyedLockRegistry();
 
     public QuoteSheetService(QuoteSheetStore store, QuoteSheetEditLockService editLockService) {
         this.store = store;
@@ -75,9 +74,7 @@ public class QuoteSheetService {
     }
 
     private <T> T withLock(Long sheetId, Supplier<T> action) {
-        ReentrantLock lock = locks.computeIfAbsent(sheetId, key -> new ReentrantLock());
-        lock.lock();
-        try {
+        return locks.execute(sheetId, () -> {
             RuntimeException lastError = null;
             for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
                 try {
@@ -90,8 +87,6 @@ public class QuoteSheetService {
                 }
             }
             throw lastError == null ? new IllegalStateException("比价报价单保存失败") : lastError;
-        } finally {
-            lock.unlock();
-        }
+        });
     }
 }

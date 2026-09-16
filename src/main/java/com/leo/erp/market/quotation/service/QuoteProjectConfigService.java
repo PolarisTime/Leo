@@ -1,5 +1,6 @@
 package com.leo.erp.market.quotation.service;
 
+import com.leo.erp.common.support.KeyedLockRegistry;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -7,9 +8,6 @@ import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
-
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 比价项目级配置: 按项目唯一, PUT 整体替换。
@@ -24,7 +22,7 @@ public class QuoteProjectConfigService {
     private static final int MAX_ATTEMPTS = 3;
 
     private final QuoteProjectConfigStore store;
-    private final ConcurrentHashMap<Long, ReentrantLock> locks = new ConcurrentHashMap<>();
+    private final KeyedLockRegistry locks = new KeyedLockRegistry();
 
     public QuoteProjectConfigService(QuoteProjectConfigStore store) {
         this.store = store;
@@ -37,13 +35,7 @@ public class QuoteProjectConfigService {
 
     /** 保存项目配置(不存在则创建, 存在则整体替换; 幂等)。 */
     public QuoteProjectConfigResponse save(Long projectId, QuoteProjectConfigRequest request, Long expectedVersion) {
-        ReentrantLock lock = locks.computeIfAbsent(projectId, key -> new ReentrantLock());
-        lock.lock();
-        try {
-            return saveWithRetry(projectId, request, expectedVersion);
-        } finally {
-            lock.unlock();
-        }
+        return locks.execute(projectId, () -> saveWithRetry(projectId, request, expectedVersion));
     }
 
     private QuoteProjectConfigResponse saveWithRetry(Long projectId, QuoteProjectConfigRequest request,
