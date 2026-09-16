@@ -27,7 +27,6 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
 /** 比价报价单: 单据头 + 品牌 + 商品行 + 行×品牌现货价(可标识供应商)。 */
