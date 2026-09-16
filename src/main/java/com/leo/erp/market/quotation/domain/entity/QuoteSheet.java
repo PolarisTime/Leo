@@ -12,6 +12,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -67,7 +68,9 @@ public class QuoteSheet extends AbstractAuditableEntity {
     @Column(name = "version", nullable = false)
     private Long version;
 
+    /** LAZY 反向集合: 不参与 fetch join(避免与 items 双 bag), 按 50 一批懒加载避免 N+1。 */
     @OneToMany(mappedBy = "sheet", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @BatchSize(size = 50)
     @OrderBy("sortOrder ASC")
     private List<QuoteSheetBrand> brands = new ArrayList<>();
 

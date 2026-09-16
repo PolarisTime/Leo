@@ -12,6 +12,7 @@ import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -48,7 +49,9 @@ public class QuoteSheetItem {
     @Column(name = "ton", precision = 18, scale = 8)
     private BigDecimal ton;
 
+    /** LAZY 反向集合: 不参与 fetch join(避免与 items 双 bag), 按 50 一批懒加载避免 N+1。 */
     @OneToMany(mappedBy = "item", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @BatchSize(size = 50)
     @OrderBy("brandName ASC")
     private List<QuoteSheetItemPrice> prices = new ArrayList<>();
 }
