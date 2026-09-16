@@ -7,6 +7,7 @@ public record SupplierRequest(
         String supplierCode,
         @NotBlank(message = "供应商名称不能为空")
         String supplierName,
+        String shortName,
         String contactName,
         String contactPhone,
         String city,
@@ -14,4 +15,10 @@ public record SupplierRequest(
         String status,
         String remark
 ) {
+
+    /** 兼容无简称的构造(简称缺省为 null)。 */
+    public SupplierRequest(String supplierCode, String supplierName, String contactName, String contactPhone,
+                           String city, String status, String remark) {
+        this(supplierCode, supplierName, null, contactName, contactPhone, city, status, remark);
+    }
 }

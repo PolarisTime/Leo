@@ -28,6 +28,9 @@ public class Supplier extends AbstractAuditableEntity {
     @Column(name = "supplier_name", nullable = false, length = 128)
     private String supplierName;
 
+    @Column(name = "short_name", length = 64)
+    private String shortName;
+
     @Column(name = "contact_name", length = 32)
     private String contactName;
 

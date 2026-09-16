@@ -13,6 +13,16 @@ public interface SupplierQuery {
 
     List<SupplierSnapshot> findActiveByNameOrderByCode(String supplierName);
 
-    record SupplierSnapshot(Long id, String code, String name) {
+    record SupplierSnapshot(Long id, String code, String name, String shortName) {
+
+        /** 兼容无简称的构造(简称缺省为 null)。 */
+        public SupplierSnapshot(Long id, String code, String name) {
+            this(id, code, name, null);
+        }
+
+        /** 展示名: 优先简称, 否则全称。 */
+        public String displayName() {
+            return shortName == null || shortName.isBlank() ? name : shortName;
+        }
     }
 }

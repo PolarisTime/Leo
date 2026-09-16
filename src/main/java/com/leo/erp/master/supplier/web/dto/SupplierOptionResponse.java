@@ -5,7 +5,8 @@ public record SupplierOptionResponse(
         Long value,
         String label,
         String supplierCode,
-        String supplierName
+        String supplierName,
+        String shortName
 ) {
     public SupplierOptionResponse {
         if (id == null || id <= 0) {
@@ -17,10 +18,15 @@ public record SupplierOptionResponse(
         label = requireText(label, "供应商选项label不能为空");
         supplierCode = requireText(supplierCode, "供应商编码不能为空");
         supplierName = requireText(supplierName, "供应商名称不能为空");
+        shortName = shortName == null ? null : shortName.trim();
+    }
+
+    public SupplierOptionResponse(Long id, String supplierCode, String supplierName, String shortName) {
+        this(id, id, optionLabel(supplierCode, supplierName), supplierCode, supplierName, shortName);
     }
 
     public SupplierOptionResponse(Long id, String supplierCode, String supplierName) {
-        this(id, id, optionLabel(supplierCode, supplierName), supplierCode, supplierName);
+        this(id, supplierCode, supplierName, null);
     }
 
     private static String optionLabel(String supplierCode, String supplierName) {

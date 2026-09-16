@@ -137,7 +137,8 @@ public class SupplierService implements RedisCacheHealthCheck {
                 .map(s -> new SupplierOptionResponse(
                         s.getId(),
                         s.getSupplierCode(),
-                        s.getSupplierName()
+                        s.getSupplierName(),
+                        s.getShortName()
                 ))
                 .toList();
     }
@@ -190,6 +191,7 @@ public class SupplierService implements RedisCacheHealthCheck {
                 request.supplierCode()
         ));
         entity.setSupplierName(requireText(request.supplierName(), "供应商名称不能为空"));
+        entity.setShortName(trimToNull(request.shortName()));
         entity.setContactName(trimToNull(request.contactName()));
         entity.setContactPhone(trimToNull(request.contactPhone()));
         entity.setCity(trimToNull(request.city()));

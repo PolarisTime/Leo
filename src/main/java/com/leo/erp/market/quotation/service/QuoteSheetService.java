@@ -173,7 +173,7 @@ public class QuoteSheetService {
             names.put(supplierId, supplierQuery.findActiveById(supplierId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR,
                             "供应商不存在或已停用: " + supplierId))
-                    .name());
+                    .displayName());
         }
         return names;
     }

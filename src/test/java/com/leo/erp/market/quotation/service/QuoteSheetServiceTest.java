@@ -152,7 +152,8 @@ class QuoteSheetServiceTest {
         when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 202L, 301L);
         when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
         when(supplierQuery.findActiveById(77L))
-                .thenReturn(Optional.of(new SupplierQuery.SupplierSnapshot(77L, "S001", "杭州物资")));
+                .thenReturn(Optional.of(new SupplierQuery.SupplierSnapshot(
+                        77L, "S001", "杭州物资有限公司", "杭州物资")));
 
         QuoteSheetResponse response = service().create(requestWithSupplier(77L));
 

@@ -43,6 +43,7 @@ public class SupplierQueryService implements SupplierQuery {
     }
 
     private SupplierSnapshot toSnapshot(Supplier supplier) {
-        return new SupplierSnapshot(supplier.getId(), supplier.getSupplierCode(), supplier.getSupplierName());
+        return new SupplierSnapshot(supplier.getId(), supplier.getSupplierCode(), supplier.getSupplierName(),
+                supplier.getShortName());
     }
 }
