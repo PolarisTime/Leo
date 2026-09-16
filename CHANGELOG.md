@@ -1,3 +1,36 @@
+# [10.9.0](https://github.com/PolarisTime/Leo/compare/v10.8.0...v10.9.0) (2026-09-16)
+
+
+### Bug Fixes
+
+* **auth:** 修复账号删除会话吊销顺序并补齐撤销原因约束 ([553a7e7](https://github.com/PolarisTime/Leo/commit/553a7e711b8944d82b0df6d1b7869c442be5cda7))
+* **erp:** 修复审计发现的正确性、并发、索引与性能问题 ([cb205f1](https://github.com/PolarisTime/Leo/commit/cb205f1a9dbcac6bec08111b8f30687fbf846192))
+* **inventory:** 稳定来源占用加锁顺序并消除移动加权舍入残值 ([42a820e](https://github.com/PolarisTime/Leo/commit/42a820e4108733900b657a81bc75e623069c9d09))
+* **sales-return:** 退货来源候选仅返回可退明细 ([33b803e](https://github.com/PolarisTime/Leo/commit/33b803e26ab46cb5058725178136263e00cc0292))
+* **security:** 角色响应补充权限数与用户数 ([a43a0ea](https://github.com/PolarisTime/Leo/commit/a43a0ea0415a47554f39a6e1522d34915f98d240))
+* **statement:** 客户对账汇总支持方向筛选并补充查询层测试 ([94be9b2](https://github.com/PolarisTime/Leo/commit/94be9b2def0e29028fb3b824afd9e58b3def1cca))
+
+
+### Features
+
+* **auth:** 新增多用户账号管理 API 并放开单账号约束 ([d1acc34](https://github.com/PolarisTime/Leo/commit/d1acc34fe76a3f93aafcf25f13d6dc13a0236aa9))
+* **inventory:** 库存响应富化物料信息并支持期初回填 ([92f2438](https://github.com/PolarisTime/Leo/commit/92f243864c8ae3e466a61501a47c460415618037))
+* **inventory:** 新增库存台账与移动加权成本 ([01aec99](https://github.com/PolarisTime/Leo/commit/01aec994aa917e56aaa8bfac11bb568030481a52))
+* **master-data:** 新增商品主数据版本历史、导入预览与批次回滚 ([635db8d](https://github.com/PolarisTime/Leo/commit/635db8d168a783c9b6beaacb13ed8f7ee7533acc))
+* **print:** 支持按每份件数拆分打印 ([cbaa4fa](https://github.com/PolarisTime/Leo/commit/cbaa4fa6bfec159b9aa21e84ffe911535ac55108))
+* **print:** 支持销售退货单打印数据来源 ([6e9d097](https://github.com/PolarisTime/Leo/commit/6e9d09776a1440f0fc7cb56c003ae12999d59805))
+* **sales-outbound:** 支持部分出库（累计覆盖） ([1c1412a](https://github.com/PolarisTime/Leo/commit/1c1412a7202a70e1c418a3374dddc33c3f224b66))
+* **sales-return:** 新增销售退货单与订单派生数量、单据流 ([9c2f368](https://github.com/PolarisTime/Leo/commit/9c2f3681eb5dd3547e4d73944cb0a7c9f51810ef))
+* **security:** 可扩展端点权限模型（资源:动作细化） ([deb0335](https://github.com/PolarisTime/Leo/commit/deb03350543ce4abc35248988c50abc13fcb7164))
+* **security:** 权限全量铺开并支持 resource:* 通配 ([9b9e868](https://github.com/PolarisTime/Leo/commit/9b9e868269a122688fa814ab171e8355091bc146))
+* **security:** 落地 RBAC0 用户-角色-权限落库 ([7336933](https://github.com/PolarisTime/Leo/commit/733693342a697b5e2e73b44789a2fe8778588c4f))
+* **statement:** 新增红字对账单与退货净额冲销 ([00c7fc7](https://github.com/PolarisTime/Leo/commit/00c7fc70c083c4ae20f98b45aa18029393d60db5))
+
+
+### Performance Improvements
+
+* **inventory:** 库存余额改为增量快照表 ([b0886b6](https://github.com/PolarisTime/Leo/commit/b0886b66ccc727c89d9eb77fa869379d90530dc0))
+
 # [10.8.0](https://github.com/PolarisTime/Leo/compare/v10.7.0...v10.8.0) (2026-09-12)
 
 
