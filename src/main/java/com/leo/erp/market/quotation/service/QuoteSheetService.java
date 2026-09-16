@@ -51,25 +51,47 @@ public class QuoteSheetService {
 
     public QuoteSheetResponse update(Long id, QuoteSheetRequest request, Long expectedVersion, Long ownerId) {
         editLockService.ensureWritable(id, ownerId);
-        return withLock(id, () -> store.update(id, request, expectedVersion));
+        return withLock(id, () -> withCurrentVersion(store.update(id, request, expectedVersion), id));
     }
 
     public QuoteSheetItemWrite addItem(Long sheetId, QuoteSheetRequest.ItemRequest request,
                                        Long expectedVersion, Long ownerId) {
         editLockService.ensureWritable(sheetId, ownerId);
-        return withLock(sheetId, () -> store.addItem(sheetId, request, expectedVersion));
+        return withLock(sheetId, () -> withCurrentVersion(store.addItem(sheetId, request, expectedVersion), sheetId));
     }
 
     public QuoteSheetItemWrite updateItem(Long sheetId, Long itemId,
                                           QuoteSheetRequest.ItemRequest request,
                                           Long expectedVersion, Long ownerId) {
         editLockService.ensureWritable(sheetId, ownerId);
-        return withLock(sheetId, () -> store.updateItem(sheetId, itemId, request, expectedVersion));
+        return withLock(sheetId,
+                () -> withCurrentVersion(store.updateItem(sheetId, itemId, request, expectedVersion), sheetId));
     }
 
     public Long deleteItem(Long sheetId, Long itemId, Long expectedVersion, Long ownerId) {
         editLockService.ensureWritable(sheetId, ownerId);
-        return withLock(sheetId, () -> store.deleteItem(sheetId, itemId, expectedVersion));
+        return withLock(sheetId, () -> withCurrentVersion(store.deleteItem(sheetId, itemId, expectedVersion), sheetId));
+    }
+
+    /**
+     * 用写事务提交后回读到的权威版本覆盖返回版本。
+     * <p>父单据 {@code FORCE_INCREMENT} 在事务提交阶段才应用, 存储层 flush 后构造的 DTO 版本会落后 1;
+     * 这里在写事务结束后(同一进程锁内)以新事务回读, 保证对外版本与数据库一致。</p>
+     */
+    private QuoteSheetResponse withCurrentVersion(QuoteSheetResponse response, Long sheetId) {
+        Long version = store.currentVersion(sheetId);
+        return version == null ? response : response.withVersion(version);
+    }
+
+    private QuoteSheetItemWrite withCurrentVersion(QuoteSheetItemWrite write, Long sheetId) {
+        Long version = store.currentVersion(sheetId);
+        return version == null ? write : new QuoteSheetItemWrite(write.item(), version);
+    }
+
+    /** 同 {@link #withCurrentVersion(QuoteSheetResponse, Long)}; 用于返回值为版本号的删除行写。 */
+    private Long withCurrentVersion(Long version, Long sheetId) {
+        Long current = store.currentVersion(sheetId);
+        return current == null ? version : current;
     }
 
     private <T> T withLock(Long sheetId, Supplier<T> action) {

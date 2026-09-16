@@ -2,13 +2,11 @@ package com.leo.erp.market.quotation.repository;
 
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import jakarta.persistence.LockModeType;
-import jakarta.persistence.QueryHint;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
@@ -17,6 +15,10 @@ public interface QuoteSheetRepository extends JpaRepository<QuoteSheet, Long>,
         JpaSpecificationExecutor<QuoteSheet> {
 
     boolean existsBySheetNoAndDeletedFlagFalse(String sheetNo);
+
+    /** 只读取版本号(不初始化 brands/items 集合), 供写事务提交后回读权威版本。 */
+    @Query("select sheet.version from QuoteSheet sheet where sheet.id = :id and sheet.deletedFlag = false")
+    Long findVersionById(@Param("id") Long id);
 
     /**
      * 读取详情/行级写父单据。
@@ -34,12 +36,13 @@ public interface QuoteSheetRepository extends JpaRepository<QuoteSheet, Long>,
      * 加数据库行级排他锁读取存在的报价单。用于编辑签出锁的首次插入串行化:
      * {@code mk_quote_sheet_edit_lock.sheet_id} 上对不存在行做 {@code FOR UPDATE} 不会加锁,
      * 因此先锁父单据行, 让同一单据的签出/抢占在多副本下严格串行, 避免唯一键冲突。
-     * <p>锁等待超时: PostgreSQL 在 Hibernate 下仅支持 {@code 0}(NOWAIT) 与 {@code -2}(SKIP LOCKED),
-     * 不支持带等待时长的 {@code FOR UPDATE WAIT n}; 因此使用 NOWAIT 快速失败, 由全局异常处理映射为
-     * 409(CONCURRENT_MODIFICATION), 避免长时间阻塞后冒泡为 500。</p>
+     * <p>锁语义: 使用阻塞式 {@code FOR UPDATE}(不设置 NOWAIT)。原先的 {@code lock.timeout=0}(NOWAIT)
+     * 会让同一单据的正常并发签出/续约立即抛 {@code CannotAcquireLockException} 并映射 409, 体验回归;
+     * 签出相关事务都是单行、短事务, 阻塞等待时间极短。若等待时间过长, 由数据库 {@code lock_timeout}
+     * (例如 {@code LEO_POSTGRES_LOCK_TIMEOUT=10s}) 取消并冒泡为 {@code CannotAcquireLockException},
+     * 再由全局异常统一映射 409(CONCURRENT_MODIFICATION), 不会暴露为 500。</p>
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "0"))
     @Query("select sheet from QuoteSheet sheet where sheet.id = :id and sheet.deletedFlag = false")
     Optional<QuoteSheet> findActiveForUpdate(@Param("id") Long id);
 }

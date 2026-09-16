@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -64,13 +65,24 @@ public class QuoteProjectConfigStore {
             created.setProjectId(projectId);
             return created;
         });
-        apply(entity, request);
+        boolean scalarChanged = apply(entity, request);
         // 整体替换改的是 mappedBy 反向集合, 仅变更品牌子集合时 Hibernate 不会把父行标脏,
-        // 父 @Version 不会递增; 对已有配置显式 FORCE_INCREMENT, 保证每次整体替换版本恰好 +1。
-        if (existing.isPresent()) {
+        // 父 @Version 不会递增; 此时对已有配置显式 FORCE_INCREMENT。若标量字段已变更, 父行会被自然标脏、
+        // 由 @Version 自然递增一次, 再叠加 FORCE_INCREMENT 会变成 +2, 故仅在标量未变时强制自增。
+        if (existing.isPresent() && !scalarChanged) {
             entityManager.lock(entity, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
         }
         return toResponse(repository.saveAndFlush(entity));
+    }
+
+    /**
+     * 以独立只读事务回读配置当前权威版本, 供服务层在写事务提交后覆盖响应版本。
+     * <p>FORCE_INCREMENT 在事务提交(方法返回之后)才应用, 存储层在 flush 后构造的 DTO 版本会落后 1;
+     * 提交后再回读可保证对外 {@code X-Resource-Version} 与数据库一致。</p>
+     */
+    @Transactional(readOnly = true)
+    public Long currentVersion(Long projectId) {
+        return repository.findVersionByProjectId(projectId);
     }
 
     /** 乐观并发校验: 版本不匹配抛 412(PRECONDITION_FAILED); expectedVersion 为空表示不做校验。 */
@@ -80,13 +92,26 @@ public class QuoteProjectConfigStore {
         }
     }
 
-    private void apply(QuoteProjectConfig entity, QuoteProjectConfigRequest request) {
-        entity.setLengthPremium(request.lengthPremium() == null ? DEFAULT_LENGTH_PREMIUM : request.lengthPremium());
-        entity.setHrb400eFallback(Boolean.TRUE.equals(request.hrb400eFallback()));
-        entity.setProducts(join(request.products()));
-        entity.setDesignatedBrands(join(request.designatedBrands()));
+    /** 应用标量字段并返回是否发生实际变化(用于判定是否需要显式 FORCE_INCREMENT)。 */
+    private boolean apply(QuoteProjectConfig entity, QuoteProjectConfigRequest request) {
+        boolean changed = false;
+        BigDecimal lengthPremium = request.lengthPremium() == null ? DEFAULT_LENGTH_PREMIUM : request.lengthPremium();
+        // 数值列回读后标度可能不同(如 30 vs 30.00), 必须按数值比较, 否则会误判为已变更而跳过 FORCE_INCREMENT。
+        changed |= differs(lengthPremium, entity.getLengthPremium());
+        entity.setLengthPremium(lengthPremium);
+        boolean hrb400eFallback = Boolean.TRUE.equals(request.hrb400eFallback());
+        changed |= hrb400eFallback != entity.isHrb400eFallback();
+        entity.setHrb400eFallback(hrb400eFallback);
+        String products = join(request.products());
+        changed |= !Objects.equals(products, entity.getProducts());
+        entity.setProducts(products);
+        String designatedBrands = join(request.designatedBrands());
+        changed |= !Objects.equals(designatedBrands, entity.getDesignatedBrands());
+        entity.setDesignatedBrands(designatedBrands);
+        changed |= !Objects.equals(request.remark(), entity.getRemark());
         entity.setRemark(request.remark());
         replaceBrands(entity, request.brands());
+        return changed;
     }
 
     /**
@@ -144,6 +169,13 @@ public class QuoteProjectConfigStore {
                 entity.getRemark(),
                 brands,
                 entity.getVersion());
+    }
+
+    private static boolean differs(BigDecimal left, BigDecimal right) {
+        if (left == null || right == null) {
+            return !Objects.equals(left, right);
+        }
+        return left.compareTo(right) != 0;
     }
 
     private static String join(List<String> values) {

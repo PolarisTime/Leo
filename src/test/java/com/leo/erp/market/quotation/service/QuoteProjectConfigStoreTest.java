@@ -221,6 +221,25 @@ class QuoteProjectConfigStoreTest {
         verify(entityManager).lock(existing, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
     }
 
+    /**
+     * P1-2 回归: 整体替换同时变更标量字段时, 父行被自然标脏并由 {@code @Version} 递增一次,
+     * 不得再叠加 FORCE_INCREMENT(否则 +2)。
+     */
+    @Test
+    void save_existingConfig_withScalarChange_doesNotForceIncrement() {
+        QuoteProjectConfig existing = existingConfig(5L);
+        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
+                .thenAnswer((invocation) -> invocation.getArgument(0));
+
+        store().save(88L, new QuoteProjectConfigRequest(
+                new BigDecimal("40"), false, List.of(), List.of(), null,
+                List.of(new QuoteProjectConfigRequest.BrandRequest("中天", new BigDecimal("30"), List.of(), 0))), 5L);
+
+        verify(entityManager, never()).lock(any(QuoteProjectConfig.class),
+                eq(LockModeType.OPTIMISTIC_FORCE_INCREMENT));
+    }
+
     private QuoteProjectBrand projectBrand(QuoteProjectConfig config, Long id, String name, String freight) {
         QuoteProjectBrand brand = new QuoteProjectBrand();
         brand.setId(id);
@@ -236,6 +255,9 @@ class QuoteProjectConfigStoreTest {
         config.setId(1L);
         config.setProjectId(88L);
         config.setVersion(version);
+        // 标量与"仅改品牌"请求一致, 用于验证纯子集合变更时显式 FORCE_INCREMENT。
+        config.setLengthPremium(new BigDecimal("30"));
+        config.setHrb400eFallback(false);
         return config;
     }
 }

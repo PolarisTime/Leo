@@ -15,6 +15,12 @@ public record QuoteProjectConfigResponse(
         Long version
 ) {
 
+    /** 以提交后回读的权威版本覆盖当前版本, 其余字段保持不变。 */
+    public QuoteProjectConfigResponse withVersion(Long newVersion) {
+        return new QuoteProjectConfigResponse(projectId, lengthPremium, hrb400eFallback, products,
+                designatedBrands, remark, brands, newVersion);
+    }
+
     public record BrandResponse(
             String brandName,
             BigDecimal freight,

@@ -43,7 +43,11 @@ public class QuoteProjectConfigService {
         RuntimeException lastError = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                return store.save(projectId, request, expectedVersion);
+                QuoteProjectConfigResponse saved = store.save(projectId, request, expectedVersion);
+                // FORCE_INCREMENT 在写事务提交后才应用, 存储层 flush 后构造的版本会落后 1;
+                // 以新事务回读权威版本, 保证对外 X-Resource-Version 与数据库一致。
+                Long version = store.currentVersion(projectId);
+                return version == null ? saved : saved.withVersion(version);
             } catch (ObjectOptimisticLockingFailureException | DataIntegrityViolationException
                      | CannotAcquireLockException ex) {
                 lastError = ex;

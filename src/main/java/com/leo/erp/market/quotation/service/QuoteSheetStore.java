@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -84,17 +85,33 @@ public class QuoteSheetStore {
         boolean headerOnly = request.brands() == null && request.items() == null;
         checkLockedRefChange(entity, request);
         if (headerOnly) {
-            applyHeader(entity, request);
+            // 表头 PATCH 语义: 未显式携带 locked/specQuantityLocked(null) 时保留原值, 仅显式 false 解锁。
+            applyHeader(entity, request, true);
         } else {
             validate(request);
             checkSpecQuantityLockedForReplace(entity, request.items());
             // 整体替换改的是 mappedBy 反向集合, 仅变更子集合时 Hibernate 不会把父行标脏,
-            // 父 @Version 不会递增; 与行级写一致, flush 前对父实体加 FORCE_INCREMENT,
-            // 保证每次整体替换父版本恰好 +1(表头-only 不经过此分支, 仍只自然递增一次)。
-            entityManager.lock(entity, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
-            apply(entity, request);
+            // 父 @Version 不递增; 此时才需要 FORCE_INCREMENT。若表头标量也已变更, 父行会被自然标脏、
+            // 由 @Version 自然递增一次, 再叠加 FORCE_INCREMENT 会变成 +2, 故仅在表头未变时强制自增,
+            // 保证任意路径父版本恰好 +1。
+            boolean headerChanged = applyHeader(entity, request, false);
+            replaceBrands(entity, request.brands());
+            replaceItems(entity, request.items(), resolveSupplierNames(request.items()));
+            if (!headerChanged) {
+                entityManager.lock(entity, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+            }
         }
         return toResponse(repository.saveAndFlush(entity));
+    }
+
+    /**
+     * 以独立只读事务回读单据当前权威版本, 供服务层在写事务提交后覆盖响应版本。
+     * <p>FORCE_INCREMENT 在事务提交(方法返回之后)才应用, 存储层在 flush 后构造的 DTO 版本会落后 1;
+     * 提交后再回读可保证对外 {@code X-Resource-Version} 与数据库一致, 避免客户端下一次写必 412。</p>
+     */
+    @Transactional(readOnly = true)
+    public Long currentVersion(Long id) {
+        return repository.findVersionById(id);
     }
 
     @Transactional(readOnly = true)
@@ -303,17 +320,15 @@ public class QuoteSheetStore {
         if (!entity.isSpecQuantityLocked()) {
             return;
         }
-        Map<Integer, QuoteSheetItem> existingByLineNo = new HashMap<>();
-        for (QuoteSheetItem item : entity.getItems()) {
-            existingByLineNo.put(item.getLineNo(), item);
-        }
+        // 与 replaceItems 完全一致的行匹配口径: 按请求顺序对既有行(line_no 升序)一一对应,
+        // 不能用理想行号 index+1, 否则 deleteItem 造成行号空洞(如 {1,3}) 时合法改价会被误拒。
+        List<QuoteSheetItem> existing = sortedByLineNo(entity.getItems());
         // 行数变化意味着增行(数量增加)或删行(数量减少), 一律拒绝。
-        if (requests == null || requests.size() != existingByLineNo.size()) {
+        if (requests == null || requests.size() != existing.size()) {
             throw specQuantityLockedException();
         }
         for (int index = 0; index < requests.size(); index++) {
-            QuoteSheetItem existing = existingByLineNo.get(index + 1);
-            if (existing == null || specOrQuantityChanged(existing, requests.get(index))) {
+            if (specOrQuantityChanged(existing.get(index), requests.get(index))) {
                 throw specQuantityLockedException();
             }
         }
@@ -340,23 +355,61 @@ public class QuoteSheetStore {
     }
 
     private void apply(QuoteSheet entity, QuoteSheetRequest request) {
-        applyHeader(entity, request);
+        applyHeader(entity, request, false);
         replaceBrands(entity, request.brands());
         replaceItems(entity, request.items(), resolveSupplierNames(request.items()));
     }
 
-    private void applyHeader(QuoteSheet entity, QuoteSheetRequest request) {
-        entity.setName(request.name().trim());
+    /**
+     * 应用表头标量并返回是否有实际变更。
+     *
+     * @param preserveNullLockFlags 为 true 时(表头-only PATCH), 请求中为 null 的
+     *                              {@code locked}/{@code specQuantityLocked} 保留原值, 仅显式 false 解锁;
+     *                              为 false 时(整单替换 PUT)沿用原有"缺省即 false"语义。
+     * @return 是否有任一标量字段发生实际变化(用于判定是否需要显式 FORCE_INCREMENT)
+     */
+    private boolean applyHeader(QuoteSheet entity, QuoteSheetRequest request, boolean preserveNullLockFlags) {
+        boolean changed = false;
+        String name = request.name().trim();
+        changed |= !Objects.equals(name, entity.getName());
+        entity.setName(name);
+        changed |= !Objects.equals(request.projectId(), entity.getProjectId());
         entity.setProjectId(request.projectId());
+        changed |= !Objects.equals(request.projectName(), entity.getProjectName());
         entity.setProjectName(request.projectName());
+        changed |= !Objects.equals(request.orderDate(), entity.getOrderDate());
         entity.setOrderDate(request.orderDate());
+        changed |= !Objects.equals(request.refDate(), entity.getRefDate());
         entity.setRefDate(request.refDate());
+        changed |= !Objects.equals(request.refPeriod(), entity.getRefPeriod());
         entity.setRefPeriod(request.refPeriod());
-        entity.setLengthPremium(request.lengthPremium() == null ? DEFAULT_LENGTH_PREMIUM : request.lengthPremium());
-        entity.setLocked(Boolean.TRUE.equals(request.locked()));
-        entity.setSpecQuantityLocked(Boolean.TRUE.equals(request.specQuantityLocked()));
-        entity.setStatus(request.status() == null || request.status().isBlank() ? DEFAULT_STATUS : request.status());
+        BigDecimal lengthPremium = request.lengthPremium() == null ? DEFAULT_LENGTH_PREMIUM : request.lengthPremium();
+        // 数值列回读后标度可能不同(如 30 vs 30.00), 必须按数值比较, 否则会误判为已变更而跳过 FORCE_INCREMENT。
+        changed |= differs(lengthPremium, entity.getLengthPremium());
+        entity.setLengthPremium(lengthPremium);
+        changed |= applyLockFlags(entity, request.locked(), request.specQuantityLocked(), preserveNullLockFlags);
+        String status = request.status() == null || request.status().isBlank() ? DEFAULT_STATUS : request.status();
+        changed |= !Objects.equals(status, entity.getStatus());
+        entity.setStatus(status);
+        changed |= !Objects.equals(request.remark(), entity.getRemark());
         entity.setRemark(request.remark());
+        return changed;
+    }
+
+    private static boolean applyLockFlags(QuoteSheet entity, Boolean locked, Boolean specQuantityLocked,
+                                          boolean preserveNull) {
+        boolean changed = false;
+        if (locked != null || !preserveNull) {
+            boolean value = Boolean.TRUE.equals(locked);
+            changed |= value != entity.isLocked();
+            entity.setLocked(value);
+        }
+        if (specQuantityLocked != null || !preserveNull) {
+            boolean value = Boolean.TRUE.equals(specQuantityLocked);
+            changed |= value != entity.isSpecQuantityLocked();
+            entity.setSpecQuantityLocked(value);
+        }
+        return changed;
     }
 
     /** 批量解析现货价来源供应商名称, 任一不存在则拒绝。 */
@@ -417,32 +470,40 @@ public class QuoteSheetStore {
     }
 
     /**
-     * 按 line_no 协调商品明细: 同 line_no 复用原实体并仅更新字段与行×品牌现货价, 新增才创建,
-     * 库中存在但请求未携带的行从集合移除。行号按请求顺序归一化为 1..N, 与旧整体替换语义一致,
-     * 同时避免 {@code uk_quote_item_line(sheet_id, line_no)} 因删除后重建而冲突。
+     * 按请求顺序协调商品明细: 第 i 个请求复用既有行按 line_no 升序排列后的第 i 个实体,
+     * 新增才创建, 库中存在但请求未携带的行从集合移除; 行号统一归一化为 1..N。
+     * <p>与 {@code checkSpecQuantityLockedForReplace} 采用同一匹配口径, 保证 deleteItem 造成
+     * 行号空洞(如 {1,3})时整单替换仍按顺序复用既有行, 不会被误判为新增行。</p>
+     * <p>归一化后第 k 行的目标 line_no 为 k, 而排序后第 k 行的原 line_no 必然 ≥ k,
+     * 因此按升序重编号不会在同一 flush 内产生 {@code uk_quote_item_line} 瞬时重复。</p>
      */
     private void replaceItems(QuoteSheet entity, List<QuoteSheetRequest.ItemRequest> requests,
                               Map<Long, String> supplierNames) {
-        Map<Integer, QuoteSheetItem> existingByLineNo = new HashMap<>();
-        for (QuoteSheetItem item : entity.getItems()) {
-            existingByLineNo.put(item.getLineNo(), item);
-        }
+        List<QuoteSheetItem> existing = sortedByLineNo(entity.getItems());
         List<QuoteSheetItem> reconciled = new ArrayList<>();
         int lineNo = 0;
         for (QuoteSheetRequest.ItemRequest request : requests) {
             lineNo += 1;
-            QuoteSheetItem item = existingByLineNo.remove(lineNo);
+            QuoteSheetItem item = lineNo <= existing.size() ? existing.get(lineNo - 1) : null;
             if (item == null) {
                 item = new QuoteSheetItem();
                 item.setId(snowflakeIdGenerator.nextId());
                 item.setSheet(entity);
-                item.setLineNo(lineNo);
             }
+            item.setLineNo(lineNo);
             applyItem(item, request, supplierNames);
             reconciled.add(item);
         }
         entity.getItems().clear();
         entity.getItems().addAll(reconciled);
+    }
+
+    /** 既有行按 line_no 升序排序(null 行号排在末尾), 供整体替换与规格数量锁校验共享匹配口径。 */
+    private static List<QuoteSheetItem> sortedByLineNo(List<QuoteSheetItem> items) {
+        List<QuoteSheetItem> sorted = new ArrayList<>(items);
+        sorted.sort(Comparator.comparing(QuoteSheetItem::getLineNo,
+                Comparator.nullsLast(Comparator.naturalOrder())));
+        return sorted;
     }
 
     private QuoteSheetItem buildItem(QuoteSheet sheet, QuoteSheetRequest.ItemRequest request, int lineNo,

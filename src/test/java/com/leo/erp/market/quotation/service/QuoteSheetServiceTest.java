@@ -40,12 +40,27 @@ class QuoteSheetServiceTest {
     @Test
     void update_checksEditLockThenDelegates() {
         when(store.update(eq(9L), any(), eq(3L))).thenReturn(response());
+        when(store.currentVersion(9L)).thenReturn(3L);
 
         QuoteSheetResponse result = service.update(9L, request(), 3L, 7L);
 
         assertThat(result).isNotNull();
         verify(editLockService).ensureWritable(9L, 7L);
         verify(store).update(9L, request(), 3L);
+    }
+
+    /**
+     * P0-1 回归: FORCE_INCREMENT 在提交后才应用, 存储层返回的版本会落后 1;
+     * 服务层必须以写事务提交后的回读版本覆盖响应版本。
+     */
+    @Test
+    void update_overridesResponseVersionWithCommittedReadBackVersion() {
+        when(store.update(eq(9L), any(), eq(3L))).thenReturn(response());
+        when(store.currentVersion(9L)).thenReturn(9L);
+
+        QuoteSheetResponse result = service.update(9L, request(), 3L, 7L);
+
+        assertThat(result.version()).isEqualTo(9L);
     }
 
     @Test
@@ -98,6 +113,7 @@ class QuoteSheetServiceTest {
     void addItem_checksEditLockThenDelegates() {
         QuoteSheetItemWrite write = new QuoteSheetItemWrite(itemResponse(), 4L);
         when(store.addItem(eq(9L), any(), eq(3L))).thenReturn(write);
+        when(store.currentVersion(9L)).thenReturn(4L);
 
         QuoteSheetItemWrite result = service.addItem(9L, itemRequest(), 3L, 7L);
 
@@ -106,9 +122,22 @@ class QuoteSheetServiceTest {
         verify(editLockService).ensureWritable(9L, 7L);
     }
 
+    /** 行级写同样必须以提交后回读版本覆盖写入结果版本。 */
+    @Test
+    void addItem_overridesVersionWithCommittedReadBackVersion() {
+        when(store.addItem(eq(9L), any(), eq(3L))).thenReturn(new QuoteSheetItemWrite(itemResponse(), 4L));
+        when(store.currentVersion(9L)).thenReturn(5L);
+
+        QuoteSheetItemWrite result = service.addItem(9L, itemRequest(), 3L, 7L);
+
+        assertThat(result.version()).isEqualTo(5L);
+        assertThat(result.item()).isEqualTo(itemResponse());
+    }
+
     @Test
     void deleteItem_delegatesAfterEditLockCheck() {
         when(store.deleteItem(9L, 301L, 3L)).thenReturn(4L);
+        when(store.currentVersion(9L)).thenReturn(4L);
 
         Long version = service.deleteItem(9L, 301L, 3L, 7L);
 

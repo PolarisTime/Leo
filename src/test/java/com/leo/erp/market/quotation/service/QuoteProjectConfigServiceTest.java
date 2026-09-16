@@ -61,6 +61,17 @@ class QuoteProjectConfigServiceTest {
         verify(store, times(2)).save(eq(88L), any(QuoteProjectConfigRequest.class), any());
     }
 
+    /** P0-1 回归: 项目配置保存同样以提交后回读版本覆盖响应版本。 */
+    @Test
+    void save_overridesResponseVersionWithCommittedReadBackVersion() {
+        when(store.save(eq(88L), any(QuoteProjectConfigRequest.class), any())).thenReturn(response());
+        when(store.currentVersion(88L)).thenReturn(7L);
+
+        QuoteProjectConfigResponse result = service().save(88L, request(), null);
+
+        assertThat(result.version()).isEqualTo(7L);
+    }
+
     @Test
     void save_propagatesWhenConflictsPersist() {
         when(store.save(eq(88L), any(QuoteProjectConfigRequest.class), any()))

@@ -22,10 +22,17 @@ public record QuoteSheetResponse(
         String remark,
         List<BrandResponse> brands,
         List<ItemResponse> items,
-        LocalDateTime createdAt,
-        LocalDateTime updatedAt,
-        Long version
+         LocalDateTime createdAt,
+         LocalDateTime updatedAt,
+         Long version
 ) {
+
+    /** 以提交后回读的权威版本覆盖当前版本, 其余字段保持不变。 */
+    public QuoteSheetResponse withVersion(Long newVersion) {
+        return new QuoteSheetResponse(id, sheetNo, name, projectId, projectName, orderDate, refDate, refPeriod,
+                lengthPremium, locked, specQuantityLocked, status, remark,
+                brands, items, createdAt, updatedAt, newVersion);
+    }
 
     public record BrandResponse(Long id, String brandName, BigDecimal freight, Integer sortOrder) {
     }
