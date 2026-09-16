@@ -36,21 +36,22 @@ public class QuoteProjectConfigService {
     }
 
     /** 保存项目配置(不存在则创建, 存在则整体替换; 幂等)。 */
-    public QuoteProjectConfigResponse save(Long projectId, QuoteProjectConfigRequest request) {
+    public QuoteProjectConfigResponse save(Long projectId, QuoteProjectConfigRequest request, Long expectedVersion) {
         ReentrantLock lock = locks.computeIfAbsent(projectId, key -> new ReentrantLock());
         lock.lock();
         try {
-            return saveWithRetry(projectId, request);
+            return saveWithRetry(projectId, request, expectedVersion);
         } finally {
             lock.unlock();
         }
     }
 
-    private QuoteProjectConfigResponse saveWithRetry(Long projectId, QuoteProjectConfigRequest request) {
+    private QuoteProjectConfigResponse saveWithRetry(Long projectId, QuoteProjectConfigRequest request,
+                                                     Long expectedVersion) {
         RuntimeException lastError = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                return store.save(projectId, request);
+                return store.save(projectId, request, expectedVersion);
             } catch (ObjectOptimisticLockingFailureException | DataIntegrityViolationException
                      | CannotAcquireLockException ex) {
                 lastError = ex;

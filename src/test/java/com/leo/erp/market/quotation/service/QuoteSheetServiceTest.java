@@ -121,7 +121,7 @@ class QuoteSheetServiceTest {
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
 
-        assertThatThrownBy(() -> service().update(9L, changedRef))
+        assertThatThrownBy(() -> service().update(9L, changedRef, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已锁定");
         verify(repository, never()).saveAndFlush(any());
@@ -141,10 +141,37 @@ class QuoteSheetServiceTest {
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
 
-        QuoteSheetResponse response = service().update(9L, changedRef);
+        QuoteSheetResponse response = service().update(9L, changedRef, null);
 
         assertThat(response.locked()).isFalse();
         assertThat(response.refDate()).isEqualTo(LocalDate.of(2026, 9, 11));
+    }
+
+    @Test
+    void update_acceptsMatchingExpectedVersion() {
+        QuoteSheet existing = new QuoteSheet();
+        existing.setId(9L);
+        existing.setVersion(3L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = service().update(9L, request(), 3L);
+
+        assertThat(response.name()).isEqualTo("9月9日报单");
+        verify(repository).saveAndFlush(any(QuoteSheet.class));
+    }
+
+    @Test
+    void update_rejectsStaleExpectedVersion() {
+        QuoteSheet existing = new QuoteSheet();
+        existing.setId(9L);
+        existing.setVersion(3L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service().update(9L, request(), 2L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("数据已被他人修改");
+        verify(repository, never()).saveAndFlush(any());
     }
 
     @Test

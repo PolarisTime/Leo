@@ -61,7 +61,7 @@ class QuoteProjectConfigStoreTest {
                 List.of("螺纹钢|HRB400|12|9米", "盘螺|HRB400|8|-"),
                 List.of("沙钢", "中天"), "重点客户",
                 List.of(new QuoteProjectConfigRequest.BrandRequest("中天", new BigDecimal("30"),
-                        List.of("螺纹钢", "盘钢"), 0))));
+                        List.of("螺纹钢", "盘钢"), 0))), null);
 
         assertThat(response.lengthPremium()).isEqualByComparingTo("40");
         assertThat(response.hrb400eFallback()).isTrue();
@@ -81,9 +81,42 @@ class QuoteProjectConfigStoreTest {
                 List.of(new QuoteProjectConfigRequest.BrandRequest("中天", new BigDecimal("30"), List.of(), 0),
                         new QuoteProjectConfigRequest.BrandRequest("中天", new BigDecimal("20"), List.of(), 1)));
 
-        assertThatThrownBy(() -> store().save(88L, duplicated))
+        assertThatThrownBy(() -> store().save(88L, duplicated, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不可重复");
         verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void save_acceptsMatchingExpectedVersion() {
+        QuoteProjectConfig existing = existingConfig(5L);
+        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
+                .thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteProjectConfigResponse response = store().save(88L, new QuoteProjectConfigRequest(
+                new BigDecimal("40"), false, List.of(), List.of(), null, List.of()), 5L);
+
+        assertThat(response.lengthPremium()).isEqualByComparingTo("40");
+        verify(repository).saveAndFlush(any(QuoteProjectConfig.class));
+    }
+
+    @Test
+    void save_rejectsStaleExpectedVersion() {
+        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.of(existingConfig(5L)));
+
+        assertThatThrownBy(() -> store().save(88L, new QuoteProjectConfigRequest(
+                new BigDecimal("40"), false, List.of(), List.of(), null, List.of()), 4L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("数据已被他人修改");
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    private QuoteProjectConfig existingConfig(Long version) {
+        QuoteProjectConfig config = new QuoteProjectConfig();
+        config.setId(1L);
+        config.setProjectId(88L);
+        config.setVersion(version);
+        return config;
     }
 }

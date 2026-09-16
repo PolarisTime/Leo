@@ -35,7 +35,7 @@ class QuoteSheetDtoJsonContractTest {
                         new BigDecimal("10.00000000"),
                         List.of(new QuoteSheetResponse.ItemPriceResponse(
                                 3L, "中天", new BigDecimal("3280.00"), 77L, "杭州物资")))),
-                null, null);
+                null, null, 7L);
 
         String json = objectMapper.writeValueAsString(response);
 
@@ -43,6 +43,7 @@ class QuoteSheetDtoJsonContractTest {
         assertThat(json).contains("\"projectId\":\"123\"");
         assertThat(json).contains("\"orderDate\":\"2026-09-09\"");
         assertThat(json).contains("\"spec\":12");
+        assertThat(json).contains("\"version\":\"7\"");
     }
 
     @Test

@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -41,21 +42,29 @@ public class QuoteProjectConfigStore {
         return repository.findByProjectIdAndDeletedFlagFalse(projectId)
                 .map(this::toResponse)
                 .orElseGet(() -> new QuoteProjectConfigResponse(
-                        projectId, DEFAULT_LENGTH_PREMIUM, false, List.of(), List.of(), null, List.of()));
+                        projectId, DEFAULT_LENGTH_PREMIUM, false, List.of(), List.of(), null, List.of(), null));
     }
 
     /** 保存项目配置(不存在则创建, 存在则整体替换)。每次调用开启独立事务。 */
     @Transactional
-    public QuoteProjectConfigResponse save(Long projectId, QuoteProjectConfigRequest request) {
-        QuoteProjectConfig entity = repository.findByProjectIdAndDeletedFlagFalse(projectId)
-                .orElseGet(() -> {
-                    QuoteProjectConfig created = new QuoteProjectConfig();
-                    created.setId(snowflakeIdGenerator.nextId());
-                    created.setProjectId(projectId);
-                    return created;
-                });
+    public QuoteProjectConfigResponse save(Long projectId, QuoteProjectConfigRequest request, Long expectedVersion) {
+        Optional<QuoteProjectConfig> existing = repository.findByProjectIdAndDeletedFlagFalse(projectId);
+        checkVersion(existing.map(QuoteProjectConfig::getVersion).orElse(null), expectedVersion);
+        QuoteProjectConfig entity = existing.orElseGet(() -> {
+            QuoteProjectConfig created = new QuoteProjectConfig();
+            created.setId(snowflakeIdGenerator.nextId());
+            created.setProjectId(projectId);
+            return created;
+        });
         apply(entity, request);
         return toResponse(repository.saveAndFlush(entity));
+    }
+
+    /** 乐观并发校验: expectedVersion 为空表示不做校验(兼容旧调用)。 */
+    private void checkVersion(Long currentVersion, Long expectedVersion) {
+        if (expectedVersion != null && !expectedVersion.equals(currentVersion)) {
+            throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "数据已被他人修改，请刷新后重试");
+        }
     }
 
     private void apply(QuoteProjectConfig entity, QuoteProjectConfigRequest request) {
@@ -103,7 +112,8 @@ public class QuoteProjectConfigStore {
                 split(entity.getProducts()),
                 split(entity.getDesignatedBrands()),
                 entity.getRemark(),
-                brands);
+                brands,
+                entity.getVersion());
     }
 
     private static String join(List<String> values) {

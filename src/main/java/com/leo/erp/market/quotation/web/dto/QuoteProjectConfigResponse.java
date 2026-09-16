@@ -11,7 +11,8 @@ public record QuoteProjectConfigResponse(
         List<String> products,
         List<String> designatedBrands,
         String remark,
-        List<BrandResponse> brands
+        List<BrandResponse> brands,
+        Long version
 ) {
 
     public record BrandResponse(

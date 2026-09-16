@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -40,7 +41,8 @@ public class V2QuoteProjectConfigController {
     @PutMapping("/{projectId}")
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public QuoteProjectConfigResponse save(@PathVariable Long projectId,
+                                           @RequestHeader(value = "If-Match", required = false) String ifMatch,
                                            @Valid @RequestBody QuoteProjectConfigRequest request) {
-        return service.save(projectId, request);
+        return service.save(projectId, request, IfMatchVersion.parse(ifMatch));
     }
 }

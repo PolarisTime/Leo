@@ -22,7 +22,8 @@ public record QuoteSheetResponse(
         List<BrandResponse> brands,
         List<ItemResponse> items,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        Long version
 ) {
 
     public record BrandResponse(Long id, String brandName, BigDecimal freight, Integer sortOrder) {

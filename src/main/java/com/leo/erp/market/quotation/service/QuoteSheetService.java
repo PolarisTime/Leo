@@ -60,9 +60,10 @@ public class QuoteSheetService {
     }
 
     @Transactional
-    public QuoteSheetResponse update(Long id, QuoteSheetRequest request) {
+    public QuoteSheetResponse update(Long id, QuoteSheetRequest request, Long expectedVersion) {
         validate(request);
         QuoteSheet entity = requireSheet(id);
+        checkVersion(entity.getVersion(), expectedVersion);
         if (entity.isLocked() && Boolean.TRUE.equals(request.locked())
                 && (!entity.getRefDate().equals(request.refDate())
                     || !entity.getRefPeriod().equals(request.refPeriod()))) {
@@ -111,6 +112,13 @@ public class QuoteSheetService {
     private QuoteSheet requireSheet(Long id) {
         return repository.findByIdAndDeletedFlagFalse(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "报价单不存在"));
+    }
+
+    /** 乐观并发校验: expectedVersion 为空表示不做校验(兼容旧调用)。 */
+    private void checkVersion(Long currentVersion, Long expectedVersion) {
+        if (expectedVersion != null && !expectedVersion.equals(currentVersion)) {
+            throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "数据已被他人修改，请刷新后重试");
+        }
     }
 
     private void validate(QuoteSheetRequest request) {
@@ -243,6 +251,6 @@ public class QuoteSheetService {
         return new QuoteSheetResponse(entity.getId(), entity.getSheetNo(), entity.getName(), entity.getProjectId(),
                 entity.getProjectName(), entity.getOrderDate(), entity.getRefDate(), entity.getRefPeriod(),
                 entity.getLengthPremium(), entity.isLocked(), entity.getStatus(), entity.getRemark(),
-                brands, items, entity.getCreatedAt(), entity.getUpdatedAt());
+                brands, items, entity.getCreatedAt(), entity.getUpdatedAt(), entity.getVersion());
     }
 }

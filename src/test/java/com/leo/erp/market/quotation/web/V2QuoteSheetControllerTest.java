@@ -69,6 +69,6 @@ class V2QuoteSheetControllerTest {
     private QuoteSheetResponse response() {
         return new QuoteSheetResponse(100L, "100", "9月9日报单", null, "云潮筝鸣府",
                 LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30"),
-                false, "报价", null, List.of(), List.of(), null, null);
+                false, "报价", null, List.of(), List.of(), null, null, 0L);
     }
 }

@@ -1,5 +1,7 @@
 package com.leo.erp.market.quotation.service;
 
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigResponse;
 import org.junit.jupiter.api.Test;
@@ -36,7 +38,8 @@ class QuoteProjectConfigServiceTest {
     }
 
     private QuoteProjectConfigResponse response() {
-        return new QuoteProjectConfigResponse(88L, new BigDecimal("30"), false, List.of(), List.of(), null, List.of());
+        return new QuoteProjectConfigResponse(88L, new BigDecimal("30"), false, List.of(), List.of(), null,
+                List.of(), 0L);
     }
 
     @Test
@@ -48,23 +51,34 @@ class QuoteProjectConfigServiceTest {
 
     @Test
     void save_retriesOnOptimisticConflictThenSucceeds() {
-        when(store.save(eq(88L), any(QuoteProjectConfigRequest.class)))
+        when(store.save(eq(88L), any(QuoteProjectConfigRequest.class), any()))
                 .thenThrow(new ObjectOptimisticLockingFailureException("QuoteProjectConfig", 88L))
                 .thenReturn(response());
 
-        QuoteProjectConfigResponse result = service().save(88L, request());
+        QuoteProjectConfigResponse result = service().save(88L, request(), null);
 
         assertThat(result.projectId()).isEqualTo(88L);
-        verify(store, times(2)).save(eq(88L), any(QuoteProjectConfigRequest.class));
+        verify(store, times(2)).save(eq(88L), any(QuoteProjectConfigRequest.class), any());
     }
 
     @Test
     void save_propagatesWhenConflictsPersist() {
-        when(store.save(eq(88L), any(QuoteProjectConfigRequest.class)))
+        when(store.save(eq(88L), any(QuoteProjectConfigRequest.class), any()))
                 .thenThrow(new ObjectOptimisticLockingFailureException("QuoteProjectConfig", 88L));
 
-        assertThatThrownBy(() -> service().save(88L, request()))
+        assertThatThrownBy(() -> service().save(88L, request(), null))
                 .isInstanceOf(ObjectOptimisticLockingFailureException.class);
-        verify(store, times(3)).save(eq(88L), any(QuoteProjectConfigRequest.class));
+        verify(store, times(3)).save(eq(88L), any(QuoteProjectConfigRequest.class), any());
+    }
+
+    @Test
+    void save_propagatesVersionConflictWithoutRetry() {
+        when(store.save(eq(88L), any(QuoteProjectConfigRequest.class), any()))
+                .thenThrow(new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "数据已被他人修改，请刷新后重试"));
+
+        assertThatThrownBy(() -> service().save(88L, request(), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("数据已被他人修改");
+        verify(store, times(1)).save(eq(88L), any(QuoteProjectConfigRequest.class), any());
     }
 }
