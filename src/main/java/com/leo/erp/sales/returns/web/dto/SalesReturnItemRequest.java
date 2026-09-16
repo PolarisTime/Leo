@@ -12,7 +12,7 @@ import java.math.BigDecimal;
  * <p>
  * 明细必须带 {@code sourceSalesOutboundItemId}（来源销售出库明细），后端据此复制物料/仓库/批次
  * 快照并推导来源销售订单明细；数量、件重、单价等可覆盖字段读取请求值。可选
- * {@code sourceFreightBillId} 用于校验来源物流单。
+ * {@code sourceFreightBillId} 仅作为来源物流单引用留存，不再做跨模块服务端校验。
  */
 public record SalesReturnItemRequest(
         Long id,

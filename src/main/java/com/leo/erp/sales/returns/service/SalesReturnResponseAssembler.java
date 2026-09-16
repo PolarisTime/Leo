@@ -1,6 +1,5 @@
 package com.leo.erp.sales.returns.service;
 
-import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.returns.domain.entity.SalesReturn;
@@ -25,10 +24,6 @@ public class SalesReturnResponseAssembler {
                 entity.getItems().stream()
                         .map(SalesReturnItem::getSourceSalesOutboundItemId)
                         .toList());
-        Map<Long, FreightBill> freightBillMap = sourceService.loadFreightBillMap(
-                entity.getItems().stream()
-                        .map(SalesReturnItem::getSourceFreightBillId)
-                        .toList());
         return new SalesReturnResponse(
                 entity.getId(),
                 entity.getReturnNo(),
@@ -48,7 +43,7 @@ public class SalesReturnResponseAssembler {
                 entity.isDeletedFlag(),
                 entity.getRemark(),
                 entity.getItems().stream()
-                        .map(item -> toItemResponse(item, outboundMap, freightBillMap))
+                        .map(item -> toItemResponse(item, outboundMap))
                         .toList()
         );
     }
@@ -77,15 +72,11 @@ public class SalesReturnResponseAssembler {
     }
 
     private SalesReturnItemResponse toItemResponse(SalesReturnItem item,
-                                                   Map<Long, SalesOutboundItem> outboundMap,
-                                                   Map<Long, FreightBill> freightBillMap) {
+                                                   Map<Long, SalesOutboundItem> outboundMap) {
         SalesOutboundItem sourceOutbound = item.getSourceSalesOutboundItemId() == null
                 ? null
                 : outboundMap.get(item.getSourceSalesOutboundItemId());
         SalesOutbound sourceOutboundHeader = sourceOutbound == null ? null : sourceOutbound.getSalesOutbound();
-        FreightBill sourceFreightBill = item.getSourceFreightBillId() == null
-                ? null
-                : freightBillMap.get(item.getSourceFreightBillId());
         return new SalesReturnItemResponse(
                 item.getId(),
                 item.getLineNo(),
@@ -94,7 +85,7 @@ public class SalesReturnResponseAssembler {
                 item.getSourceSalesOrderItemId(),
                 sourceOutboundHeader == null ? null : sourceOutboundHeader.getSalesOrderNo(),
                 item.getSourceFreightBillId(),
-                sourceFreightBill == null ? null : sourceFreightBill.getBillNo(),
+                null,
                 item.getSettlementCompanyId(),
                 item.getSettlementCompanyName(),
                 item.getMaterialId(),

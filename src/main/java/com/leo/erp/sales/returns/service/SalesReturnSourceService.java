@@ -2,8 +2,6 @@ package com.leo.erp.sales.returns.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.logistics.bill.domain.entity.FreightBill;
-import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
@@ -25,14 +23,11 @@ public class SalesReturnSourceService {
 
     private final SalesOutboundItemRepository salesOutboundItemRepository;
     private final SalesOrderItemQueryService salesOrderItemQueryService;
-    private final FreightBillRepository freightBillRepository;
 
     public SalesReturnSourceService(SalesOutboundItemRepository salesOutboundItemRepository,
-                                    SalesOrderItemQueryService salesOrderItemQueryService,
-                                    FreightBillRepository freightBillRepository) {
+                                    SalesOrderItemQueryService salesOrderItemQueryService) {
         this.salesOutboundItemRepository = salesOutboundItemRepository;
         this.salesOrderItemQueryService = salesOrderItemQueryService;
-        this.freightBillRepository = freightBillRepository;
     }
 
     Map<Long, SalesOutboundItem> loadSourceOutboundItemMap(Collection<Long> outboundItemIds) {
@@ -63,16 +58,6 @@ public class SalesReturnSourceService {
         return indexBy(
                 salesOrderItemQueryService.findActiveByIdIn(distinctIds(salesOrderItemIds)),
                 SalesOrderItem::getId
-        );
-    }
-
-    Map<Long, FreightBill> loadFreightBillMap(Collection<Long> freightBillIds) {
-        if (freightBillIds == null || freightBillIds.isEmpty()) {
-            return Map.of();
-        }
-        return indexBy(
-                freightBillRepository.findAllById(distinctIds(freightBillIds)),
-                FreightBill::getId
         );
     }
 

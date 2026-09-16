@@ -3,10 +3,6 @@ package com.leo.erp.sales.returns.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.logistics.bill.domain.entity.FreightBill;
-import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceOrder;
-import com.leo.erp.logistics.bill.repository.FreightBillSourceOrderRepository;
-import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
@@ -38,17 +34,11 @@ public class SalesReturnCoverageValidator {
 
     private final SalesReturnSourceService sourceService;
     private final SalesReturnItemRepository salesReturnItemRepository;
-    private final FreightBillRepository freightBillRepository;
-    private final FreightBillSourceOrderRepository freightBillSourceOrderRepository;
 
     public SalesReturnCoverageValidator(SalesReturnSourceService sourceService,
-                                        SalesReturnItemRepository salesReturnItemRepository,
-                                        FreightBillRepository freightBillRepository,
-                                        FreightBillSourceOrderRepository freightBillSourceOrderRepository) {
+                                        SalesReturnItemRepository salesReturnItemRepository) {
         this.sourceService = sourceService;
         this.salesReturnItemRepository = salesReturnItemRepository;
-        this.freightBillRepository = freightBillRepository;
-        this.freightBillSourceOrderRepository = freightBillSourceOrderRepository;
     }
 
     public void assertCoverage(SalesReturn salesReturn) {
@@ -112,9 +102,6 @@ public class SalesReturnCoverageValidator {
             if (sourceOrder.getId() != null) {
                 orderIds.add(sourceOrder.getId());
             }
-            if (item.getSourceFreightBillId() != null) {
-                assertFreightBillContainsOrder(item.getSourceFreightBillId(), sourceOrder.getId(), lineNo);
-            }
             requestQuantityByOutboundItem.merge(
                     item.getSourceSalesOutboundItemId(),
                     quantity(item.getQuantity()),
@@ -139,27 +126,6 @@ public class SalesReturnCoverageValidator {
         }
         if (!StatusConstants.AUDITED.equals(normalize(outbound.getStatus()))) {
             throw business("第" + lineNo + "行来源销售出库单未审核，不能作为退货来源");
-        }
-    }
-
-    private void assertFreightBillContainsOrder(Long freightBillId, Long salesOrderId, int lineNo) {
-        FreightBill bill = freightBillRepository.findById(freightBillId).orElse(null);
-        if (bill == null || bill.isDeletedFlag()) {
-            throw business("第" + lineNo + "行来源物流单不存在或已删除");
-        }
-        if (!StatusConstants.AUDITED.equals(normalize(bill.getStatus()))) {
-            throw business("第" + lineNo + "行来源物流单未审核，不能作为退货来源");
-        }
-        if (salesOrderId == null) {
-            throw business("第" + lineNo + "行无法确认来源销售订单，不能校验物流单");
-        }
-        boolean contains = freightBillSourceOrderRepository.findActiveBySourceOrderId(salesOrderId).stream()
-                .map(FreightBillSourceOrder::getFreightBill)
-                .filter(Objects::nonNull)
-                .map(FreightBill::getId)
-                .anyMatch(freightBillId::equals);
-        if (!contains) {
-            throw business("第" + lineNo + "行来源物流单未包含该销售订单");
         }
     }
 

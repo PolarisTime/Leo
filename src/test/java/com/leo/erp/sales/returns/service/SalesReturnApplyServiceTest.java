@@ -1,7 +1,6 @@
 package com.leo.erp.sales.returns.service;
 
 import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
@@ -39,15 +38,12 @@ class SalesReturnApplyServiceTest {
     @Mock
     private SalesOrderItemQueryService salesOrderItemQueryService;
 
-    @Mock
-    private FreightBillRepository freightBillRepository;
-
     private SalesReturnApplyService service;
 
     @BeforeEach
     void setUp() {
         SalesReturnSourceService sourceService = new SalesReturnSourceService(
-                salesOutboundItemRepository, salesOrderItemQueryService, freightBillRepository);
+                salesOutboundItemRepository, salesOrderItemQueryService);
         service = new SalesReturnApplyService(sourceService);
     }
 

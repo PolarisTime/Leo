@@ -2,8 +2,6 @@ package com.leo.erp.sales.returns.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.logistics.bill.repository.FreightBillRepository;
-import com.leo.erp.logistics.bill.repository.FreightBillSourceOrderRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
@@ -39,15 +37,8 @@ class SalesReturnCoverageValidatorTest {
     @Mock
     private SalesReturnItemRepository salesReturnItemRepository;
 
-    @Mock
-    private FreightBillRepository freightBillRepository;
-
-    @Mock
-    private FreightBillSourceOrderRepository freightBillSourceOrderRepository;
-
     private SalesReturnCoverageValidator validator() {
-        return new SalesReturnCoverageValidator(
-                sourceService, salesReturnItemRepository, freightBillRepository, freightBillSourceOrderRepository);
+        return new SalesReturnCoverageValidator(sourceService, salesReturnItemRepository);
     }
 
     private SalesReturn salesReturn(Long id, SalesReturnItem... items) {
