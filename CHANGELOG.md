@@ -1,3 +1,10 @@
+# [11.1.0](https://github.com/PolarisTime/Leo/compare/v11.0.2...v11.1.0) (2026-09-16)
+
+
+### Features
+
+* **market:** 报价单支持锁定报单规格和数量 ([8055c86](https://github.com/PolarisTime/Leo/commit/8055c8630379bc758dcd10648e3d68d947fcf5a4))
+
 ## [11.0.1](https://github.com/PolarisTime/Leo/compare/v11.0.0...v11.0.1) (2026-09-16)
 
 
