@@ -263,29 +263,65 @@ public class QuoteSheetStore {
         return names;
     }
 
+    /**
+     * 按品牌名称协调品牌: 同名复用原实体(仅更新运费/排序, id 不变), 新增才创建,
+     * 库中存在但请求未携带的从集合移除。
+     * <p>
+     * 不能 clear + 重新 add: 新子实体带新雪花 ID, 同一 flush 内会先 INSERT 新子行再删除旧子行,
+     * 违反 {@code uk_quote_sheet_brand(sheet_id, brand_name)}。复用同实体避免 INSERT/DELETE。
+     */
     private void replaceBrands(QuoteSheet entity, List<QuoteSheetRequest.BrandRequest> requests) {
-        entity.getBrands().clear();
+        Map<String, QuoteSheetBrand> existingByBrandName = new HashMap<>();
+        for (QuoteSheetBrand brand : entity.getBrands()) {
+            existingByBrandName.put(brand.getBrandName(), brand);
+        }
+        List<QuoteSheetBrand> reconciled = new ArrayList<>();
         int index = 0;
         for (QuoteSheetRequest.BrandRequest request : requests) {
-            QuoteSheetBrand brand = new QuoteSheetBrand();
-            brand.setId(snowflakeIdGenerator.nextId());
-            brand.setSheet(entity);
-            brand.setBrandName(request.brandName().trim());
+            String brandName = request.brandName().trim();
+            QuoteSheetBrand brand = existingByBrandName.remove(brandName);
+            if (brand == null) {
+                brand = new QuoteSheetBrand();
+                brand.setId(snowflakeIdGenerator.nextId());
+                brand.setSheet(entity);
+                brand.setBrandName(brandName);
+            }
             brand.setFreight(request.freight() == null ? BigDecimal.ZERO : request.freight());
             brand.setSortOrder(request.sortOrder() == null ? index : request.sortOrder());
-            entity.getBrands().add(brand);
+            reconciled.add(brand);
             index += 1;
         }
+        entity.getBrands().clear();
+        entity.getBrands().addAll(reconciled);
     }
 
+    /**
+     * 按 line_no 协调商品明细: 同 line_no 复用原实体并仅更新字段与行×品牌现货价, 新增才创建,
+     * 库中存在但请求未携带的行从集合移除。行号按请求顺序归一化为 1..N, 与旧整体替换语义一致,
+     * 同时避免 {@code uk_quote_item_line(sheet_id, line_no)} 因删除后重建而冲突。
+     */
     private void replaceItems(QuoteSheet entity, List<QuoteSheetRequest.ItemRequest> requests,
                               Map<Long, String> supplierNames) {
-        entity.getItems().clear();
+        Map<Integer, QuoteSheetItem> existingByLineNo = new HashMap<>();
+        for (QuoteSheetItem item : entity.getItems()) {
+            existingByLineNo.put(item.getLineNo(), item);
+        }
+        List<QuoteSheetItem> reconciled = new ArrayList<>();
         int lineNo = 0;
         for (QuoteSheetRequest.ItemRequest request : requests) {
             lineNo += 1;
-            entity.getItems().add(buildItem(entity, request, lineNo, supplierNames));
+            QuoteSheetItem item = existingByLineNo.remove(lineNo);
+            if (item == null) {
+                item = new QuoteSheetItem();
+                item.setId(snowflakeIdGenerator.nextId());
+                item.setSheet(entity);
+                item.setLineNo(lineNo);
+            }
+            applyItem(item, request, supplierNames);
+            reconciled.add(item);
         }
+        entity.getItems().clear();
+        entity.getItems().addAll(reconciled);
     }
 
     private QuoteSheetItem buildItem(QuoteSheet sheet, QuoteSheetRequest.ItemRequest request, int lineNo,
@@ -298,6 +334,11 @@ public class QuoteSheetStore {
         return item;
     }
 
+    /**
+     * 应用商品行字段并按品牌名称协调行×品牌现货价: 同名复用原实体(仅更新现货价/供应商快照, id 不变),
+     * 新增才创建, 请求未携带的品牌价从集合移除, 避免
+     * {@code uk_quote_item_price(item_id, brand_name)} 冲突。
+     */
     private void applyItem(QuoteSheetItem item, QuoteSheetRequest.ItemRequest request,
                            Map<Long, String> supplierNames) {
         item.setCategory(request.category());
@@ -305,20 +346,30 @@ public class QuoteSheetStore {
         item.setSpec(request.spec());
         item.setLength(request.length());
         item.setTon(request.ton());
-        item.getPrices().clear();
+        Map<String, QuoteSheetItemPrice> existingByBrandName = new HashMap<>();
+        for (QuoteSheetItemPrice price : item.getPrices()) {
+            existingByBrandName.put(price.getBrandName(), price);
+        }
+        List<QuoteSheetItemPrice> reconciled = new ArrayList<>();
         if (request.prices() != null) {
             for (QuoteSheetRequest.ItemPriceRequest priceRequest : request.prices()) {
-                QuoteSheetItemPrice price = new QuoteSheetItemPrice();
-                price.setId(snowflakeIdGenerator.nextId());
-                price.setItem(item);
-                price.setBrandName(priceRequest.brandName());
+                String brandName = priceRequest.brandName();
+                QuoteSheetItemPrice price = existingByBrandName.remove(brandName);
+                if (price == null) {
+                    price = new QuoteSheetItemPrice();
+                    price.setId(snowflakeIdGenerator.nextId());
+                    price.setItem(item);
+                    price.setBrandName(brandName);
+                }
                 price.setSpotPrice(priceRequest.spotPrice());
                 price.setSupplierId(priceRequest.supplierId());
                 price.setSupplierName(priceRequest.supplierId() == null
                         ? null : supplierNames.get(priceRequest.supplierId()));
-                item.getPrices().add(price);
+                reconciled.add(price);
             }
         }
+        item.getPrices().clear();
+        item.getPrices().addAll(reconciled);
     }
 
     private QuoteSheetResponse toResponse(QuoteSheet entity) {

@@ -2,6 +2,7 @@ package com.leo.erp.market.quotation.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.market.quotation.domain.entity.QuoteProjectBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
 import com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigRequest;
@@ -125,6 +126,78 @@ class QuoteProjectConfigStoreTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("版本已变更");
         verify(repository, never()).saveAndFlush(any());
+    }
+
+    /**
+     * 回归: 同一 projectId 连续两次保存相同品牌(模拟重新进入页面再次保存),
+     * 必须复用原品牌实体、保持雪花 id 不变, 且不再分配新 id。
+     * <p>旧实现 clear + 重新 add 会让每次保存都产生新子实体 id, 生产上触发
+     * {@code uk_quote_project_brand(config_id, brand_name)} 冲突并映射为 409。
+     */
+    @Test
+    void save_sameBrandTwice_reusesExistingBrandEntityAndKeepsId() {
+        QuoteProjectConfig existing = new QuoteProjectConfig();
+        existing.setId(1L);
+        existing.setProjectId(88L);
+        existing.setVersion(0L);
+        existing.getBrands().add(projectBrand(existing, 999L, "中天", "30"));
+
+        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
+                .thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteProjectConfigRequest request = new QuoteProjectConfigRequest(
+                new BigDecimal("30"), false, List.of(), List.of(), null,
+                List.of(new QuoteProjectConfigRequest.BrandRequest("中天", new BigDecimal("28"),
+                        List.of("螺纹钢", "盘螺"), 0)));
+
+        QuoteProjectConfigResponse first = store().save(88L, request, null);
+        QuoteProjectConfigResponse second = store().save(88L, request, null);
+
+        assertThat(first.brands()).hasSize(1);
+        assertThat(second.brands()).hasSize(1);
+        assertThat(existing.getBrands()).hasSize(1);
+        assertThat(existing.getBrands().get(0).getId()).isEqualTo(999L);
+        assertThat(existing.getBrands().get(0).getFreight()).isEqualByComparingTo("28");
+        assertThat(second.brands().get(0).categories()).containsExactly("螺纹钢", "盘螺");
+        verify(snowflakeIdGenerator, never()).nextId();
+    }
+
+    /** 回归: 按名称协调——命中名称复用旧实体, 请求新增才创建, 库中多余项被移除。 */
+    @Test
+    void save_reconcilesBrandsByName_reusesKeepsRemovesAndAdds() {
+        QuoteProjectConfig existing = new QuoteProjectConfig();
+        existing.setId(1L);
+        existing.setProjectId(88L);
+        existing.setVersion(0L);
+        existing.getBrands().add(projectBrand(existing, 111L, "中天", "30"));
+        existing.getBrands().add(projectBrand(existing, 222L, "沙钢", "40"));
+
+        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
+                .thenAnswer((invocation) -> invocation.getArgument(0));
+        when(snowflakeIdGenerator.nextId()).thenReturn(333L);
+
+        store().save(88L, new QuoteProjectConfigRequest(
+                new BigDecimal("30"), false, List.of(), List.of(), null,
+                List.of(new QuoteProjectConfigRequest.BrandRequest("中天", new BigDecimal("30"), List.of(), 0),
+                        new QuoteProjectConfigRequest.BrandRequest("亚新", new BigDecimal("35"), List.of(), 1))),
+                null);
+
+        assertThat(existing.getBrands()).extracting(QuoteProjectBrand::getBrandName)
+                .containsExactly("中天", "亚新");
+        assertThat(existing.getBrands().get(0).getId()).isEqualTo(111L);
+        assertThat(existing.getBrands().get(1).getId()).isEqualTo(333L);
+    }
+
+    private QuoteProjectBrand projectBrand(QuoteProjectConfig config, Long id, String name, String freight) {
+        QuoteProjectBrand brand = new QuoteProjectBrand();
+        brand.setId(id);
+        brand.setConfig(config);
+        brand.setBrandName(name);
+        brand.setFreight(new BigDecimal(freight));
+        brand.setSortOrder(0);
+        return brand;
     }
 
     private QuoteProjectConfig existingConfig(Long version) {

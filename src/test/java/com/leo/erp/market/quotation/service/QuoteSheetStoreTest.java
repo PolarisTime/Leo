@@ -318,6 +318,60 @@ class QuoteSheetStoreTest {
         verify(repository, never()).saveAndFlush(any());
     }
 
+    /**
+     * 回归: 同一单据连续两次保存相同品牌 + 相同 line_no 明细, 必须复用原品牌/明细/现货价实体,
+     * 雪花 id 保持不变且不再分配新 id。
+     * <p>旧实现 clear + 重新 add 会产生新子实体 id, 生产上触发
+     * {@code uk_quote_sheet_brand(sheet_id, brand_name)}、{@code uk_quote_item_line(sheet_id, line_no)}、
+     * {@code uk_quote_item_price(item_id, brand_name)} 冲突并映射为 409。
+     */
+    @Test
+    void update_sameBrandAndLineNoTwice_reusesChildEntityIds() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class)))
+                .thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse first = store().update(9L, request(), null);
+        QuoteSheetResponse second = store().update(9L, request(), null);
+
+        assertThat(first.brands()).hasSize(1);
+        assertThat(second.items()).hasSize(1);
+        assertThat(existing.getBrands()).hasSize(1);
+        assertThat(existing.getBrands().get(0).getId()).isEqualTo(201L);
+        assertThat(existing.getItems()).hasSize(1);
+        assertThat(existing.getItems().get(0).getId()).isEqualTo(301L);
+        assertThat(existing.getItems().get(0).getPrices()).hasSize(1);
+        assertThat(existing.getItems().get(0).getPrices().get(0).getId()).isEqualTo(401L);
+        verify(snowflakeIdGenerator, never()).nextId();
+    }
+
+    /** 回归: line_no 命中复用明细实体, 品牌价按 brandName 协调, 仅新建真正新增的子实体。 */
+    @Test
+    void update_reconcilesItemsByLineNoAndPricesByBrand() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class)))
+                .thenAnswer((invocation) -> invocation.getArgument(0));
+        when(snowflakeIdGenerator.nextId()).thenReturn(555L, 666L);
+
+        QuoteSheetResponse response = store().update(9L, new QuoteSheetRequest(
+                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("30"), false, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("沙钢", new BigDecimal("30"), 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("沙钢", new BigDecimal("3280"), null))))), null);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(existing.getItems().get(0).getId()).isEqualTo(301L);
+        assertThat(existing.getItems().get(0).getPrices().get(0).getId()).isEqualTo(666L);
+        assertThat(existing.getItems().get(0).getPrices().get(0).getBrandName()).isEqualTo("沙钢");
+        assertThat(existing.getBrands()).extracting(QuoteSheetBrand::getBrandName).containsExactly("沙钢");
+        assertThat(existing.getBrands().get(0).getId()).isEqualTo(555L);
+    }
+
     private QuoteSheet lockedSheet() {
         QuoteSheet sheet = new QuoteSheet();
         sheet.setId(9L);

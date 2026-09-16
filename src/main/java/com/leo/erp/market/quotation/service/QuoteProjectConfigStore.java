@@ -13,8 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -77,28 +79,45 @@ public class QuoteProjectConfigStore {
         replaceBrands(entity, request.brands());
     }
 
+    /**
+     * 按品牌名称协调参与品牌: 同名复用原实体(仅更新运费/品种/排序, id 不变), 新增才创建,
+     * 库中存在但请求未携带的从集合移除。
+     * <p>
+     * 不能使用 clear + 重新 add: 新子实体带新雪花 ID, Hibernate 会在同一 flush 内先 INSERT
+     * 新子行再处理旧子行删除, 从而违反 {@code uk_quote_project_brand(config_id, brand_name)}。
+     * 复用同实体可避免任何 INSERT/DELETE, 只产生受控 UPDATE。
+     */
     private void replaceBrands(QuoteProjectConfig entity, List<QuoteProjectConfigRequest.BrandRequest> requests) {
-        entity.getBrands().clear();
-        if (requests == null) {
-            return;
+        Map<String, QuoteProjectBrand> existingByBrandName = new HashMap<>();
+        for (QuoteProjectBrand brand : entity.getBrands()) {
+            existingByBrandName.put(brand.getBrandName(), brand);
         }
+        List<QuoteProjectBrand> reconciled = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         int index = 0;
-        for (QuoteProjectConfigRequest.BrandRequest request : requests) {
-            String brandName = request.brandName() == null ? "" : request.brandName().trim();
-            if (brandName.isEmpty() || !seen.add(brandName)) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "品牌名称不能为空且不可重复: " + brandName);
+        if (requests != null) {
+            for (QuoteProjectConfigRequest.BrandRequest request : requests) {
+                String brandName = request.brandName() == null ? "" : request.brandName().trim();
+                if (brandName.isEmpty() || !seen.add(brandName)) {
+                    throw new BusinessException(ErrorCode.VALIDATION_ERROR, "品牌名称不能为空且不可重复: " + brandName);
+                }
+                QuoteProjectBrand brand = existingByBrandName.remove(brandName);
+                if (brand == null) {
+                    brand = new QuoteProjectBrand();
+                    brand.setId(snowflakeIdGenerator.nextId());
+                    brand.setConfig(entity);
+                    brand.setBrandName(brandName);
+                }
+                brand.setFreight(request.freight() == null ? BigDecimal.ZERO : request.freight());
+                brand.setCategories(join(request.categories()));
+                brand.setSortOrder(request.sortOrder() == null ? index : request.sortOrder());
+                reconciled.add(brand);
+                index += 1;
             }
-            QuoteProjectBrand brand = new QuoteProjectBrand();
-            brand.setId(snowflakeIdGenerator.nextId());
-            brand.setConfig(entity);
-            brand.setBrandName(brandName);
-            brand.setFreight(request.freight() == null ? BigDecimal.ZERO : request.freight());
-            brand.setCategories(join(request.categories()));
-            brand.setSortOrder(request.sortOrder() == null ? index : request.sortOrder());
-            entity.getBrands().add(brand);
-            index += 1;
         }
+        // 未被请求命中的 existingByBrandName 余项即需要删除的孤儿, 通过重设集合内容解除关联。
+        entity.getBrands().clear();
+        entity.getBrands().addAll(reconciled);
     }
 
     private QuoteProjectConfigResponse toResponse(QuoteProjectConfig entity) {
