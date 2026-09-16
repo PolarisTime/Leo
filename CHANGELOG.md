@@ -1,3 +1,10 @@
+# [10.12.0](https://github.com/PolarisTime/Leo/compare/v10.11.0...v10.12.0) (2026-09-16)
+
+
+### Features
+
+* **master:** 供应商资料新增简称，供受限场景展示 ([f85da79](https://github.com/PolarisTime/Leo/commit/f85da797395e559d28cc881bd8012615f75f33a0))
+
 # [10.11.0](https://github.com/PolarisTime/Leo/compare/v10.10.0...v10.11.0) (2026-09-16)
 
 
