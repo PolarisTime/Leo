@@ -4,6 +4,8 @@ import com.leo.erp.common.api.ApiProblemFactory;
 import com.leo.erp.common.error.ErrorCode;
 import jakarta.persistence.OptimisticLockException;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -70,6 +72,30 @@ class GlobalExceptionHandlerOptimisticLockTest {
                 new ObjectOptimisticLockingFailureException("SalesOrder", 9L), null);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    }
+
+    /** 悲观锁获取失败(等待超时/取消 NOWAIT)统一映射为 409, 避免长时间阻塞后 500。 */
+    @Test
+    void cannotAcquireLock_mapsTo409() {
+        MockHttpServletRequest request = request("/v2.0/quote-sheets/9/edit-lock");
+
+        ResponseEntity<?> response = handler.handlePessimisticLockingFailure(
+                new CannotAcquireLockException("could not obtain lock"), request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(codeOf(response)).isEqualTo(ErrorCode.CONCURRENT_MODIFICATION.getCode());
+    }
+
+    /** 死锁等悲观锁失败同样映射为 409 并发冲突。 */
+    @Test
+    void genericPessimisticLockingFailure_mapsTo409() {
+        MockHttpServletRequest request = request("/v2.0/quote-sheets/9/edit-lock");
+
+        ResponseEntity<?> response = handler.handlePessimisticLockingFailure(
+                new PessimisticLockingFailureException("deadlock detected"), request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(codeOf(response)).isEqualTo(ErrorCode.CONCURRENT_MODIFICATION.getCode());
     }
 
     private MockHttpServletRequest request(String uri) {

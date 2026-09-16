@@ -678,21 +678,226 @@ class QuoteSheetStoreTest {
         assertThat(existing.isSpecQuantityLocked()).isTrue();
     }
 
-    /** 行级写只动明细, 不得清零表头 specQuantityLocked。 */
+    /** 行级写(仅改现货价)不得清零表头 specQuantityLocked。 */
     @Test
-    void addItem_doesNotClearSpecQuantityLocked() {
+    void updateItem_doesNotClearSpecQuantityLocked() {
         QuoteSheet existing = sheetWithItem(9L);
         existing.setVersion(5L);
         existing.setSpecQuantityLocked(true);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
         when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
-        when(snowflakeIdGenerator.nextId()).thenReturn(777L);
         stubForceIncrement();
 
-        store().addItem(9L, new QuoteSheetRequest.ItemRequest(
-                "盘螺", "HRB400E", 8, "9米", BigDecimal.ONE, List.of()), 5L);
+        store().updateItem(9L, 301L, new QuoteSheetRequest.ItemRequest(
+                "螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
+                List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3400"), null))), 5L);
 
         assertThat(existing.isSpecQuantityLocked()).isTrue();
+    }
+
+    /**
+     * P1-1 回归: 整体替换(brands/items 任一非 null)必须显式对父单据加
+     * {@code OPTIMISTIC_FORCE_INCREMENT}, 保证仅改子集合(如某现货价)时父版本仍恰好 +1。
+     */
+    @Test
+    void update_fullReplace_forcesParentVersionIncrement() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(5L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        stubForceIncrement();
+
+        QuoteSheetResponse response = store().update(9L, fullRequest(12, BigDecimal.TEN, "3600"), 5L);
+
+        assertThat(response.version()).isEqualTo(6L);
+        assertThat(response.items().get(0).prices().get(0).spotPrice()).isEqualByComparingTo("3600");
+        verify(entityManager).lock(existing, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+    }
+
+    /** 行级写: 规格/数量已锁定时新增行(增加数量)必须 422。 */
+    @Test
+    void addItem_rejectsWhenSpecQuantityLocked() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(5L);
+        existing.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> store().addItem(9L,
+                new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE, List.of()), 5L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("规格和数量已锁定")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 行级写: 规格/数量已锁定时删除行(减少数量)必须 422。 */
+    @Test
+    void deleteItem_rejectsWhenSpecQuantityLocked() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(5L);
+        existing.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> store().deleteItem(9L, 301L, 5L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("规格和数量已锁定")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+        assertThat(existing.getItems()).hasSize(1);
+    }
+
+    /** 行级写: 已锁定时改吨数(数量)必须 422。 */
+    @Test
+    void updateItem_rejectsQuantityChangeWhenSpecQuantityLocked() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(1L);
+        existing.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> store().updateItem(9L, 301L,
+                new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("规格和数量已锁定")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 行级写: 已锁定时改规格(spec/length/category/material)必须 422。 */
+    @Test
+    void updateItem_rejectsSpecChangeWhenSpecQuantityLocked() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(1L);
+        existing.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> store().updateItem(9L, 301L,
+                new QuoteSheetRequest.ItemRequest("高线", "HPB300", 10, "12米", BigDecimal.TEN,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("规格和数量已锁定")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 行级写: 已锁定时仅改现货价(不涉规格数量)仍允许。 */
+    @Test
+    void updateItem_allowsPriceOnlyChangeWhenSpecQuantityLocked() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(1L);
+        existing.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetItemWrite updated = store().updateItem(9L, 301L,
+                new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3600"), null))), 1L);
+
+        assertThat(updated.item().prices().get(0).spotPrice()).isEqualByComparingTo("3600");
+        verify(repository).saveAndFlush(existing);
+    }
+
+    /** 整单替换: 已锁定时改规格必须 422, 且不得触碰父版本。 */
+    @Test
+    void update_fullReplace_rejectsSpecChangeWhenSpecQuantityLocked() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(3L);
+        existing.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> store().update(9L, fullRequest(10, BigDecimal.TEN, "3280"), 3L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("规格和数量已锁定")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+        verifyNoInteractions(entityManager);
+    }
+
+    /** 整单替换: 已锁定时改吨数(数量)必须 422。 */
+    @Test
+    void update_fullReplace_rejectsQuantityChangeWhenSpecQuantityLocked() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(3L);
+        existing.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> store().update(9L, fullRequest(12, BigDecimal.ONE, "3280"), 3L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("规格和数量已锁定")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 整单替换: 已锁定时增行(行数变化)必须 422。 */
+    @Test
+    void update_fullReplace_rejectsRowCountChangeWhenSpecQuantityLocked() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(3L);
+        existing.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        QuoteSheetRequest twoRows = new QuoteSheetRequest(
+                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("30"), false, false, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
+                                List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
+                        new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE,
+                                List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3300"), null)))));
+
+        assertThatThrownBy(() -> store().update(9L, twoRows, 3L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("规格和数量已锁定");
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 整单替换: 已锁定时仅改现货价(不涉规格数量)仍允许, 且父版本 +1。 */
+    @Test
+    void update_fullReplace_allowsPriceOnlyChangeWhenSpecQuantityLocked() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(7L);
+        existing.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        stubForceIncrement();
+
+        QuoteSheetResponse response = store().update(9L, fullRequest(12, BigDecimal.TEN, "3600"), 7L);
+
+        assertThat(response.version()).isEqualTo(8L);
+        assertThat(response.items().get(0).prices().get(0).spotPrice()).isEqualByComparingTo("3600");
+    }
+
+    /** 显式解锁(specQuantityLocked=false 的表头写)之后, 整单替换改规格才放行。 */
+    @Test
+    void update_unlockThenFullReplace_allowsSpecChange() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(1L);
+        existing.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse unlocked = store().update(9L, new QuoteSheetRequest(
+                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("30"), false, false, "报价", null, null, null), null);
+        assertThat(unlocked.specQuantityLocked()).isFalse();
+
+        QuoteSheetResponse replaced = store().update(9L, fullRequest(10, BigDecimal.TEN, "3280"), null);
+        assertThat(replaced.items().get(0).spec()).isEqualTo(10);
+    }
+
+    private QuoteSheetRequest fullRequest(Integer spec, BigDecimal ton, String spotPrice) {
+        return new QuoteSheetRequest(
+                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("30"), false, false, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", spec, "9米", ton,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal(spotPrice), null)))));
     }
 
     private QuoteSheet lockedSheet() {

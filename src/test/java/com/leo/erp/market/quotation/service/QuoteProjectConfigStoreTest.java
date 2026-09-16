@@ -7,6 +7,8 @@ import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
 import com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigResponse;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -19,6 +21,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,8 +36,11 @@ class QuoteProjectConfigStoreTest {
     @Mock
     private SnowflakeIdGenerator snowflakeIdGenerator;
 
+    @Mock
+    private EntityManager entityManager;
+
     private QuoteProjectConfigStore store() {
-        return new QuoteProjectConfigStore(repository, snowflakeIdGenerator);
+        return new QuoteProjectConfigStore(repository, snowflakeIdGenerator, entityManager);
     }
 
     @Test
@@ -188,6 +195,30 @@ class QuoteProjectConfigStoreTest {
                 .containsExactly("中天", "亚新");
         assertThat(existing.getBrands().get(0).getId()).isEqualTo(111L);
         assertThat(existing.getBrands().get(1).getId()).isEqualTo(333L);
+    }
+
+    /**
+     * 回归(并发保护): 整体替换语义下, 即使仅改动品牌的子集合, 也必须显式对已有配置加
+     * {@code OPTIMISTIC_FORCE_INCREMENT}, 保证父配置 {@code @Version} 每次替换恰好 +1。
+     */
+    @Test
+    void save_existingConfig_forcesVersionIncrementEvenForBrandOnlyChange() {
+        QuoteProjectConfig existing = existingConfig(5L);
+        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
+                .thenAnswer((invocation) -> invocation.getArgument(0));
+        doAnswer(invocation -> {
+            QuoteProjectConfig config = invocation.getArgument(0);
+            config.setVersion(config.getVersion() + 1);
+            return null;
+        }).when(entityManager).lock(any(QuoteProjectConfig.class), eq(LockModeType.OPTIMISTIC_FORCE_INCREMENT));
+
+        QuoteProjectConfigResponse response = store().save(88L, new QuoteProjectConfigRequest(
+                new BigDecimal("30"), false, List.of(), List.of(), null,
+                List.of(new QuoteProjectConfigRequest.BrandRequest("中天", new BigDecimal("30"), List.of(), 0))), 5L);
+
+        assertThat(response.version()).isEqualTo(6L);
+        verify(entityManager).lock(existing, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
     }
 
     private QuoteProjectBrand projectBrand(QuoteProjectConfig config, Long id, String name, String freight) {

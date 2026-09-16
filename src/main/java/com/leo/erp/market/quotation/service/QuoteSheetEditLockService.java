@@ -85,19 +85,11 @@ public class QuoteSheetEditLockService {
         try {
             return toResponse(repository.saveAndFlush(lock), ownerId);
         } catch (DataIntegrityViolationException ex) {
-            // 兜底: 唯一约束 uk_quote_sheet_edit_lock_sheet 冲突(并发首插)。事务已回滚, 重查实际持有者并上报,
-            // 避免直接暴露底层唯一键 409。
-            throw concurrentInsertConflict(sheetId, ownerId, now);
+            // 并发首插兜底: 唯一约束 uk_quote_sheet_edit_lock_sheet 冲突后当前事务已被标记回滚,
+            // 在同一事务内重查会再次失败, 因此直接抛出业务 409, 由调用方稍后重试。
+            // 主路径已通过父单据行 PESSIMISTIC_WRITE(lockActiveSheet) 串行化同一单据的签出首插。
+            throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "单据已被签出编辑，请稍后重试");
         }
-    }
-
-    private BusinessException concurrentInsertConflict(Long sheetId, Long ownerId, LocalDateTime now) {
-        QuoteSheetEditLock concurrent = repository.findBySheetId(sheetId).orElse(null);
-        if (concurrent != null && !concurrent.expiredAt(now) && !Objects.equals(concurrent.getOwnerId(), ownerId)) {
-            return new BusinessException(ErrorCode.CONCURRENT_MODIFICATION,
-                    "单据已被 " + concurrent.getOwnerName() + " 签出编辑");
-        }
-        return new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "单据正在被签出，请稍后重试");
     }
 
     /** 查询当前锁; 无锁或已过期返回 {@code locked=false}。 */

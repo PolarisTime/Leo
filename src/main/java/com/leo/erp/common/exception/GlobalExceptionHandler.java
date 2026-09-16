@@ -9,7 +9,9 @@ import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -238,6 +240,25 @@ public class GlobalExceptionHandler {
                     ErrorCode.PRECONDITION_FAILED.getMessage()
             );
         }
+        return failure(
+                request,
+                HttpStatus.CONFLICT,
+                ErrorCode.CONCURRENT_MODIFICATION,
+                ErrorCode.CONCURRENT_MODIFICATION.getMessage()
+        );
+    }
+
+    /**
+     * 悲观锁获取失败映射。
+     * <p>行级锁等待超时/取消(如 PostgreSQL 55P03 lock_not_available)或死锁时,
+     * 统一按并发冲突 409(CONCURRENT_MODIFICATION)返回, 避免长时间阻塞后冒泡为 500。</p>
+     */
+    @ExceptionHandler({CannotAcquireLockException.class, PessimisticLockingFailureException.class})
+    public ResponseEntity<?> handlePessimisticLockingFailure(
+            PessimisticLockingFailureException ex,
+            HttpServletRequest request
+    ) {
+        log.warn("获取数据库锁失败: {}", ex.getMessage());
         return failure(
                 request,
                 HttpStatus.CONFLICT,

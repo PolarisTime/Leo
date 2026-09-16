@@ -201,41 +201,23 @@ class QuoteSheetEditLockServiceTest {
     }
 
     /**
-     * 回归: 并发首次插入时唯一约束兜底冲突, 必须重查并上报实际持有者(业务语义),
-     * 不得把底层 DataIntegrityViolationException 直接抛给调用方。
+     * 回归: 并发首次插入触发唯一约束时, 当前事务已回滚, 不得在同一事务内重查;
+     * 直接抛出业务 409(业务语义), 不暴露底层唯一键异常。
      */
     @Test
-    void acquire_concurrentFirstInsert_reportsOtherHolder() {
+    void acquire_concurrentFirstInsertUniqueViolation_mapsToConflictWithoutRequery() {
         sheetLockable(9L);
         when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.empty());
         when(snowflakeIdGenerator.nextId()).thenReturn(900L);
         when(repository.saveAndFlush(any(QuoteSheetEditLock.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key value violates unique constraint"));
-        when(repository.findBySheetId(9L)).thenReturn(Optional.of(activeLock(8L, "李四")));
 
         assertThatThrownBy(() -> service.acquire(9L, 7L, "张三"))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("李四")
                 .hasMessageContaining("签出编辑")
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.CONCURRENT_MODIFICATION);
-    }
-
-    /** 并发首插后若重查不到有效持有者, 仍返回 409 并发冲突而非底层唯一键异常。 */
-    @Test
-    void acquire_concurrentFirstInsertWithoutReadableHolder_conflicts() {
-        sheetLockable(9L);
-        when(repository.findBySheetIdForUpdate(9L)).thenReturn(Optional.empty());
-        when(snowflakeIdGenerator.nextId()).thenReturn(900L);
-        when(repository.saveAndFlush(any(QuoteSheetEditLock.class)))
-                .thenThrow(new DataIntegrityViolationException("duplicate key value violates unique constraint"));
-        when(repository.findBySheetId(9L)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.acquire(9L, 7L, "张三"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("签出")
-                .extracting(ex -> ((BusinessException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.CONCURRENT_MODIFICATION);
+        verify(repository, never()).findBySheetId(9L);
     }
 
     private QuoteSheetEditLock activeLock(Long ownerId, String ownerName) {

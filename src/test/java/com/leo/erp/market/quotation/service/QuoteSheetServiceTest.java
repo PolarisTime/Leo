@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.math.BigDecimal;
@@ -58,10 +59,22 @@ class QuoteSheetServiceTest {
         verify(store, times(1)).update(eq(9L), any(), eq(2L));
     }
 
+    /** 乐观锁失败属版本已变更, 原样重试注定失败: 只执行一次并直接冒泡, 由全局异常映射 412。 */
     @Test
-    void update_retriesOnOptimisticLockFailureThenSucceeds() {
+    void update_doesNotRetryOptimisticLockFailure() {
         when(store.update(eq(9L), any(), eq(3L)))
-                .thenThrow(new ObjectOptimisticLockingFailureException("QuoteSheet", 9L))
+                .thenThrow(new ObjectOptimisticLockingFailureException("QuoteSheet", 9L));
+
+        assertThatThrownBy(() -> service.update(9L, request(), 3L, 7L))
+                .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+        verify(store, times(1)).update(eq(9L), any(), eq(3L));
+    }
+
+    /** 唯一键/取锁类瞬时冲突仍按上限重试。 */
+    @Test
+    void update_retriesOnDataIntegrityViolationThenSucceeds() {
+        when(store.update(eq(9L), any(), eq(3L)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"))
                 .thenReturn(response());
 
         QuoteSheetResponse result = service.update(9L, request(), 3L, 7L);

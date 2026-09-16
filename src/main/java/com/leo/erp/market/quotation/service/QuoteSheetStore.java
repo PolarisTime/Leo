@@ -87,6 +87,11 @@ public class QuoteSheetStore {
             applyHeader(entity, request);
         } else {
             validate(request);
+            checkSpecQuantityLockedForReplace(entity, request.items());
+            // 整体替换改的是 mappedBy 反向集合, 仅变更子集合时 Hibernate 不会把父行标脏,
+            // 父 @Version 不会递增; 与行级写一致, flush 前对父实体加 FORCE_INCREMENT,
+            // 保证每次整体替换父版本恰好 +1(表头-only 不经过此分支, 仍只自然递增一次)。
+            entityManager.lock(entity, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
             apply(entity, request);
         }
         return toResponse(repository.saveAndFlush(entity));
@@ -133,6 +138,7 @@ public class QuoteSheetStore {
     public QuoteSheetItemWrite addItem(Long sheetId, QuoteSheetRequest.ItemRequest request,
                                        Long expectedVersion) {
         QuoteSheet sheet = requireSheetForRowWrite(sheetId, expectedVersion);
+        checkSpecQuantityLockedForItemAppend(sheet);
         validateItemPrices(request, brandNamesOf(sheet));
         int nextLineNo = sheet.getItems().stream()
                 .map(QuoteSheetItem::getLineNo)
@@ -154,6 +160,7 @@ public class QuoteSheetStore {
         QuoteSheet sheet = requireSheetForRowWrite(sheetId, expectedVersion);
         validateItemPrices(request, brandNamesOf(sheet));
         QuoteSheetItem item = requireItem(sheet, itemId);
+        checkSpecQuantityLockedForItemUpdate(sheet, item, request);
         Map<Long, String> supplierNames = resolveSupplierNames(List.of(request));
         applyItem(item, request, supplierNames);
         repository.saveAndFlush(sheet);
@@ -164,6 +171,7 @@ public class QuoteSheetStore {
     @Transactional
     public Long deleteItem(Long sheetId, Long itemId, Long expectedVersion) {
         QuoteSheet sheet = requireSheetForRowWrite(sheetId, expectedVersion);
+        checkSpecQuantityLockedForItemAppend(sheet);
         QuoteSheetItem item = requireItem(sheet, itemId);
         sheet.getItems().remove(item);
         repository.saveAndFlush(sheet);
@@ -269,6 +277,66 @@ public class QuoteSheetStore {
         if (refDateChanged || refPeriodChanged) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "参照日期/时段已锁定, 请先解锁再修改");
         }
+    }
+
+    /**
+     * 锁定报单规格和数量(spec_quantity_locked)的服务端强制: 与参照锁 locked 相互独立。
+     * <p>锁定期间禁止新增/删除商品行, 也禁止改动行的规格(category/material/spec/length)与数量(ton);
+     * 仅现货价/供应商/运费等不涉及规格数量的字段仍可修改。显式以表头写把 spec_quantity_locked 置 false
+     * 解锁后才放行。命中即 422(VALIDATION_ERROR)。</p>
+     */
+    private void checkSpecQuantityLockedForItemAppend(QuoteSheet sheet) {
+        if (sheet.isSpecQuantityLocked()) {
+            throw specQuantityLockedException();
+        }
+    }
+
+    private void checkSpecQuantityLockedForItemUpdate(QuoteSheet sheet, QuoteSheetItem item,
+                                                      QuoteSheetRequest.ItemRequest request) {
+        if (sheet.isSpecQuantityLocked() && specOrQuantityChanged(item, request)) {
+            throw specQuantityLockedException();
+        }
+    }
+
+    private void checkSpecQuantityLockedForReplace(QuoteSheet entity,
+                                                   List<QuoteSheetRequest.ItemRequest> requests) {
+        if (!entity.isSpecQuantityLocked()) {
+            return;
+        }
+        Map<Integer, QuoteSheetItem> existingByLineNo = new HashMap<>();
+        for (QuoteSheetItem item : entity.getItems()) {
+            existingByLineNo.put(item.getLineNo(), item);
+        }
+        // 行数变化意味着增行(数量增加)或删行(数量减少), 一律拒绝。
+        if (requests == null || requests.size() != existingByLineNo.size()) {
+            throw specQuantityLockedException();
+        }
+        for (int index = 0; index < requests.size(); index++) {
+            QuoteSheetItem existing = existingByLineNo.get(index + 1);
+            if (existing == null || specOrQuantityChanged(existing, requests.get(index))) {
+                throw specQuantityLockedException();
+            }
+        }
+    }
+
+    /** 规格判定口径: category/material/spec/length; 数量判定口径: ton(按数值比较, 忽略标度)。 */
+    private static boolean specOrQuantityChanged(QuoteSheetItem item, QuoteSheetRequest.ItemRequest request) {
+        return !Objects.equals(item.getCategory(), request.category())
+                || !Objects.equals(item.getMaterial(), request.material())
+                || !Objects.equals(item.getSpec(), request.spec())
+                || !Objects.equals(item.getLength(), request.length())
+                || differs(item.getTon(), request.ton());
+    }
+
+    private static boolean differs(BigDecimal left, BigDecimal right) {
+        if (left == null || right == null) {
+            return !Objects.equals(left, right);
+        }
+        return left.compareTo(right) != 0;
+    }
+
+    private static BusinessException specQuantityLockedException() {
+        return new BusinessException(ErrorCode.VALIDATION_ERROR, "报单规格和数量已锁定，请先解锁再修改");
     }
 
     private void apply(QuoteSheet entity, QuoteSheetRequest request) {

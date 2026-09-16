@@ -8,6 +8,8 @@ import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
 import com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigResponse;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,11 +33,14 @@ public class QuoteProjectConfigStore {
 
     private final QuoteProjectConfigRepository repository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
+    private final EntityManager entityManager;
 
     public QuoteProjectConfigStore(QuoteProjectConfigRepository repository,
-                                   SnowflakeIdGenerator snowflakeIdGenerator) {
+                                   SnowflakeIdGenerator snowflakeIdGenerator,
+                                   EntityManager entityManager) {
         this.repository = repository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
+        this.entityManager = entityManager;
     }
 
     /** 查询项目配置; 未配置时返回默认空配置(不落库)。 */
@@ -60,6 +65,11 @@ public class QuoteProjectConfigStore {
             return created;
         });
         apply(entity, request);
+        // 整体替换改的是 mappedBy 反向集合, 仅变更品牌子集合时 Hibernate 不会把父行标脏,
+        // 父 @Version 不会递增; 对已有配置显式 FORCE_INCREMENT, 保证每次整体替换版本恰好 +1。
+        if (existing.isPresent()) {
+            entityManager.lock(entity, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+        }
         return toResponse(repository.saveAndFlush(entity));
     }
 

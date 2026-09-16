@@ -8,7 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -79,8 +78,9 @@ public class QuoteSheetService {
             for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
                 try {
                     return action.get();
-                } catch (ObjectOptimisticLockingFailureException | DataIntegrityViolationException
-                         | CannotAcquireLockException ex) {
+                } catch (DataIntegrityViolationException | CannotAcquireLockException ex) {
+                    // 只重试唯一键/取锁类瞬时冲突; ObjectOptimisticLockingFailureException 表示版本已变更,
+                    // 原样重试注定失败, 直接冒泡由全局异常按 412 语义返回。
                     lastError = ex;
                     log.warn("比价报价单保存冲突, 重试 {}/{}: sheetId={}, {}",
                             attempt, MAX_ATTEMPTS, sheetId, ex.getMessage());
