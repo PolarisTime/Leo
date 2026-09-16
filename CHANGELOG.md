@@ -1,3 +1,10 @@
+## [10.12.1](https://github.com/PolarisTime/Leo/compare/v10.12.0...v10.12.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **market:** 比价项目配置并发保存串行化并冲突重试，避免 409 ([8ced6e1](https://github.com/PolarisTime/Leo/commit/8ced6e11c988572d7e5c2e367d3d7aa5a03ac8d5))
+
 # [10.12.0](https://github.com/PolarisTime/Leo/compare/v10.11.0...v10.12.0) (2026-09-16)
 
 
