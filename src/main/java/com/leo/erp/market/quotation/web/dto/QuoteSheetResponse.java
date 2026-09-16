@@ -28,7 +28,8 @@ public record QuoteSheetResponse(
     public record BrandResponse(Long id, String brandName, BigDecimal freight, Integer sortOrder) {
     }
 
-    public record ItemPriceResponse(Long id, String brandName, BigDecimal spotPrice) {
+    public record ItemPriceResponse(Long id, String brandName, BigDecimal spotPrice,
+                                    Long supplierId, String supplierName) {
     }
 
     public record ItemResponse(Long id, Integer lineNo, String category, String material, Integer spec,

@@ -33,7 +33,8 @@ class QuoteSheetDtoJsonContractTest {
                 List.of(new QuoteSheetResponse.BrandResponse(1L, "中天", new BigDecimal("30.00"), 0)),
                 List.of(new QuoteSheetResponse.ItemResponse(2L, 1, "螺纹钢", "HRB400E", 12, "9米",
                         new BigDecimal("10.00000000"),
-                        List.of(new QuoteSheetResponse.ItemPriceResponse(3L, "中天", new BigDecimal("3280.00"))))),
+                        List.of(new QuoteSheetResponse.ItemPriceResponse(
+                                3L, "中天", new BigDecimal("3280.00"), 77L, "杭州物资")))),
                 null, null);
 
         String json = objectMapper.writeValueAsString(response);

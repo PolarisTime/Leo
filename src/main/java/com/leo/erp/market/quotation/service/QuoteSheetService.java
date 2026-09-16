@@ -12,6 +12,7 @@ import com.leo.erp.market.quotation.domain.entity.QuoteSheetItemPrice;
 import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
+import com.leo.erp.master.api.SupplierQuery;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,11 +23,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
-/** 比价报价单: 单据头 + 品牌 + 商品行 + 行×品牌现货价。 */
+/** 比价报价单: 单据头 + 品牌 + 商品行 + 行×品牌现货价(可标识供应商)。 */
 @Service
 public class QuoteSheetService {
 
@@ -35,10 +39,14 @@ public class QuoteSheetService {
 
     private final QuoteSheetRepository repository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
+    private final SupplierQuery supplierQuery;
 
-    public QuoteSheetService(QuoteSheetRepository repository, SnowflakeIdGenerator snowflakeIdGenerator) {
+    public QuoteSheetService(QuoteSheetRepository repository,
+                             SnowflakeIdGenerator snowflakeIdGenerator,
+                             SupplierQuery supplierQuery) {
         this.repository = repository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
+        this.supplierQuery = supplierQuery;
     }
 
     @Transactional
@@ -56,6 +64,11 @@ public class QuoteSheetService {
     public QuoteSheetResponse update(Long id, QuoteSheetRequest request) {
         validate(request);
         QuoteSheet entity = requireSheet(id);
+        if (entity.isLocked() && Boolean.TRUE.equals(request.locked())
+                && (!entity.getRefDate().equals(request.refDate())
+                    || !entity.getRefPeriod().equals(request.refPeriod()))) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "参照日期/时段已锁定, 请先解锁再修改");
+        }
         apply(entity, request);
         return toResponse(repository.saveAndFlush(entity));
     }
@@ -138,7 +151,32 @@ public class QuoteSheetService {
         entity.setStatus(request.status() == null || request.status().isBlank() ? DEFAULT_STATUS : request.status());
         entity.setRemark(request.remark());
         replaceBrands(entity, request.brands());
-        replaceItems(entity, request.items());
+        replaceItems(entity, request.items(), resolveSupplierNames(request.items()));
+    }
+
+    /** 批量解析现货价来源供应商名称, 任一不存在则拒绝。 */
+    private Map<Long, String> resolveSupplierNames(List<QuoteSheetRequest.ItemRequest> items) {
+        Set<Long> supplierIds = new LinkedHashSet<>();
+        if (items != null) {
+            for (QuoteSheetRequest.ItemRequest item : items) {
+                if (item == null || item.prices() == null) {
+                    continue;
+                }
+                for (QuoteSheetRequest.ItemPriceRequest price : item.prices()) {
+                    if (price != null && price.supplierId() != null) {
+                        supplierIds.add(price.supplierId());
+                    }
+                }
+            }
+        }
+        Map<Long, String> names = new HashMap<>();
+        for (Long supplierId : supplierIds) {
+            names.put(supplierId, supplierQuery.findActiveById(supplierId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR,
+                            "供应商不存在或已停用: " + supplierId))
+                    .name());
+        }
+        return names;
     }
 
     private void replaceBrands(QuoteSheet entity, List<QuoteSheetRequest.BrandRequest> requests) {
@@ -156,7 +194,8 @@ public class QuoteSheetService {
         }
     }
 
-    private void replaceItems(QuoteSheet entity, List<QuoteSheetRequest.ItemRequest> requests) {
+    private void replaceItems(QuoteSheet entity, List<QuoteSheetRequest.ItemRequest> requests,
+                              Map<Long, String> supplierNames) {
         entity.getItems().clear();
         int lineNo = 0;
         for (QuoteSheetRequest.ItemRequest request : requests) {
@@ -177,6 +216,9 @@ public class QuoteSheetService {
                     price.setItem(item);
                     price.setBrandName(priceRequest.brandName());
                     price.setSpotPrice(priceRequest.spotPrice());
+                    price.setSupplierId(priceRequest.supplierId());
+                    price.setSupplierName(priceRequest.supplierId() == null
+                            ? null : supplierNames.get(priceRequest.supplierId()));
                     item.getPrices().add(price);
                 }
             }
@@ -195,7 +237,8 @@ public class QuoteSheetService {
                         item.getLength(), item.getTon(),
                         item.getPrices().stream()
                                 .map(price -> new QuoteSheetResponse.ItemPriceResponse(
-                                        price.getId(), price.getBrandName(), price.getSpotPrice()))
+                                        price.getId(), price.getBrandName(), price.getSpotPrice(),
+                                        price.getSupplierId(), price.getSupplierName()))
                                 .toList()))
                 .toList();
         return new QuoteSheetResponse(entity.getId(), entity.getSheetNo(), entity.getName(), entity.getProjectId(),

@@ -12,30 +12,30 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 
+/** 比价项目参与品牌: 运费与启用品种。 */
 @Getter
 @Setter
 @Entity
-@Table(name = "mk_quote_item_price")
-public class QuoteSheetItemPrice {
+@Table(name = "mk_quote_project_brand")
+public class QuoteProjectBrand {
 
     @Id
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "item_id", nullable = false)
-    private QuoteSheetItem item;
+    @JoinColumn(name = "config_id", nullable = false)
+    private QuoteProjectConfig config;
 
     @Column(name = "brand_name", nullable = false, length = 64)
     private String brandName;
 
-    @Column(name = "spot_price", precision = 12, scale = 2)
-    private BigDecimal spotPrice;
+    @Column(name = "freight", nullable = false, precision = 10, scale = 2)
+    private BigDecimal freight;
 
-    /** 现货价来源供应商ID(主数据)。 */
-    @Column(name = "supplier_id")
-    private Long supplierId;
+    /** 启用品种列表(逗号分隔); 空表示全部启用。 */
+    @Column(name = "categories")
+    private String categories;
 
-    /** 供应商名称快照。 */
-    @Column(name = "supplier_name", length = 200)
-    private String supplierName;
+    @Column(name = "sort_order", nullable = false)
+    private Integer sortOrder;
 }

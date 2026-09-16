@@ -6,6 +6,7 @@ import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
+import com.leo.erp.master.api.SupplierQuery;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -32,8 +33,11 @@ class QuoteSheetServiceTest {
     @Mock
     private SnowflakeIdGenerator snowflakeIdGenerator;
 
+    @Mock
+    private SupplierQuery supplierQuery;
+
     private QuoteSheetService service() {
-        return new QuoteSheetService(repository, snowflakeIdGenerator);
+        return new QuoteSheetService(repository, snowflakeIdGenerator, supplierQuery);
     }
 
     @Test
@@ -75,7 +79,7 @@ class QuoteSheetServiceTest {
                 base.name(), base.projectId(), base.projectName(), base.orderDate(), base.refDate(), base.refPeriod(),
                 base.lengthPremium(), base.locked(), base.status(), base.remark(), base.brands(),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
-                        List.of(new QuoteSheetRequest.ItemPriceRequest("亚新", new BigDecimal("3280"))))));
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("亚新", new BigDecimal("3280"), null)))));
 
         assertThatThrownBy(() -> service().create(invalid))
                 .isInstanceOf(BusinessException.class)
@@ -104,12 +108,93 @@ class QuoteSheetServiceTest {
                 .hasMessageContaining("报价单不存在");
     }
 
+    @Test
+    void update_rejectsRefChangeWhenLocked() {
+        QuoteSheet existing = lockedSheet();
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        QuoteSheetRequest changedRef = new QuoteSheetRequest(
+                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
+                LocalDate.of(2026, 9, 11), "9:30 上午",
+                new BigDecimal("30"), true, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
+
+        assertThatThrownBy(() -> service().update(9L, changedRef))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已锁定");
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_allowsRefChangeAfterUnlock() {
+        QuoteSheet existing = lockedSheet();
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetRequest changedRef = new QuoteSheetRequest(
+                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
+                LocalDate.of(2026, 9, 11), "9:30 上午",
+                new BigDecimal("30"), false, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
+
+        QuoteSheetResponse response = service().update(9L, changedRef);
+
+        assertThat(response.locked()).isFalse();
+        assertThat(response.refDate()).isEqualTo(LocalDate.of(2026, 9, 11));
+    }
+
+    @Test
+    void create_resolvesSupplierNameSnapshot() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 202L, 301L);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(supplierQuery.findActiveById(77L))
+                .thenReturn(Optional.of(new SupplierQuery.SupplierSnapshot(77L, "S001", "杭州物资")));
+
+        QuoteSheetResponse response = service().create(requestWithSupplier(77L));
+
+        QuoteSheetResponse.ItemPriceResponse price = response.items().get(0).prices().get(0);
+        assertThat(price.supplierId()).isEqualTo(77L);
+        assertThat(price.supplierName()).isEqualTo("杭州物资");
+    }
+
+    @Test
+    void create_rejectsUnknownSupplier() {
+        when(supplierQuery.findActiveById(404L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().create(requestWithSupplier(404L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商不存在");
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    private QuoteSheet lockedSheet() {
+        QuoteSheet sheet = new QuoteSheet();
+        sheet.setId(9L);
+        sheet.setLocked(true);
+        sheet.setRefDate(LocalDate.of(2026, 9, 10));
+        sheet.setRefPeriod("9:30 上午");
+        return sheet;
+    }
+
+    private QuoteSheetRequest requestWithSupplier(Long supplierId) {
+        return new QuoteSheetRequest(
+                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("30"), false, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", new BigDecimal("10"),
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), supplierId)))));
+    }
+
     private QuoteSheetRequest request() {
         return new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
                 new BigDecimal("30"), false, "报价", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", new BigDecimal("10"),
-                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"))))));
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
     }
 }

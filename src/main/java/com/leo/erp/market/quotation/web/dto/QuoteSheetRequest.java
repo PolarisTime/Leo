@@ -35,10 +35,11 @@ public record QuoteSheetRequest(
     ) {
     }
 
-    /** 行×品牌现货价。 */
+    /** 行×品牌现货价, 可标识来源供应商。 */
     public record ItemPriceRequest(
             @NotBlank(message = "品牌名称不能为空") @Size(max = 64, message = "品牌名称过长") String brandName,
-            @DecimalMin(value = "0", message = "现货价不能为负") BigDecimal spotPrice
+            @DecimalMin(value = "0", message = "现货价不能为负") BigDecimal spotPrice,
+            Long supplierId
     ) {
     }
 
