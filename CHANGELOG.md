@@ -1,3 +1,10 @@
+# [10.13.0](https://github.com/PolarisTime/Leo/compare/v10.12.1...v10.13.0) (2026-09-16)
+
+
+### Features
+
+* **market:** 报价单与项目配置支持 If-Match 乐观并发 ([4ca9e99](https://github.com/PolarisTime/Leo/commit/4ca9e999ebcf556805e4d7f913991158a64bdd9e))
+
 ## [10.12.1](https://github.com/PolarisTime/Leo/compare/v10.12.0...v10.12.1) (2026-09-16)
 
 
