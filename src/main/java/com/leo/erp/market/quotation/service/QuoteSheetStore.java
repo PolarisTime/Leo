@@ -286,6 +286,7 @@ public class QuoteSheetStore {
         entity.setRefPeriod(request.refPeriod());
         entity.setLengthPremium(request.lengthPremium() == null ? DEFAULT_LENGTH_PREMIUM : request.lengthPremium());
         entity.setLocked(Boolean.TRUE.equals(request.locked()));
+        entity.setSpecQuantityLocked(Boolean.TRUE.equals(request.specQuantityLocked()));
         entity.setStatus(request.status() == null || request.status().isBlank() ? DEFAULT_STATUS : request.status());
         entity.setRemark(request.remark());
     }
@@ -434,8 +435,8 @@ public class QuoteSheetStore {
                 .toList();
         return new QuoteSheetResponse(entity.getId(), entity.getSheetNo(), entity.getName(), entity.getProjectId(),
                 entity.getProjectName(), entity.getOrderDate(), entity.getRefDate(), entity.getRefPeriod(),
-                entity.getLengthPremium(), entity.isLocked(), entity.getStatus(), entity.getRemark(),
-                brands, items, entity.getCreatedAt(), entity.getUpdatedAt(), entity.getVersion());
+                entity.getLengthPremium(), entity.isLocked(), entity.isSpecQuantityLocked(), entity.getStatus(),
+                entity.getRemark(), brands, items, entity.getCreatedAt(), entity.getUpdatedAt(), entity.getVersion());
     }
 
     private QuoteSheetResponse.ItemResponse toItemResponse(QuoteSheetItem item) {

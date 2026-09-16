@@ -21,6 +21,7 @@ public record QuoteSheetRequest(
         @NotBlank(message = "参照时段不能为空") @Size(max = 32, message = "参照时段过长") String refPeriod,
         @DecimalMin(value = "0", message = "12米加价不能为负") BigDecimal lengthPremium,
         Boolean locked,
+        Boolean specQuantityLocked,
         @Size(max = 16, message = "状态过长") String status,
         @Size(max = 255, message = "备注过长") String remark,
         @Valid List<BrandRequest> brands,

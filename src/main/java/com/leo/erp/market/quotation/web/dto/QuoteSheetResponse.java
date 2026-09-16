@@ -17,6 +17,7 @@ public record QuoteSheetResponse(
         String refPeriod,
         BigDecimal lengthPremium,
         boolean locked,
+        boolean specQuantityLocked,
         String status,
         String remark,
         List<BrandResponse> brands,

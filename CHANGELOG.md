@@ -1,11 +1,3 @@
-## [11.0.2](https://github.com/PolarisTime/Leo/compare/v11.0.1...v11.0.2) (2026-09-16)
-
-
-### Bug Fixes
-
-* **quotation:** 修复报价单品牌校验、编辑锁与乐观锁状态码缺陷 ([06b5ea0](https://github.com/PolarisTime/Leo/commit/06b5ea06e9b13f27b2c06f0d88b88f93b21a1012))
-* **quotation:** 修复行级写父版本不递增的乐观并发缺口 ([a31f551](https://github.com/PolarisTime/Leo/commit/a31f5515b56aa2357370b875ece894692030dcfa))
-
 ## [11.0.1](https://github.com/PolarisTime/Leo/compare/v11.0.0...v11.0.1) (2026-09-16)
 
 

@@ -54,6 +54,9 @@ public class QuoteSheet extends AbstractAuditableEntity {
     @Column(name = "locked", nullable = false)
     private boolean locked = false;
 
+    @Column(name = "spec_quantity_locked", nullable = false)
+    private boolean specQuantityLocked = false;
+
     @Column(name = "status", nullable = false, length = 16)
     private String status = "报价";
 
