@@ -114,7 +114,12 @@ public class QuoteSheetStore {
             // 由 @Version 自然递增一次, 再叠加 FORCE_INCREMENT 会变成 +2, 故仅在表头未变时强制自增,
             // 保证任意路径父版本恰好 +1。
             boolean headerChanged = applyHeader(entity, request, false);
-            replaceBrands(entity, request.brands());
+            // 项目配置存在时品牌快照完全由 syncBrandSnapshot 依据配置真源协调, 不再先按请求品牌
+            // 重建, 避免请求品牌与配置不一致时同名品牌被删后以新雪花 ID 重建(ID 漂移, 徒增 DELETE/INSERT)。
+            // 请求品牌仅在配置缺失(历史/未配置项目)时作为快照来源。
+            if (config == null) {
+                replaceBrands(entity, request.brands());
+            }
             syncBrandSnapshot(entity, config);
             replaceItems(entity, request.items(), resolveSupplierNames(request.items()));
             if (!headerChanged) {
