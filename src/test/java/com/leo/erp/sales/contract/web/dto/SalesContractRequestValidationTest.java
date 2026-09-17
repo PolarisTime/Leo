@@ -70,14 +70,16 @@ class SalesContractRequestValidationTest {
     }
 
     @Test
-    void rejectsBlankName() {
-        SalesContractRequest request = new SalesContractRequest(
+    void allowsNullAndBlankName() {
+        SalesContractRequest nullName = new SalesContractRequest(
+                null, null, 1L, 2L, LocalDate.of(2026, 9, 17), null, null,
+                BigDecimal.ONE, BigDecimal.ONE, null, null);
+        SalesContractRequest blankName = new SalesContractRequest(
                 null, "  ", 1L, 2L, LocalDate.of(2026, 9, 17), null, null,
                 BigDecimal.ONE, BigDecimal.ONE, null, null);
 
-        assertThat(validator.validate(request))
-                .extracting(violation -> violation.getPropertyPath().toString())
-                .contains("name");
+        assertThat(validator.validate(nullName)).isEmpty();
+        assertThat(validator.validate(blankName)).isEmpty();
     }
 
     private SalesContractRequest request(BigDecimal amount, BigDecimal tonnage) {

@@ -2,7 +2,6 @@ package com.leo.erp.sales.contract.web.dto;
 
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
@@ -14,11 +13,11 @@ import java.time.LocalDate;
 /**
  * 销售合同新增/整体替换请求。
  *
- * <p>合同编号为空时由服务端按雪花 ID 自动生成; 客户/项目名称由 master.api 端口回填快照, 不接受客户端伪造。</p>
+ * <p>合同编号为空时由服务端按雪花 ID 自动生成; 合同名称为可空字段(空值原样入库为 null);
+ * 客户/项目名称由 master.api 端口回填快照, 不接受客户端伪造。</p>
  */
 public record SalesContractRequest(
         @Size(max = 64, message = "合同编号长度不能超过64个字符") String contractNo,
-        @NotBlank(message = "合同名称不能为空")
         @Size(max = 128, message = "合同名称长度不能超过128个字符") String name,
         @NotNull(message = "客户不能为空") @Positive(message = "客户ID必须为正整数") Long customerId,
         @NotNull(message = "项目不能为空") @Positive(message = "项目ID必须为正整数") Long projectId,
