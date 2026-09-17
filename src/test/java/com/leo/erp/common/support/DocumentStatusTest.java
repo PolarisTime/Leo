@@ -26,6 +26,15 @@ class DocumentStatusTest {
         assertThat(DocumentStatus.fromLabel(StatusConstants.DISABLED)).contains(DocumentStatus.DISABLED);
         assertThat(DocumentStatus.fromLabel(StatusConstants.DRAFT)).contains(DocumentStatus.DRAFT);
         assertThat(DocumentStatus.fromLabel(StatusConstants.AUDITED)).contains(DocumentStatus.AUDITED);
+        assertThat(DocumentStatus.fromLabel(StatusConstants.ISSUED)).contains(DocumentStatus.ISSUED);
+        assertThat(DocumentStatus.fromLabel(StatusConstants.CONTRACT_REVIEWED))
+                .contains(DocumentStatus.CONTRACT_REVIEWED);
+        assertThat(DocumentStatus.fromLabel(StatusConstants.CONTRACT_ISSUED))
+                .contains(DocumentStatus.CONTRACT_ISSUED);
+        assertThat(DocumentStatus.CONTRACT_REVIEWED.label()).isEqualTo("审核");
+        assertThat(DocumentStatus.CONTRACT_ISSUED.label()).isEqualTo("签发");
+        assertThat(DocumentStatus.fromLabel("审核")).contains(DocumentStatus.CONTRACT_REVIEWED);
+        assertThat(DocumentStatus.fromLabel("签发")).contains(DocumentStatus.CONTRACT_ISSUED);
         assertThat(DocumentStatus.fromLabel(StatusConstants.COMPLETED)).contains(DocumentStatus.COMPLETED);
         assertThat(DocumentStatus.fromLabel(StatusConstants.PRE_OUTBOUND)).contains(DocumentStatus.PRE_OUTBOUND);
         assertThat(DocumentStatus.fromLabel(StatusConstants.PAID)).contains(DocumentStatus.LEGACY_PAID);

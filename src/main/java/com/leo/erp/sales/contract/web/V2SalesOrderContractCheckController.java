@@ -34,8 +34,9 @@ public class V2SalesOrderContractCheckController {
     }
 
     @Operation(summary = "校验销售订单合同金额/吨位",
-            description = "统计项目下已审核合同总额度, 与项目下未删除销售订单累计(可排除当前订单)加本次提交值比对; "
-                    + "只读提示, 不阻断保存。")
+            description = "统计项目下未删除且状态为「审核/签发/归档」的合同总额度(草稿与作废不计入), "
+                    + "与项目下未删除销售订单累计(可排除当前订单)加本次提交值比对; 只读提示, 不阻断保存。"
+                    + "权限沿用 sales-orders:read(录单场景)。")
     @GetMapping
     @RequirePermission(PermissionCodes.SALES_ORDERS_READ)
     public SalesContractCheckResponse check(@RequestParam Long projectId,

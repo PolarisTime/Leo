@@ -25,8 +25,12 @@ public enum DocumentStatus {
     @Deprecated
     PRE_OUTBOUND("PRE_OUTBOUND", "预出库"),
     AUDITED("AUDITED", "已审核"),
-    /** 销售合同已发出: 已审核之后发出, 只能继续归档, 不允许直接作废。 */
+    /** 通用已发出态; 销售合同模块已改用 {@link #CONTRACT_ISSUED}(「签发」), 此处仅保留兼容历史单据。 */
     ISSUED("ISSUED", "已发出"),
+    /** 销售合同审核态: 取值「审核」, 与通用单据「已审核」({@link #AUDITED})区分。 */
+    CONTRACT_REVIEWED("CONTRACT_REVIEWED", "审核"),
+    /** 销售合同签发态: 取值「签发」, 与通用单据「已发出」({@link #ISSUED})区分。 */
+    CONTRACT_ISSUED("CONTRACT_ISSUED", "签发"),
     COMPLETED("COMPLETED", "已完成"),
     /** 销售合同作废: 终态之一, 未被删除但不再计入有效合同额度。 */
     VOIDED("VOIDED", "作废"),

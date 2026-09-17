@@ -149,7 +149,7 @@ class V2SalesContractControllerPermissionTest {
 
         mockMvc.perform(patch("/v2.0/sales-contracts/5/status")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"已审核\"}"))
+                        .content("{\"status\":\"审核\"}"))
                 .andExpect(status().isForbidden());
 
         verify(service, never()).updateStatus(anyLong(), any());

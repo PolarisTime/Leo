@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 真实 PostgreSQL 累计口径回归(默认跳过, 设置 {@code LEO_TEST_POSTGRES=true} 才执行)。
- * <p>覆盖: 已审核/已发出/归档合同求和、草稿与作废不计入、已删除合同/订单不计入、排除当前订单、
+ * <p>覆盖: 审核/签发/归档合同求和、草稿与作废不计入、已删除合同/订单不计入、排除当前订单、
  * 跨项目不计入、边界刚好等于/超出, 以及雪花 ID 持久化与字符串出参。</p>
  * <p>用例自带隔离的客户/项目主数据(测试事务回滚), 不依赖开发库既有业务数据。</p>
  */
@@ -44,7 +44,7 @@ class SalesOrderContractCheckPostgresTest {
     private static final long CUSTOMER_ID = 941000000000000001L;
     private static final long PROJECT_ID = 941000000000000011L;
     private static final long OTHER_PROJECT_ID = 941000000000000012L;
-    private static final long CONTRACT_AUDITED = 941000000000000101L;
+    private static final long CONTRACT_REVIEWED = 941000000000000101L;
     private static final long CONTRACT_ISSUED = 941000000000000102L;
     private static final long CONTRACT_ARCHIVED = 941000000000000103L;
     private static final long CONTRACT_VOIDED = 941000000000000104L;
@@ -81,12 +81,12 @@ class SalesOrderContractCheckPostgresTest {
 
     @Test
     void check_sumsAuditedIssuedArchivedContracts_ignoringDraftVoidedDeletedAndOtherProjects() {
-        persistContract(CONTRACT_AUDITED, StatusConstants.AUDITED, "100.00", "10.00000000", PROJECT_ID, false);
-        persistContract(CONTRACT_ISSUED, StatusConstants.ISSUED, "40.00", "4.00000000", PROJECT_ID, false);
+        persistContract(CONTRACT_REVIEWED, StatusConstants.CONTRACT_REVIEWED, "100.00", "10.00000000", PROJECT_ID, false);
+        persistContract(CONTRACT_ISSUED, StatusConstants.CONTRACT_ISSUED, "40.00", "4.00000000", PROJECT_ID, false);
         persistContract(CONTRACT_ARCHIVED, StatusConstants.ARCHIVED, "10.00", "1.00000000", PROJECT_ID, false);
         persistContract(CONTRACT_VOIDED, StatusConstants.VOIDED, "999.00", "999.00000000", PROJECT_ID, false);
         persistContract(CONTRACT_DRAFT, StatusConstants.DRAFT, "888.00", "888.00000000", PROJECT_ID, false);
-        persistContract(CONTRACT_DELETED, StatusConstants.AUDITED, "777.00", "77.00000000", PROJECT_ID, true);
+        persistContract(CONTRACT_DELETED, StatusConstants.CONTRACT_REVIEWED, "777.00", "77.00000000", PROJECT_ID, true);
         persistOrder(ORDER_1, PROJECT_ID, "30.00", "3.00000000", false);
         persistOrder(ORDER_2, PROJECT_ID, "20.00", "2.00000000", false);
         persistOrder(ORDER_DELETED, PROJECT_ID, "500.00", "50.00000000", true);
@@ -129,7 +129,7 @@ class SalesOrderContractCheckPostgresTest {
 
     @Test
     void check_exactlyAtBoundary_isNotExceeded_andOneCentOverIsExceeded() {
-        persistContract(CONTRACT_AUDITED, StatusConstants.AUDITED, "100.00", "10.00000000", PROJECT_ID, false);
+        persistContract(CONTRACT_REVIEWED, StatusConstants.CONTRACT_REVIEWED, "100.00", "10.00000000", PROJECT_ID, false);
         persistOrder(ORDER_1, PROJECT_ID, "90.00", "9.00000000", false);
         contractRepository.flush();
         salesOrderRepository.flush();
@@ -165,7 +165,7 @@ class SalesOrderContractCheckPostgresTest {
     @Test
     void snowflakeId_isPersistedAndEmittedAsDecimalString() throws Exception {
         long largeId = 9223372036854775807L;
-        persistContract(largeId, StatusConstants.AUDITED, "1.00", "1.00000000", PROJECT_ID, false);
+        persistContract(largeId, StatusConstants.CONTRACT_REVIEWED, "1.00", "1.00000000", PROJECT_ID, false);
         contractRepository.flush();
 
         SalesContract stored = contractRepository.findById(largeId).orElseThrow();

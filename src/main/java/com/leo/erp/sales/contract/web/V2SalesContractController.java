@@ -79,7 +79,8 @@ public class V2SalesContractController {
     @Operation(summary = "整体替换销售合同",
             description = "要求资源版本前置条件头 " + VERSION_HEADER + "(兼容别名 If-Match); "
                     + "该前置条件是否必需由 leo.sales.contract.require-resource-version 控制, "
-                    + "开启时缺少版本返回 428, 版本不匹配返回 412; 响应头回传最新版本。")
+                    + "开启时缺少版本返回 428, 版本不匹配返回 412; 响应头回传最新版本。"
+                    + "仅「草稿」可整体替换; 「审核/签发/归档/作废」为受保护状态, 返回 422。")
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.SALES_CONTRACTS_UPDATE)
     public ResponseEntity<SalesContractResponse> update(
@@ -105,8 +106,10 @@ public class V2SalesContractController {
     }
 
     @Operation(summary = "变更销售合同状态",
-            description = "状态机: 草稿→已审核→已发出→归档, 不支持逆向回退; "
-                    + "作废仅允许自 草稿/已审核/归档, 已发出须先归档; 非法流转返回 422。")
+            description = "状态机: 草稿→审核→签发→归档, 不支持逆向回退; "
+                    + "作废仅允许自 草稿/审核/归档, 签发不可作废(须先归档), "
+                    + "归档作废前校验「项目下不存在未删除销售订单」(本期口径, 不引入订单对合同的引用字段); "
+                    + "作废为终态只读; 非法流转返回 422。")
     @PatchMapping("/{id}/status")
     @RequirePermission(PermissionCodes.SALES_CONTRACTS_UPDATE)
     public ResponseEntity<SalesContractResponse> updateStatus(@PathVariable Long id,

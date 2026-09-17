@@ -14,12 +14,15 @@ import com.leo.erp.sales.contract.web.dto.SalesContractResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -103,7 +106,7 @@ class SalesContractServiceTest {
         when(idGenerator.nextId()).thenReturn(100L);
         when(repository.existsByContractNo("100")).thenReturn(false);
 
-        assertThatThrownBy(() -> service.create(request(null, StatusConstants.AUDITED)))
+        assertThatThrownBy(() -> service.create(request(null, StatusConstants.CONTRACT_REVIEWED)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("只能保存为草稿");
         verify(repository, never()).save(any());
@@ -167,7 +170,7 @@ class SalesContractServiceTest {
         SalesContract entity = existing(9L, StatusConstants.DRAFT, "HT-1", 3L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(entity));
 
-        assertThatThrownBy(() -> service.update(9L, request(null, StatusConstants.AUDITED), 3L))
+        assertThatThrownBy(() -> service.update(9L, request(null, StatusConstants.CONTRACT_REVIEWED), 3L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("状态只能通过状态变更操作修改");
         verify(repository, never()).save(any());
@@ -185,15 +188,27 @@ class SalesContractServiceTest {
         verify(repository, never()).save(any());
     }
 
-    @Test
-    void update_rejectsAuditedContract() {
-        SalesContract entity = existing(9L, StatusConstants.AUDITED, "HT-1", 3L);
+    @ParameterizedTest
+    @MethodSource("nonEditableContractStatuses")
+    void update_rejectsNonDraftStatuses(String status) {
+        SalesContract entity = existing(9L, status, "HT-1", 3L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(entity));
 
         assertThatThrownBy(() -> service.update(9L, request(null, null), null))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("不能编辑");
+                .hasMessageContaining("不能编辑")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.BUSINESS_ERROR);
         verify(repository, never()).save(any());
+    }
+
+    private static Stream<String> nonEditableContractStatuses() {
+        return Stream.of(
+                StatusConstants.CONTRACT_REVIEWED,
+                StatusConstants.CONTRACT_ISSUED,
+                StatusConstants.ARCHIVED,
+                StatusConstants.VOIDED
+        );
     }
 
     @Test
@@ -208,14 +223,17 @@ class SalesContractServiceTest {
         verify(repository).save(entity);
     }
 
-    @Test
-    void delete_rejectsAuditedContract() {
-        SalesContract entity = existing(9L, StatusConstants.AUDITED, "HT-1", 3L);
+    @ParameterizedTest
+    @MethodSource("nonEditableContractStatuses")
+    void delete_rejectsNonDraftStatuses(String status) {
+        SalesContract entity = existing(9L, status, "HT-1", 3L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(entity));
 
         assertThatThrownBy(() -> service.delete(9L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("不能删除");
+                .hasMessageContaining("不能删除")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.BUSINESS_ERROR);
         verify(repository, never()).save(any());
     }
 
@@ -231,18 +249,18 @@ class SalesContractServiceTest {
     }
 
     @Test
-    void updateStatus_draftToAudited() {
-        assertTransition(StatusConstants.DRAFT, StatusConstants.AUDITED);
+    void updateStatus_draftToReviewed() {
+        assertTransition(StatusConstants.DRAFT, StatusConstants.CONTRACT_REVIEWED);
     }
 
     @Test
-    void updateStatus_auditedToIssued() {
-        assertTransition(StatusConstants.AUDITED, StatusConstants.ISSUED);
+    void updateStatus_reviewedToIssued() {
+        assertTransition(StatusConstants.CONTRACT_REVIEWED, StatusConstants.CONTRACT_ISSUED);
     }
 
     @Test
     void updateStatus_issuedToArchived() {
-        assertTransition(StatusConstants.ISSUED, StatusConstants.ARCHIVED);
+        assertTransition(StatusConstants.CONTRACT_ISSUED, StatusConstants.ARCHIVED);
     }
 
     @Test
@@ -251,8 +269,8 @@ class SalesContractServiceTest {
     }
 
     @Test
-    void updateStatus_auditedToVoided() {
-        assertTransition(StatusConstants.AUDITED, StatusConstants.VOIDED);
+    void updateStatus_reviewedToVoided() {
+        assertTransition(StatusConstants.CONTRACT_REVIEWED, StatusConstants.VOIDED);
     }
 
     @Test
@@ -283,7 +301,7 @@ class SalesContractServiceTest {
 
     @Test
     void updateStatus_issuedCannotBeVoided() {
-        SalesContract entity = existing(9L, StatusConstants.ISSUED, "HT-1", 3L);
+        SalesContract entity = existing(9L, StatusConstants.CONTRACT_ISSUED, "HT-1", 3L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(entity));
 
         assertThatThrownBy(() -> service.updateStatus(9L, StatusConstants.VOIDED))
@@ -297,7 +315,7 @@ class SalesContractServiceTest {
 
     @Test
     void updateStatus_reverseTransitionRejected() {
-        SalesContract entity = existing(9L, StatusConstants.AUDITED, "HT-1", 3L);
+        SalesContract entity = existing(9L, StatusConstants.CONTRACT_REVIEWED, "HT-1", 3L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(entity));
 
         assertThatThrownBy(() -> service.updateStatus(9L, StatusConstants.DRAFT))
@@ -307,8 +325,21 @@ class SalesContractServiceTest {
     }
 
     @Test
+    void updateStatus_voidedIsTerminal() {
+        SalesContract entity = existing(9L, StatusConstants.VOIDED, "HT-1", 3L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> service.updateStatus(9L, StatusConstants.ARCHIVED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能从")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.BUSINESS_ERROR);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
     void updateStatus_unknownStatusRejected() {
-        SalesContract entity = existing(9L, StatusConstants.AUDITED, "HT-1", 3L);
+        SalesContract entity = existing(9L, StatusConstants.CONTRACT_REVIEWED, "HT-1", 3L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(entity));
 
         assertThatThrownBy(() -> service.updateStatus(9L, "不存在的状态"))

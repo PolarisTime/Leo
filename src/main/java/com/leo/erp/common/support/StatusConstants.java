@@ -20,10 +20,14 @@ public final class StatusConstants {
     @Deprecated
     public static final String PRE_OUTBOUND = DocumentStatus.PRE_OUTBOUND.label();
     public static final String AUDITED = DocumentStatus.AUDITED.label();
-    /** 销售合同已发出: 已审核之后发出, 归归档前置, 不可直接作废。 */
+    /** 通用已发出态; 销售合同模块已改用 {@link #CONTRACT_ISSUED}(「签发」)。 */
     public static final String ISSUED = DocumentStatus.ISSUED.label();
+    /** 销售合同审核态(取值「审核」): 与通用 {@link #AUDITED}(「已审核」)区分。 */
+    public static final String CONTRACT_REVIEWED = DocumentStatus.CONTRACT_REVIEWED.label();
+    /** 销售合同签发态(取值「签发」): 与通用 {@link #ISSUED}(「已发出」)区分。 */
+    public static final String CONTRACT_ISSUED = DocumentStatus.CONTRACT_ISSUED.label();
     public static final String COMPLETED = DocumentStatus.COMPLETED.label();
-    /** 销售合同作废: 不计入有效合同额度, 不能从作废回到已审核。 */
+    /** 销售合同作废: 终态只读, 不计入有效合同额度, 不能从作废回到审核。 */
     public static final String VOIDED = DocumentStatus.VOIDED.label();
 
     // 财务状态
@@ -75,14 +79,15 @@ public final class StatusConstants {
     public static final Set<String> ALLOWED_SALES_OUTBOUND_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_SALES_RETURN_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_CONTRACT_STATUS = Set.of(DRAFT, EXECUTING, SIGNED, ARCHIVED);
-    /** 销售合同合法状态集合: 草稿 / 已审核 / 已发出 / 归档 / 作废。 */
+    /** 销售合同合法状态集合: 草稿 / 审核 / 签发 / 归档 / 作废。 */
     public static final Set<String> ALLOWED_SALES_CONTRACT_STATUS =
-            Set.of(DRAFT, AUDITED, ISSUED, ARCHIVED, VOIDED);
+            Set.of(DRAFT, CONTRACT_REVIEWED, CONTRACT_ISSUED, ARCHIVED, VOIDED);
     /**
-     * 参与合同金额/吨位累计的销售合同状态: 已审核 / 已发出 / 归档。
+     * 参与合同金额/吨位累计的销售合同状态: 审核 / 签发 / 归档。
      * 草稿与作废不计入有效合同额度。
      */
-    public static final Set<String> SALES_CONTRACT_QUOTA_STATUSES = Set.of(AUDITED, ISSUED, ARCHIVED);
+    public static final Set<String> SALES_CONTRACT_QUOTA_STATUSES =
+            Set.of(CONTRACT_REVIEWED, CONTRACT_ISSUED, ARCHIVED);
     public static final Set<String> ALLOWED_STATEMENT_STATUS = Set.of(PENDING_CONFIRM, CONFIRMED);
 
     // 客户对账单方向：蓝字=正常对账（正数），红字=退货冲销（负数）
@@ -98,6 +103,12 @@ public final class StatusConstants {
     public static final Set<String> ALLOWED_PAYMENT_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_RECEIPT_STATUS = Set.of(DRAFT, AUDITED);
 
+    /**
+     * 受保护单据状态: 编辑与删除均被拒绝, 只能通过专用状态接口流转。
+     * 其中 {@link #CONTRACT_REVIEWED}、{@link #CONTRACT_ISSUED} 与 {@link #VOIDED} 服务于
+     * 销售合同「审核/签发/归档/作废不可编辑、不可删除, 仅草稿可编辑可删除」的口径;
+     * {@code 作废} 为终态只读, 不可再流转。
+     */
     public static final Set<String> PROTECTED_DOCUMENT_STATUS = Set.of(
             AUDITED,
             COMPLETED,
@@ -108,7 +119,10 @@ public final class StatusConstants {
             CONFIRMED,
             SIGNED,
             ISSUED,
-            ARCHIVED
+            ARCHIVED,
+            CONTRACT_REVIEWED,
+            CONTRACT_ISSUED,
+            VOIDED
     );
     public static final Set<String> SETTLEABLE_CUSTOMER_STATEMENT_STATUS = Set.of(CONFIRMED);
     public static final Set<String> SETTLEABLE_FREIGHT_STATEMENT_STATUS = Set.of(AUDITED);
@@ -152,15 +166,15 @@ public final class StatusConstants {
             StatusTransition.of(SIGNED, ARCHIVED)
     );
     /**
-     * 销售合同状态迁移(定稿): 草稿 → 已审核 → 已发出 → 归档, 不支持逆向回退;
-     * 作废仅允许自 草稿 / 已审核 / 归档, 已发出必须先归档再作废。
+     * 销售合同状态迁移(定稿): 草稿 → 审核 → 签发 → 归档, 不支持逆向回退;
+     * 作废仅允许自 草稿 / 审核 / 归档, 签发不可作废(须先归档); 作废为终态, 无出边。
      */
     public static final Set<StatusTransition> SALES_CONTRACT_TRANSITIONS = Set.of(
-            StatusTransition.of(DRAFT, AUDITED),
-            StatusTransition.of(AUDITED, ISSUED),
-            StatusTransition.of(ISSUED, ARCHIVED),
+            StatusTransition.of(DRAFT, CONTRACT_REVIEWED),
+            StatusTransition.of(CONTRACT_REVIEWED, CONTRACT_ISSUED),
+            StatusTransition.of(CONTRACT_ISSUED, ARCHIVED),
             StatusTransition.of(DRAFT, VOIDED),
-            StatusTransition.of(AUDITED, VOIDED),
+            StatusTransition.of(CONTRACT_REVIEWED, VOIDED),
             StatusTransition.of(ARCHIVED, VOIDED)
     );
     public static final Set<StatusTransition> STATEMENT_CONFIRM_TRANSITIONS = Set.of(

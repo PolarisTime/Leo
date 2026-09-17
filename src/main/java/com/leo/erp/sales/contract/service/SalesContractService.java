@@ -26,8 +26,12 @@ import java.util.Objects;
 /**
  * 销售合同 CRUD 与状态流转。
  *
- * <p>状态机(定稿): 草稿 → 已审核 → 已发出 → 归档, 不支持逆向回退;
- * 作废仅允许自 草稿 / 已审核 / 归档, 已发出必须先归档; 非法流转按 422 返回。</p>
+ * <p>状态机(定稿): 草稿 → 审核 → 签发 → 归档, 不支持逆向回退;
+ * 作废仅允许自 草稿 / 审核 / 归档, 签发不可作废(须先归档); 非法流转按 422 返回。</p>
+ *
+ * <p>编辑/删除口径: 仅 {@code 草稿} 可整体替换(PUT)与软删; {@code 审核/签发/归档/作废}
+ * 均为受保护状态, PUT 与 DELETE 一律被 {@link com.leo.erp.common.service.CrudStatusGuard} 拒绝并返回 422;
+ * {@code 作废} 为终态只读, 不再参与任何流转。</p>
  *
  * <p>客户/项目存在性与名称快照经 {@code master.api} 端口解析, 不直接依赖 master 模块内部。
  * 删除为软删; 但数据库层合同编号全量唯一, 因此软删后同一编号不可复用。</p>
@@ -145,6 +149,12 @@ public class SalesContractService {
         return toResponse(saved);
     }
 
+    /**
+     * 归档合同作废前的「已被销售订单引用」校验。
+     *
+     * <p>口径(本期定稿): 项目下只要存在未删除的销售订单即视为被引用, 不引入销售订单对合同的显式引用字段。
+     * 与额度累计口径一致, 均按 {@code projectId + deleted_flag = false} 判定。</p>
+     */
     private void assertNotReferencedBySalesOrder(SalesContract entity) {
         if (orderMetricsRepository.existsByProjectIdAndDeletedFlagFalse(entity.getProjectId())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR,

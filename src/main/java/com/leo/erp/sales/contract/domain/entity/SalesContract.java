@@ -62,6 +62,7 @@ public class SalesContract extends AbstractAuditableEntity implements StatusAwar
     @Column(name = "total_tonnage", nullable = false, precision = 18, scale = 8)
     private BigDecimal totalTonnage;
 
+    /** 状态: 草稿 / 审核 / 签发 / 归档 / 作废; 仅状态接口可变更, 作废为终态只读。 */
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 

@@ -4,6 +4,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
@@ -30,6 +31,7 @@ public record SalesContractRequest(
         @NotNull(message = "合同总吨位不能为空")
         @DecimalMin(value = "0", message = "合同总吨位不能为负")
         @Digits(integer = 10, fraction = 8, message = "合同总吨位精度不合法") BigDecimal totalTonnage,
+        @Pattern(regexp = "^(草稿|审核|签发|归档|作废)?$", message = "销售合同状态不合法")
         String status,
         @Size(max = 255, message = "备注长度不能超过255个字符") String remark
 ) {

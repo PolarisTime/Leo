@@ -121,13 +121,13 @@ class V2SalesContractControllerTest {
 
     @Test
     void updateStatus_returnsVersionHeader() {
-        when(service.updateStatus(100L, "已审核")).thenReturn(auditedResponse(4L));
+        when(service.updateStatus(100L, "审核")).thenReturn(reviewedResponse(4L));
 
         ResponseEntity<SalesContractResponse> entity =
-                controller(false).updateStatus(100L, new StatusUpdateRequest("已审核"));
+                controller(false).updateStatus(100L, new StatusUpdateRequest("审核"));
 
         assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(entity.getBody().status()).isEqualTo("已审核");
+        assertThat(entity.getBody().status()).isEqualTo("审核");
         assertThat(entity.getHeaders().getFirst(ResourceVersionPrecondition.HEADER)).isEqualTo("4");
     }
 
@@ -157,13 +157,13 @@ class V2SalesContractControllerTest {
         );
     }
 
-    private SalesContractResponse auditedResponse(Long version) {
+    private SalesContractResponse reviewedResponse(Long version) {
         return new SalesContractResponse(
                 100L, "HT-1", "年度钢材采购合同",
                 1L, "客户甲", 2L, "项目乙",
                 LocalDate.of(2026, 9, 17), LocalDate.of(2026, 9, 18), LocalDate.of(2026, 12, 31),
                 new BigDecimal("1000000.00"), new BigDecimal("3000.50000000"),
-                "已审核", "备注", null, null, version
+                "审核", "备注", null, null, version
         );
     }
 }
