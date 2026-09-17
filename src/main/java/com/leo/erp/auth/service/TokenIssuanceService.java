@@ -11,6 +11,7 @@ import com.leo.erp.auth.web.dto.TokenResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.jwt.JwtTokenService;
+import com.leo.erp.security.permission.AuthorityProvider;
 import com.leo.erp.security.support.SecurityPrincipal;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -30,17 +32,20 @@ public class TokenIssuanceService {
     private final JwtTokenService jwtTokenService;
     private final SessionManagementService sessionManagementService;
     private final ApplicationEventPublisher eventPublisher;
+    private final AuthorityProvider authorityProvider;
 
     public TokenIssuanceService(
             UserAccountRepository userAccountRepository,
             JwtTokenService jwtTokenService,
             SessionManagementService sessionManagementService,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            AuthorityProvider authorityProvider
     ) {
         this.userAccountRepository = userAccountRepository;
         this.jwtTokenService = jwtTokenService;
         this.sessionManagementService = sessionManagementService;
         this.eventPublisher = eventPublisher;
+        this.authorityProvider = authorityProvider;
     }
 
     @Transactional(noRollbackFor = BadCredentialsException.class)
@@ -144,7 +149,8 @@ public class TokenIssuanceService {
                 new AuthUserResponse(
                         user.getId(),
                         user.getLoginName(),
-                        user.getUserName()
+                        user.getUserName(),
+                        resolvePermissions(principal)
                 )
         );
     }
@@ -170,9 +176,18 @@ public class TokenIssuanceService {
                 new AuthUserResponse(
                         user.getId(),
                         user.getLoginName(),
-                        user.getUserName()
+                        user.getUserName(),
+                        resolvePermissions(principal)
                 )
         );
+    }
+
+    /** 当前用户启用角色的权限码并集(去重排序), 供前端做菜单/按钮级 UI 控制。 */
+    private List<String> resolvePermissions(SecurityPrincipal principal) {
+        return authorityProvider.authoritiesFor(principal).stream()
+                .distinct()
+                .sorted()
+                .toList();
     }
 
     private long normalizeCredentialVersion(Long credentialVersion) {
