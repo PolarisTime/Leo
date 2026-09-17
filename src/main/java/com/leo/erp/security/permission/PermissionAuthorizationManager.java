@@ -60,15 +60,8 @@ public final class PermissionAuthorizationManager implements AuthorizationManage
      * 也包括 {@code sales-returns:read:amount} 这类字段级权限码。</p>
      */
     private boolean isGranted(String required, Set<String> granted) {
-        if (granted.contains(required)) {
-            return true;
-        }
-        int separator = required.indexOf(':');
-        if (separator <= 0) {
-            return false;
-        }
-        String resource = required.substring(0, separator);
-        return granted.contains(resource + ":" + PermissionCodes.Actions.WILDCARD);
+        // 与 service 层 PermissionChecker / 字段序列化器共用同一通配语义，避免行为漂移。
+        return PermissionCodes.grants(granted, required);
     }
 
     private RequirePermission findAnnotation(MethodInvocation invocation) {

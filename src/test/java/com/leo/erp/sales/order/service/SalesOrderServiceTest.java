@@ -8,10 +8,15 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
+import com.leo.erp.security.permission.PermissionChecker;
+import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.support.SecurityPrincipal;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
@@ -19,11 +24,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -67,8 +75,17 @@ class SalesOrderServiceTest {
     @Mock
     private SalesOrderWorkflowService workflowService;
 
+    @Mock
+    private PermissionChecker permissionChecker;
+
     @InjectMocks
     private SalesOrderService service;
+
+    @BeforeEach
+    void grantFieldPermissionsByDefault() {
+        // 默认放行字段级权限，避免影响与字段权限无关的既有用例。
+        lenient().when(permissionChecker.has(anyString())).thenReturn(true);
+    }
 
     private SalesOrderRequest request(String orderNo, String status) {
         return new SalesOrderRequest(
@@ -342,6 +359,35 @@ class SalesOrderServiceTest {
         assertThatThrownBy(() -> service.update(5L, request("SO001", null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不能从「已审核」变更为「完成销售」");
+
+        verify(workflowService, never()).saveUpdated(any(), any());
+    }
+
+    @Test
+    void update_shouldRejectUnitPriceChangeWithoutPermission() {
+        loginAs(1L);
+        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+        SalesOrderItem existingItem = new SalesOrderItem();
+        existingItem.setId(11L);
+        existingItem.setUnitPrice(new BigDecimal("100.00"));
+        entity.setItems(new ArrayList<>(List.of(existingItem)));
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(documentChargeItemService.list("sales-order", 5L)).thenReturn(List.of());
+        when(mutationGuardService.allowsProtectedUpdate(eq(entity), any())).thenReturn(true);
+        when(permissionChecker.has(PermissionCodes.SALES_ORDERS_UPDATE_UNIT_PRICE)).thenReturn(false);
+
+        SalesOrderItemRequest item = new SalesOrderItemRequest(
+                11L, "M001", "品牌", "品类", "材质", "规格", "9米", "吨",
+                null, 100L, "仓库", "批号", 5, "件", BigDecimal.ONE, 0, BigDecimal.TEN,
+                new BigDecimal("200.00"), new BigDecimal("2000.00"));
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A", null, null,
+                LocalDate.of(2026, 8, 1), "销售员A", "草稿", null,
+                List.of(item), List.of(), false);
+
+        assertThatThrownBy(() -> service.update(5L, request))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("sales-orders:update:unit-price");
 
         verify(workflowService, never()).saveUpdated(any(), any());
     }

@@ -10,20 +10,27 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
+import com.leo.erp.security.permission.PermissionChecker;
+import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.support.SecurityPrincipal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -41,6 +48,7 @@ public class SalesOrderService {
     private final SalesOrderQueryService queryService;
     private final SalesOrderMutationGuardService mutationGuardService;
     private final SalesOrderWorkflowService workflowService;
+    private final PermissionChecker permissionChecker;
 
     @Autowired
     public SalesOrderService(SalesOrderRepository repository,
@@ -48,13 +56,15 @@ public class SalesOrderService {
                              DocumentChargeItemService documentChargeItemService,
                              SalesOrderQueryService queryService,
                              SalesOrderMutationGuardService mutationGuardService,
-                             SalesOrderWorkflowService workflowService) {
+                             SalesOrderWorkflowService workflowService,
+                             PermissionChecker permissionChecker) {
         this.idGenerator = idGenerator;
         this.repository = repository;
         this.documentChargeItemService = documentChargeItemService;
         this.queryService = queryService;
         this.mutationGuardService = mutationGuardService;
         this.workflowService = workflowService;
+        this.permissionChecker = permissionChecker;
     }
 
     @Transactional(readOnly = true)
@@ -179,6 +189,7 @@ public class SalesOrderService {
         SalesOrder entity = requireEntity(id);
         SalesOrderRequest normalized = normalizeUpdateRequest(entity, request);
         STATUS_GUARD.assertEditAllowed(entity, allowProtectedStatusUpdate(entity, normalized));
+        assertUnitPriceChangeAllowed(entity, normalized);
         validateUpdate(entity, normalized);
         Optional<String> currentStatus = STATUS_GUARD.resolveStatus(entity);
         apply(entity, normalized);
@@ -189,6 +200,39 @@ public class SalesOrderService {
         SalesOrderResponse response = toSavedResponse(saveUpdatedEntity(entity, normalized));
         log.info("{} updated: id={}", entity.getClass().getSimpleName(), id);
         return response;
+    }
+
+    /**
+     * 字段级写权限校验：无 {@code sales-orders:update:unit-price} 时，禁止在更新中改动
+     * 既有明细的单价；新增行（无 id）不在本次校验内（其定价受 create 权限约束）。
+     */
+    private void assertUnitPriceChangeAllowed(SalesOrder entity, SalesOrderRequest request) {
+        if (permissionChecker.has(PermissionCodes.SALES_ORDERS_UPDATE_UNIT_PRICE)) {
+            return;
+        }
+        if (request.items() == null || entity.getItems() == null) {
+            return;
+        }
+        Map<Long, BigDecimal> existingPriceById = new HashMap<>();
+        for (SalesOrderItem item : entity.getItems()) {
+            if (item.getId() != null) {
+                existingPriceById.put(item.getId(), item.getUnitPrice());
+            }
+        }
+        for (SalesOrderItemRequest item : request.items()) {
+            if (item == null || item.id() == null) {
+                continue;
+            }
+            BigDecimal previous = existingPriceById.get(item.id());
+            if (previous == null) {
+                continue;
+            }
+            BigDecimal next = item.unitPrice() == null ? BigDecimal.ZERO : item.unitPrice();
+            if (previous.compareTo(next) != 0) {
+                throw new AccessDeniedException(
+                        "缺少权限: " + PermissionCodes.SALES_ORDERS_UPDATE_UNIT_PRICE);
+            }
+        }
     }
 
     /**

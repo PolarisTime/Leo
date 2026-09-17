@@ -1,5 +1,6 @@
 package com.leo.erp.security.permission;
 
+import java.util.Collection;
 import java.util.Set;
 
 /**
@@ -511,6 +512,30 @@ public final class PermissionCodes {
     /** 返回目录内全部权限码，供默认 {@link AuthorityProvider} 与测试使用。 */
     public static Set<String> all() {
         return ALL;
+    }
+
+    /**
+     * 判断所需权限码是否被授予（与 {@code PermissionAuthorizationManager} 同源语义）：
+     * 全局通配 {@link #WILDCARD}、精确匹配，或所需码资源段的 {@code 资源:*}。
+     *
+     * <p>注意：粗粒度码不会授予细粒度码，例如 {@code sales-orders:read} 不授予
+     * {@code sales-orders:read:amount}；后者需显式授予或由 {@code sales-orders:*} / {@code *} 覆盖。</p>
+     *
+     * @param granted  当前主体持有的权限码集合
+     * @param required 需要的权限码
+     */
+    public static boolean grants(Collection<String> granted, String required) {
+        if (granted == null || required == null || required.isBlank()) {
+            return false;
+        }
+        if (granted.contains(WILDCARD) || granted.contains(required)) {
+            return true;
+        }
+        int separator = required.indexOf(':');
+        if (separator <= 0) {
+            return false;
+        }
+        return granted.contains(required.substring(0, separator) + ":" + Actions.WILDCARD);
     }
 
     private static void requireText(String value, String label) {

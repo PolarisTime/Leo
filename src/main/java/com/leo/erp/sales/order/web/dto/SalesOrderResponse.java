@@ -3,6 +3,8 @@ package com.leo.erp.sales.order.web.dto;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.leo.erp.common.charge.api.DocumentChargeItemResponse;
+import com.leo.erp.security.permission.PermissionDecimalSerializer;
+import com.leo.erp.security.permission.PermissionField;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -23,6 +25,8 @@ public record SalesOrderResponse(
         LocalDate deliveryDate,
         String salesName,
         BigDecimal totalWeight,
+        @PermissionField("sales-orders:read:amount")
+        @JsonSerialize(using = PermissionDecimalSerializer.class)
         BigDecimal totalAmount,
         String status,
         boolean deletedFlag,
