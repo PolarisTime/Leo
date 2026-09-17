@@ -8,12 +8,16 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.service.ReferenceSnapshotSyncService;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
+import com.leo.erp.master.supplier.domain.entity.SupplierBrand;
 import com.leo.erp.master.supplier.mapper.SupplierMapper;
+import com.leo.erp.master.supplier.repository.SupplierBrandRepository;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
+import com.leo.erp.master.supplier.web.dto.SupplierOptionResponse;
 import com.leo.erp.master.supplier.web.dto.SupplierRequest;
 import com.leo.erp.master.supplier.web.dto.SupplierResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.annotation.CacheEvict;
@@ -30,6 +34,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -48,15 +53,39 @@ class SupplierServiceTest {
     private MasterDataCodeIssuanceService codeIssuanceService;
     @Mock
     private ReferenceSnapshotSyncService referenceSnapshotSyncService;
+    @Mock
+    private SupplierBrandRepository supplierBrandRepository;
 
     private SupplierService service() {
         return new SupplierService(supplierRepository, snowflakeIdGenerator, supplierMapper,
-                referenceGuard, codeIssuanceService, referenceSnapshotSyncService);
+                referenceGuard, codeIssuanceService, referenceSnapshotSyncService, supplierBrandRepository);
     }
 
     private SupplierRequest request(String supplierName) {
         return new SupplierRequest("GYS001", supplierName, "联系人", "13800000000",
                 "上海", "正常", "备注");
+    }
+
+    private SupplierRequest requestWithBrands(String supplierName, List<String> brands) {
+        return new SupplierRequest("GYS001", supplierName, null, "联系人", "13800000000",
+                "上海", "正常", "备注", brands);
+    }
+
+    private SupplierBrand brand(long id, long supplierId, String name) {
+        SupplierBrand brand = new SupplierBrand();
+        brand.setId(id);
+        brand.setSupplierId(supplierId);
+        brand.setBrandName(name);
+        return brand;
+    }
+
+    private Supplier supplier(long id, String code, String name, String shortName) {
+        Supplier supplier = new Supplier();
+        supplier.setId(id);
+        supplier.setSupplierCode(code);
+        supplier.setSupplierName(name);
+        supplier.setShortName(shortName);
+        return supplier;
     }
 
     @Test
@@ -82,6 +111,7 @@ class SupplierServiceTest {
         assertThat(entity.getStatus()).isEqualTo("正常");
         assertThat(result.id()).isEqualTo(77L);
         assertThat(result.supplierName()).isEqualTo("供应商A");
+        assertThat(result.brands()).isEmpty();
         verify(codeIssuanceService).validate("supplier", "GYS001");
         verify(codeIssuanceService).consume("supplier", "GYS001");
     }
@@ -118,6 +148,163 @@ class SupplierServiceTest {
                 .hasMessage("编码已占用");
         verify(supplierRepository, never()).save(any());
         verify(codeIssuanceService, never()).consume(anyString(), anyString());
+    }
+
+    @Test
+    void create_brands_dedupesSortsAndPersistsOnlyNewNames() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(77L, 201L, 202L);
+        when(codeIssuanceService.resolve(eq("supplier"), any(), anyString())).thenReturn("S001");
+        when(supplierRepository.save(any(Supplier.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(77L)).thenReturn(List.of());
+        when(supplierMapper.toResponse(any(Supplier.class))).thenReturn(null);
+
+        SupplierResponse result = service().create(
+                requestWithBrands("供应商A", List.of(" 永钢 ", "沙钢", "沙钢", "  永钢  ")));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<SupplierBrand> captor = ArgumentCaptor.forClass(SupplierBrand.class);
+        verify(supplierBrandRepository, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues()).extracting(SupplierBrand::getBrandName)
+                .containsExactly("永钢", "沙钢");
+        assertThat(captor.getAllValues()).extracting(SupplierBrand::getSupplierId)
+                .containsOnly(77L);
+        assertThat(captor.getAllValues()).extracting(SupplierBrand::getId)
+                .containsExactly(201L, 202L);
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void create_blankBrand_rejectedAs422BeforeSave() {
+        assertThatThrownBy(() -> service().create(requestWithBrands("供应商A", List.of(" "))))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("品牌名称不能为空");
+        verify(supplierRepository, never()).save(any());
+        verify(supplierBrandRepository, never()).save(any());
+    }
+
+    @Test
+    void create_overlongBrand_rejectedAs422BeforeSave() {
+        String overlong = "钢".repeat(65);
+
+        assertThatThrownBy(() -> service().create(requestWithBrands("供应商A", List.of(overlong))))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("品牌名称长度不能超过64个字符");
+        verify(supplierRepository, never()).save(any());
+    }
+
+    @Test
+    void update_brandSetChanged_deletesUnreferencedAddsMissingAndReusesSameName() {
+        Supplier entity = supplier(5L, "GYS001", "供应商A", null);
+        when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(supplierRepository.save(entity)).thenReturn(entity);
+        when(supplierMapper.toResponse(entity)).thenReturn(new SupplierResponse(
+                5L, "GYS001", "供应商A", null, null, null, "正常", null));
+        SupplierBrand keep = brand(11L, 5L, "沙钢");
+        SupplierBrand remove = brand(12L, 5L, "旧品牌");
+        when(supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(5L))
+                .thenReturn(List.of(keep, remove));
+        when(snowflakeIdGenerator.nextId()).thenReturn(99L);
+
+        service().update(5L, requestWithBrands("供应商A", List.of("沙钢", "永钢")));
+
+        verify(supplierBrandRepository).delete(remove);
+        verify(supplierBrandRepository, never()).delete(keep);
+        ArgumentCaptor<SupplierBrand> captor = ArgumentCaptor.forClass(SupplierBrand.class);
+        verify(supplierBrandRepository).save(captor.capture());
+        assertThat(captor.getValue().getBrandName()).isEqualTo("永钢");
+        assertThat(captor.getValue().getSupplierId()).isEqualTo(5L);
+        assertThat(captor.getValue().getId()).isEqualTo(99L);
+    }
+
+    @Test
+    void update_brandSetUnchanged_noWritesAtAll() {
+        Supplier entity = supplier(5L, "GYS001", "供应商A", null);
+        when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(supplierRepository.save(entity)).thenReturn(entity);
+        when(supplierMapper.toResponse(entity)).thenReturn(new SupplierResponse(
+                5L, "GYS001", "供应商A", null, null, null, "正常", null));
+        when(supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(5L))
+                .thenReturn(List.of(brand(11L, 5L, "沙钢"), brand(12L, 5L, "永钢")));
+
+        service().update(5L, requestWithBrands("供应商A", List.of("永钢", "沙钢")));
+
+        verify(supplierBrandRepository, never()).delete(any());
+        verify(supplierBrandRepository, never()).save(any());
+    }
+
+    @Test
+    void update_emptyBrandList_clearsAllExistingBrands() {
+        Supplier entity = supplier(5L, "GYS001", "供应商A", null);
+        when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(supplierRepository.save(entity)).thenReturn(entity);
+        when(supplierMapper.toResponse(entity)).thenReturn(new SupplierResponse(
+                5L, "GYS001", "供应商A", null, null, null, "正常", null));
+        SupplierBrand first = brand(11L, 5L, "沙钢");
+        SupplierBrand second = brand(12L, 5L, "永钢");
+        when(supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(5L))
+                .thenReturn(List.of(first, second));
+
+        service().update(5L, requestWithBrands("供应商A", List.of()));
+
+        verify(supplierBrandRepository).delete(first);
+        verify(supplierBrandRepository).delete(second);
+        verify(supplierBrandRepository, never()).save(any());
+    }
+
+    @Test
+    void update_nullBrands_leavesExistingBrandsUntouchedAndReturnsThem() {
+        Supplier entity = supplier(5L, "GYS001", "供应商A", null);
+        when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(supplierRepository.save(entity)).thenReturn(entity);
+        when(supplierMapper.toResponse(entity)).thenReturn(new SupplierResponse(
+                5L, "GYS001", "供应商A", null, null, null, "正常", null));
+        when(supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(5L))
+                .thenReturn(List.of(brand(11L, 5L, "永钢"), brand(12L, 5L, "沙钢")));
+
+        SupplierResponse response = service().update(5L, request("供应商A"));
+
+        assertThat(response.brands()).containsExactly("永钢", "沙钢");
+        verify(supplierBrandRepository, never()).delete(any());
+        verify(supplierBrandRepository, never()).save(any());
+    }
+
+    @Test
+    void detail_returnsBrands() {
+        Supplier entity = supplier(5L, "GYS001", "供应商A", null);
+        when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(5L))
+                .thenReturn(List.of(brand(11L, 5L, "沙钢")));
+        when(supplierMapper.toResponse(entity)).thenReturn(new SupplierResponse(
+                5L, "GYS001", "供应商A", null, null, null, "正常", null));
+
+        SupplierResponse response = service().detail(5L);
+
+        assertThat(response.brands()).containsExactly("沙钢");
+    }
+
+    @Test
+    void options_returnsBrandsPerSupplierInRepositoryOrder() {
+        when(supplierRepository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc("正常"))
+                .thenReturn(List.of(
+                        supplier(101L, "S001", "供应商A", "甲"),
+                        supplier(102L, "S002", "供应商B", null),
+                        supplier(103L, "S003", "无品牌供应商", null)));
+        when(supplierBrandRepository.findBySupplierIdInOrderBySupplierIdAscBrandNameAsc(any()))
+                .thenReturn(List.of(
+                        brand(1L, 101L, "沙钢"),
+                        brand(2L, 101L, "永钢"),
+                        brand(3L, 102L, "中天")));
+
+        List<SupplierOptionResponse> options = service().listActiveOptions();
+
+        assertThat(options).hasSize(3);
+        assertThat(options.get(0).brands()).containsExactly("沙钢", "永钢");
+        assertThat(options.get(1).brands()).containsExactly("中天");
+        assertThat(options.get(2).brands()).isEmpty();
     }
 
     @Test
@@ -218,7 +405,7 @@ class SupplierServiceTest {
     @Test
     void delete_nullReferenceGuard_toleratedAsBefore() {
         SupplierService nullGuardService = new SupplierService(supplierRepository, snowflakeIdGenerator,
-                supplierMapper, null, codeIssuanceService, referenceSnapshotSyncService);
+                supplierMapper, null, codeIssuanceService, referenceSnapshotSyncService, supplierBrandRepository);
         Supplier entity = new Supplier();
         entity.setId(5L);
         when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
