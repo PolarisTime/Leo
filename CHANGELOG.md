@@ -1,3 +1,10 @@
+## [11.1.3](https://github.com/PolarisTime/Leo/compare/v11.1.2...v11.1.3) (2026-09-17)
+
+
+### Bug Fixes
+
+* **quotation:** 支持同一整单请求内解锁并改规格数量 ([ed5bd63](https://github.com/PolarisTime/Leo/commit/ed5bd639e56343d44b5b352b82af168e95ec7da6))
+
 ## [11.1.2](https://github.com/PolarisTime/Leo/compare/v11.1.1...v11.1.2) (2026-09-17)
 
 
