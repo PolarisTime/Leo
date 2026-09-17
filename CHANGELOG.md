@@ -1,3 +1,16 @@
+# [11.4.0](https://github.com/PolarisTime/Leo/compare/v11.3.0...v11.4.0) (2026-09-17)
+
+
+### Bug Fixes
+
+* **auth:** 个人账号自助接口改为仅需登录态 ([60b239a](https://github.com/PolarisTime/Leo/commit/60b239ab8dbc4fb2ff6c5ed1d4c1aff8f216f7b5))
+* **rbac:** 禁止用户修改自己的角色 ([7351fb8](https://github.com/PolarisTime/Leo/commit/7351fb8e65711e890f13b59057bbafd82abf9aa1))
+
+
+### Features
+
+* **auth:** 登录响应返回当前用户权限集合 ([c386c99](https://github.com/PolarisTime/Leo/commit/c386c99a3c0329fb7f7046bb6da0ee2503b23d56))
+
 # [11.3.0](https://github.com/PolarisTime/Leo/compare/v11.2.0...v11.3.0) (2026-09-17)
 
 
