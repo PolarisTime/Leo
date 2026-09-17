@@ -1,3 +1,25 @@
+# [11.3.0](https://github.com/PolarisTime/Leo/compare/v11.2.0...v11.3.0) (2026-09-17)
+
+
+### Bug Fixes
+
+* **config:** 时区配置非法时抛出可读错误 ([8d5246a](https://github.com/PolarisTime/Leo/commit/8d5246aabd9d7ffb465e4c905b4f7c7d4a87089d))
+* **purchase:** 释放已删除采购入库单对采购订单明细的引用 ([954b0e2](https://github.com/PolarisTime/Leo/commit/954b0e22c924bb4215e1ad5850e2a17f07703b6a))
+* **quotation:** 项目配置存在时不再按请求品牌重建快照 ([528172f](https://github.com/PolarisTime/Leo/commit/528172fca4d8cfbd075c0b88898e2d9c32826c2d))
+* **search:** 单据流查询限制规模并统一软删与多值引用口径 ([04ce465](https://github.com/PolarisTime/Leo/commit/04ce465333817ee3630a47f61bb9e12b803110bc))
+* **supplier:** 补齐经营品牌请求校验 ([c6a85c9](https://github.com/PolarisTime/Leo/commit/c6a85c91af9efa98d46d6d29ec8ebfe1569764fa))
+
+
+### Features
+
+* **print:** 拆分打印支持按勾选明细行拆分 ([2859cef](https://github.com/PolarisTime/Leo/commit/2859cef7c80fd2c836d7ae3db15f8d138788d81c))
+* **supplier:** 经营品牌改为软删除并支持同名重新绑定 ([baa9f26](https://github.com/PolarisTime/Leo/commit/baa9f26afbfd88b1c54e02af060f8153b43493de))
+
+
+### Performance Improvements
+
+* **search:** 单据流补 trigram 索引并改分层批量查询 ([24344e3](https://github.com/PolarisTime/Leo/commit/24344e3088d039347bfffbea6b0cfe8957ec676c))
+
 # [11.2.0](https://github.com/PolarisTime/Leo/compare/v11.1.4...v11.2.0) (2026-09-17)
 
 
