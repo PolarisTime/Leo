@@ -4,6 +4,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.search.flow.web.dto.DocumentFlowLink;
 import com.leo.erp.search.flow.web.dto.DocumentFlowNode;
 import com.leo.erp.search.flow.web.dto.DocumentFlowResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -14,7 +15,6 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 
 import java.math.BigDecimal;
-import java.sql.Date;
 import java.sql.ResultSet;
 import java.time.LocalDate;
 import java.util.List;
@@ -23,17 +23,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * DocumentFlowService 单据流装配测试。
+ * DocumentFlowService 单据流装配测试(分层批量查询版)。
  * <p>
  * 覆盖：空单号与未命中单号的错误语义、采购订单 → 采购入库 → 销售订单 → 销售出库 → 物流单
  * 的节点/关系边装配、以及雪花 ID 十进制字符串化与多值引用拆分。
+ * <p>
+ * 通过按 SQL 特征分派 mock 结果, 验证分层批量反查/按单号查询能正确装配整条链路。
  */
 @ExtendWith(MockitoExtension.class)
 class DocumentFlowServiceTest {
@@ -46,6 +46,66 @@ class DocumentFlowServiceTest {
 
     @Mock
     private NamedParameterJdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void stubQueries() {
+        // seeds: findByNo 走 RowMapper, 仅采购订单按单号命中
+        lenient().when(jdbcTemplate.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
+                .thenAnswer(invocation -> {
+                    String sql = invocation.getArgument(0);
+                    RowMapper<Object> mapper = invocation.getArgument(2);
+                    if (sql.contains("FROM po_purchase_order") && sql.contains("order_no = :no")) {
+                        return List.of(mapper.mapRow(row(ORDER_ID, "PO-1", null), 0));
+                    }
+                    return List.of();
+                });
+
+        // 分层批量查询走 RowCallbackHandler, 按 SQL 特征分派
+        lenient().doAnswer(invocation -> {
+            String sql = invocation.getArgument(0);
+            RowCallbackHandler handler = invocation.getArgument(2);
+            ResultSet row = null;
+            if (sql.contains("LIKE :p")) {
+                if (sql.contains("FROM po_purchase_inbound")) {
+                    row = row(INBOUND_ID, "IN-1", "PO-1");
+                } else if (sql.contains("FROM so_sales_order") && sql.contains("purchase_inbound_no LIKE")) {
+                    row = row(SALES_ORDER_ID, "SO-1", "IN-1");
+                } else if (sql.contains("FROM so_sales_outbound")) {
+                    row = row(OUTBOUND_ID, "OUT-1", "SO-1");
+                } else if (sql.contains("FROM lg_freight_bill bill") && sql.contains("bill_item.source_no LIKE")) {
+                    row = row(FREIGHT_BILL_ID, "BILL-1", "SO-1");
+                }
+            } else if (sql.contains(" AS ref_value FROM")) {
+                if (sql.contains("FROM po_purchase_inbound")) {
+                    row = row(INBOUND_ID, null, "PO-1");
+                } else if (sql.contains("FROM so_sales_order") && sql.contains("purchase_inbound_no AS ref_value")) {
+                    row = row(SALES_ORDER_ID, null, "IN-1");
+                } else if (sql.contains("FROM so_sales_order") && sql.contains("purchase_order_no AS ref_value")) {
+                    row = row(SALES_ORDER_ID, null, null);
+                } else if (sql.contains("FROM so_sales_outbound")) {
+                    row = row(OUTBOUND_ID, null, "SO-1");
+                }
+            } else if (sql.contains(" IN (:nos)")) {
+                if (sql.contains("FROM po_purchase_order")) {
+                    row = row(ORDER_ID, "PO-1", null);
+                } else if (sql.contains("FROM po_purchase_inbound")) {
+                    row = row(INBOUND_ID, "IN-1", null);
+                } else if (sql.contains("FROM so_sales_order")) {
+                    row = row(SALES_ORDER_ID, "SO-1", null);
+                }
+            } else if (sql.contains(" IN (:ids)") && sql.contains("outbound_item.outbound_id IN")) {
+                // 出库 → 物流; 出库 → 退货返回空(无退货)
+                if (!sql.contains("FROM so_sales_return ret")) {
+                    row = rowWithSource(FREIGHT_BILL_ID, "BILL-1", OUTBOUND_ID);
+                }
+            }
+            if (row != null) {
+                handler.processRow(row);
+            }
+            return null;
+        }).when(jdbcTemplate).query(anyString(), any(SqlParameterSource.class), any(RowCallbackHandler.class));
+    }
 
     @Test
     void splitReferences_shouldSplitMultipleSeparatorsAndIgnoreBlanks() {
@@ -66,8 +126,11 @@ class DocumentFlowServiceTest {
     }
 
     @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
     void documentFlow_shouldThrowNotFoundWhenNoDocumentMatches() {
-        stubRows(rowMapper -> List.of());
+        // 覆盖 mock: 任意单号都未命中
+        when(jdbcTemplate.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
+                .thenReturn(List.of());
         DocumentFlowService service = new DocumentFlowService(jdbcTemplate);
 
         assertThatThrownBy(() -> service.documentFlow("UNKNOWN-1"))
@@ -76,74 +139,11 @@ class DocumentFlowServiceTest {
     }
 
     @Test
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    void documentFlow_shouldBuildCoreChainWithStringifiedSnowflakeIds() throws Exception {
-        ResultSet order = nodeRow(ORDER_ID, "PO-1", "已审核", "1000.00", "10.00000000", LocalDate.of(2026, 9, 1));
-        ResultSet inbound = nodeRow(INBOUND_ID, "IN-1", "已审核", "1000.00", "10.00000000", LocalDate.of(2026, 9, 2));
-        ResultSet salesOrder = nodeRow(SALES_ORDER_ID, "SO-1", "已审核", "1200.00", "10.00000000", LocalDate.of(2026, 9, 3));
-        ResultSet outbound = nodeRow(OUTBOUND_ID, "OUT-1", "已审核", "1200.00", "10.00000000", LocalDate.of(2026, 9, 4));
-        ResultSet freightBill = nodeRow(FREIGHT_BILL_ID, "BILL-1", "已审核", "500.00", "10.00000000", LocalDate.of(2026, 9, 5));
-
-        when(jdbcTemplate.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
-                .thenAnswer(invocation -> {
-                    String sql = invocation.getArgument(0);
-                    RowMapper<Object> mapper = invocation.getArgument(2);
-                    ResultSet row = null;
-                    if (sql.contains("FROM po_purchase_order")) {
-                        row = order;
-                    } else if (sql.contains("FROM po_purchase_inbound")) {
-                        row = inbound;
-                    } else if (sql.contains("FROM so_sales_order")) {
-                        row = salesOrder;
-                    } else if (sql.contains("FROM so_sales_outbound")) {
-                        row = outbound;
-                    } else if (sql.contains("FROM lg_freight_bill bill") && !sql.contains("source_no = :no")) {
-                        row = freightBill;
-                    }
-                    return row == null ? List.of() : List.of(mapper.mapRow(row, 0));
-                });
-
-        lenient().doAnswer(invocation -> {
-            String sql = invocation.getArgument(0);
-            RowCallbackHandler handler = invocation.getArgument(2);
-            if (sql.contains("FROM po_purchase_inbound") && sql.contains("purchase_order_no LIKE")) {
-                handler.processRow(refRow(INBOUND_ID, "PO-1"));
-            } else if (sql.contains("FROM so_sales_order") && sql.contains("purchase_inbound_no LIKE")) {
-                handler.processRow(refRow(SALES_ORDER_ID, "IN-1"));
-            } else if (sql.contains("FROM so_sales_outbound") && sql.contains("sales_order_no LIKE")) {
-                handler.processRow(refRow(OUTBOUND_ID, "SO-1"));
-            } else if (sql.contains("FROM lg_freight_bill bill") && sql.contains("source_no LIKE")) {
-                handler.processRow(freightBillItemRow(FREIGHT_BILL_ID, "SO-1"));
-            }
-            return null;
-        }).when(jdbcTemplate).query(anyString(), any(SqlParameterSource.class), any(RowCallbackHandler.class));
-
-        // referenceValue 与 sourceNosOfFreightBill 均改用 queryForList 读取引用列。
-        lenient().when(jdbcTemplate.queryForList(anyString(), any(SqlParameterSource.class), eq(String.class)))
-                .thenAnswer(invocation -> {
-                    String sql = invocation.getArgument(0);
-                    if (sql.contains("bill_item.source_no")) {
-                        return List.of("SO-1");
-                    }
-                    if (sql.contains("FROM so_sales_order") && sql.contains("purchase_order_no")) {
-                        // 销售单未引用采购单: 返回空, 不额外补边
-                        return List.of();
-                    }
-                    if (sql.contains("SELECT purchase_inbound_no")) {
-                        return List.of("IN-1");
-                    }
-                    if (sql.contains("SELECT purchase_order_no")) {
-                        return List.of("PO-1");
-                    }
-                    if (sql.contains("SELECT sales_order_no")) {
-                        return List.of("SO-1");
-                    }
-                    return List.of();
-                });
-
+    void documentFlow_shouldBuildCoreChainWithStringifiedSnowflakeIds() {
         DocumentFlowResponse response = new DocumentFlowService(jdbcTemplate).documentFlow("PO-1");
 
         assertThat(response.documentNo()).isEqualTo("PO-1");
+        assertThat(response.truncated()).isFalse();
         assertThat(response.nodes()).extracting(DocumentFlowNode::type)
                 .containsExactly("purchase-order", "purchase-inbound", "sales-order", "sales-outbound", "freight-bill");
         assertThat(response.nodes()).extracting(DocumentFlowNode::id)
@@ -163,49 +163,21 @@ class DocumentFlowServiceTest {
         assertThat(response.links().get(4).toType()).isEqualTo("freight-bill");
     }
 
-    /** 种子查询：仅采购订单按单号命中。 */
-    private void stubRows(java.util.function.Function<RowMapper<Object>, List<Object>> answer) {
-        when(jdbcTemplate.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
-                .thenAnswer(invocation -> answer.apply(invocation.getArgument(2)));
-    }
-
-    private static ResultSet nodeRow(long id, String no, String status, String amount, String weight, LocalDate date)
-            throws Exception {
+    private static ResultSet row(long id, String no, String refValue) throws Exception {
         ResultSet resultSet = mock(ResultSet.class);
         lenient().when(resultSet.getLong("id")).thenReturn(id);
         lenient().when(resultSet.getString("no")).thenReturn(no);
-        lenient().when(resultSet.getString("status")).thenReturn(status);
-        lenient().when(resultSet.getBigDecimal("amount")).thenReturn(new BigDecimal(amount));
-        lenient().when(resultSet.getBigDecimal("weight")).thenReturn(new BigDecimal(weight));
-        lenient().when(resultSet.getObject("business_date", LocalDate.class)).thenReturn(date);
-        return resultSet;
-    }
-
-    /** 物流单明细行：提供 source_no 供多值 LIKE 预筛，同时提供节点列用于映射。 */
-    private static ResultSet freightBillItemRow(long id, String sourceNo) throws Exception {
-        ResultSet resultSet = mock(ResultSet.class);
-        lenient().when(resultSet.getLong("id")).thenReturn(id);
-        lenient().when(resultSet.getString("no")).thenReturn("BILL-1");
         lenient().when(resultSet.getString("status")).thenReturn("已审核");
-        lenient().when(resultSet.getBigDecimal("amount")).thenReturn(new BigDecimal("500.00"));
+        lenient().when(resultSet.getBigDecimal("amount")).thenReturn(new BigDecimal("1000.00"));
         lenient().when(resultSet.getBigDecimal("weight")).thenReturn(new BigDecimal("10.00000000"));
-        lenient().when(resultSet.getObject("business_date", LocalDate.class)).thenReturn(LocalDate.of(2026, 9, 5));
-        lenient().when(resultSet.getString("source_no")).thenReturn(sourceNo);
+        lenient().when(resultSet.getObject("business_date", LocalDate.class)).thenReturn(LocalDate.of(2026, 9, 1));
+        lenient().when(resultSet.getString("ref_value")).thenReturn(refValue);
         return resultSet;
     }
 
-    /** 处理引用列的 LIKE 预筛回调：只填充引用列，其它列与 id 用于映射节点。 */
-    private static ResultSet refRow(long id, String reference) throws Exception {
-        ResultSet resultSet = mock(ResultSet.class);
-        lenient().when(resultSet.getLong("id")).thenReturn(id);
-        lenient().when(resultSet.getString("purchase_order_no")).thenReturn(reference);
-        lenient().when(resultSet.getString("purchase_inbound_no")).thenReturn(reference);
-        lenient().when(resultSet.getString("sales_order_no")).thenReturn(reference);
-        lenient().when(resultSet.getString("no")).thenReturn(reference);
-        lenient().when(resultSet.getString("status")).thenReturn("已审核");
-        lenient().when(resultSet.getBigDecimal("amount")).thenReturn(BigDecimal.ZERO);
-        lenient().when(resultSet.getBigDecimal("weight")).thenReturn(BigDecimal.ZERO);
-        lenient().when(resultSet.getObject("business_date", LocalDate.class)).thenReturn(Date.valueOf("2026-09-01").toLocalDate());
+    private static ResultSet rowWithSource(long id, String no, long sourceId) throws Exception {
+        ResultSet resultSet = row(id, no, null);
+        lenient().when(resultSet.getLong("source_id")).thenReturn(sourceId);
         return resultSet;
     }
 }

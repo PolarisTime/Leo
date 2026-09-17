@@ -5,6 +5,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.search.flow.web.dto.DocumentFlowLink;
 import com.leo.erp.search.flow.web.dto.DocumentFlowNode;
 import com.leo.erp.search.flow.web.dto.DocumentFlowResponse;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -15,13 +16,14 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -30,6 +32,9 @@ import java.util.regex.Pattern;
  * 链路方向统一为上游 → 下游：采购单 → 采购入库 → 销售单 → 销售出库 → 销售退货 / 物流单。
  * 单号引用字段（如 {@code purchase_order_no}）允许逗号分隔多值，先按 {@code LIKE} 缩小范围，
  * 再在应用侧按分隔符精确匹配，避免子串误命中。ID 输出为十进制字符串以保留雪花精度。
+ * <p>
+ * 为避免逐节点反查的 N+1，扩展按"层"进行：同层同类型的引用反查与按单号查询均批量执行
+ * （引用列已由 V152 建立 pg_trgm GIN 索引，{@code LIKE '%单号%'} 走索引）。
  */
 @Service
 public class DocumentFlowService {
@@ -80,7 +85,7 @@ public class DocumentFlowService {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    /** 输入单号所在单据为起点，广度扩展出整个连通链路的节点与关系边。 */
+    /** 输入单号所在单据为起点，按层广度扩展出整个连通链路的节点与关系边。 */
     @Transactional(readOnly = true)
     public DocumentFlowResponse documentFlow(String documentNo) {
         String target = documentNo == null ? "" : documentNo.trim();
@@ -98,27 +103,27 @@ public class DocumentFlowService {
 
         Map<String, FlowNode> nodes = new LinkedHashMap<>();
         Map<String, DocumentFlowLink> links = new LinkedHashMap<>();
-        Deque<FlowNode> queue = new ArrayDeque<>();
+        List<FlowNode> currentLayer = new ArrayList<>();
         for (FlowNode seed : seeds) {
             if (nodes.putIfAbsent(seed.key(), seed) == null) {
-                queue.add(seed);
+                currentLayer.add(seed);
             }
         }
         boolean truncated = false;
-        while (!queue.isEmpty()) {
+        while (!currentLayer.isEmpty() && !truncated) {
             if (nodes.size() >= MAX_NODES) {
                 truncated = true;
                 break;
             }
-            FlowNode current = queue.poll();
-            for (FlowEdge edge : relatedEdges(current)) {
+            List<FlowNode> nextLayer = new ArrayList<>();
+            for (FlowEdge edge : expandLayer(currentLayer)) {
                 if (!nodes.containsKey(edge.from().key())) {
                     if (nodes.size() >= MAX_NODES) {
                         truncated = true;
                         continue;
                     }
                     nodes.put(edge.from().key(), edge.from());
-                    queue.add(edge.from());
+                    nextLayer.add(edge.from());
                 }
                 if (!nodes.containsKey(edge.to().key())) {
                     if (nodes.size() >= MAX_NODES) {
@@ -126,7 +131,7 @@ public class DocumentFlowService {
                         continue;
                     }
                     nodes.put(edge.to().key(), edge.to());
-                    queue.add(edge.to());
+                    nextLayer.add(edge.to());
                 }
                 if (links.size() >= MAX_LINKS) {
                     truncated = true;
@@ -138,6 +143,7 @@ public class DocumentFlowService {
                         edge.linkType());
                 links.putIfAbsent(edge.from().key() + "->" + edge.to().key(), link);
             }
+            currentLayer = nextLayer;
         }
 
         List<DocumentFlowNode> nodeList = nodes.values().stream()
@@ -166,201 +172,331 @@ public class DocumentFlowService {
                 .stream().findFirst();
     }
 
-    private List<FlowEdge> relatedEdges(FlowNode node) {
-        return switch (node.type()) {
-            case TYPE_PURCHASE_ORDER -> purchaseOrderEdges(node);
-            case TYPE_PURCHASE_INBOUND -> purchaseInboundEdges(node);
-            case TYPE_SALES_ORDER -> salesOrderEdges(node);
-            case TYPE_SALES_OUTBOUND -> salesOutboundEdges(node);
-            case TYPE_SALES_RETURN -> salesReturnEdges(node);
-            case TYPE_FREIGHT_BILL -> freightBillEdges(node);
-            default -> List.of();
-        };
-    }
-
-    private List<FlowEdge> purchaseOrderEdges(FlowNode order) {
-        List<FlowEdge> edges = new ArrayList<>();
-        for (FlowNode inbound : referencingNodes(TYPE_PURCHASE_INBOUND, "purchase_order_no", order.no())) {
-            edges.add(new FlowEdge(order, inbound, LINK_INBOUND));
+    /** 按层展开：同层同类型的引用反查与按单号查询合并为批量 SQL, 消除逐节点 N+1。 */
+    private List<FlowEdge> expandLayer(List<FlowNode> layer) {
+        Map<String, List<FlowNode>> byType = new LinkedHashMap<>();
+        for (FlowNode node : layer) {
+            byType.computeIfAbsent(node.type(), key -> new ArrayList<>()).add(node);
         }
-        for (FlowNode salesOrder : referencingNodes(TYPE_SALES_ORDER, "purchase_order_no", order.no())) {
-            edges.add(new FlowEdge(order, salesOrder, LINK_SALES));
+        List<FlowEdge> edges = new ArrayList<>();
+        List<FlowNode> purchaseOrders = byType.getOrDefault(TYPE_PURCHASE_ORDER, List.of());
+        List<FlowNode> purchaseInbounds = byType.getOrDefault(TYPE_PURCHASE_INBOUND, List.of());
+        List<FlowNode> salesOrders = byType.getOrDefault(TYPE_SALES_ORDER, List.of());
+        List<FlowNode> salesOutbounds = byType.getOrDefault(TYPE_SALES_OUTBOUND, List.of());
+        List<FlowNode> salesReturns = byType.getOrDefault(TYPE_SALES_RETURN, List.of());
+        List<FlowNode> freightBills = byType.getOrDefault(TYPE_FREIGHT_BILL, List.of());
+
+        if (!purchaseOrders.isEmpty()) {
+            addReferencingEdges(purchaseOrders, TYPE_PURCHASE_INBOUND, "purchase_order_no", LINK_INBOUND, edges);
+            addReferencingEdges(purchaseOrders, TYPE_SALES_ORDER, "purchase_order_no", LINK_SALES, edges);
+        }
+        if (!purchaseInbounds.isEmpty()) {
+            addForwardEdges(purchaseInbounds, "purchase_order_no", TYPE_PURCHASE_ORDER, LINK_INBOUND, edges);
+            addReferencingEdges(purchaseInbounds, TYPE_SALES_ORDER, "purchase_inbound_no", LINK_SALES, edges);
+        }
+        if (!salesOrders.isEmpty()) {
+            addForwardEdges(salesOrders, "purchase_inbound_no", TYPE_PURCHASE_INBOUND, LINK_SALES, edges);
+            addForwardEdges(salesOrders, "purchase_order_no", TYPE_PURCHASE_ORDER, LINK_SALES, edges);
+            addReferencingEdges(salesOrders, TYPE_SALES_OUTBOUND, "sales_order_no", LINK_OUTBOUND, edges);
+            addReferencingEdges(salesOrders, TYPE_SALES_RETURN, "sales_order_no", LINK_RETURN, edges);
+            addFreightBySalesOrderNoEdges(salesOrders, edges);
+        }
+        if (!salesOutbounds.isEmpty()) {
+            addForwardEdges(salesOutbounds, "sales_order_no", TYPE_SALES_ORDER, LINK_OUTBOUND, edges);
+            addReturnsByOutboundIdEdges(salesOutbounds, edges);
+            addFreightByOutboundIdEdges(salesOutbounds, edges);
+        }
+        if (!salesReturns.isEmpty()) {
+            addForwardEdges(salesReturns, "sales_order_no", TYPE_SALES_ORDER, LINK_RETURN, edges);
+            addOutboundsByReturnIdEdges(salesReturns, edges);
+            addFreightByReturnIdEdges(salesReturns, edges);
+        }
+        if (!freightBills.isEmpty()) {
+            addFreightToSalesOrderEdges(freightBills, edges);
+            addOutboundsByFreightBillIdEdges(freightBills, edges);
         }
         return edges;
     }
 
-    private List<FlowEdge> purchaseInboundEdges(FlowNode inbound) {
-        List<FlowEdge> edges = new ArrayList<>();
-        for (String orderNo : splitReferences(referenceValue(TYPE_PURCHASE_INBOUND, inbound.id(), "purchase_order_no"))) {
-            findByNo(TYPE_PURCHASE_ORDER, orderNo)
-                    .ifPresent(order -> edges.add(new FlowEdge(order, inbound, LINK_INBOUND)));
+    /** 源节点按单号被下游引用(反向): 批量查目标表中引用列包含任一源单号的记录。边方向 源 → 目标。 */
+    private void addReferencingEdges(List<FlowNode> sources, String targetType, String refColumn,
+                                     String linkType, List<FlowEdge> edges) {
+        Set<String> nos = singleNos(sources);
+        if (nos.isEmpty()) {
+            return;
         }
-        for (FlowNode salesOrder : referencingNodes(TYPE_SALES_ORDER, "purchase_inbound_no", inbound.no())) {
-            edges.add(new FlowEdge(inbound, salesOrder, LINK_SALES));
-        }
-        return edges;
-    }
-
-    private List<FlowEdge> salesOrderEdges(FlowNode salesOrder) {
-        List<FlowEdge> edges = new ArrayList<>();
-        for (String inboundNo : splitReferences(referenceValue(TYPE_SALES_ORDER, salesOrder.id(), "purchase_inbound_no"))) {
-            findByNo(TYPE_PURCHASE_INBOUND, inboundNo)
-                    .ifPresent(inbound -> edges.add(new FlowEdge(inbound, salesOrder, LINK_SALES)));
-        }
-        for (String orderNo : splitReferences(referenceValue(TYPE_SALES_ORDER, salesOrder.id(), "purchase_order_no"))) {
-            findByNo(TYPE_PURCHASE_ORDER, orderNo)
-                    .ifPresent(order -> edges.add(new FlowEdge(order, salesOrder, LINK_SALES)));
-        }
-        for (FlowNode outbound : referencingNodes(TYPE_SALES_OUTBOUND, "sales_order_no", salesOrder.no())) {
-            edges.add(new FlowEdge(salesOrder, outbound, LINK_OUTBOUND));
-        }
-        for (FlowNode salesReturn : referencingNodes(TYPE_SALES_RETURN, "sales_order_no", salesOrder.no())) {
-            edges.add(new FlowEdge(salesOrder, salesReturn, LINK_RETURN));
-        }
-        for (FlowNode bill : freightBillsBySalesOrderNo(salesOrder.no())) {
-            edges.add(new FlowEdge(salesOrder, bill, LINK_FREIGHT));
-        }
-        return edges;
-    }
-
-    private List<FlowEdge> salesOutboundEdges(FlowNode outbound) {
-        List<FlowEdge> edges = new ArrayList<>();
-        for (String orderNo : splitReferences(referenceValue(TYPE_SALES_OUTBOUND, outbound.id(), "sales_order_no"))) {
-            findByNo(TYPE_SALES_ORDER, orderNo)
-                    .ifPresent(salesOrder -> edges.add(new FlowEdge(salesOrder, outbound, LINK_OUTBOUND)));
-        }
-        for (FlowNode salesReturn : returnsByOutboundId(outbound.id())) {
-            edges.add(new FlowEdge(outbound, salesReturn, LINK_RETURN));
-        }
-        for (FlowNode bill : freightBillsByOutboundId(outbound.id())) {
-            edges.add(new FlowEdge(outbound, bill, LINK_FREIGHT));
-        }
-        return edges;
-    }
-
-    private List<FlowEdge> salesReturnEdges(FlowNode salesReturn) {
-        List<FlowEdge> edges = new ArrayList<>();
-        for (String orderNo : splitReferences(referenceValue(TYPE_SALES_RETURN, salesReturn.id(), "sales_order_no"))) {
-            findByNo(TYPE_SALES_ORDER, orderNo)
-                    .ifPresent(salesOrder -> edges.add(new FlowEdge(salesOrder, salesReturn, LINK_RETURN)));
-        }
-        for (FlowNode outbound : outboundsByReturnId(salesReturn.id())) {
-            edges.add(new FlowEdge(outbound, salesReturn, LINK_RETURN));
-        }
-        for (FlowNode bill : freightBillsByReturnId(salesReturn.id())) {
-            edges.add(new FlowEdge(bill, salesReturn, LINK_FREIGHT));
-        }
-        return edges;
-    }
-
-    private List<FlowEdge> freightBillEdges(FlowNode bill) {
-        List<FlowEdge> edges = new ArrayList<>();
-        for (String salesOrderNo : sourceNosOfFreightBill(bill.id())) {
-            findByNo(TYPE_SALES_ORDER, salesOrderNo)
-                    .ifPresent(salesOrder -> edges.add(new FlowEdge(salesOrder, bill, LINK_FREIGHT)));
-        }
-        for (FlowNode outbound : outboundsByFreightBillId(bill.id())) {
-            edges.add(new FlowEdge(outbound, bill, LINK_FREIGHT));
-        }
-        return edges;
-    }
-
-    /** 引用列（逗号分隔多值）包含指定单号的单据；LIKE 预筛后在应用侧精确拆分校验。 */
-    private List<FlowNode> referencingNodes(String type, String column, String no) {
-        String sql = "SELECT " + columnsOf(type) + ", " + column + " FROM " + tableOf(type)
-                + " WHERE deleted_flag = FALSE AND " + column + " LIKE :pattern";
-        List<FlowNode> nodes = new ArrayList<>();
-        jdbcTemplate.query(sql, new MapSqlParameterSource("pattern", likePattern(no)), resultSet -> {
-            if (splitReferences(resultSet.getString(column)).contains(no)) {
-                nodes.add(mapNode(type, resultSet));
+        Map<String, List<FlowNode>> byRef = referencingNodesBatch(targetType, refColumn, nos);
+        for (FlowNode source : sources) {
+            for (FlowNode target : byRef.getOrDefault(source.no(), List.of())) {
+                edges.add(new FlowEdge(source, target, linkType));
             }
-        });
-        return nodes;
-    }
-
-    private String referenceValue(String type, String id, String column) {
-        // 与 findByNo/referencingNodes 保持软删过滤口径一致; 记录不存在或已软删时返回 null。
-        String sql = "SELECT " + column + " FROM " + tableOf(type)
-                + " WHERE id = :id AND deleted_flag = FALSE";
-        List<String> values = jdbcTemplate.queryForList(
-                sql, new MapSqlParameterSource("id", Long.parseLong(id)), String.class);
-        return values.isEmpty() ? null : values.get(0);
-    }
-
-    private List<FlowNode> returnsByOutboundId(String outboundId) {
-        String sql = "SELECT DISTINCT " + aliasColumns(SALES_RETURN_COLUMNS, "ret") + " FROM so_sales_return ret"
-                + " JOIN so_sales_return_item return_item ON return_item.return_id = ret.id"
-                + " JOIN so_sales_outbound_item outbound_item ON outbound_item.id = return_item.source_sales_outbound_item_id"
-                + " WHERE ret.deleted_flag = FALSE AND outbound_item.outbound_id = :id";
-        return queryNodes(TYPE_SALES_RETURN, sql, outboundId);
-    }
-
-    private List<FlowNode> outboundsByReturnId(String returnId) {
-        String sql = "SELECT DISTINCT " + aliasColumns(SALES_OUTBOUND_COLUMNS, "outbound") + " FROM so_sales_outbound outbound"
-                + " JOIN so_sales_outbound_item outbound_item ON outbound_item.outbound_id = outbound.id"
-                + " JOIN so_sales_return_item return_item ON return_item.source_sales_outbound_item_id = outbound_item.id"
-                + " WHERE outbound.deleted_flag = FALSE AND return_item.return_id = :id";
-        return queryNodes(TYPE_SALES_OUTBOUND, sql, returnId);
+        }
     }
 
     /**
-     * source_no 与其它引用字段口径一致: 允许逗号分隔多值, 先 LIKE 预筛再在应用侧精确拆分校验,
-     * 避免单号含多值时精确等值漏匹配。
+     * 源节点通过自身引用列指向上游(正向): 批量取引用列 -> 批量按单号查目标。
+     * 源是下游、目标是上游, 故边方向固定为 目标 → 源。
      */
-    private List<FlowNode> freightBillsBySalesOrderNo(String salesOrderNo) {
-        String sql = "SELECT DISTINCT " + aliasColumns(FREIGHT_BILL_COLUMNS, "bill")
-                + ", bill_item.source_no AS source_no FROM lg_freight_bill bill"
-                + " JOIN lg_freight_bill_item bill_item ON bill_item.bill_id = bill.id"
-                + " WHERE bill.deleted_flag = FALSE AND bill_item.source_no LIKE :pattern";
-        Map<String, FlowNode> matched = new LinkedHashMap<>();
-        jdbcTemplate.query(sql, new MapSqlParameterSource("pattern", likePattern(salesOrderNo)), resultSet -> {
-            if (splitReferences(resultSet.getString("source_no")).contains(salesOrderNo)) {
-                FlowNode node = mapNode(TYPE_FREIGHT_BILL, resultSet);
-                matched.putIfAbsent(node.key(), node);
-            }
-        });
-        return List.copyOf(matched.values());
-    }
-
-    private List<FlowNode> freightBillsByOutboundId(String outboundId) {
-        String sql = "SELECT DISTINCT " + aliasColumns(FREIGHT_BILL_COLUMNS, "bill") + " FROM lg_freight_bill bill"
-                + " JOIN lg_freight_bill_item bill_item ON bill_item.bill_id = bill.id"
-                + " JOIN so_sales_outbound_item outbound_item ON outbound_item.id = bill_item.source_sales_outbound_item_id"
-                + " WHERE bill.deleted_flag = FALSE AND outbound_item.outbound_id = :id";
-        return queryNodes(TYPE_FREIGHT_BILL, sql, outboundId);
-    }
-
-    private List<FlowNode> freightBillsByReturnId(String returnId) {
-        String sql = "SELECT DISTINCT " + aliasColumns(FREIGHT_BILL_COLUMNS, "bill") + " FROM lg_freight_bill bill"
-                + " JOIN so_sales_return_item return_item ON return_item.source_freight_bill_id = bill.id"
-                + " WHERE bill.deleted_flag = FALSE AND return_item.return_id = :id";
-        return queryNodes(TYPE_FREIGHT_BILL, sql, returnId);
-    }
-
-    private List<FlowNode> outboundsByFreightBillId(String billId) {
-        String sql = "SELECT DISTINCT " + aliasColumns(SALES_OUTBOUND_COLUMNS, "outbound") + " FROM so_sales_outbound outbound"
-                + " JOIN so_sales_outbound_item outbound_item ON outbound_item.outbound_id = outbound.id"
-                + " JOIN lg_freight_bill_item bill_item ON bill_item.source_sales_outbound_item_id = outbound_item.id"
-                + " WHERE outbound.deleted_flag = FALSE AND bill_item.bill_id = :id";
-        return queryNodes(TYPE_SALES_OUTBOUND, sql, billId);
-    }
-
-    private List<String> sourceNosOfFreightBill(String billId) {
-        String sql = "SELECT DISTINCT bill_item.source_no FROM lg_freight_bill_item bill_item"
-                + " WHERE bill_item.bill_id = :id AND COALESCE(BTRIM(bill_item.source_no), '') <> ''";
-        List<String> result = new ArrayList<>();
-        for (String raw : jdbcTemplate.queryForList(sql, new MapSqlParameterSource("id", Long.parseLong(billId)), String.class)) {
-            for (String no : splitReferences(raw)) {
-                if (!result.contains(no)) {
-                    result.add(no);
+    private void addForwardEdges(List<FlowNode> sources, String refColumn, String targetType,
+                                 String linkType, List<FlowEdge> edges) {
+        List<Long> ids = idsOf(sources);
+        if (ids.isEmpty()) {
+            return;
+        }
+        Map<Long, String> refById = referenceValuesBatch(sources.get(0).type(), refColumn, ids);
+        Set<String> targetNos = new LinkedHashSet<>();
+        for (String raw : refById.values()) {
+            targetNos.addAll(splitReferences(raw));
+        }
+        Map<String, FlowNode> targets = findByNosBatch(targetType, targetNos);
+        for (FlowNode source : sources) {
+            for (String no : splitReferences(refById.get(Long.parseLong(source.id())))) {
+                FlowNode target = targets.get(no);
+                if (target != null) {
+                    edges.add(new FlowEdge(target, source, linkType));
                 }
             }
         }
+    }
+
+    /** 物流单按明细 source_no(多值) 关联销售单。 */
+    private void addFreightBySalesOrderNoEdges(List<FlowNode> salesOrders, List<FlowEdge> edges) {
+        Set<String> nos = singleNos(salesOrders);
+        if (nos.isEmpty()) {
+            return;
+        }
+        Map<String, List<FlowNode>> bySeller = freightBillsBySalesOrderNos(nos);
+        for (FlowNode salesOrder : salesOrders) {
+            for (FlowNode bill : bySeller.getOrDefault(salesOrder.no(), List.of())) {
+                edges.add(new FlowEdge(salesOrder, bill, LINK_FREIGHT));
+            }
+        }
+    }
+
+    /** 物流单按自身明细 source_no 反查上游销售单。 */
+    private void addFreightToSalesOrderEdges(List<FlowNode> freightBills, List<FlowEdge> edges) {
+        Map<Long, List<String>> sourceNosByBill = sourceNosByBill(freightBills);
+        Set<String> orderNos = new LinkedHashSet<>();
+        for (List<String> raws : sourceNosByBill.values()) {
+            for (String raw : raws) {
+                orderNos.addAll(splitReferences(raw));
+            }
+        }
+        Map<String, FlowNode> orders = findByNosBatch(TYPE_SALES_ORDER, orderNos);
+        for (FlowNode bill : freightBills) {
+            Set<String> matched = new LinkedHashSet<>();
+            for (String raw : sourceNosByBill.getOrDefault(Long.parseLong(bill.id()), List.of())) {
+                matched.addAll(splitReferences(raw));
+            }
+            for (String no : matched) {
+                FlowNode order = orders.get(no);
+                if (order != null) {
+                    edges.add(new FlowEdge(order, bill, LINK_FREIGHT));
+                }
+            }
+        }
+    }
+
+    private void addReturnsByOutboundIdEdges(List<FlowNode> salesOutbounds, List<FlowEdge> edges) {
+        String sql = "SELECT DISTINCT " + aliasColumns(SALES_RETURN_COLUMNS, "ret")
+                + ", outbound_item.outbound_id AS source_id FROM so_sales_return ret"
+                + " JOIN so_sales_return_item return_item ON return_item.return_id = ret.id"
+                + " JOIN so_sales_outbound_item outbound_item"
+                + " ON outbound_item.id = return_item.source_sales_outbound_item_id"
+                + " WHERE ret.deleted_flag = FALSE AND outbound_item.outbound_id IN (:ids)";
+        Map<Long, List<FlowNode>> bySource = queryNodesBySourceId(TYPE_SALES_RETURN, sql, idsOf(salesOutbounds));
+        for (FlowNode outbound : salesOutbounds) {
+            for (FlowNode salesReturn : bySource.getOrDefault(Long.parseLong(outbound.id()), List.of())) {
+                edges.add(new FlowEdge(outbound, salesReturn, LINK_RETURN));
+            }
+        }
+    }
+
+    private void addOutboundsByReturnIdEdges(List<FlowNode> salesReturns, List<FlowEdge> edges) {
+        String sql = "SELECT DISTINCT " + aliasColumns(SALES_OUTBOUND_COLUMNS, "outbound")
+                + ", return_item.return_id AS source_id FROM so_sales_outbound outbound"
+                + " JOIN so_sales_outbound_item outbound_item ON outbound_item.outbound_id = outbound.id"
+                + " JOIN so_sales_return_item return_item"
+                + " ON return_item.source_sales_outbound_item_id = outbound_item.id"
+                + " WHERE outbound.deleted_flag = FALSE AND return_item.return_id IN (:ids)";
+        Map<Long, List<FlowNode>> bySource = queryNodesBySourceId(TYPE_SALES_OUTBOUND, sql, idsOf(salesReturns));
+        for (FlowNode salesReturn : salesReturns) {
+            for (FlowNode outbound : bySource.getOrDefault(Long.parseLong(salesReturn.id()), List.of())) {
+                edges.add(new FlowEdge(outbound, salesReturn, LINK_RETURN));
+            }
+        }
+    }
+
+    private void addFreightByOutboundIdEdges(List<FlowNode> salesOutbounds, List<FlowEdge> edges) {
+        String sql = "SELECT DISTINCT " + aliasColumns(FREIGHT_BILL_COLUMNS, "bill")
+                + ", outbound_item.outbound_id AS source_id FROM lg_freight_bill bill"
+                + " JOIN lg_freight_bill_item bill_item ON bill_item.bill_id = bill.id"
+                + " JOIN so_sales_outbound_item outbound_item"
+                + " ON outbound_item.id = bill_item.source_sales_outbound_item_id"
+                + " WHERE bill.deleted_flag = FALSE AND outbound_item.outbound_id IN (:ids)";
+        Map<Long, List<FlowNode>> bySource = queryNodesBySourceId(TYPE_FREIGHT_BILL, sql, idsOf(salesOutbounds));
+        for (FlowNode outbound : salesOutbounds) {
+            for (FlowNode bill : bySource.getOrDefault(Long.parseLong(outbound.id()), List.of())) {
+                edges.add(new FlowEdge(outbound, bill, LINK_FREIGHT));
+            }
+        }
+    }
+
+    private void addFreightByReturnIdEdges(List<FlowNode> salesReturns, List<FlowEdge> edges) {
+        String sql = "SELECT DISTINCT " + aliasColumns(FREIGHT_BILL_COLUMNS, "bill")
+                + ", return_item.return_id AS source_id FROM lg_freight_bill bill"
+                + " JOIN so_sales_return_item return_item ON return_item.source_freight_bill_id = bill.id"
+                + " WHERE bill.deleted_flag = FALSE AND return_item.return_id IN (:ids)";
+        Map<Long, List<FlowNode>> bySource = queryNodesBySourceId(TYPE_FREIGHT_BILL, sql, idsOf(salesReturns));
+        for (FlowNode salesReturn : salesReturns) {
+            for (FlowNode bill : bySource.getOrDefault(Long.parseLong(salesReturn.id()), List.of())) {
+                edges.add(new FlowEdge(bill, salesReturn, LINK_FREIGHT));
+            }
+        }
+    }
+
+    private void addOutboundsByFreightBillIdEdges(List<FlowNode> freightBills, List<FlowEdge> edges) {
+        String sql = "SELECT DISTINCT " + aliasColumns(SALES_OUTBOUND_COLUMNS, "outbound")
+                + ", bill_item.bill_id AS source_id FROM so_sales_outbound outbound"
+                + " JOIN so_sales_outbound_item outbound_item ON outbound_item.outbound_id = outbound.id"
+                + " JOIN lg_freight_bill_item bill_item"
+                + " ON bill_item.source_sales_outbound_item_id = outbound_item.id"
+                + " WHERE outbound.deleted_flag = FALSE AND bill_item.bill_id IN (:ids)";
+        Map<Long, List<FlowNode>> bySource = queryNodesBySourceId(TYPE_SALES_OUTBOUND, sql, idsOf(freightBills));
+        for (FlowNode bill : freightBills) {
+            for (FlowNode outbound : bySource.getOrDefault(Long.parseLong(bill.id()), List.of())) {
+                edges.add(new FlowEdge(outbound, bill, LINK_FREIGHT));
+            }
+        }
+    }
+
+    /** 显式指定 RowCallbackHandler, 避免与 ResultSetExtractor 重载歧义。 */
+    private void forEachRow(String sql, MapSqlParameterSource params, RowCallbackHandler handler) {
+        jdbcTemplate.query(sql, params, handler);
+    }
+
+    /** 批量反查引用列(逗号分隔多值): LIKE 预筛后在应用侧精确拆分, 返回 单号 -> 命中节点。 */
+    private Map<String, List<FlowNode>> referencingNodesBatch(String type, String column, Set<String> nos) {
+        StringBuilder where = new StringBuilder();
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        int index = 0;
+        for (String no : nos) {
+            if (index > 0) {
+                where.append(" OR ");
+            }
+            where.append(column).append(" LIKE :p").append(index);
+            params.addValue("p" + index, likePattern(no));
+            index++;
+        }
+        String sql = "SELECT " + columnsOf(type) + ", " + column + " AS ref_value FROM " + tableOf(type)
+                + " WHERE deleted_flag = FALSE AND (" + where + ")";
+        Map<String, List<FlowNode>> result = new LinkedHashMap<>();
+        Set<String> seen = new LinkedHashSet<>();
+        forEachRow(sql, params, resultSet -> {
+            FlowNode node = mapNode(type, resultSet);
+            for (String no : splitReferences(resultSet.getString("ref_value"))) {
+                if (nos.contains(no) && seen.add(no + "|" + node.key())) {
+                    result.computeIfAbsent(no, key -> new ArrayList<>()).add(node);
+                }
+            }
+        });
         return result;
     }
 
-    private List<FlowNode> queryNodes(String type, String sql, String id) {
-        return jdbcTemplate.query(sql, new MapSqlParameterSource("id", Long.parseLong(id)), nodeMapper(type));
+    /** 物流单按明细 source_no 反查销售单号。 */
+    private Map<String, List<FlowNode>> freightBillsBySalesOrderNos(Set<String> nos) {
+        StringBuilder where = new StringBuilder();
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        int index = 0;
+        for (String no : nos) {
+            if (index > 0) {
+                where.append(" OR ");
+            }
+            where.append("bill_item.source_no LIKE :p").append(index);
+            params.addValue("p" + index, likePattern(no));
+            index++;
+        }
+        String sql = "SELECT DISTINCT " + aliasColumns(FREIGHT_BILL_COLUMNS, "bill")
+                + ", bill_item.source_no AS ref_value FROM lg_freight_bill bill"
+                + " JOIN lg_freight_bill_item bill_item ON bill_item.bill_id = bill.id"
+                + " WHERE bill.deleted_flag = FALSE AND (" + where + ")";
+        Map<String, List<FlowNode>> result = new LinkedHashMap<>();
+        Set<String> seen = new LinkedHashSet<>();
+        forEachRow(sql, params, resultSet -> {
+            FlowNode node = mapNode(TYPE_FREIGHT_BILL, resultSet);
+            for (String no : splitReferences(resultSet.getString("ref_value"))) {
+                if (nos.contains(no) && seen.add(no + "|" + node.key())) {
+                    result.computeIfAbsent(no, key -> new ArrayList<>()).add(node);
+                }
+            }
+        });
+        return result;
+    }
+
+    /** 批量按 id 读取引用列值(带软删过滤), 返回 id -> 原始引用字符串。 */
+    private Map<Long, String> referenceValuesBatch(String type, String column, Collection<Long> ids) {
+        String sql = "SELECT id, " + column + " AS ref_value FROM " + tableOf(type)
+                + " WHERE deleted_flag = FALSE AND id IN (:ids)";
+        Map<Long, String> result = new LinkedHashMap<>();
+        forEachRow(sql, new MapSqlParameterSource("ids", ids), resultSet ->
+                result.put(resultSet.getLong("id"), resultSet.getString("ref_value")));
+        return result;
+    }
+
+    /** 批量按单号查询节点, 返回 单号 -> 节点。 */
+    private Map<String, FlowNode> findByNosBatch(String type, Set<String> nos) {
+        if (nos.isEmpty()) {
+            return Map.of();
+        }
+        String sql = "SELECT " + columnsOf(type) + " FROM " + tableOf(type)
+                + " WHERE deleted_flag = FALSE AND " + noColumnOf(type) + " IN (:nos)";
+        Map<String, FlowNode> result = new LinkedHashMap<>();
+        forEachRow(sql, new MapSqlParameterSource("nos", nos), resultSet -> {
+            FlowNode node = mapNode(type, resultSet);
+            result.putIfAbsent(node.no(), node);
+        });
+        return result;
+    }
+
+    /** 物流单明细的 source_no 集合, 返回 单据id -> 原始 source_no 列表。 */
+    private Map<Long, List<String>> sourceNosByBill(List<FlowNode> freightBills) {
+        String sql = "SELECT bill_id, source_no FROM lg_freight_bill_item"
+                + " WHERE bill_id IN (:ids) AND COALESCE(BTRIM(source_no), '') <> ''";
+        Map<Long, List<String>> result = new LinkedHashMap<>();
+        forEachRow(sql, new MapSqlParameterSource("ids", idsOf(freightBills)), resultSet ->
+                result.computeIfAbsent(resultSet.getLong("bill_id"), key -> new ArrayList<>())
+                        .add(resultSet.getString("source_no")));
+        return result;
+    }
+
+    /** 按关联列批量查询节点, 返回 源单据id -> 节点列表(用于明细级 id 关联)。 */
+    private Map<Long, List<FlowNode>> queryNodesBySourceId(String type, String sql, Collection<Long> ids) {
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<FlowNode>> result = new LinkedHashMap<>();
+        forEachRow(sql, new MapSqlParameterSource("ids", ids), resultSet ->
+                result.computeIfAbsent(resultSet.getLong("source_id"), key -> new ArrayList<>())
+                        .add(mapNode(type, resultSet)));
+        return result;
+    }
+
+    private static Set<String> singleNos(List<FlowNode> nodes) {
+        Set<String> nos = new LinkedHashSet<>();
+        for (FlowNode node : nodes) {
+            if (node.no() != null && !node.no().isBlank()) {
+                nos.add(node.no());
+            }
+        }
+        return nos;
+    }
+
+    private static List<Long> idsOf(List<FlowNode> nodes) {
+        List<Long> ids = new ArrayList<>();
+        for (FlowNode node : nodes) {
+            ids.add(Long.parseLong(node.id()));
+        }
+        return ids;
     }
 
     /** 为列清单逐项加上表别名与 AS 别名，用于 JOIN 查询。 */
