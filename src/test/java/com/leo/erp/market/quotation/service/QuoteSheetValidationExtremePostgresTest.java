@@ -38,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 真实 PostgreSQL 极端输入/子实体协调回归(默认跳过, 设置 {@code LEO_TEST_POSTGRES=true} 才执行)。
  * <p>
  * 覆盖: 行号空洞 {2,3}/{1,3} 下整单替换按既有行升序复用并归一化行号, 不触发
- * {@code uk_quote_item_line} 瞬时冲突; 同一请求内"解锁规格数量锁 + 改规格"当前语义;
+ * {@code uk_quote_item_line} 瞬时冲突; 同一请求内"解锁规格数量锁 + 改规格"的放行语义;
  * 品牌/prices 的 trim/同名/大小写/超长在极端输入下不得落唯一键 409。
  */
 @DataJpaTest(properties = {
@@ -210,25 +210,22 @@ class QuoteSheetValidationExtremePostgresTest {
     }
 
     /**
-     * 同一请求内显式解锁 + 改规格: 当前实现先校验后应用表头, 因此判 422 并整体回滚(锁与版本不变)。
-     * 见任务报告对"单请求解锁+改规格"语义的记录。
+     * 缺陷 B: 同一请求内显式解锁 + 改规格必须放行(200), 解锁与新规格随请求落库, 父版本恰好 +1。
      */
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    void sameRequestUnlockAndSpecChange_isRejectedAndRolledBack() {
+    void sameRequestUnlockAndSpecChange_succeedsAndPersists() {
         persistSheetWithItems(true, 1);
         long version = dbVersion();
 
-        assertThatThrownBy(() -> store.update(SHEET_ID,
-                wholeRequest(false, item("螺纹钢", "HRB400E", 14, "10", "3600")), version))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("规格和数量已锁定")
-                .extracting(ex -> ((BusinessException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        QuoteSheetResponse response = store.update(SHEET_ID,
+                wholeRequest(false, item("螺纹钢", "HRB400E", 14, "10", "3600")), version);
 
+        assertThat(response.specQuantityLocked()).isFalse();
         QuoteSheet reloaded = repository.findByIdAndDeletedFlagFalse(SHEET_ID).orElseThrow();
-        assertThat(reloaded.isSpecQuantityLocked()).isTrue();
-        assertThat(reloaded.getVersion()).isEqualTo(version);
+        assertThat(reloaded.isSpecQuantityLocked()).isFalse();
+        assertThat(reloaded.getItems().get(0).getSpec()).isEqualTo(14);
+        assertThat(reloaded.getVersion()).isEqualTo(version + 1);
     }
 
     private long dbVersion() {

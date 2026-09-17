@@ -89,7 +89,7 @@ public class QuoteSheetStore {
             applyHeader(entity, request, true);
         } else {
             validate(request);
-            checkSpecQuantityLockedForReplace(entity, request.items());
+            checkSpecQuantityLockedForReplace(entity, request.items(), request.specQuantityLocked());
             // 整体替换改的是 mappedBy 反向集合, 仅变更子集合时 Hibernate 不会把父行标脏,
             // 父 @Version 不递增; 此时才需要 FORCE_INCREMENT。若表头标量也已变更, 父行会被自然标脏、
             // 由 @Version 自然递增一次, 再叠加 FORCE_INCREMENT 会变成 +2, 故仅在表头未变时强制自增,
@@ -324,9 +324,23 @@ public class QuoteSheetStore {
         }
     }
 
+    /**
+     * 整单替换的规格数量锁校验, 以"请求中的显式值"门控, 支持同一 PUT 内先解锁再改规格/数量。
+     * <ul>
+     *   <li>请求显式 {@code specQuantityLocked=false}: 视为本次请求内已解锁, 放行规格/数量变更
+     *       (随后 {@code applyHeader} 会把解锁落库);</li>
+     *   <li>请求为 {@code null}(未携带): 回退到持久化旧值, 锁定即拒绝(向后兼容);</li>
+     *   <li>请求显式 {@code true}: 按锁定拒绝。</li>
+     * </ul>
+     * 行级写仍以持久化锁状态为准, 不经过本入口, 不得借此绕过。
+     */
     private void checkSpecQuantityLockedForReplace(QuoteSheet entity,
-                                                   List<QuoteSheetRequest.ItemRequest> requests) {
-        if (!entity.isSpecQuantityLocked()) {
+                                                   List<QuoteSheetRequest.ItemRequest> requests,
+                                                   Boolean requestedSpecQuantityLocked) {
+        boolean locked = requestedSpecQuantityLocked != null
+                ? requestedSpecQuantityLocked
+                : entity.isSpecQuantityLocked();
+        if (!locked) {
             return;
         }
         // 与 replaceItems 完全一致的行匹配口径: 按请求顺序对既有行(line_no 升序)一一对应,

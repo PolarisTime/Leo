@@ -875,7 +875,7 @@ class QuoteSheetStoreTest {
         existing.setSpecQuantityLocked(true);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> store().update(9L, fullRequest(10, BigDecimal.TEN, "3280"), 3L))
+        assertThatThrownBy(() -> store().update(9L, fullRequest(10, BigDecimal.TEN, "3280", true), 3L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("规格和数量已锁定")
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
@@ -892,7 +892,7 @@ class QuoteSheetStoreTest {
         existing.setSpecQuantityLocked(true);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> store().update(9L, fullRequest(12, BigDecimal.ONE, "3280"), 3L))
+        assertThatThrownBy(() -> store().update(9L, fullRequest(12, BigDecimal.ONE, "3280", true), 3L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("规格和数量已锁定")
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
@@ -910,7 +910,7 @@ class QuoteSheetStoreTest {
 
         QuoteSheetRequest twoRows = new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null,
+                new BigDecimal("30"), false, true, "报价", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                                 List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
@@ -1010,6 +1010,83 @@ class QuoteSheetStoreTest {
 
         QuoteSheetResponse replaced = store().update(9L, fullRequest(10, BigDecimal.TEN, "3280"), null);
         assertThat(replaced.items().get(0).spec()).isEqualTo(10);
+    }
+
+    /**
+     * 缺陷 B 回归: 同一整单 PUT 内显式 {@code specQuantityLocked=false} 解锁并改规格/数量,
+     * 校验必须按请求显式值放行(而非持久化旧值), 返回 200 且落库。
+     */
+    @Test
+    void update_fullReplace_explicitUnlock_allowsSpecAndQuantityChangeInSamePut() {
+        QuoteSheet existing = sheetWithItemMatchingFullRequestHeader(9L);
+        existing.setVersion(1L);
+        existing.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = store().update(9L, fullRequest(10, BigDecimal.ONE, "3280", false), 1L);
+
+        assertThat(response.specQuantityLocked()).isFalse();
+        assertThat(response.items().get(0).spec()).isEqualTo(10);
+        assertThat(response.items().get(0).ton()).isEqualByComparingTo("1");
+        assertThat(existing.isSpecQuantityLocked()).isFalse();
+        assertThat(existing.getItems().get(0).getSpec()).isEqualTo(10);
+        assertThat(existing.getItems().get(0).getTon()).isEqualByComparingTo("1");
+    }
+
+    /** 缺陷 B 回归: 同一 PUT 仅显式解锁(规格/数量不变)也必须 200 并落库解锁。 */
+    @Test
+    void update_fullReplace_explicitUnlockWithoutSpecChange_releasesLock() {
+        QuoteSheet existing = sheetWithItemMatchingFullRequestHeader(9L);
+        existing.setVersion(1L);
+        existing.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = store().update(9L, fullRequest(12, BigDecimal.TEN, "3280", false), 1L);
+
+        assertThat(response.specQuantityLocked()).isFalse();
+        assertThat(response.items().get(0).spec()).isEqualTo(12);
+        assertThat(existing.isSpecQuantityLocked()).isFalse();
+    }
+
+    /** 缺陷 B 回归: 未携带 specQuantityLocked(null) 时仍按持久化旧值拒绝改规格。 */
+    @Test
+    void update_fullReplace_omittedSpecQuantityLocked_stillRejectsSpecChange() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(1L);
+        existing.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        QuoteSheetRequest omitted = new QuoteSheetRequest(
+                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("30"), false, null, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 10, "9米", BigDecimal.TEN,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
+
+        assertThatThrownBy(() -> store().update(9L, omitted, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("规格和数量已锁定")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 缺陷 B 回归: 持久化未锁定但请求显式 specQuantityLocked=true 时, 同请求改规格仍必须 422。 */
+    @Test
+    void update_fullReplace_explicitLockTrue_rejectsSpecChange() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(1L);
+        existing.setSpecQuantityLocked(false);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> store().update(9L, fullRequest(10, BigDecimal.TEN, "3280", true), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("规格和数量已锁定")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
     }
 
     private QuoteSheetRequest fullRequest(Integer spec, BigDecimal ton, String spotPrice) {

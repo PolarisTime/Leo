@@ -35,7 +35,7 @@ import static org.mockito.Mockito.when;
  * <p>
  * 覆盖: 请求列表中的 {@code null} 元素(JSON 可合法反序列化为 {@code List} 中的 {@code null},
  * 而 Bean Validation 会跳过 null 元素, 因此必须在服务层显式拒绝)、同一请求内"解锁规格数量锁 + 改规格"
- * 的当前语义、行号空洞下的整单替换按请求顺序复用实体、表头无变化时不推进版本。
+ * 的放行语义、行号空洞下的整单替换按请求顺序复用实体、表头无变化时不推进版本。
  */
 @ExtendWith(MockitoExtension.class)
 class QuoteSheetValidationExtremeTest {
@@ -102,24 +102,25 @@ class QuoteSheetValidationExtremeTest {
     }
 
     /**
-     * 当前语义: 整单替换请求在同一请求内显式 {@code specQuantityLocked=false} 解锁并同时改规格,
-     * 会因校验发生在应用表头之前而被判 422; 必须先单独发送一次表头写解锁, 再改规格。
-     * <p>(记录既有行为; 若产品决定允许单请求解锁+改规格, 需要调整校验顺序, 见任务报告。)
+     * 缺陷 B: 整单替换请求在同一请求内显式 {@code specQuantityLocked=false} 解锁并同时改规格,
+     * 必须按"请求显式值"门控放行(200), 且落库解锁与新规格, 不再按持久化旧值误判 422。
      */
     @Test
-    void update_fullReplace_sameRequestUnlockAndSpecChange_isRejectedBeforeHeaderApplied() {
+    void update_fullReplace_sameRequestUnlockAndSpecChange_isAllowed() {
         QuoteSheet existing = sheetWithItem(9L);
         existing.setVersion(1L);
         existing.setSpecQuantityLocked(true);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
 
         QuoteSheetRequest request = fullRequest(10, BigDecimal.TEN, "3280", false);
-        assertThatThrownBy(() -> store().update(9L, request, 1L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("规格和数量已锁定")
-                .extracting(ex -> ((BusinessException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.VALIDATION_ERROR);
-        verify(repository, never()).saveAndFlush(any());
+        QuoteSheetResponse response = store().update(9L, request, 1L);
+
+        assertThat(response.specQuantityLocked()).isFalse();
+        assertThat(response.items().get(0).spec()).isEqualTo(10);
+        assertThat(existing.isSpecQuantityLocked()).isFalse();
+        assertThat(existing.getItems().get(0).getSpec()).isEqualTo(10);
+        verify(repository).saveAndFlush(any(QuoteSheet.class));
     }
 
     /**
