@@ -1,3 +1,10 @@
+## [11.5.1](https://github.com/PolarisTime/Leo/compare/v11.5.0...v11.5.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* **rbac:** 禁止禁用内置角色, 避免管理员失去全部权限 ([304ed36](https://github.com/PolarisTime/Leo/commit/304ed36f089d7fe4f77032b7026b72d5c5c6cd5a))
+
 # [11.5.0](https://github.com/PolarisTime/Leo/compare/v11.4.0...v11.5.0) (2026-09-17)
 
 
