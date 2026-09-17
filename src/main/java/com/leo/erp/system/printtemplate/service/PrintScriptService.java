@@ -95,11 +95,15 @@ public class PrintScriptService {
         items = applyItemSelection(items, options);
         items = applyItemOrder(items, options);
         applyPrintOptions(data, items, options);
+        Set<String> splitItemIds = options == null || options.splitItemIds() == null
+                ? null
+                : new HashSet<>(options.splitItemIds());
         if (shouldMergeEquivalentItems(moduleKey, options)) {
-            items = PrintRecordItemMerger.mergeEquivalentItems(items);
+            items = PrintRecordItemMerger.mergeEquivalentItems(items, splitItemIds);
         }
         // 拆分必须发生在合并之后：拆分行共享同一明细键，提前拆分会被合并回一行。
-        items = PrintItemSplitter.splitItems(items, options == null ? null : options.splitPieceCount());
+        items = PrintItemSplitter.splitItems(
+                items, options == null ? null : options.splitPieceCount(), splitItemIds);
         items = layoutPreparer.prepare(moduleKey, template.getTemplateName(), template.getTemplateHtml(), data, items);
         if (FREIGHT_STATEMENT_MODULE.equals(moduleKey)
                 && PDF_FORM_TEMPLATE_TYPE.equals(template.getTemplateType())) {

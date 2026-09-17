@@ -30,7 +30,7 @@ public class SalesOrderPrintDocumentFactory {
         List<SalesOrderPrintLine> lines = items.stream()
                 .map(item -> toLine(item, safeOptions))
                 .toList();
-        lines = splitLines(lines, safeOptions.splitPieceCount());
+        lines = splitLines(lines, safeOptions.splitPieceCount(), safeOptions.splitItemIds());
 
         return new SalesOrderPrintDocument(
                 order.getOrderNo(),
@@ -57,12 +57,19 @@ public class SalesOrderPrintDocumentFactory {
         );
     }
 
-    private List<SalesOrderPrintLine> splitLines(List<SalesOrderPrintLine> lines, Integer splitPieceCount) {
+    private List<SalesOrderPrintLine> splitLines(List<SalesOrderPrintLine> lines,
+                                                 Integer splitPieceCount,
+                                                 List<String> splitItemIds) {
         if (splitPieceCount == null || splitPieceCount < 1 || lines.isEmpty()) {
             return lines;
         }
+        Set<String> selectedItemIds = splitItemIds == null ? null : new HashSet<>(splitItemIds);
         List<SalesOrderPrintLine> result = new ArrayList<>(lines.size());
         for (SalesOrderPrintLine line : lines) {
+            if (selectedItemIds != null && !selectedItemIds.contains(line.id())) {
+                result.add(line);
+                continue;
+            }
             BigDecimal quantity = line.quantity() == null ? null : BigDecimal.valueOf(line.quantity());
             List<PrintItemSplitter.Part> parts = PrintItemSplitter.split(
                     quantity,

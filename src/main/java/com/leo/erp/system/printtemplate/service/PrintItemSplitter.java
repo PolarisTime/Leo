@@ -5,9 +5,12 @@ import com.leo.erp.common.support.PrecisionConstants;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 打印明细「按每份件数拆分」工具。
@@ -15,6 +18,10 @@ import java.util.Map;
  * <p>当 {@code splitPieceCount = N}（N ≥ 1）且明细数量大于 N 时，把一条明细拆成多行：
  * 每行 N 件，无法整除的余数并入最后一行（例：数量 100、N=25 → 25/25/25/25；
  * 数量 103、N=25 → 25/25/25/28）。</p>
+ *
+ * <p>拆分范围由「逐行勾选」的明细 ID 集合决定：集合为 {@code null} 时兼容旧语义拆分所有明细，
+ * 非空集合仅拆分列出的行，空集合不拆分任何行；合并产生的行由
+ * {@link PrintRecordItemMerger} 写入 {@link #SPLIT_REQUEST_FIELD} 标记后同样参与拆分。</p>
  *
  * <p>重量与金额按「该份数量 / 原数量」比例缩放。为保证拆分后各份之和与原值一致，
  * 采用累计舍入法：第 i 份 = round(原值 × 累计数量_i / 原数量) − round(原值 × 累计数量_{i-1} / 原数量)。
@@ -27,6 +34,7 @@ public final class PrintItemSplitter {
     static final String AMOUNT_FIELD = "amount";
     static final String SPLIT_INDEX_FIELD = "_splitIndex";
     static final String SPLIT_TOTAL_FIELD = "_splitTotal";
+    static final String SPLIT_REQUEST_FIELD = "_splitRequested";
 
     private static final int WEIGHT_SCALE = PrecisionConstants.WEIGHT_SCALE;
     private static final int AMOUNT_SCALE = PrecisionConstants.AMOUNT_SCALE;
@@ -38,19 +46,54 @@ public final class PrintItemSplitter {
      * 拆分 Map 形式的打印明细。未开启拆分（null / &lt;1）、明细为空或单条无需拆分时原样保留。
      */
     public static List<Map<String, String>> splitItems(List<Map<String, String>> items, Integer splitPieceCount) {
-        if (!isActive(splitPieceCount) || items == null || items.isEmpty()) {
+        return splitItems(items, splitPieceCount, null);
+    }
+
+    /**
+     * 按「逐行勾选」的明细 ID 集合拆分：{@code splitItemIds} 为 {@code null} 拆分所有明细，
+     * 非空集合仅拆分列出的行（或带拆分标记的合并行），空集合不拆分任何行。
+     */
+    public static List<Map<String, String>> splitItems(List<Map<String, String>> items,
+                                                       Integer splitPieceCount,
+                                                       Collection<String> splitItemIds) {
+        if (items == null || items.isEmpty()) {
+            return items;
+        }
+        Set<String> selectedItemIds = splitItemIds == null ? null : new HashSet<>(splitItemIds);
+        if (!isActive(splitPieceCount)) {
+            items.forEach(PrintItemSplitter::clearSplitRequest);
             return items;
         }
         List<Map<String, String>> result = new ArrayList<>(items.size());
         boolean changed = false;
         for (Map<String, String> item : items) {
-            List<Map<String, String>> rows = splitItem(item, splitPieceCount);
-            if (rows.size() != 1 || rows.get(0) != item) {
-                changed = true;
+            if (!isSplitRequested(item, selectedItemIds)) {
+                result.add(clearSplitRequest(item));
+                continue;
             }
+            List<Map<String, String>> rows = splitItem(item, splitPieceCount);
+            if (rows.size() == 1 && rows.get(0) == item) {
+                result.add(clearSplitRequest(item));
+                continue;
+            }
+            changed = true;
+            rows.forEach(PrintItemSplitter::clearSplitRequest);
             result.addAll(rows);
         }
         return changed ? result : items;
+    }
+
+    private static boolean isSplitRequested(Map<String, String> item, Set<String> selectedItemIds) {
+        if (selectedItemIds == null) {
+            return true;
+        }
+        return selectedItemIds.contains(item.get("id"))
+                || "true".equals(item.get(SPLIT_REQUEST_FIELD));
+    }
+
+    private static Map<String, String> clearSplitRequest(Map<String, String> item) {
+        item.remove(SPLIT_REQUEST_FIELD);
+        return item;
     }
 
     /**

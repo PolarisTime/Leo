@@ -14,7 +14,8 @@ public record SalesOrderPrintXlsxOptions(
         Map<String, String> brandOverridesByItemId,
         List<String> itemOrder,
         List<String> selectedItemIds,
-        Integer splitPieceCount
+        Integer splitPieceCount,
+        List<String> splitItemIds
 ) {
 
     public SalesOrderPrintXlsxOptions {
@@ -30,10 +31,11 @@ public record SalesOrderPrintXlsxOptions(
         itemOrder = itemOptions.itemOrder();
         selectedItemIds = normalizeSelectedItemIds(selectedItemIds);
         splitPieceCount = normalizeSplitPieceCount(splitPieceCount);
+        splitItemIds = normalizeSplitItemIds(splitItemIds);
     }
 
     public static SalesOrderPrintXlsxOptions defaults() {
-        return new SalesOrderPrintXlsxOptions(false, false, "", Map.of(), Map.of(), List.of(), null, null);
+        return new SalesOrderPrintXlsxOptions(false, false, "", Map.of(), Map.of(), List.of(), null, null, null);
     }
 
     public PrintItemOptions itemOptions() {
@@ -41,6 +43,22 @@ public record SalesOrderPrintXlsxOptions(
     }
 
     private static List<String> normalizeSelectedItemIds(List<String> values) {
+        if (values == null) {
+            return null;
+        }
+        return values.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * {@code splitItemIds} 为 {@code null} 表示兼容旧语义（拆分所有明细）；
+     * 非空集合表示仅拆分列出的明细行，空集合表示没有任何行需要拆分。
+     */
+    private static List<String> normalizeSplitItemIds(List<String> values) {
         if (values == null) {
             return null;
         }

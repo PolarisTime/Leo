@@ -72,8 +72,12 @@ class SalesOrderPrintDocumentFactoryTest {
     }
 
     private SalesOrderPrintXlsxOptions optionsWithSplit(Integer splitPieceCount) {
+        return optionsWithSplit(splitPieceCount, null);
+    }
+
+    private SalesOrderPrintXlsxOptions optionsWithSplit(Integer splitPieceCount, List<String> splitItemIds) {
         return new SalesOrderPrintXlsxOptions(
-                false, false, "", Map.of(), Map.of(), List.of(), null, splitPieceCount);
+                false, false, "", Map.of(), Map.of(), List.of(), null, splitPieceCount, splitItemIds);
     }
 
     @Test
@@ -119,6 +123,47 @@ class SalesOrderPrintDocumentFactoryTest {
                 .map(SalesOrderPrintLine::weightTon)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         assertThat(weightSum).isEqualByComparingTo("12.5");
+    }
+
+    @Test
+    void create_shouldSplitOnlyRowsSelectedForSplit() {
+        SalesOrderItem first = new SalesOrderItem();
+        first.setId(1L);
+        first.setLineNo(1);
+        first.setQuantity(100);
+        first.setWeightTon(new BigDecimal("10.00000000"));
+        SalesOrderItem second = new SalesOrderItem();
+        second.setId(2L);
+        second.setLineNo(2);
+        second.setQuantity(100);
+        second.setWeightTon(new BigDecimal("10.00000000"));
+        SalesOrder order = new SalesOrder();
+        order.setItems(List.of(first, second));
+
+        SalesOrderPrintDocument document = factory.create(order, optionsWithSplit(25, List.of("2")), 7);
+
+        List<SalesOrderPrintLine> lines = document.pages().get(0).lines();
+        assertThat(lines).hasSize(5);
+        assertThat(lines).extracting(SalesOrderPrintLine::id)
+                .containsExactly("1", "2", "2", "2", "2");
+        assertThat(lines).extracting(SalesOrderPrintLine::quantity)
+                .containsExactly(100, 25, 25, 25, 25);
+    }
+
+    @Test
+    void create_shouldNotSplitAnyRowWhenSplitItemIdsEmpty() {
+        SalesOrderItem item = new SalesOrderItem();
+        item.setId(1L);
+        item.setLineNo(1);
+        item.setQuantity(100);
+        item.setWeightTon(new BigDecimal("10.00000000"));
+        SalesOrder order = new SalesOrder();
+        order.setItems(List.of(item));
+
+        SalesOrderPrintDocument document = factory.create(order, optionsWithSplit(25, List.of()), 7);
+
+        assertThat(document.pages().get(0).lines()).hasSize(1);
+        assertThat(document.pages().get(0).lines().get(0).quantity()).isEqualTo(100);
     }
 
     @Test

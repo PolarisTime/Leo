@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -56,8 +57,62 @@ class PrintRenderOptionsTest {
     @Test
     void constructorShouldNormalizeNonPositiveSplitPieceCount() {
         PrintRenderOptions options = new PrintRenderOptions(
-                false, false, true, "", Map.of(), Map.of(), java.util.List.of(), null, 0);
+                false, false, true, "", Map.of(), Map.of(), java.util.List.of(), null, 0, null);
 
         assertThat(options.splitPieceCount()).isNull();
+    }
+
+    @Test
+    void fromShouldKeepSplitItemIdsNullWhenAbsentForLegacySplitAll() {
+        Map<String, Object> options = new HashMap<>();
+        options.put("splitPieceCount", 25);
+
+        assertThat(PrintRenderOptions.from(options).splitItemIds()).isNull();
+        assertThat(PrintRenderOptions.defaults().splitItemIds()).isNull();
+    }
+
+    @Test
+    void fromShouldParseSplitItemIdsAndKeepEmptyListAsNoSplit() {
+        Map<String, Object> selected = new HashMap<>();
+        selected.put("splitItemIds", java.util.Arrays.asList(1001L, " 1002 ", 1002L, null, " "));
+        assertThat(PrintRenderOptions.from(selected).splitItemIds())
+                .containsExactly("1001", "1002");
+
+        Map<String, Object> empty = new HashMap<>();
+        empty.put("splitItemIds", java.util.List.of());
+        assertThat(PrintRenderOptions.from(empty).splitItemIds()).isEmpty();
+    }
+
+    @Test
+    void jsonShouldDeserializeSplitItemIdsAlongWithSplitPieceCount() throws Exception {
+        PrintRenderOptions options = new ObjectMapper().readValue(
+                """
+                {"splitPieceCount":25,"splitItemIds":["357099695337644032","357099695341838336"]}
+                """,
+                PrintRenderOptions.class);
+
+        assertThat(options.splitPieceCount()).isEqualTo(25);
+        assertThat(options.splitItemIds())
+                .containsExactly("357099695337644032", "357099695341838336");
+    }
+
+    @Test
+    void jsonShouldKeepSplitItemIdsNullWhenAbsent() throws Exception {
+        PrintRenderOptions options = new ObjectMapper().readValue(
+                """
+                {"splitPieceCount":25}
+                """,
+                PrintRenderOptions.class);
+
+        assertThat(options.splitItemIds()).isNull();
+    }
+
+    @Test
+    void constructorShouldNormalizeSplitItemIds() {
+        PrintRenderOptions options = new PrintRenderOptions(
+                false, false, true, "", Map.of(), Map.of(), java.util.List.of(), null, 25,
+                java.util.Arrays.asList(" 7 ", "7", "", null));
+
+        assertThat(options.splitItemIds()).containsExactly("7");
     }
 }

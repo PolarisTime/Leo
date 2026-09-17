@@ -2,10 +2,13 @@ package com.leo.erp.system.printtemplate.service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 final class PrintRecordItemMerger {
 
@@ -15,10 +18,20 @@ final class PrintRecordItemMerger {
     }
 
     static List<Map<String, String>> mergeEquivalentItems(List<Map<String, String>> items) {
+        return mergeEquivalentItems(items, null);
+    }
+
+    /**
+     * 合并等价明细；若被并入的行勾选了拆分，则在合并行写入拆分标记，
+     * 保证「逐行勾选拆分」在合并后仍然生效。
+     */
+    static List<Map<String, String>> mergeEquivalentItems(List<Map<String, String>> items,
+                                                          Collection<String> splitItemIds) {
         if (items.size() < 2) {
             return items;
         }
 
+        Set<String> selectedSplitItemIds = splitItemIds == null ? null : new HashSet<>(splitItemIds);
         Map<MergeKey, Map<String, String>> mergedItems = new LinkedHashMap<>();
         List<Map<String, String>> result = new ArrayList<>();
         for (Map<String, String> item : items) {
@@ -40,6 +53,9 @@ final class PrintRecordItemMerger {
                 mergedItem.put(field, sum(mergedItem.get(field), item.get(field)));
             }
             mergedItem.put("pieceWeightTon", "");
+            if (selectedSplitItemIds != null && selectedSplitItemIds.contains(item.get("id"))) {
+                mergedItem.put(PrintItemSplitter.SPLIT_REQUEST_FIELD, "true");
+            }
         }
         return result;
     }

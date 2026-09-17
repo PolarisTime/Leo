@@ -3,6 +3,7 @@ package com.leo.erp.system.printtemplate.service;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -172,5 +173,59 @@ class PrintItemSplitterTest {
         assertThat(PrintItemSplitter.splitItems(items, null)).isSameAs(items);
         assertThat(PrintItemSplitter.splitItems(items, 0)).isSameAs(items);
         assertThat(PrintItemSplitter.splitItems(List.of(), 25)).isEmpty();
+    }
+
+    @Test
+    void splitItemsShouldOnlySplitSelectedItemIds() {
+        Map<String, String> first = item("100", "10.00000000", "200.00");
+        Map<String, String> second = item("100", "10.00000000", "200.00");
+        second.put("id", "1002");
+
+        List<Map<String, String>> rows = PrintItemSplitter.splitItems(
+                List.of(first, second), 25, List.of("1002"));
+
+        assertThat(rows).hasSize(5);
+        assertThat(rows).extracting(row -> row.get("id"))
+                .containsExactly("1001", "1002", "1002", "1002", "1002");
+        assertThat(rows).extracting(row -> row.get("quantity"))
+                .containsExactly("100", "25", "25", "25", "25");
+    }
+
+    @Test
+    void splitItemsShouldNotSplitAnyRowWhenSelectedItemIdsEmpty() {
+        List<Map<String, String>> items = new ArrayList<>();
+        items.add(item("100", "1.5", "10.00"));
+
+        List<Map<String, String>> rows = PrintItemSplitter.splitItems(items, 25, List.of());
+
+        assertThat(rows).isSameAs(items);
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0)).doesNotContainKey(SPLIT_INDEX);
+    }
+
+    @Test
+    void splitItemsShouldSplitMergedRowCarryingSplitRequestAndStripMarker() {
+        Map<String, String> merged = item("100", "10.00000000", "200.00");
+        merged.put(PrintItemSplitter.SPLIT_REQUEST_FIELD, "true");
+
+        List<Map<String, String>> rows = PrintItemSplitter.splitItems(
+                List.of(merged), 25, List.of("other-id"));
+
+        assertThat(rows).hasSize(4);
+        assertThat(rows).extracting(row -> row.get("quantity"))
+                .containsExactly("25", "25", "25", "25");
+        assertThat(rows).allSatisfy(row ->
+                assertThat(row).doesNotContainKey(PrintItemSplitter.SPLIT_REQUEST_FIELD));
+    }
+
+    @Test
+    void splitItemsShouldStripSplitRequestMarkerWhenRowNotSplit() {
+        Map<String, String> item = item("10", "1.5", "10.00");
+        item.put(PrintItemSplitter.SPLIT_REQUEST_FIELD, "true");
+
+        List<Map<String, String>> rows = PrintItemSplitter.splitItems(List.of(item), 25, List.of());
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0)).doesNotContainKey(PrintItemSplitter.SPLIT_REQUEST_FIELD);
     }
 }
