@@ -32,6 +32,16 @@ public interface PurchaseInboundItemRepository extends JpaRepository<PurchaseInb
     );
 
     @Query("""
+            select item
+            from PurchaseInboundItem item
+            join fetch item.purchaseInbound inbound
+            where item.sourcePurchaseOrderItemId in :sourcePurchaseOrderItemIds
+            """)
+    List<PurchaseInboundItem> findAllBySourcePurchaseOrderItemIds(
+            @Param("sourcePurchaseOrderItemIds") Collection<Long> sourcePurchaseOrderItemIds
+    );
+
+    @Query("""
             select item.sourcePurchaseOrderItemId as sourcePurchaseOrderItemId,
                    sum(item.quantity) as totalQuantity
             from PurchaseInboundItem item

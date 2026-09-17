@@ -42,6 +42,15 @@ public interface SalesOrderItemRepository extends JpaRepository<SalesOrderItem, 
     );
 
     @Query("""
+            select distinct item.sourceInboundItemId
+            from SalesOrderItem item
+            where item.sourceInboundItemId in :sourceInboundItemIds
+            """)
+    List<Long> findReferencedSourceInboundItemIds(
+            @Param("sourceInboundItemIds") Collection<Long> sourceInboundItemIds
+    );
+
+    @Query("""
             select distinct outboundItem.sourceSalesOrderItemId
             from SalesOutboundItem outboundItem
             join outboundItem.salesOutbound outbound

@@ -34,6 +34,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.sql.SQLException;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -300,12 +301,22 @@ public class GlobalExceptionHandler {
     ) {
         Throwable cause = ex.getMostSpecificCause();
         String message = cause == null ? "" : String.valueOf(cause.getMessage());
-        if (message.contains("duplicate key") || message.contains("unique constraint")) {
+        String sqlState = cause instanceof SQLException sqlException ? sqlException.getSQLState() : null;
+        if (isUniqueViolation(sqlState, message)) {
             return failure(
                     request,
                     HttpStatus.CONFLICT,
                     ErrorCode.CONCURRENT_MODIFICATION,
                     "数据已存在或与现有记录冲突"
+            );
+        }
+        if (isForeignKeyViolation(sqlState, message)) {
+            log.warn("外键引用冲突: {}", message);
+            return failure(
+                    request,
+                    HttpStatus.CONFLICT,
+                    ErrorCode.BUSINESS_ERROR,
+                    "数据被其他单据引用，无法删除或修改"
             );
         }
         log.warn("数据完整性校验失败: {}", message);
@@ -315,6 +326,20 @@ public class GlobalExceptionHandler {
                 ErrorCode.VALIDATION_ERROR,
                 "字段长度或数值超出允许范围"
         );
+    }
+
+    private boolean isUniqueViolation(String sqlState, String message) {
+        return "23505".equals(sqlState)
+                || message.contains("duplicate key")
+                || message.contains("unique constraint");
+    }
+
+    private boolean isForeignKeyViolation(String sqlState, String message) {
+        return "23503".equals(sqlState)
+                || "23001".equals(sqlState)
+                || message.contains("violates foreign key constraint")
+                || message.contains("violates RESTRICT setting")
+                || message.contains("still referenced from table");
     }
 
     @ExceptionHandler(Exception.class)

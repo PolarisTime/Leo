@@ -62,8 +62,28 @@ public class PurchaseOrderDownstreamMutationGuard {
             Collection<PurchaseOrderItemRequest> requestedItems,
             String action
     ) {
-        if (sourceLinesChanged(order, requestedItems)) {
-            assertMutable(order, action);
+        if (!sourceLinesChanged(order, requestedItems)) {
+            return;
+        }
+        assertMutable(order, action);
+        assertNoDeletedInboundResidue(order, action);
+    }
+
+    /**
+     * 已软删除采购入库单的残留明细同样通过 RESTRICT 外键物理锁定来源采购订单明细，
+     * 行数/行内容变更会因外键失败被数据库拒绝；此处提前给出明确业务提示，避免暴露底层完整性错误。
+     */
+    private void assertNoDeletedInboundResidue(PurchaseOrder order, String action) {
+        List<Long> itemIds = SourceLineDiffSupport.sourceItemIds(
+                order == null ? null : order.getItems(), PurchaseOrderItem::getId);
+        if (itemIds.isEmpty()) {
+            return;
+        }
+        if (!purchaseInboundItemRepository.findAllBySourcePurchaseOrderItemIds(itemIds).isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "采购订单明细仍被已删除的采购入库单引用，不能" + action + "，请先清理采购入库单残留数据"
+            );
         }
     }
 
