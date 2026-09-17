@@ -1,5 +1,6 @@
 package com.leo.erp.market.quotation.service;
 
+import com.leo.erp.common.config.ClockConfig;
 import com.leo.erp.common.persistence.JpaAuditConfig;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
@@ -54,7 +55,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @EnabledIfEnvironmentVariable(named = "LEO_TEST_POSTGRES", matches = "true")
 @Import({QuoteSheetStore.class, QuoteSheetService.class, QuoteSheetEditLockService.class,
         QuoteProjectConfigStore.class, QuoteProjectConfigService.class, JpaAuditConfig.class,
-        QuoteVersionPostgresTest.StubConfig.class})
+        ClockConfig.class, QuoteVersionPostgresTest.StubConfig.class})
 class QuoteVersionPostgresTest {
 
     private static final long SHEET_ID = 920000000000000101L;

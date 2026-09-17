@@ -12,6 +12,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -33,13 +34,16 @@ public class QuoteSheetEditLockService {
     private final QuoteSheetEditLockRepository repository;
     private final QuoteSheetRepository sheetRepository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
+    private final Clock clock;
 
     public QuoteSheetEditLockService(QuoteSheetEditLockRepository repository,
                                      QuoteSheetRepository sheetRepository,
-                                     SnowflakeIdGenerator snowflakeIdGenerator) {
+                                     SnowflakeIdGenerator snowflakeIdGenerator,
+                                     Clock clock) {
         this.repository = repository;
         this.sheetRepository = sheetRepository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
+        this.clock = clock;
     }
 
     /**
@@ -64,7 +68,7 @@ public class QuoteSheetEditLockService {
     public QuoteSheetEditLockResponse acquire(Long sheetId, Long ownerId, String ownerName, boolean force) {
         // 先锁父单据行: 对尚不存在的锁行做 FOR UPDATE 不会加锁, 只有锁住父行才能让并发首插串行。
         lockActiveSheet(sheetId);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         QuoteSheetEditLock lock = repository.findBySheetIdForUpdate(sheetId).orElse(null);
         if (lock == null) {
             lock = new QuoteSheetEditLock();
@@ -96,7 +100,7 @@ public class QuoteSheetEditLockService {
     @Transactional(readOnly = true)
     public QuoteSheetEditLockResponse find(Long sheetId, Long ownerId) {
         requireSheet(sheetId);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         return repository.findBySheetId(sheetId)
                 .filter(lock -> !lock.expiredAt(now))
                 .map(lock -> toResponse(lock, ownerId))
@@ -106,7 +110,7 @@ public class QuoteSheetEditLockService {
     /** 释放锁: 本人或无锁时幂等; 他人未过期锁返回 409。 */
     @Transactional
     public void release(Long sheetId, Long ownerId) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         // 加锁读后再删: 避免无锁读到旧 owner、删除时误删他人刚抢占的新锁。
         repository.findBySheetIdForUpdate(sheetId).ifPresent(lock -> {
             if (!lock.expiredAt(now) && !Objects.equals(lock.getOwnerId(), ownerId)) {
@@ -120,7 +124,7 @@ public class QuoteSheetEditLockService {
     /** 校验可写: 存在他人未过期锁时 409; 本人或无锁/已过期不受影响。 */
     @Transactional(readOnly = true)
     public void ensureWritable(Long sheetId, Long ownerId) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         repository.findBySheetId(sheetId)
                 .filter(lock -> !lock.expiredAt(now))
                 .filter(lock -> !Objects.equals(lock.getOwnerId(), ownerId))

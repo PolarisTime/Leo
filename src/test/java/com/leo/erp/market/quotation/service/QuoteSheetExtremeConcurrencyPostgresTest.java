@@ -1,5 +1,6 @@
 package com.leo.erp.market.quotation.service;
 
+import com.leo.erp.common.config.ClockConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.JpaAuditConfig;
@@ -32,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -67,7 +69,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @EnabledIfEnvironmentVariable(named = "LEO_TEST_POSTGRES", matches = "true")
 @Import({QuoteSheetStore.class, QuoteSheetService.class, QuoteSheetEditLockService.class,
-        JpaAuditConfig.class, QuoteSheetExtremeConcurrencyPostgresTest.StubConfig.class})
+        JpaAuditConfig.class, ClockConfig.class, QuoteSheetExtremeConcurrencyPostgresTest.StubConfig.class})
 class QuoteSheetExtremeConcurrencyPostgresTest {
 
     private static final long SHEET_ID = 930000000000000101L;
@@ -82,6 +84,9 @@ class QuoteSheetExtremeConcurrencyPostgresTest {
 
     @Autowired
     private QuoteSheetEditLockService editLockService;
+
+    @Autowired
+    private Clock clock;
 
     @Autowired
     private QuoteSheetStore store;
@@ -235,7 +240,7 @@ class QuoteSheetExtremeConcurrencyPostgresTest {
         editLockService.acquire(SHEET_ID, 7L, "张三");
 
         QuoteSheetEditLock lock = lockRepository.findBySheetId(SHEET_ID).orElseThrow();
-        lock.setExpiresAt(LocalDateTime.now());
+        lock.setExpiresAt(LocalDateTime.now(clock));
         lockRepository.saveAndFlush(lock);
 
         assertThat(editLockService.find(SHEET_ID, 8L).locked()).isFalse();
@@ -243,7 +248,7 @@ class QuoteSheetExtremeConcurrencyPostgresTest {
         assertThat(taken.mine()).isTrue();
 
         QuoteSheetEditLock active = lockRepository.findBySheetId(SHEET_ID).orElseThrow();
-        active.setExpiresAt(LocalDateTime.now().plusSeconds(30));
+        active.setExpiresAt(LocalDateTime.now(clock).plusSeconds(30));
         active.setOwnerId(7L);
         active.setOwnerName("张三");
         lockRepository.saveAndFlush(active);
