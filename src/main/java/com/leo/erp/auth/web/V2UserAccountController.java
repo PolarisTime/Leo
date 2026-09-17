@@ -6,8 +6,6 @@ import com.leo.erp.auth.web.dto.CurrentAccountResponse;
 import com.leo.erp.auth.web.dto.CurrentAccountUpdateRequest;
 import com.leo.erp.auth.web.dto.PasswordChangeRequest;
 import com.leo.erp.auth.web.dto.UserAccountPreferencesPayload;
-import com.leo.erp.security.permission.PermissionCodes;
-import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.Valid;
@@ -39,14 +37,12 @@ public class V2UserAccountController {
     }
 
     @GetMapping
-    @RequirePermission(PermissionCodes.USER_ACCOUNTS_READ)
     public CurrentAccountResponse current(@AuthenticationPrincipal SecurityPrincipal principal) {
         return userAccountService.current(currentUserId(principal));
     }
 
     @PutMapping
     @OperationLoggable(moduleName = "个人账号", actionType = "编辑")
-    @RequirePermission(PermissionCodes.USER_ACCOUNTS_UPDATE)
     public CurrentAccountResponse update(@AuthenticationPrincipal SecurityPrincipal principal, @Valid @RequestBody CurrentAccountUpdateRequest request) {
         return userAccountService.updateCurrent(currentUserId(principal), request);
     }
@@ -54,20 +50,17 @@ public class V2UserAccountController {
     @PutMapping("/password")
     @OperationLoggable(moduleName = "身份认证", actionType = "修改密码")
     @V2NoContent
-    @RequirePermission(PermissionCodes.USER_ACCOUNTS_UPDATE)
     public ResponseEntity<Void> changePassword(@AuthenticationPrincipal SecurityPrincipal principal, @Valid @RequestBody PasswordChangeRequest request) {
         userAccountService.changePassword(currentUserId(principal), request);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/preferences")
-    @RequirePermission(PermissionCodes.USER_ACCOUNTS_READ)
     public UserAccountPreferencesPayload preferences(@AuthenticationPrincipal SecurityPrincipal principal) {
         return userAccountPreferenceService.getPreferences(currentUserId(principal));
     }
 
     @PutMapping("/preferences")
-    @RequirePermission(PermissionCodes.USER_ACCOUNTS_UPDATE)
     public UserAccountPreferencesPayload savePreferences(@AuthenticationPrincipal SecurityPrincipal principal, @Valid @RequestBody UserAccountPreferencesPayload request) {
         return userAccountPreferenceService.savePreferences(currentUserId(principal), request);
     }
