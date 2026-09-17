@@ -8,6 +8,8 @@ import java.util.List;
 public record DocumentFlowResponse(
         String documentNo,
         List<DocumentFlowNode> nodes,
-        List<DocumentFlowLink> links
+        List<DocumentFlowLink> links,
+        /** 是否因节点/关系边数量达到上限而截断。 */
+        boolean truncated
 ) {
 }

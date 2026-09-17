@@ -43,6 +43,12 @@ public class DocumentFlowService {
 
     private static final Pattern REFERENCE_SPLITTER = Pattern.compile("[,，、;；\\s]+");
 
+    /** 单号长度上限, 防止超长输入放大 LIKE 扫描开销。 */
+    private static final int MAX_DOCUMENT_NO_LENGTH = 64;
+    /** 链路节点/关系边上限, 避免热门单据级联出超大规模图与响应。 */
+    private static final int MAX_NODES = 500;
+    private static final int MAX_LINKS = 1000;
+
     private static final String PURCHASE_ORDER_COLUMNS =
             "id, order_no AS no, status, total_amount AS amount, total_weight AS weight, "
                     + "order_date::date AS business_date";
@@ -81,6 +87,10 @@ public class DocumentFlowService {
         if (target.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "单号不能为空");
         }
+        if (target.length() > MAX_DOCUMENT_NO_LENGTH) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "单号长度不能超过 " + MAX_DOCUMENT_NO_LENGTH + " 个字符");
+        }
         List<FlowNode> seeds = findSeeds(target);
         if (seeds.isEmpty()) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "未找到单号对应的单据: " + target);
@@ -94,14 +104,33 @@ public class DocumentFlowService {
                 queue.add(seed);
             }
         }
+        boolean truncated = false;
         while (!queue.isEmpty()) {
+            if (nodes.size() >= MAX_NODES) {
+                truncated = true;
+                break;
+            }
             FlowNode current = queue.poll();
             for (FlowEdge edge : relatedEdges(current)) {
-                if (nodes.putIfAbsent(edge.from().key(), edge.from()) == null) {
+                if (!nodes.containsKey(edge.from().key())) {
+                    if (nodes.size() >= MAX_NODES) {
+                        truncated = true;
+                        continue;
+                    }
+                    nodes.put(edge.from().key(), edge.from());
                     queue.add(edge.from());
                 }
-                if (nodes.putIfAbsent(edge.to().key(), edge.to()) == null) {
+                if (!nodes.containsKey(edge.to().key())) {
+                    if (nodes.size() >= MAX_NODES) {
+                        truncated = true;
+                        continue;
+                    }
+                    nodes.put(edge.to().key(), edge.to());
                     queue.add(edge.to());
+                }
+                if (links.size() >= MAX_LINKS) {
+                    truncated = true;
+                    continue;
                 }
                 DocumentFlowLink link = new DocumentFlowLink(
                         edge.from().type(), edge.from().id(),
@@ -116,7 +145,8 @@ public class DocumentFlowService {
                         node.type(), node.id(), node.no(), node.status(),
                         node.amount(), node.weight(), node.date()))
                 .toList();
-        return new DocumentFlowResponse(target, nodeList, List.copyOf(links.values()));
+        return new DocumentFlowResponse(
+                target, nodeList, List.copyOf(links.values()), truncated);
     }
 
     private List<FlowNode> findSeeds(String no) {
@@ -249,8 +279,12 @@ public class DocumentFlowService {
     }
 
     private String referenceValue(String type, String id, String column) {
-        String sql = "SELECT " + column + " FROM " + tableOf(type) + " WHERE id = :id";
-        return jdbcTemplate.queryForObject(sql, new MapSqlParameterSource("id", Long.parseLong(id)), String.class);
+        // 与 findByNo/referencingNodes 保持软删过滤口径一致; 记录不存在或已软删时返回 null。
+        String sql = "SELECT " + column + " FROM " + tableOf(type)
+                + " WHERE id = :id AND deleted_flag = FALSE";
+        List<String> values = jdbcTemplate.queryForList(
+                sql, new MapSqlParameterSource("id", Long.parseLong(id)), String.class);
+        return values.isEmpty() ? null : values.get(0);
     }
 
     private List<FlowNode> returnsByOutboundId(String outboundId) {
@@ -269,11 +303,23 @@ public class DocumentFlowService {
         return queryNodes(TYPE_SALES_OUTBOUND, sql, returnId);
     }
 
+    /**
+     * source_no 与其它引用字段口径一致: 允许逗号分隔多值, 先 LIKE 预筛再在应用侧精确拆分校验,
+     * 避免单号含多值时精确等值漏匹配。
+     */
     private List<FlowNode> freightBillsBySalesOrderNo(String salesOrderNo) {
-        String sql = "SELECT DISTINCT " + aliasColumns(FREIGHT_BILL_COLUMNS, "bill") + " FROM lg_freight_bill bill"
+        String sql = "SELECT DISTINCT " + aliasColumns(FREIGHT_BILL_COLUMNS, "bill")
+                + ", bill_item.source_no AS source_no FROM lg_freight_bill bill"
                 + " JOIN lg_freight_bill_item bill_item ON bill_item.bill_id = bill.id"
-                + " WHERE bill.deleted_flag = FALSE AND bill_item.source_no = :no";
-        return jdbcTemplate.query(sql, new MapSqlParameterSource("no", salesOrderNo), nodeMapper(TYPE_FREIGHT_BILL));
+                + " WHERE bill.deleted_flag = FALSE AND bill_item.source_no LIKE :pattern";
+        Map<String, FlowNode> matched = new LinkedHashMap<>();
+        jdbcTemplate.query(sql, new MapSqlParameterSource("pattern", likePattern(salesOrderNo)), resultSet -> {
+            if (splitReferences(resultSet.getString("source_no")).contains(salesOrderNo)) {
+                FlowNode node = mapNode(TYPE_FREIGHT_BILL, resultSet);
+                matched.putIfAbsent(node.key(), node);
+            }
+        });
+        return List.copyOf(matched.values());
     }
 
     private List<FlowNode> freightBillsByOutboundId(String outboundId) {

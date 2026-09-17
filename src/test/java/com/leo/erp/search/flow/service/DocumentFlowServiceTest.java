@@ -112,27 +112,34 @@ class DocumentFlowServiceTest {
                 handler.processRow(refRow(SALES_ORDER_ID, "IN-1"));
             } else if (sql.contains("FROM so_sales_outbound") && sql.contains("sales_order_no LIKE")) {
                 handler.processRow(refRow(OUTBOUND_ID, "SO-1"));
+            } else if (sql.contains("FROM lg_freight_bill bill") && sql.contains("source_no LIKE")) {
+                handler.processRow(freightBillItemRow(FREIGHT_BILL_ID, "SO-1"));
             }
             return null;
         }).when(jdbcTemplate).query(anyString(), any(SqlParameterSource.class), any(RowCallbackHandler.class));
 
-        when(jdbcTemplate.queryForObject(anyString(), any(SqlParameterSource.class), eq(String.class)))
+        // referenceValue 与 sourceNosOfFreightBill 均改用 queryForList 读取引用列。
+        lenient().when(jdbcTemplate.queryForList(anyString(), any(SqlParameterSource.class), eq(String.class)))
                 .thenAnswer(invocation -> {
                     String sql = invocation.getArgument(0);
+                    if (sql.contains("bill_item.source_no")) {
+                        return List.of("SO-1");
+                    }
                     if (sql.contains("FROM so_sales_order") && sql.contains("purchase_order_no")) {
-                        return null;
+                        // 销售单未引用采购单: 返回空, 不额外补边
+                        return List.of();
                     }
                     if (sql.contains("SELECT purchase_inbound_no")) {
-                        return "IN-1";
+                        return List.of("IN-1");
                     }
                     if (sql.contains("SELECT purchase_order_no")) {
-                        return "PO-1";
+                        return List.of("PO-1");
                     }
-                    return "SO-1";
+                    if (sql.contains("SELECT sales_order_no")) {
+                        return List.of("SO-1");
+                    }
+                    return List.of();
                 });
-
-        lenient().when(jdbcTemplate.queryForList(anyString(), any(SqlParameterSource.class), eq(String.class)))
-                .thenReturn(List.of("SO-1"));
 
         DocumentFlowResponse response = new DocumentFlowService(jdbcTemplate).documentFlow("PO-1");
 
@@ -148,8 +155,12 @@ class DocumentFlowServiceTest {
                         Long.toString(FREIGHT_BILL_ID));
         assertThat(response.links()).extracting(DocumentFlowLink::linkType)
                 .containsExactly("入库", "销售", "出库", "物流", "物流");
-        assertThat(response.links().get(3).fromType()).isEqualTo("sales-outbound");
+        // 两条物流边: 销售单按 sales_order_no 引用(sales-order → freight-bill),
+        // 销售出库按明细关联(sales-outbound → freight-bill)。
+        assertThat(response.links().get(3).fromType()).isEqualTo("sales-order");
         assertThat(response.links().get(3).toType()).isEqualTo("freight-bill");
+        assertThat(response.links().get(4).fromType()).isEqualTo("sales-outbound");
+        assertThat(response.links().get(4).toType()).isEqualTo("freight-bill");
     }
 
     /** 种子查询：仅采购订单按单号命中。 */
@@ -167,6 +178,19 @@ class DocumentFlowServiceTest {
         lenient().when(resultSet.getBigDecimal("amount")).thenReturn(new BigDecimal(amount));
         lenient().when(resultSet.getBigDecimal("weight")).thenReturn(new BigDecimal(weight));
         lenient().when(resultSet.getObject("business_date", LocalDate.class)).thenReturn(date);
+        return resultSet;
+    }
+
+    /** 物流单明细行：提供 source_no 供多值 LIKE 预筛，同时提供节点列用于映射。 */
+    private static ResultSet freightBillItemRow(long id, String sourceNo) throws Exception {
+        ResultSet resultSet = mock(ResultSet.class);
+        lenient().when(resultSet.getLong("id")).thenReturn(id);
+        lenient().when(resultSet.getString("no")).thenReturn("BILL-1");
+        lenient().when(resultSet.getString("status")).thenReturn("已审核");
+        lenient().when(resultSet.getBigDecimal("amount")).thenReturn(new BigDecimal("500.00"));
+        lenient().when(resultSet.getBigDecimal("weight")).thenReturn(new BigDecimal("10.00000000"));
+        lenient().when(resultSet.getObject("business_date", LocalDate.class)).thenReturn(LocalDate.of(2026, 9, 5));
+        lenient().when(resultSet.getString("source_no")).thenReturn(sourceNo);
         return resultSet;
     }
 
