@@ -1,3 +1,10 @@
+## [11.1.2](https://github.com/PolarisTime/Leo/compare/v11.1.1...v11.1.2) (2026-09-17)
+
+
+### Bug Fixes
+
+* **quotation:** 拒绝报价子实体集合中的空元素避免 500 ([b90ab75](https://github.com/PolarisTime/Leo/commit/b90ab750409f0d562313127d205a1936e4a66480))
+
 ## [11.1.1](https://github.com/PolarisTime/Leo/compare/v11.1.0...v11.1.1) (2026-09-16)
 
 
