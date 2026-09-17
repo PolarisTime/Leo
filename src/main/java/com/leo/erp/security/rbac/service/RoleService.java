@@ -124,6 +124,10 @@ public class RoleService {
     public RoleResponse updateStatus(Long id, String status) {
         SysRole role = requireActiveRole(id);
         String nextStatus = StatusConstants.normalizeActiveStatus(status, "角色状态");
+        // 内置角色（如 SUPER_ADMIN）禁用会导致管理员失去全部权限，禁止禁用；删除与权限保存同样已保护。
+        if (role.isBuiltin() && !StatusConstants.NORMAL.equals(nextStatus)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "内置角色不允许禁用");
+        }
         if (!nextStatus.equals(role.getStatus())) {
             role.setStatus(nextStatus);
             role = roleRepository.save(role);

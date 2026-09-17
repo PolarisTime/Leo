@@ -64,6 +64,29 @@ class RoleServiceTest {
     }
 
     @Test
+    void updateStatus_shouldRejectDisablingBuiltinRole() {
+        when(roleRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(role(1L, "SUPER_ADMIN", true)));
+
+        assertThatThrownBy(() -> roleService.updateStatus(1L, StatusConstants.DISABLED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("内置角色不允许禁用");
+
+        verify(roleRepository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_shouldAllowEnablingBuiltinRole() {
+        SysRole builtin = role(1L, "SUPER_ADMIN", true);
+        builtin.setStatus(StatusConstants.DISABLED);
+        when(roleRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(builtin));
+        when(roleRepository.save(builtin)).thenReturn(builtin);
+
+        roleService.updateStatus(1L, StatusConstants.NORMAL);
+
+        assertThat(builtin.getStatus()).isEqualTo(StatusConstants.NORMAL);
+    }
+
+    @Test
     void update_shouldRejectBuiltinCodeChange() {
         when(roleRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(role(1L, "SUPER_ADMIN", true)));
 
