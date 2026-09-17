@@ -1,3 +1,10 @@
+## [11.1.4](https://github.com/PolarisTime/Leo/compare/v11.1.3...v11.1.4) (2026-09-17)
+
+
+### Bug Fixes
+
+* **quotation:** 现货价品牌以项目配置为唯一真源并全量协调快照 ([b7e7a28](https://github.com/PolarisTime/Leo/commit/b7e7a28a6ada1d4801701c521c7186f38e57b6fa))
+
 ## [11.1.2](https://github.com/PolarisTime/Leo/compare/v11.1.1...v11.1.2) (2026-09-17)
 
 
