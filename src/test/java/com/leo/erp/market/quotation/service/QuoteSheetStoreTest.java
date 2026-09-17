@@ -3,10 +3,13 @@ package com.leo.erp.market.quotation.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.market.quotation.domain.entity.QuoteProjectBrand;
+import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItem;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItemPrice;
+import com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository;
 import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
@@ -27,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -40,6 +44,9 @@ class QuoteSheetStoreTest {
     private QuoteSheetRepository repository;
 
     @Mock
+    private QuoteProjectConfigRepository quoteProjectConfigRepository;
+
+    @Mock
     private SnowflakeIdGenerator snowflakeIdGenerator;
 
     @Mock
@@ -49,7 +56,8 @@ class QuoteSheetStoreTest {
     private EntityManager entityManager;
 
     private QuoteSheetStore store() {
-        return new QuoteSheetStore(repository, snowflakeIdGenerator, supplierQuery, entityManager);
+        return new QuoteSheetStore(repository, quoteProjectConfigRepository, snowflakeIdGenerator,
+                supplierQuery, entityManager);
     }
 
     @Test
@@ -156,6 +164,311 @@ class QuoteSheetStoreTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("现货价品牌不在品牌列表中");
         verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 有效集合: projectId 为 null 时不查询项目配置, 仅按单据/请求品牌校验, 未知品牌仍 422。 */
+    @Test
+    void addItem_projectIdNull_doesNotConsultProjectConfig() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> store().addItem(9L,
+                new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("铜陵富鑫", new BigDecimal("3300"), null))), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("现货价品牌不在品牌列表中");
+        verifyNoInteractions(quoteProjectConfigRepository);
+    }
+
+    /** 有效集合: 项目配置存在且新增品牌时, 行级写该品牌价格必须放行, 并把品牌补齐到单据快照。 */
+    @Test
+    void addItem_configOnlyBrand_isAcceptedAndSnapshotSynced() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setProjectId(77L);
+        existing.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L))
+                .thenReturn(Optional.of(configWithBrands("中天", "铜陵富鑫")));
+        when(snowflakeIdGenerator.nextId()).thenReturn(777L, 888L);
+
+        QuoteSheetItemWrite added = store().addItem(9L,
+                new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("铜陵富鑫", new BigDecimal("3300"), null))), 1L);
+
+        assertThat(added.item().prices()).extracting(QuoteSheetResponse.ItemPriceResponse::brandName)
+                .containsExactly("铜陵富鑫");
+        assertThat(existing.getBrands()).extracting(QuoteSheetBrand::getBrandName)
+                .containsExactly("中天", "铜陵富鑫");
+        verify(quoteProjectConfigRepository, atLeastOnce()).findByProjectIdAndDeletedFlagFalse(77L);
+    }
+
+    /** 有效集合: 配置品牌名前后空格在比对前 trim, 命中已有单据品牌名。 */
+    @Test
+    void addItem_configBrandIsTrimmedBeforeMatching() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setProjectId(77L);
+        existing.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L))
+                .thenReturn(Optional.of(configWithBrands(" 铜陵富鑫 ")));
+        when(snowflakeIdGenerator.nextId()).thenReturn(777L);
+
+        QuoteSheetItemWrite added = store().addItem(9L,
+                new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("铜陵富鑫", new BigDecimal("3300"), null))), 1L);
+
+        assertThat(added.item().prices()).extracting(QuoteSheetResponse.ItemPriceResponse::brandName)
+                .containsExactly("铜陵富鑫");
+        assertThat(existing.getBrands()).extracting(QuoteSheetBrand::getBrandName)
+                .contains("铜陵富鑫");
+    }
+
+    /** 有效集合: 配置不存在(未配置项目)时, 仍只按单据快照校验, 配置独有品牌不可用。 */
+    @Test
+    void addItem_configMissing_onlySheetBrandsAllowed() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setProjectId(77L);
+        existing.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> store().addItem(9L,
+                new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("铜陵富鑫", new BigDecimal("3300"), null))), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("现货价品牌不在品牌列表中");
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 有效集合: 配置存在但品牌集合为空时, 仍只按单据快照校验。 */
+    @Test
+    void addItem_configWithEmptyBrands_onlySheetBrandsAllowed() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setProjectId(77L);
+        existing.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L))
+                .thenReturn(Optional.of(configWithBrands()));
+
+        assertThatThrownBy(() -> store().addItem(9L,
+                new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("铜陵富鑫", new BigDecimal("3300"), null))), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("现货价品牌不在品牌列表中");
+    }
+
+    /** 有效集合: 创建单据时同样按"请求品牌 ∪ 配置品牌"放行配置新增品牌。 */
+    @Test
+    void create_configOnlyBrand_isAcceptedAndSnapshotSynced() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 301L, 302L, 303L);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L))
+                .thenReturn(Optional.of(configWithBrands("中天", "铜陵富鑫")));
+
+        QuoteSheetRequest request = new QuoteSheetRequest(
+                "9月9日报单", 77L, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("30"), false, false, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("铜陵富鑫", new BigDecimal("3280"), null)))));
+
+        QuoteSheetResponse response = store().create(request);
+
+        assertThat(response.items().get(0).prices()).extracting(QuoteSheetResponse.ItemPriceResponse::brandName)
+                .containsExactly("铜陵富鑫");
+        assertThat(response.brands()).extracting(QuoteSheetResponse.BrandResponse::brandName)
+                .containsExactly("中天", "铜陵富鑫");
+    }
+
+    /** 有效集合: 整单替换同样按"请求品牌 ∪ 配置品牌"放行配置新增品牌, 父版本恰好 +1。 */
+    @Test
+    void update_configOnlyBrand_isAcceptedAndForcesParentVersionIncrement() {
+        QuoteSheet existing = sheetWithItemMatchingFullRequestHeader(9L);
+        existing.setProjectId(77L);
+        existing.setVersion(5L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L))
+                .thenReturn(Optional.of(configWithBrands("中天", "铜陵富鑫")));
+        when(snowflakeIdGenerator.nextId()).thenReturn(777L);
+        stubForceIncrement();
+
+        QuoteSheetRequest request = new QuoteSheetRequest(
+                "9月9日报单", 77L, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("30"), false, false, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("铜陵富鑫", new BigDecimal("3280"), null)))));
+
+        QuoteSheetResponse response = store().update(9L, request, 5L);
+
+        assertThat(response.version()).isEqualTo(6L);
+        assertThat(response.brands()).extracting(QuoteSheetResponse.BrandResponse::brandName)
+                .containsExactly("中天", "铜陵富鑫");
+        verify(entityManager).lock(existing, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+    }
+
+    /** 快照全量协调: 表头-only 写把快照对齐配置(含删除配置已移除的品牌), 且父版本恰好 +1。 */
+    @Test
+    void update_headerOnly_configOnlyBrand_syncsSnapshotAndIncrementsVersionOnce() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setProjectId(77L);
+        existing.setVersion(3L);
+        existing.setName("9月9日报单");
+        existing.setProjectName("云潮筝鸣府");
+        existing.setOrderDate(LocalDate.of(2026, 9, 9));
+        existing.setRefDate(LocalDate.of(2026, 9, 10));
+        existing.setRefPeriod("9:30 上午");
+        existing.setLengthPremium(new BigDecimal("30"));
+        existing.setStatus("报价");
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L))
+                .thenReturn(Optional.of(configWithBrands("铜陵富鑫")));
+        when(snowflakeIdGenerator.nextId()).thenReturn(777L);
+        stubForceIncrement();
+
+        QuoteSheetRequest headerOnly = new QuoteSheetRequest(
+                "9月9日报单", 77L, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("30"), false, false, "报价", null, null, null);
+
+        QuoteSheetResponse response = store().update(9L, headerOnly, 3L);
+
+        assertThat(response.version()).isEqualTo(4L);
+        assertThat(response.brands()).extracting(QuoteSheetResponse.BrandResponse::brandName)
+                .containsExactly("铜陵富鑫");
+    }
+
+    /** 漂移消除: 快照已与配置一致时不再改动集合, 也不产生额外版本自增。 */
+    @Test
+    void update_snapshotAlreadyInSync_doesNotForceIncrementWhenHeaderUnchanged() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setProjectId(77L);
+        existing.setVersion(3L);
+        existing.setName("9月9日报单");
+        existing.setProjectName("云潮筝鸣府");
+        existing.setOrderDate(LocalDate.of(2026, 9, 9));
+        existing.setRefDate(LocalDate.of(2026, 9, 10));
+        existing.setRefPeriod("9:30 上午");
+        existing.setLengthPremium(new BigDecimal("30"));
+        existing.setStatus("报价");
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L))
+                .thenReturn(Optional.of(configWithBrands("中天")));
+
+        QuoteSheetRequest headerOnly = new QuoteSheetRequest(
+                "9月9日报单", 77L, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("30"), false, false, "报价", null, null, null);
+
+        store().update(9L, headerOnly, 3L);
+
+        verifyNoInteractions(entityManager);
+    }
+
+    /** 真源为配置: 配置已删除的品牌即使仍在单据快照中也必须 422(替换上一版并集放行)。 */
+    @Test
+    void addItem_configDeletedBrand_isRejected422() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setProjectId(77L);
+        existing.setVersion(1L);
+        existing.getBrands().add(extraBrand(existing, 999L, "铜陵富鑫"));
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L))
+                .thenReturn(Optional.of(configWithBrands("中天")));
+
+        assertThatThrownBy(() -> store().addItem(9L,
+                new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("铜陵富鑫", new BigDecimal("3300"), null))), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("现货价品牌不在品牌列表中")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 真源为配置: 快照中残留、配置已无的品牌随下一次成功写的快照同步被移除, 与配置完全对齐。 */
+    @Test
+    void addItem_staleSnapshotBrand_removedByConfigSync() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setProjectId(77L);
+        existing.setVersion(1L);
+        existing.getBrands().add(extraBrand(existing, 999L, "铜陵富鑫"));
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L))
+                .thenReturn(Optional.of(configWithBrands("中天", "沙钢")));
+        when(snowflakeIdGenerator.nextId()).thenReturn(777L, 888L, 889L);
+
+        QuoteSheetItemWrite added = store().addItem(9L,
+                new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("沙钢", new BigDecimal("3300"), null))), 1L);
+
+        assertThat(added.item().prices()).extracting(QuoteSheetResponse.ItemPriceResponse::brandName)
+                .containsExactly("沙钢");
+        assertThat(existing.getBrands()).extracting(QuoteSheetBrand::getBrandName)
+                .containsExactly("中天", "沙钢");
+    }
+
+    /** 整单替换: 快照与配置完全对齐(删除多余、补齐缺失), 仅子集合变更时父版本恰好 +1。 */
+    @Test
+    void update_fullReplace_alignsSnapshotToConfig() {
+        QuoteSheet existing = sheetWithItemMatchingFullRequestHeader(9L);
+        existing.setProjectId(77L);
+        existing.setVersion(5L);
+        existing.getBrands().add(extraBrand(existing, 999L, "铜陵富鑫"));
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L))
+                .thenReturn(Optional.of(configWithBrands("中天", "沙钢")));
+        when(snowflakeIdGenerator.nextId()).thenReturn(777L, 888L, 889L);
+        stubForceIncrement();
+
+        QuoteSheetRequest request = new QuoteSheetRequest(
+                "9月9日报单", 77L, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("30"), false, false, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("铜陵富鑫", new BigDecimal("30"), 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("沙钢", new BigDecimal("3280"), null)))));
+
+        QuoteSheetResponse response = store().update(9L, request, 5L);
+
+        assertThat(response.brands()).extracting(QuoteSheetResponse.BrandResponse::brandName)
+                .containsExactly("中天", "沙钢");
+        assertThat(response.version()).isEqualTo(6L);
+    }
+
+    private QuoteSheetBrand extraBrand(QuoteSheet sheet, Long id, String name) {
+        QuoteSheetBrand brand = new QuoteSheetBrand();
+        brand.setId(id);
+        brand.setSheet(sheet);
+        brand.setBrandName(name);
+        brand.setFreight(new BigDecimal("30"));
+        brand.setSortOrder(1);
+        return brand;
+    }
+
+    private QuoteProjectConfig configWithBrands(String... brandNames) {
+        QuoteProjectConfig config = new QuoteProjectConfig();
+        config.setId(500L);
+        config.setProjectId(77L);
+        config.setLengthPremium(new BigDecimal("30"));
+        int index = 0;
+        for (String brandName : brandNames) {
+            QuoteProjectBrand brand = new QuoteProjectBrand();
+            brand.setId(600L + index);
+            brand.setConfig(config);
+            brand.setBrandName(brandName);
+            // 与 sheetWithItem 的品牌运费(30)一致, 便于"快照已同步"用例断言无差异。
+            brand.setFreight(new BigDecimal("30"));
+            brand.setSortOrder(index);
+            config.getBrands().add(brand);
+            index += 1;
+        }
+        return config;
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItem;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItemPrice;
+import com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository;
 import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
@@ -44,6 +45,9 @@ class QuoteSheetValidationExtremeTest {
     private QuoteSheetRepository repository;
 
     @Mock
+    private QuoteProjectConfigRepository quoteProjectConfigRepository;
+
+    @Mock
     private SnowflakeIdGenerator snowflakeIdGenerator;
 
     @Mock
@@ -53,7 +57,8 @@ class QuoteSheetValidationExtremeTest {
     private EntityManager entityManager;
 
     private QuoteSheetStore store() {
-        return new QuoteSheetStore(repository, snowflakeIdGenerator, supplierQuery, entityManager);
+        return new QuoteSheetStore(repository, quoteProjectConfigRepository, snowflakeIdGenerator,
+                supplierQuery, entityManager);
     }
 
     /**

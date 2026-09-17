@@ -5,10 +5,13 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.market.quotation.domain.entity.QuoteProjectBrand;
+import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItem;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItemPrice;
+import com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository;
 import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
@@ -27,10 +30,12 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -46,15 +51,18 @@ public class QuoteSheetStore {
     private static final String DEFAULT_STATUS = "报价";
 
     private final QuoteSheetRepository repository;
+    private final QuoteProjectConfigRepository quoteProjectConfigRepository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final SupplierQuery supplierQuery;
     private final EntityManager entityManager;
 
     public QuoteSheetStore(QuoteSheetRepository repository,
+                           QuoteProjectConfigRepository quoteProjectConfigRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            SupplierQuery supplierQuery,
                            EntityManager entityManager) {
         this.repository = repository;
+        this.quoteProjectConfigRepository = quoteProjectConfigRepository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.supplierQuery = supplierQuery;
         this.entityManager = entityManager;
@@ -62,12 +70,14 @@ public class QuoteSheetStore {
 
     @Transactional
     public QuoteSheetResponse create(QuoteSheetRequest request) {
-        validate(request);
+        QuoteProjectConfig config = effectiveProjectConfig(request.projectId()).orElse(null);
+        validate(request, config);
         QuoteSheet entity = new QuoteSheet();
         long id = snowflakeIdGenerator.nextId();
         entity.setId(id);
         entity.setSheetNo(String.valueOf(id));
         apply(entity, request);
+        syncBrandSnapshot(entity, config);
         return toResponse(repository.saveAndFlush(entity));
     }
 
@@ -86,9 +96,18 @@ public class QuoteSheetStore {
         checkLockedRefChange(entity, request);
         if (headerOnly) {
             // 表头 PATCH 语义: 未显式携带 locked/specQuantityLocked(null) 时保留原值, 仅显式 false 解锁。
-            applyHeader(entity, request, true);
+            boolean headerChanged = applyHeader(entity, request, true);
+            // 表头-only 不携带 brands: 仍以项目配置为真源全量协调快照, 消除配置增删品牌后的漂移。
+            QuoteProjectConfig config = effectiveProjectConfig(entity.getProjectId()).orElse(null);
+            boolean snapshotChanged = syncBrandSnapshot(entity, config);
+            // 仅快照子集合变更时 Hibernate 不会把父行标脏, 需显式 FORCE_INCREMENT 保证父版本恰好 +1;
+            // 表头已变更时父行自然标脏, 不得叠加, 且无任何差异时不得自增。
+            if (snapshotChanged && !headerChanged) {
+                entityManager.lock(entity, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+            }
         } else {
-            validate(request);
+            QuoteProjectConfig config = effectiveProjectConfig(request.projectId()).orElse(null);
+            validate(request, config);
             checkSpecQuantityLockedForReplace(entity, request.items(), request.specQuantityLocked());
             // 整体替换改的是 mappedBy 反向集合, 仅变更子集合时 Hibernate 不会把父行标脏,
             // 父 @Version 不递增; 此时才需要 FORCE_INCREMENT。若表头标量也已变更, 父行会被自然标脏、
@@ -96,6 +115,7 @@ public class QuoteSheetStore {
             // 保证任意路径父版本恰好 +1。
             boolean headerChanged = applyHeader(entity, request, false);
             replaceBrands(entity, request.brands());
+            syncBrandSnapshot(entity, config);
             replaceItems(entity, request.items(), resolveSupplierNames(request.items()));
             if (!headerChanged) {
                 entityManager.lock(entity, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
@@ -156,7 +176,9 @@ public class QuoteSheetStore {
                                        Long expectedVersion) {
         QuoteSheet sheet = requireSheetForRowWrite(sheetId, expectedVersion);
         checkSpecQuantityLockedForItemAppend(sheet);
-        validateItemPrices(request, brandNamesOf(sheet));
+        QuoteProjectConfig config = effectiveProjectConfig(sheet.getProjectId()).orElse(null);
+        syncBrandSnapshot(sheet, config);
+        validateItemPrices(request, effectiveBrandNamesOf(sheet, config));
         int nextLineNo = sheet.getItems().stream()
                 .map(QuoteSheetItem::getLineNo)
                 .filter(Objects::nonNull)
@@ -175,7 +197,9 @@ public class QuoteSheetStore {
                                           QuoteSheetRequest.ItemRequest request,
                                           Long expectedVersion) {
         QuoteSheet sheet = requireSheetForRowWrite(sheetId, expectedVersion);
-        validateItemPrices(request, brandNamesOf(sheet));
+        QuoteProjectConfig config = effectiveProjectConfig(sheet.getProjectId()).orElse(null);
+        syncBrandSnapshot(sheet, config);
+        validateItemPrices(request, effectiveBrandNamesOf(sheet, config));
         QuoteSheetItem item = requireItem(sheet, itemId);
         checkSpecQuantityLockedForItemUpdate(sheet, item, request);
         Map<Long, String> supplierNames = resolveSupplierNames(List.of(request));
@@ -189,6 +213,7 @@ public class QuoteSheetStore {
     public Long deleteItem(Long sheetId, Long itemId, Long expectedVersion) {
         QuoteSheet sheet = requireSheetForRowWrite(sheetId, expectedVersion);
         checkSpecQuantityLockedForItemAppend(sheet);
+        syncBrandSnapshot(sheet, effectiveProjectConfig(sheet.getProjectId()).orElse(null));
         QuoteSheetItem item = requireItem(sheet, itemId);
         sheet.getItems().remove(item);
         repository.saveAndFlush(sheet);
@@ -230,33 +255,36 @@ public class QuoteSheetStore {
         }
     }
 
-    private void validate(QuoteSheetRequest request) {
+    private void validate(QuoteSheetRequest request, QuoteProjectConfig config) {
         if (request.brands() == null || request.brands().isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "至少需要一个品牌");
         }
         if (request.items() == null || request.items().isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "至少需要一行商品");
         }
-        Set<String> brandNames = new LinkedHashSet<>();
+        Set<String> requestBrandNames = new LinkedHashSet<>();
         for (QuoteSheetRequest.BrandRequest brand : request.brands()) {
             if (brand == null) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "品牌不能为空");
             }
             String brandName = normalizeBrandName(brand.brandName());
-            if (!brandNames.add(brandName)) {
+            if (!requestBrandNames.add(brandName)) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "品牌重复: " + brandName);
             }
         }
+        // 项目配置存在且品牌非空时以配置为唯一真源: 请求品牌随后会被快照同步覆盖;
+        // 否则回退请求品牌(它们将成为单据快照), 保持历史/未配置项目行为。
+        Set<String> allowedBrandNames = config == null ? requestBrandNames : configuredBrandNames(config);
         for (QuoteSheetRequest.ItemRequest item : request.items()) {
             if (item == null) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "商品行不能为空");
             }
-            validateItemPrices(item, brandNames);
+            validateItemPrices(item, allowedBrandNames);
         }
     }
 
     /**
-     * 校验单行现货价品牌: 按 trim 后名称去重, 且必须属于该单据的品牌列表。
+     * 校验单行现货价品牌: 按 trim 后名称去重, 且必须属于"有效品牌集合"。
      * 未通过时抛 422(VALIDATION_ERROR), 避免落库触发 {@code uk_quote_item_price} 唯一键 409。
      */
     private void validateItemPrices(QuoteSheetRequest.ItemRequest item, Set<String> brandNames) {
@@ -287,6 +315,108 @@ public class QuoteSheetStore {
             brandNames.add(normalizeBrandName(brand.getBrandName()));
         }
         return brandNames;
+    }
+
+    /**
+     * 校验真源: 仅当 {@code projectId} 非空、项目配置存在且至少含一个非空品牌名时返回该配置;
+     * 否则返回空, 调用方回退到单据品牌快照(兼容未配置项目与历史单据)。
+     */
+    private Optional<QuoteProjectConfig> effectiveProjectConfig(Long projectId) {
+        if (projectId == null) {
+            return Optional.empty();
+        }
+        return quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(projectId)
+                .filter(config -> !configuredBrandNames(config).isEmpty());
+    }
+
+    /** 项目配置品牌名(trim 后, 忽略空名), 保持配置的 sortOrder 顺序。 */
+    private static Set<String> configuredBrandNames(QuoteProjectConfig config) {
+        Set<String> brandNames = new LinkedHashSet<>();
+        for (QuoteProjectBrand brand : config.getBrands()) {
+            String brandName = normalizeBrandName(brand.getBrandName());
+            if (!brandName.isEmpty()) {
+                brandNames.add(brandName);
+            }
+        }
+        return brandNames;
+    }
+
+    /**
+     * 有效品牌集合: 配置真源存在时只认配置品牌(配置已删除的品牌不再因并集放行);
+     * 配置不存在或品牌为空时回退单据快照(projectId 为空/无配置/配置品牌为空)。
+     */
+    private Set<String> effectiveBrandNamesOf(QuoteSheet sheet, QuoteProjectConfig config) {
+        return config == null ? brandNamesOf(sheet) : configuredBrandNames(config);
+    }
+
+    /**
+     * 写单据时把 {@code mk_quote_sheet_brand} 快照与项目配置品牌全量对齐:
+     * 按 brandName 同名复用既有实体(仅更新 freight/sortOrder), 配置新增则补建, 配置已删则移除多余品牌。
+     * 以配置为准而非并集, 避免配置删除品牌后单据仍可写该品牌; 仅确有差异时变更集合,
+     * 无差异时不触碰集合、不产生无谓版本自增。
+     *
+     * @return 是否对快照产生了实际变更
+     */
+    private boolean syncBrandSnapshot(QuoteSheet entity, QuoteProjectConfig config) {
+        if (config == null) {
+            return false;
+        }
+        Map<String, QuoteSheetBrand> existingByBrandName = new LinkedHashMap<>();
+        for (QuoteSheetBrand brand : entity.getBrands()) {
+            existingByBrandName.put(normalizeBrandName(brand.getBrandName()), brand);
+        }
+        List<QuoteSheetBrand> reconciled = new ArrayList<>();
+        boolean changed = false;
+        int index = 0;
+        for (QuoteProjectBrand configBrand : config.getBrands()) {
+            String brandName = normalizeBrandName(configBrand.getBrandName());
+            if (brandName.isEmpty()) {
+                continue;
+            }
+            BigDecimal freight = configBrand.getFreight() == null ? BigDecimal.ZERO : configBrand.getFreight();
+            Integer sortOrder = configBrand.getSortOrder() == null ? index : configBrand.getSortOrder();
+            QuoteSheetBrand snapshot = existingByBrandName.remove(brandName);
+            if (snapshot == null) {
+                snapshot = new QuoteSheetBrand();
+                snapshot.setId(snowflakeIdGenerator.nextId());
+                snapshot.setSheet(entity);
+                snapshot.setBrandName(brandName);
+                snapshot.setFreight(freight);
+                snapshot.setSortOrder(sortOrder);
+                changed = true;
+            } else if (differs(snapshot.getFreight(), freight)
+                    || !Objects.equals(snapshot.getSortOrder(), sortOrder)) {
+                snapshot.setFreight(freight);
+                snapshot.setSortOrder(sortOrder);
+                changed = true;
+            }
+            reconciled.add(snapshot);
+            index += 1;
+        }
+        if (!existingByBrandName.isEmpty()) {
+            // 配置已删除的品牌: 快照中残留的品牌同样移除, 与配置完全对齐。
+            changed = true;
+        }
+        if (changed && !sameBrandSequence(entity.getBrands(), reconciled)) {
+            // 按 brandName 复用实体后重建集合, 避免 clear + 新雪花 id 造成同一 flush 内
+            // uk_quote_sheet_brand(sheet_id, brand_name) 的 INSERT/DELETE 冲突。
+            entity.getBrands().clear();
+            entity.getBrands().addAll(reconciled);
+        }
+        return changed;
+    }
+
+    /** 判断快照集合是否与目标集合成员及顺序完全一致(同一实体引用), 一致时无需重建集合。 */
+    private static boolean sameBrandSequence(List<QuoteSheetBrand> current, List<QuoteSheetBrand> target) {
+        if (current.size() != target.size()) {
+            return false;
+        }
+        for (int i = 0; i < current.size(); i++) {
+            if (current.get(i) != target.get(i)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static String normalizeBrandName(String brandName) {
