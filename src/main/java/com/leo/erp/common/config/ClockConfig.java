@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Clock;
+import java.time.DateTimeException;
 import java.time.ZoneId;
 
 /**
@@ -16,6 +17,11 @@ public class ClockConfig {
 
     @Bean
     public Clock clock(@Value("${leo.timezone:Asia/Shanghai}") String timezone) {
-        return Clock.system(ZoneId.of(timezone));
+        try {
+            return Clock.system(ZoneId.of(timezone));
+        } catch (DateTimeException e) {
+            // 与 JacksonConfig 保持一致的启动期校验语义, 抛出可读的配置错误
+            throw new IllegalArgumentException("Invalid timezone configured: leo.timezone=" + timezone, e);
+        }
     }
 }
