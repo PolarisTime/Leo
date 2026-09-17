@@ -211,10 +211,12 @@ class SupplierServiceTest {
 
         service().update(5L, requestWithBrands("供应商A", List.of("沙钢", "永钢")));
 
-        verify(supplierBrandRepository).delete(remove);
-        verify(supplierBrandRepository, never()).delete(keep);
+        // 未再被引用的品牌改为软删, 不再物理删除
+        verify(supplierBrandRepository, never()).delete(any());
+        assertThat(remove.isDeletedFlag()).isTrue();
+        assertThat(keep.isDeletedFlag()).isFalse();
         ArgumentCaptor<SupplierBrand> captor = ArgumentCaptor.forClass(SupplierBrand.class);
-        verify(supplierBrandRepository).save(captor.capture());
+        verify(supplierBrandRepository, times(2)).save(captor.capture());
         assertThat(captor.getValue().getBrandName()).isEqualTo("永钢");
         assertThat(captor.getValue().getSupplierId()).isEqualTo(5L);
         assertThat(captor.getValue().getId()).isEqualTo(99L);
@@ -250,9 +252,11 @@ class SupplierServiceTest {
 
         service().update(5L, requestWithBrands("供应商A", List.of()));
 
-        verify(supplierBrandRepository).delete(first);
-        verify(supplierBrandRepository).delete(second);
-        verify(supplierBrandRepository, never()).save(any());
+        // 清空品牌改为全部软删
+        verify(supplierBrandRepository, never()).delete(any());
+        assertThat(first.isDeletedFlag()).isTrue();
+        assertThat(second.isDeletedFlag()).isTrue();
+        verify(supplierBrandRepository, times(2)).save(any());
     }
 
     @Test
@@ -276,7 +280,7 @@ class SupplierServiceTest {
     void detail_returnsBrands() {
         Supplier entity = supplier(5L, "GYS001", "供应商A", null);
         when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
-        when(supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(5L))
+        when(supplierBrandRepository.findBySupplierIdAndDeletedFlagFalseOrderByBrandNameAsc(5L))
                 .thenReturn(List.of(brand(11L, 5L, "沙钢")));
         when(supplierMapper.toResponse(entity)).thenReturn(new SupplierResponse(
                 5L, "GYS001", "供应商A", null, null, null, "正常", null));
@@ -293,7 +297,7 @@ class SupplierServiceTest {
                         supplier(101L, "S001", "供应商A", "甲"),
                         supplier(102L, "S002", "供应商B", null),
                         supplier(103L, "S003", "无品牌供应商", null)));
-        when(supplierBrandRepository.findBySupplierIdInOrderBySupplierIdAscBrandNameAsc(any()))
+        when(supplierBrandRepository.findBySupplierIdInAndDeletedFlagFalseOrderBySupplierIdAscBrandNameAsc(any()))
                 .thenReturn(List.of(
                         brand(1L, 101L, "沙钢"),
                         brand(2L, 101L, "永钢"),
@@ -395,6 +399,8 @@ class SupplierServiceTest {
         entity.setId(5L);
         when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(supplierRepository.save(entity)).thenReturn(entity);
+        when(supplierBrandRepository.findBySupplierIdAndDeletedFlagFalseOrderByBrandNameAsc(5L))
+                .thenReturn(List.of());
 
         service().delete(5L);
 
@@ -410,6 +416,8 @@ class SupplierServiceTest {
         entity.setId(5L);
         when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(supplierRepository.save(entity)).thenReturn(entity);
+        when(supplierBrandRepository.findBySupplierIdAndDeletedFlagFalseOrderByBrandNameAsc(5L))
+                .thenReturn(List.of());
 
         nullGuardService.delete(5L);
 

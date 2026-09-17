@@ -8,7 +8,10 @@ import java.util.List;
 
 public interface SupplierBrandRepository extends JpaRepository<SupplierBrand, Long> {
 
+    /** 含软删行: 用于品牌协调时复用既有行(含恢复软删行)。 */
     List<SupplierBrand> findBySupplierIdOrderByBrandNameAsc(Long supplierId);
 
-    List<SupplierBrand> findBySupplierIdInOrderBySupplierIdAscBrandNameAsc(Collection<Long> supplierIds);
+    List<SupplierBrand> findBySupplierIdAndDeletedFlagFalseOrderByBrandNameAsc(Long supplierId);
+
+    List<SupplierBrand> findBySupplierIdInAndDeletedFlagFalseOrderBySupplierIdAscBrandNameAsc(Collection<Long> supplierIds);
 }

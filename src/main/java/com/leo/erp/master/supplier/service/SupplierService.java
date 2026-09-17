@@ -40,7 +40,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 public class SupplierService implements RedisCacheHealthCheck {
@@ -138,6 +137,12 @@ public class SupplierService implements RedisCacheHealthCheck {
         Supplier entity = requireActiveSupplier(id);
         if (referenceGuard != null) {
             referenceGuard.assertNoReferences("该供应商", supplierReferences(entity));
+        }
+        // 连带软删经营品牌: 保留历史行以支持供应商恢复, 避免物理孤儿行
+        for (SupplierBrand brand : supplierBrandRepository
+                .findBySupplierIdAndDeletedFlagFalseOrderByBrandNameAsc(id)) {
+            brand.setDeletedFlag(true);
+            supplierBrandRepository.save(brand);
         }
         entity.setDeletedFlag(true);
         saveSupplier(entity);
@@ -305,22 +310,26 @@ public class SupplierService implements RedisCacheHealthCheck {
     private List<String> synchronizeBrands(Long supplierId, List<String> requestedBrands) {
         List<SupplierBrand> existing = supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(supplierId);
         if (requestedBrands == null) {
-            return existing.stream().map(SupplierBrand::getBrandName).sorted().toList();
+            return activeBrandNames(existing);
         }
         Set<String> desired = new LinkedHashSet<>(requestedBrands);
-        Set<String> existingNames = existing.stream()
-                .map(SupplierBrand::getBrandName)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        if (desired.equals(existingNames)) {
-            return desired.stream().sorted().toList();
-        }
+        // 同名行优先保留未删除的, 以便恢复软删行时不会与活跃行冲突(部分唯一索引仅约束未删除行)。
+        Map<String, SupplierBrand> byName = new LinkedHashMap<>();
         for (SupplierBrand brand : existing) {
-            if (!desired.contains(brand.getBrandName())) {
-                supplierBrandRepository.delete(brand);
+            SupplierBrand current = byName.get(brand.getBrandName());
+            if (current == null || (current.isDeletedFlag() && !brand.isDeletedFlag())) {
+                byName.put(brand.getBrandName(), brand);
+            }
+        }
+        for (SupplierBrand brand : byName.values()) {
+            boolean shouldBeActive = desired.contains(brand.getBrandName());
+            if (brand.isDeletedFlag() == shouldBeActive) {
+                brand.setDeletedFlag(!shouldBeActive);
+                supplierBrandRepository.save(brand);
             }
         }
         for (String name : desired) {
-            if (!existingNames.contains(name)) {
+            if (!byName.containsKey(name)) {
                 SupplierBrand brand = new SupplierBrand();
                 brand.setId(snowflakeIdGenerator.nextId());
                 brand.setSupplierId(supplierId);
@@ -331,8 +340,16 @@ public class SupplierService implements RedisCacheHealthCheck {
         return desired.stream().sorted().toList();
     }
 
+    private static List<String> activeBrandNames(List<SupplierBrand> brands) {
+        return brands.stream()
+                .filter(brand -> !brand.isDeletedFlag())
+                .map(SupplierBrand::getBrandName)
+                .sorted()
+                .toList();
+    }
+
     private List<String> loadBrandNames(Long supplierId) {
-        return supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(supplierId).stream()
+        return supplierBrandRepository.findBySupplierIdAndDeletedFlagFalseOrderByBrandNameAsc(supplierId).stream()
                 .map(SupplierBrand::getBrandName)
                 .toList();
     }
@@ -347,7 +364,7 @@ public class SupplierService implements RedisCacheHealthCheck {
         }
         Map<Long, List<String>> brandsBySupplier = new LinkedHashMap<>();
         for (SupplierBrand brand : supplierBrandRepository
-                .findBySupplierIdInOrderBySupplierIdAscBrandNameAsc(supplierIds)) {
+                .findBySupplierIdInAndDeletedFlagFalseOrderBySupplierIdAscBrandNameAsc(supplierIds)) {
             brandsBySupplier.computeIfAbsent(brand.getSupplierId(), key -> new ArrayList<>())
                     .add(brand.getBrandName());
         }

@@ -88,19 +88,28 @@ class SupplierBrandPostgresTest {
                 .containsEntry("id", "bigint")
                 .containsEntry("supplier_id", "bigint")
                 .containsEntry("brand_name", "character varying")
+                .containsEntry("deleted_flag", "boolean")
                 .containsEntry("created_at", "timestamp without time zone");
 
-        List<String> uniqueColumns = jdbc.queryForList(
+        // 唯一性改为仅约束未删除行的部分唯一索引
+        Map<String, String> activeUniqueIndex = jdbc.query(
                 """
-                select kcu.column_name
-                from information_schema.table_constraints tc
-                join information_schema.key_column_usage kcu
-                  on tc.constraint_name = kcu.constraint_name and tc.table_schema = kcu.table_schema
-                where tc.table_schema = 'public' and tc.table_name = 'md_supplier_brand'
-                  and tc.constraint_type = 'UNIQUE' and tc.constraint_name = 'uk_supplier_brand'
-                order by kcu.ordinal_position
-                """, String.class);
-        assertThat(uniqueColumns).containsExactly("supplier_id", "brand_name");
+                select indexname, indexdef
+                from pg_indexes
+                where schemaname = 'public' and tablename = 'md_supplier_brand'
+                  and indexname = 'uk_supplier_brand_active'
+                """,
+                rs -> {
+                    Map<String, String> result = new java.util.LinkedHashMap<>();
+                    while (rs.next()) {
+                        result.put(rs.getString("indexname"), rs.getString("indexdef"));
+                    }
+                    return result;
+                });
+        assertThat(activeUniqueIndex).containsKey("uk_supplier_brand_active");
+        assertThat(activeUniqueIndex.get("uk_supplier_brand_active"))
+                .contains("UNIQUE").contains("supplier_id, brand_name")
+                .containsIgnoringCase("WHERE (deleted_flag = false)");
 
         Integer foreignKeys = jdbc.queryForObject(
                 """
@@ -124,7 +133,8 @@ class SupplierBrandPostgresTest {
         service.create(request(List.of("沙钢", "永钢")));
         supplierRepository.flush();
 
-        List<SupplierBrand> first = supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(SUPPLIER_ID);
+        List<SupplierBrand> first = supplierBrandRepository
+                .findBySupplierIdAndDeletedFlagFalseOrderByBrandNameAsc(SUPPLIER_ID);
         assertThat(first).extracting(SupplierBrand::getBrandName).containsExactly("永钢", "沙钢");
         Map<String, Long> firstIds = first.stream()
                 .collect(Collectors.toMap(SupplierBrand::getBrandName, SupplierBrand::getId));
@@ -132,11 +142,13 @@ class SupplierBrandPostgresTest {
         service.update(SUPPLIER_ID, request(List.of("永钢", "沙钢")));
         supplierRepository.flush();
 
-        List<SupplierBrand> second = supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(SUPPLIER_ID);
+        List<SupplierBrand> second = supplierBrandRepository
+                .findBySupplierIdAndDeletedFlagFalseOrderByBrandNameAsc(SUPPLIER_ID);
         assertThat(second).extracting(SupplierBrand::getBrandName).containsExactly("永钢", "沙钢");
         assertThat(second).extracting(SupplierBrand::getId)
                 .containsExactly(firstIds.get("永钢"), firstIds.get("沙钢"));
-        assertThat(supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(SUPPLIER_ID)).hasSize(2);
+        assertThat(supplierBrandRepository
+                .findBySupplierIdAndDeletedFlagFalseOrderByBrandNameAsc(SUPPLIER_ID)).hasSize(2);
     }
 
     @Test
@@ -150,13 +162,21 @@ class SupplierBrandPostgresTest {
         service.update(SUPPLIER_ID, request(List.of("永钢", "中天")));
         supplierRepository.flush();
 
-        List<String> brands = supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(SUPPLIER_ID).stream()
+        // 被移除的品牌保留为软删行, 活跃集合只含中天/永钢
+        List<String> brands = supplierBrandRepository
+                .findBySupplierIdAndDeletedFlagFalseOrderByBrandNameAsc(SUPPLIER_ID).stream()
                 .map(SupplierBrand::getBrandName)
                 .toList();
         assertThat(brands).containsExactly("中天", "永钢");
-        assertThat(supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(SUPPLIER_ID))
+        assertThat(supplierBrandRepository
+                .findBySupplierIdAndDeletedFlagFalseOrderByBrandNameAsc(SUPPLIER_ID))
                 .extracting(SupplierBrand::getId)
                 .containsExactly(ZHONGTIAN_BRAND_ID, YONGGANG_BRAND_ID);
+        // 原有的"沙钢"行被软删而非物理删除
+        assertThat(supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(SUPPLIER_ID))
+                .filteredOn(SupplierBrand::isDeletedFlag)
+                .extracting(SupplierBrand::getBrandName)
+                .contains("沙钢");
     }
 
     private SupplierService service() {
