@@ -1,3 +1,10 @@
+# [11.5.0](https://github.com/PolarisTime/Leo/compare/v11.4.0...v11.5.0) (2026-09-17)
+
+
+### Features
+
+* **rbac:** 字段级权限落地(金额/成本读脱敏与单价写校验) ([98ab14b](https://github.com/PolarisTime/Leo/commit/98ab14b87e0d4310230f7088e4bd62a1e72499dd))
+
 # [11.4.0](https://github.com/PolarisTime/Leo/compare/v11.3.0...v11.4.0) (2026-09-17)
 
 
