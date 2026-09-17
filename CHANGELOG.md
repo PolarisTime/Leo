@@ -1,3 +1,18 @@
+# [11.2.0](https://github.com/PolarisTime/Leo/compare/v11.1.4...v11.2.0) (2026-09-17)
+
+
+### Bug Fixes
+
+* **sales-contract:** 合同名称改为可空并补齐接口契约测试 ([91b5e78](https://github.com/PolarisTime/Leo/commit/91b5e78ce34cb6001569a24949e7728f07b13e49))
+* **sales-contract:** 恢复销售合同入口授权并修正状态注释 ([7980434](https://github.com/PolarisTime/Leo/commit/7980434e35b9c3b4b7fa83cb0f1a037ea012a0ba))
+
+
+### Features
+
+* **sales-contract:** 新增销售合同模块 P1 后端 ([0d58e8c](https://github.com/PolarisTime/Leo/commit/0d58e8cc397e5ac5cc345085076ce7c1bbade587))
+* **search:** 新增按单号查询采购销售物流单据流向 ([6b60814](https://github.com/PolarisTime/Leo/commit/6b6081465cafef4d9ac06be18f364aa7b30d563f))
+* **supplier:** 新增供应商经营品牌绑定与选项品牌输出 ([4cb353a](https://github.com/PolarisTime/Leo/commit/4cb353af9e19ba18237287f60884dd5d83ea57fa))
+
 ## [11.1.4](https://github.com/PolarisTime/Leo/compare/v11.1.3...v11.1.4) (2026-09-17)
 
 
