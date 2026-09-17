@@ -1,6 +1,7 @@
 package com.leo.erp.common.config;
 
 import com.leo.erp.common.api.ApiVersion;
+import io.swagger.v3.core.converter.ModelConverter;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.media.ArraySchema;
@@ -57,6 +58,15 @@ public class OpenApiConfig {
                         .version("v2.0")
                         .contact(new Contact().name("Leo ERP"))
                         .license(new License().name("Proprietary")));
+    }
+
+    /**
+     * Long/long 在 OpenAPI 中标注为 string/int64，与全局 Jackson 序列化契约一致。
+     * springdoc 通过 ModelConverterRegistrar 自动注册容器内的 ModelConverter bean。
+     */
+    @Bean
+    public ModelConverter longToStringModelConverter() {
+        return new LongToStringModelConverter();
     }
 
     @Bean
