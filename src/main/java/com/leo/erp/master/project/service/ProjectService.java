@@ -341,6 +341,7 @@ public class ProjectService {
         Long projectId = entity.getId();
         return List.of(
                 ReferenceCheck.active("so_sales_order", "project_id", projectId),
+                ReferenceCheck.active("so_sales_contract", "project_id", projectId),
                 ReferenceCheck.active("ct_sales_contract", "project_id", projectId),
                 ReferenceCheck.active("so_sales_outbound", "project_id", projectId),
                 ReferenceCheck.active("st_customer_statement", "project_id", projectId),

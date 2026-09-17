@@ -25,7 +25,11 @@ public enum DocumentStatus {
     @Deprecated
     PRE_OUTBOUND("PRE_OUTBOUND", "预出库"),
     AUDITED("AUDITED", "已审核"),
+    /** 销售合同已发出: 已审核之后发出, 只能继续归档, 不允许直接作废。 */
+    ISSUED("ISSUED", "已发出"),
     COMPLETED("COMPLETED", "已完成"),
+    /** 销售合同作废: 终态之一, 未被删除但不再计入有效合同额度。 */
+    VOIDED("VOIDED", "作废"),
 
     // 财务状态（历史迁移前数据）
     /** 仅用于兼容迁移前的付款数据，新流程统一使用 {@link #AUDITED}。 */
@@ -46,7 +50,7 @@ public enum DocumentStatus {
     UNSIGNED("UNSIGNED", "未签署"),
     UNAUDITED("UNAUDITED", "未审核"),
     EXECUTING("EXECUTING", "执行中"),
-    ARCHIVED("ARCHIVED", "已归档"),
+    ARCHIVED("ARCHIVED", "归档"),
 
     // 待处理状态
     PENDING_CONFIRM("PENDING_CONFIRM", "待确认"),

@@ -45,6 +45,7 @@ public class ModuleCatalog {
         modules.put("purchase-order", "采购订单");
         modules.put("purchase-inbound", "采购入库");
         modules.put("sales-order", "销售订单");
+        modules.put("sales-contract", "销售合同");
         modules.put("sales-outbound", "销售出库");
         modules.put("sales-return", "销售退货单");
         modules.put("freight-bill", "物流单");

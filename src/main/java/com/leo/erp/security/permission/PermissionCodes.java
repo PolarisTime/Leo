@@ -45,6 +45,7 @@ public final class PermissionCodes {
      */
     public static final class Resources {
         public static final String SALES_ORDERS = "sales-orders";
+        public static final String SALES_CONTRACTS = "sales-contracts";
         public static final String SALES_RETURNS = "sales-returns";
         public static final String SALES_OUTBOUNDS = "sales-outbounds";
         public static final String MATERIALS = "materials";
@@ -143,6 +144,12 @@ public final class PermissionCodes {
     public static final String SALES_ORDERS_COMPLETE = Resources.SALES_ORDERS + ":" + Actions.COMPLETE;
     public static final String SALES_ORDERS_PRINT = Resources.SALES_ORDERS + ":" + Actions.PRINT;
     public static final String SALES_ORDERS_EXPORT = Resources.SALES_ORDERS + ":" + Actions.EXPORT;
+
+    // 销售合同
+    public static final String SALES_CONTRACTS_READ = Resources.SALES_CONTRACTS + ":" + Actions.READ;
+    public static final String SALES_CONTRACTS_CREATE = Resources.SALES_CONTRACTS + ":" + Actions.CREATE;
+    public static final String SALES_CONTRACTS_UPDATE = Resources.SALES_CONTRACTS + ":" + Actions.UPDATE;
+    public static final String SALES_CONTRACTS_DELETE = Resources.SALES_CONTRACTS + ":" + Actions.DELETE;
 
     // 销售退货单
     public static final String SALES_RETURNS_READ = Resources.SALES_RETURNS + ":" + Actions.READ;
@@ -423,6 +430,7 @@ public final class PermissionCodes {
             SALES_ORDERS_READ, SALES_ORDERS_CREATE, SALES_ORDERS_UPDATE, SALES_ORDERS_DELETE,
             SALES_ORDERS_AUDIT, SALES_ORDERS_UNAUDIT, SALES_ORDERS_CONFIRM, SALES_ORDERS_COMPLETE,
             SALES_ORDERS_PRINT, SALES_ORDERS_EXPORT,
+            SALES_CONTRACTS_READ, SALES_CONTRACTS_CREATE, SALES_CONTRACTS_UPDATE, SALES_CONTRACTS_DELETE,
             SALES_RETURNS_READ, SALES_RETURNS_CREATE, SALES_RETURNS_UPDATE, SALES_RETURNS_DELETE,
             SALES_RETURNS_AUDIT, SALES_RETURNS_UNAUDIT, SALES_RETURNS_PRINT, SALES_RETURNS_EXPORT,
             SALES_OUTBOUNDS_READ, SALES_OUTBOUNDS_CREATE, SALES_OUTBOUNDS_UPDATE, SALES_OUTBOUNDS_DELETE,
