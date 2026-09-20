@@ -11,6 +11,7 @@ import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItem;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItemPrice;
+import com.leo.erp.market.quotation.domain.enums.QuoteRowType;
 import com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository;
 import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
@@ -183,7 +184,7 @@ public class QuoteSheetStore {
         checkSpecQuantityLockedForItemAppend(sheet);
         QuoteProjectConfig config = effectiveProjectConfig(sheet.getProjectId()).orElse(null);
         syncBrandSnapshot(sheet, config);
-        validateItemPrices(request, effectiveBrandNamesOf(sheet, config));
+        validateRowForWrite(request, effectiveBrandNamesOf(sheet, config));
         int nextLineNo = sheet.getItems().stream()
                 .map(QuoteSheetItem::getLineNo)
                 .filter(Objects::nonNull)
@@ -204,7 +205,7 @@ public class QuoteSheetStore {
         QuoteSheet sheet = requireSheetForRowWrite(sheetId, expectedVersion);
         QuoteProjectConfig config = effectiveProjectConfig(sheet.getProjectId()).orElse(null);
         syncBrandSnapshot(sheet, config);
-        validateItemPrices(request, effectiveBrandNamesOf(sheet, config));
+        validateRowForWrite(request, effectiveBrandNamesOf(sheet, config));
         QuoteSheetItem item = requireItem(sheet, itemId);
         checkSpecQuantityLockedForItemUpdate(sheet, item, request);
         Map<Long, String> supplierNames = resolveSupplierNames(List.of(request));
@@ -280,11 +281,71 @@ public class QuoteSheetStore {
         // 项目配置存在且品牌非空时以配置为唯一真源: 请求品牌随后会被快照同步覆盖;
         // 否则回退请求品牌(它们将成为单据快照), 保持历史/未配置项目行为。
         Set<String> allowedBrandNames = config == null ? requestBrandNames : configuredBrandNames(config);
+        boolean hasProductRow = false;
         for (QuoteSheetRequest.ItemRequest item : request.items()) {
             if (item == null) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "商品行不能为空");
             }
-            validateItemPrices(item, allowedBrandNames);
+            if (resolveRowType(item) == QuoteRowType.SEPARATOR) {
+                validateSeparatorRow(item);
+            } else {
+                hasProductRow = true;
+                validateProductRow(item, allowedBrandNames);
+            }
+        }
+        if (!hasProductRow) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "至少需要一行商品");
+        }
+    }
+
+    /** 商品行必填商品字段, 且现货价品牌必须属于有效品牌集合。 */
+    private void validateProductRow(QuoteSheetRequest.ItemRequest item, Set<String> brandNames) {
+        if (isBlank(item.category())) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "类别不能为空");
+        }
+        if (isBlank(item.material())) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "材质不能为空");
+        }
+        if (item.spec() == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "规格不能为空");
+        }
+        if (item.spec() <= 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "规格必须为正整数");
+        }
+        if (isBlank(item.length())) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "长度不能为空");
+        }
+        validateItemPrices(item, brandNames);
+    }
+
+    /** 隔断行仅作视觉分组: 不得携带商品字段、吨位或现货价。 */
+    private void validateSeparatorRow(QuoteSheetRequest.ItemRequest item) {
+        boolean carriesProduct = !isBlank(item.category())
+                || !isBlank(item.material())
+                || item.spec() != null
+                || !isBlank(item.length())
+                || item.ton() != null;
+        if (carriesProduct) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "隔断行不能携带商品信息");
+        }
+        if (item.prices() != null && !item.prices().isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "隔断行不能携带现货价");
+        }
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    /** 行级写的单个请求校验: 按行类型分派(整体替换走 {@link #validate})。 */
+    private void validateRowForWrite(QuoteSheetRequest.ItemRequest item, Set<String> brandNames) {
+        if (item == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "商品行不能为空");
+        }
+        if (resolveRowType(item) == QuoteRowType.SEPARATOR) {
+            validateSeparatorRow(item);
+        } else {
+            validateProductRow(item, brandNames);
         }
     }
 
@@ -305,6 +366,9 @@ public class QuoteSheetStore {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "现货价不能为空");
             }
             String brandName = normalizeBrandName(price.brandName());
+            if (isBlank(brandName)) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "现货价品牌不能为空");
+            }
             if (!priceBrandNames.add(brandName)) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "现货价品牌重复: " + brandName);
             }
@@ -312,6 +376,11 @@ public class QuoteSheetStore {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "现货价品牌不在品牌列表中: " + brandName);
             }
         }
+    }
+
+    /** 行类型: 未显式携带时按商品行处理(兼容历史请求)。 */
+    private static QuoteRowType resolveRowType(QuoteSheetRequest.ItemRequest item) {
+        return item.rowType() == null ? QuoteRowType.PRODUCT : item.rowType();
     }
 
     private Set<String> brandNamesOf(QuoteSheet sheet) {
@@ -492,8 +561,11 @@ public class QuoteSheetStore {
         }
     }
 
-    /** 规格判定口径: category/material/spec/length; 数量判定口径: ton(按数值比较, 忽略标度)。 */
+    /** 规格判定口径: rowType/category/material/spec/length; 数量判定口径: ton(按数值比较, 忽略标度)。 */
     private static boolean specOrQuantityChanged(QuoteSheetItem item, QuoteSheetRequest.ItemRequest request) {
+        if (item.getRowType() != resolveRowType(request)) {
+            return true;
+        }
         return !Objects.equals(item.getCategory(), request.category())
                 || !Objects.equals(item.getMaterial(), request.material())
                 || !Objects.equals(item.getSpec(), request.spec())
@@ -681,6 +753,18 @@ public class QuoteSheetStore {
      */
     private void applyItem(QuoteSheetItem item, QuoteSheetRequest.ItemRequest request,
                            Map<Long, String> supplierNames) {
+        QuoteRowType rowType = resolveRowType(request);
+        item.setRowType(rowType);
+        if (rowType == QuoteRowType.SEPARATOR) {
+            // 隔断行不携带商品与价格: 清空商品字段并移除全部价格
+            item.setCategory(null);
+            item.setMaterial(null);
+            item.setSpec(null);
+            item.setLength(null);
+            item.setTon(null);
+            item.getPrices().clear();
+            return;
+        }
         item.setCategory(request.category());
         item.setMaterial(request.material());
         item.setSpec(request.spec());
@@ -728,8 +812,8 @@ public class QuoteSheetStore {
 
     private QuoteSheetResponse.ItemResponse toItemResponse(QuoteSheetItem item) {
         return new QuoteSheetResponse.ItemResponse(
-                item.getId(), item.getLineNo(), item.getCategory(), item.getMaterial(), item.getSpec(),
-                item.getLength(), item.getTon(),
+                item.getId(), item.getLineNo(), item.getRowType(), item.getCategory(), item.getMaterial(),
+                item.getSpec(), item.getLength(), item.getTon(),
                 item.getPrices().stream()
                         .map(price -> new QuoteSheetResponse.ItemPriceResponse(
                                 price.getId(), price.getBrandName(), price.getSpotPrice(),

@@ -9,6 +9,7 @@ import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItem;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItemPrice;
+import com.leo.erp.market.quotation.domain.enums.QuoteRowType;
 import com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository;
 import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
@@ -1547,5 +1548,186 @@ class QuoteSheetStoreTest {
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", new BigDecimal("10"),
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
+    }
+
+    // ------------------------------------------------------- 隔断行(rowType=SEPARATOR)
+
+    private static QuoteSheetRequest.ItemRequest separatorRequest() {
+        return new QuoteSheetRequest.ItemRequest(
+                QuoteRowType.SEPARATOR, null, null, null, null, null, List.of());
+    }
+
+    private static QuoteSheetRequest requestWithItems(List<QuoteSheetRequest.ItemRequest> items) {
+        return new QuoteSheetRequest(
+                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("30"), false, false, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
+                items);
+    }
+
+    /** 商品行 + 隔断行混合: 隔断行商品字段与价格均为空, 且 line_no 连续。 */
+    @Test
+    void create_persistsSeparatorRowWithoutProductFields() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 301L, 302L);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = store().create(requestWithItems(
+                List.of(itemRequest("螺纹钢", "HRB400E", 12, "10", "3280"), separatorRequest())));
+
+        assertThat(response.items()).hasSize(2);
+        assertThat(response.items().get(0).rowType()).isEqualTo(QuoteRowType.PRODUCT);
+        assertThat(response.items().get(0).category()).isEqualTo("螺纹钢");
+        assertThat(response.items().get(1).rowType()).isEqualTo(QuoteRowType.SEPARATOR);
+        assertThat(response.items().get(1).category()).isNull();
+        assertThat(response.items().get(1).material()).isNull();
+        assertThat(response.items().get(1).spec()).isNull();
+        assertThat(response.items().get(1).length()).isNull();
+        assertThat(response.items().get(1).ton()).isNull();
+        assertThat(response.items().get(1).prices()).isEmpty();
+        assertThat(response.items()).extracting(QuoteSheetResponse.ItemResponse::lineNo).containsExactly(1, 2);
+    }
+
+    /** 只有隔断行、没有商品行: 拒绝(至少需要一行商品)。 */
+    @Test
+    void create_rejectsSheetWithOnlySeparatorRows() {
+        assertThatThrownBy(() -> store().create(requestWithItems(List.of(separatorRequest()))))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 隔断行携带商品字段: 拒绝。 */
+    @Test
+    void create_rejectsSeparatorRowWithProductFields() {
+        QuoteSheetRequest.ItemRequest bad = new QuoteSheetRequest.ItemRequest(
+                QuoteRowType.SEPARATOR, "螺纹钢", null, null, null, null, List.of());
+        assertThatThrownBy(() -> store().create(requestWithItems(
+                List.of(itemRequest("螺纹钢", "HRB400E", 12, "10", "3280"), bad))))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 隔断行携带现货价: 拒绝。 */
+    @Test
+    void create_rejectsSeparatorRowWithPrices() {
+        QuoteSheetRequest.ItemRequest bad = new QuoteSheetRequest.ItemRequest(
+                QuoteRowType.SEPARATOR, null, null, null, null, null,
+                List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)));
+        assertThatThrownBy(() -> store().create(requestWithItems(
+                List.of(itemRequest("螺纹钢", "HRB400E", 12, "10", "3280"), bad))))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** 商品行缺失必填商品字段: 服务层 422(注解已放开, 由服务层按类型强制)。 */
+    @Test
+    void create_rejectsProductRowMissingCategory() {
+        QuoteSheetRequest.ItemRequest bad = new QuoteSheetRequest.ItemRequest(
+                QuoteRowType.PRODUCT, null, "HRB400E", 12, "9米", BigDecimal.TEN, List.of());
+        assertThatThrownBy(() -> store().create(requestWithItems(List.of(bad))))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** rowType 缺省(null)按商品行处理, 兼容历史请求。 */
+    @Test
+    void create_defaultsNullRowTypeToProduct() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 301L);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = store().create(request());
+
+        assertThat(response.items().get(0).rowType()).isEqualTo(QuoteRowType.PRODUCT);
+    }
+
+    /** 行级新增隔断行: 追加到末尾且不携带商品字段。 */
+    @Test
+    void addItem_appendsSeparatorRow() {
+        QuoteSheet sheet = sheetWithItem(9L);
+        sheet.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+        when(snowflakeIdGenerator.nextId()).thenReturn(501L);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetItemWrite write = store().addItem(9L, separatorRequest(), 1L);
+
+        assertThat(write.item().rowType()).isEqualTo(QuoteRowType.SEPARATOR);
+        assertThat(write.item().lineNo()).isEqualTo(2);
+        assertThat(write.item().category()).isNull();
+        assertThat(write.item().prices()).isEmpty();
+    }
+
+    /** 规格数量锁定期间: 新增隔断行同样被拒绝(隔断行也改变行结构)。 */
+    @Test
+    void addItem_rejectsSeparatorRowWhenSpecQuantityLocked() {
+        QuoteSheet sheet = sheetWithItem(9L);
+        sheet.setVersion(1L);
+        sheet.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+
+        assertThatThrownBy(() -> store().addItem(9L, separatorRequest(), 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+    }
+
+    /** 商品行整行替换为隔断行: 清空商品字段与价格。 */
+    @Test
+    void updateItem_convertsProductRowToSeparator() {
+        QuoteSheet sheet = sheetWithItem(9L);
+        sheet.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetItemWrite write = store().updateItem(9L, 301L, separatorRequest(), 1L);
+
+        assertThat(write.item().rowType()).isEqualTo(QuoteRowType.SEPARATOR);
+        assertThat(write.item().category()).isNull();
+        assertThat(write.item().ton()).isNull();
+        assertThat(write.item().prices()).isEmpty();
+        assertThat(sheet.getItems().get(0).getRowType()).isEqualTo(QuoteRowType.SEPARATOR);
+    }
+
+    /** 规格数量锁定期间: 商品行改成隔断行属于结构变化, 被拒绝。 */
+    @Test
+    void updateItem_rejectsProductToSeparatorWhenSpecQuantityLocked() {
+        QuoteSheet sheet = sheetWithItem(9L);
+        sheet.setVersion(1L);
+        sheet.setSpecQuantityLocked(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+
+        assertThatThrownBy(() -> store().updateItem(9L, 301L, separatorRequest(), 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+    }
+
+    /** 整单替换保持商品行 + 隔断行混排且顺序不变, line_no 归一化连续。 */
+    @Test
+    void update_fullReplace_keepsSeparatorRowOrder() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(snowflakeIdGenerator.nextId()).thenReturn(601L);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = store().update(9L,
+                requestWithItems(List.of(itemRequest("螺纹钢", "HRB400E", 12, "10", "3280"),
+                        separatorRequest(),
+                        itemRequest("盘螺", "HRB400E", 8, "5", "3300"))),
+                1L);
+
+        assertThat(response.items()).extracting(QuoteSheetResponse.ItemResponse::rowType)
+                .containsExactly(QuoteRowType.PRODUCT, QuoteRowType.SEPARATOR, QuoteRowType.PRODUCT);
+        assertThat(response.items()).extracting(QuoteSheetResponse.ItemResponse::lineNo)
+                .containsExactly(1, 2, 3);
+        assertThat(response.items().get(1).prices()).isEmpty();
     }
 }

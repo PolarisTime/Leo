@@ -1,10 +1,10 @@
 package com.leo.erp.market.quotation.web.dto;
 
+import com.leo.erp.market.quotation.domain.enums.QuoteRowType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
@@ -44,14 +44,26 @@ public record QuoteSheetRequest(
     ) {
     }
 
-    /** 商品行。 */
+    /**
+     * 商品行/隔断行。
+     * <p>
+     * {@code rowType} 为空按 {@code PRODUCT}(商品行)处理, 兼容历史请求; 商品字段的"必填"校验
+     * 因隔断行可空而无法用注解表达, 统一由服务层按行类型校验(见 {@code QuoteSheetStore.validate})。
+     */
     public record ItemRequest(
-            @NotBlank(message = "类别不能为空") @Size(max = 16, message = "类别过长") String category,
-            @NotBlank(message = "材质不能为空") @Size(max = 16, message = "材质过长") String material,
-            @NotNull(message = "规格不能为空") @Positive(message = "规格必须为正整数") Integer spec,
-            @NotBlank(message = "长度不能为空") @Size(max = 16, message = "长度过长") String length,
+            QuoteRowType rowType,
+            @Size(max = 16, message = "类别过长") String category,
+            @Size(max = 16, message = "材质过长") String material,
+            Integer spec,
+            @Size(max = 16, message = "长度过长") String length,
             @DecimalMin(value = "0", message = "吨数不能为负") BigDecimal ton,
             @Valid List<ItemPriceRequest> prices
     ) {
+
+        /** 兼容旧调用方: 未显式传行类型时按商品行处理。 */
+        public ItemRequest(String category, String material, Integer spec, String length,
+                           BigDecimal ton, List<ItemPriceRequest> prices) {
+            this(null, category, material, spec, length, ton, prices);
+        }
     }
 }

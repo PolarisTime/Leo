@@ -2,6 +2,7 @@ package com.leo.erp.market.quotation.repository;
 
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItem;
+import com.leo.erp.market.quotation.domain.enums.QuoteRowType;
 import jakarta.persistence.Column;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -91,6 +92,23 @@ class QuoteSchemaMigrationExtremePostgresTest {
                 .map(Column::name)
                 .toList();
         assertThat(entityColumns).doesNotContain("quantity_mode", "pieces", "piece_weight_ton");
+    }
+
+    @Test
+    void v154_quoteItem_rowTypeNotNullDefault_andProductColumnsNullable() {
+        ColumnMeta rowType = column("mk_quote_item", "row_type");
+        assertThat(rowType.type()).isEqualTo("character varying");
+        assertThat(rowType.maxLength()).isEqualTo(16);
+        assertThat(rowType.nullable()).isFalse();
+        assertThat(rowType.defaultValue()).contains("PRODUCT");
+
+        // 隔断行不携带商品字段: 这四列放开 NOT NULL
+        assertThat(column("mk_quote_item", "category").nullable()).isTrue();
+        assertThat(column("mk_quote_item", "material").nullable()).isTrue();
+        assertThat(column("mk_quote_item", "spec").nullable()).isTrue();
+        assertThat(column("mk_quote_item", "length").nullable()).isTrue();
+
+        assertThat(new QuoteSheetItem().getRowType()).isEqualTo(QuoteRowType.PRODUCT);
     }
 
     @Test

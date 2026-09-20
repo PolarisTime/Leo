@@ -1,8 +1,11 @@
 package com.leo.erp.market.quotation.domain.entity;
 
+import com.leo.erp.market.quotation.domain.enums.QuoteRowType;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -34,16 +37,21 @@ public class QuoteSheetItem {
     @Column(name = "line_no", nullable = false)
     private Integer lineNo;
 
-    @Column(name = "category", nullable = false, length = 16)
+    /** 行类型: PRODUCT(商品行)/SEPARATOR(隔断行); 隔断行无商品与价格。 */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "row_type", nullable = false, length = 16)
+    private QuoteRowType rowType = QuoteRowType.PRODUCT;
+
+    @Column(name = "category", length = 16)
     private String category;
 
-    @Column(name = "material", nullable = false, length = 16)
+    @Column(name = "material", length = 16)
     private String material;
 
-    @Column(name = "spec", nullable = false)
+    @Column(name = "spec")
     private Integer spec;
 
-    @Column(name = "length", nullable = false, length = 16)
+    @Column(name = "length", length = 16)
     private String length;
 
     @Column(name = "ton", precision = 18, scale = 8)

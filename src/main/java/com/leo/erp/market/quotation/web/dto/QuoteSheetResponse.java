@@ -1,5 +1,7 @@
 package com.leo.erp.market.quotation.web.dto;
 
+import com.leo.erp.market.quotation.domain.enums.QuoteRowType;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -41,7 +43,13 @@ public record QuoteSheetResponse(
                                     Long supplierId, String supplierName) {
     }
 
-    public record ItemResponse(Long id, Integer lineNo, String category, String material, Integer spec,
-                               String length, BigDecimal ton, List<ItemPriceResponse> prices) {
+    public record ItemResponse(Long id, Integer lineNo, QuoteRowType rowType, String category, String material,
+                               Integer spec, String length, BigDecimal ton, List<ItemPriceResponse> prices) {
+
+        /** 兼容旧调用方: 未显式传行类型时按商品行处理。 */
+        public ItemResponse(Long id, Integer lineNo, String category, String material, Integer spec,
+                            String length, BigDecimal ton, List<ItemPriceResponse> prices) {
+            this(id, lineNo, QuoteRowType.PRODUCT, category, material, spec, length, ton, prices);
+        }
     }
 }

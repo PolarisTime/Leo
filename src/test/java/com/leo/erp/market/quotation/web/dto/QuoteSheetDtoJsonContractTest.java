@@ -2,6 +2,7 @@ package com.leo.erp.market.quotation.web.dto;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.config.JacksonConfig;
+import com.leo.erp.market.quotation.domain.enums.QuoteRowType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
@@ -45,6 +46,24 @@ class QuoteSheetDtoJsonContractTest {
         assertThat(json).contains("\"spec\":12");
         assertThat(json).contains("\"specQuantityLocked\":true");
         assertThat(json).contains("\"version\":\"7\"");
+        assertThat(json).contains("\"rowType\":\"PRODUCT\"");
+    }
+
+    @Test
+    void request_deserializesRowTypeAndAllowsSeparatorWithoutProductFields() throws Exception {
+        String json = "{\"name\":\"9月9日报单\",\"orderDate\":\"2026-09-09\",\"refDate\":\"2026-09-10\","
+                + "\"refPeriod\":\"9:30 上午\","
+                + "\"brands\":[{\"brandName\":\"中天\",\"freight\":30}],"
+                + "\"items\":[{\"rowType\":\"PRODUCT\",\"category\":\"螺纹钢\",\"material\":\"HRB400E\","
+                + "\"spec\":12,\"length\":\"9米\",\"ton\":10,\"prices\":[{\"brandName\":\"中天\",\"spotPrice\":3280}]},"
+                + "{\"rowType\":\"SEPARATOR\"}]}";
+
+        QuoteSheetRequest request = objectMapper.readValue(json, QuoteSheetRequest.class);
+
+        assertThat(request.items()).hasSize(2);
+        assertThat(request.items().get(0).rowType()).isEqualTo(QuoteRowType.PRODUCT);
+        assertThat(request.items().get(1).rowType()).isEqualTo(QuoteRowType.SEPARATOR);
+        assertThat(request.items().get(1).category()).isNull();
     }
 
     @Test
