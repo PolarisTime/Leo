@@ -1,3 +1,10 @@
+# [11.6.0](https://github.com/PolarisTime/Leo/compare/v11.5.1...v11.6.0) (2026-09-20)
+
+
+### Features
+
+* **quotation:** 报价单明细支持隔断行 ([4d8e973](https://github.com/PolarisTime/Leo/commit/4d8e9735007fd23e163debe569cda1a5d8ee4d3b))
+
 ## [11.5.1](https://github.com/PolarisTime/Leo/compare/v11.5.0...v11.5.1) (2026-09-17)
 
 
