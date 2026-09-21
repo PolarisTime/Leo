@@ -1,3 +1,15 @@
+## [11.7.2](https://github.com/PolarisTime/Leo/compare/v11.7.1...v11.7.2) (2026-09-21)
+
+
+### Bug Fixes
+
+* **purchase:** 修复采购入库反审核锁序反转风险 ([1dc847b](https://github.com/PolarisTime/Leo/commit/1dc847bb2bafbbf1df6717e8422b80ddb51e6c83))
+
+
+### Performance Improvements
+
+* **trade:** 商品目录按请求解析一次避免逐行全量加载 ([5553894](https://github.com/PolarisTime/Leo/commit/555389427afad66e9cb6e51a7d5499fdefaf8775))
+
 ## [11.7.1](https://github.com/PolarisTime/Leo/compare/v11.7.0...v11.7.1) (2026-09-21)
 
 
