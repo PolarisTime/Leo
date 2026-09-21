@@ -98,14 +98,20 @@ public class PurchaseOrderAvailabilityService {
             boolean hasInboundAllocation = order.getItems().stream().anyMatch(
                     item -> allocatedQuantityMap.getOrDefault(item.getId(), 0) > 0
             );
-            int importableQuantity = hasInboundAllocation
-                    ? 0
+            // 跨行总量用 long 累加: int 相加会在超大数量时回绕为负数, 导致订单被错误过滤。
+            long importableQuantity = hasInboundAllocation
+                    ? 0L
                     : order.getItems().stream()
-                    .mapToInt(item -> remainingQuantity(item, allocatedQuantityMap))
+                    .mapToLong(item -> remainingQuantity(item, allocatedQuantityMap))
                     .sum();
-            result.put(order.getId(), importableQuantity);
+            result.put(order.getId(), saturateToInt(importableQuantity));
         }
         return result;
+    }
+
+    /** 总量超出 int 时收敛到 {@link Integer#MAX_VALUE}, 避免回绕成负数被过滤。 */
+    private static int saturateToInt(long value) {
+        return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) value;
     }
 
     private List<Long> orderItemIds(PurchaseOrder order) {

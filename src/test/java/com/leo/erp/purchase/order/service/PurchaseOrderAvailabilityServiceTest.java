@@ -179,4 +179,19 @@ class PurchaseOrderAvailabilityServiceTest {
 
         assertThat(result).containsEntry(100L, 8);
     }
+
+    /** 回归(A2): 跨行总量超过 int 时不得回绕为负数, 否则订单会被 importableQuantity>0 错误过滤。 */
+    @Test
+    void buildInboundImportableQuantityMap_shouldNotOverflowOnHugeTotals() {
+        PurchaseOrder order = order(100L, List.of(
+                item(1L, 1_500_000_000),
+                item(2L, 1_500_000_000)));
+        when(purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(1L, 2L)))
+                .thenReturn(Map.of());
+
+        Map<Long, Integer> result = service.buildInboundImportableQuantityMap(List.of(order), null);
+
+        assertThat(result).containsEntry(100L, Integer.MAX_VALUE);
+        assertThat(result.get(100L)).isPositive();
+    }
 }
