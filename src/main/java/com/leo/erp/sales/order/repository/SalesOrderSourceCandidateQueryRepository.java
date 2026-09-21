@@ -233,7 +233,6 @@ public class SalesOrderSourceCandidateQueryRepository {
                     LEFT JOIN sales_allocations allocation
                       ON allocation.source_item_id = inbound_item.id
                     WHERE purchase_order.deleted_flag = FALSE
-                      AND purchase_order.status = '完成采购'
                       AND inbound.deleted_flag = FALSE
                       AND inbound.status IN ('已审核', '完成入库')
                       AND (:supplierId IS NULL OR purchase_order.supplier_id = :supplierId)

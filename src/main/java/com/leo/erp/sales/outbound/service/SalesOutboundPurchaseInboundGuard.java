@@ -2,7 +2,6 @@ package com.leo.erp.sales.outbound.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
@@ -18,7 +17,7 @@ import java.util.stream.Collectors;
 public class SalesOutboundPurchaseInboundGuard {
 
     private static final String AUDIT_BLOCK_MESSAGE =
-            "来源采购明细尚未完成采购入库，不能审核销售出库。请先完成采购入库后重试。";
+            "来源采购明细累计入库数量不足本行销售数量，不能审核销售出库。请先完成采购入库后重试。";
 
     private final SalesOutboundSourceService sourceService;
     private final JdbcTemplate jdbc;
@@ -45,8 +44,7 @@ public class SalesOutboundPurchaseInboundGuard {
                 ));
         for (Map.Entry<Long, Integer> requirement : requiredQuantityByPurchaseOrderItemId.entrySet()) {
             PurchaseInboundCoverage coverage = loadCoverage(requirement.getKey());
-            if (!StatusConstants.PURCHASE_COMPLETED.equals(coverage.purchaseOrderStatus())
-                    || coverage.inboundQuantity() < requirement.getValue()) {
+            if (coverage.inboundQuantity() < requirement.getValue()) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, AUDIT_BLOCK_MESSAGE);
             }
         }
@@ -68,8 +66,7 @@ public class SalesOutboundPurchaseInboundGuard {
 
     private PurchaseInboundCoverage loadCoverage(Long sourcePurchaseOrderItemId) {
         List<PurchaseInboundCoverage> rows = jdbc.query("""
-                    SELECT source_order.status,
-                           COALESCE(SUM(
+                    SELECT COALESCE(SUM(
                                CASE WHEN inbound.status IN ('已审核', '完成入库')
                                     THEN inbound_item.quantity ELSE 0 END
                            ), 0) AS inbound_quantity
@@ -82,17 +79,15 @@ public class SalesOutboundPurchaseInboundGuard {
                        AND inbound.deleted_flag = FALSE
                      WHERE source_item.id = ?
                        AND source_order.deleted_flag = FALSE
-                  GROUP BY source_order.status
                     """, (rs, rowNum) -> new PurchaseInboundCoverage(
-                        rs.getString("status"),
                         rs.getInt("inbound_quantity")
                 ), sourcePurchaseOrderItemId);
-        return rows.isEmpty() ? new PurchaseInboundCoverage(null, 0) : rows.get(0);
+        return rows.isEmpty() ? new PurchaseInboundCoverage(0) : rows.get(0);
     }
 
     private record PurchaseRequirement(Long purchaseOrderItemId, int quantity) {
     }
 
-    private record PurchaseInboundCoverage(String purchaseOrderStatus, int inboundQuantity) {
+    private record PurchaseInboundCoverage(int inboundQuantity) {
     }
 }

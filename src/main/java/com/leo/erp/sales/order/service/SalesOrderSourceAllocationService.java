@@ -99,12 +99,6 @@ public class SalesOrderSourceAllocationService {
                 lineNo,
                 "来源采购入库单"
         );
-        if (!StatusConstants.PURCHASE_COMPLETED.equals(sourceInboundItem.purchaseOrderStatus())) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "第" + lineNo + "行来源采购订单尚未完成采购，不能用于正常销售"
-            );
-        }
         assertSourceFieldsMatch(source, sourceInboundItem, lineNo, "来源采购入库明细");
         int allocatedQuantity = context.inboundAllocatedMap()
                 .getOrDefault(sourceInboundItemId, SalesOrderSourceAllocation.ZERO)

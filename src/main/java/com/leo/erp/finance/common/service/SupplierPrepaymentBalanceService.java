@@ -74,7 +74,6 @@ public class SupplierPrepaymentBalanceService {
                         WHERE inbound.deleted_flag = FALSE
                           AND inbound.status IN ('已审核', '完成入库')
                           AND source_order.deleted_flag = FALSE
-                          AND source_order.status = '完成采购'
                           AND inbound.settlement_company_id = :settlementCompanyId
                           AND inbound.supplier_id = :supplierId
                     ), 0)

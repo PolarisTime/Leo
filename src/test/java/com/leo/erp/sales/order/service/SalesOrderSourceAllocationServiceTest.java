@@ -143,14 +143,22 @@ class SalesOrderSourceAllocationServiceTest {
     }
 
     @Test
-    void validateLine_shouldRejectPurchaseNotCompleted() {
+    void validateLine_shouldAllowWhenPurchaseNotCompletedButInboundAudited() {
+        // 6.1B：部分入库后即可销售，不再要求来源采购订单完成采购
         stubInbound(List.of(inbound(1L, StatusConstants.AUDITED, StatusConstants.AUDITED, 10)));
         SalesOrderSourceContext context = service.prepareContext(
                 request(List.of(itemRequest(1L, null, 5))), null, List.of());
 
-        assertThatThrownBy(() -> service.validateLine(itemRequest(1L, null, 5), 1, context))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("尚未完成采购");
+        service.validateLine(itemRequest(1L, null, 5), 1, context); // 不抛
+    }
+
+    @Test
+    void validateLine_shouldAllowWhenPurchaseDraftButInboundAudited() {
+        stubInbound(List.of(inbound(1L, StatusConstants.AUDITED, StatusConstants.DRAFT, 10)));
+        SalesOrderSourceContext context = service.prepareContext(
+                request(List.of(itemRequest(1L, null, 5))), null, List.of());
+
+        service.validateLine(itemRequest(1L, null, 5), 1, context); // 不抛
     }
 
     @Test
