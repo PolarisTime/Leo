@@ -4,8 +4,10 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
+import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceItem;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceOrder;
-import com.leo.erp.logistics.bill.repository.FreightBillSourceOrderRepository;
+import com.leo.erp.logistics.bill.repository.FreightBillSourceItemRepository;
+import com.leo.erp.logistics.bill.repository.FreightBillSourceItemRepository.SourceItemOccupancySummary;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.sales.api.SalesOrderLogisticsSourceQuery;
@@ -20,17 +22,18 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * FreightBillApplyService 极端情况测试。
+ * FreightBillApplyService 极端情况测试：行级拆分/部分导入、数量与重量换算、占用校验。
  */
 @ExtendWith(MockitoExtension.class)
 class FreightBillApplyServiceTest {
@@ -39,7 +42,7 @@ class FreightBillApplyServiceTest {
     private SalesOrderLogisticsSourceQuery salesOrderSourceQuery;
 
     @Mock
-    private FreightBillSourceOrderRepository sourceOrderRepository;
+    private FreightBillSourceItemRepository sourceItemRepository;
 
     @Mock
     private SourceAllocationLockService sourceAllocationLockService;
@@ -47,14 +50,19 @@ class FreightBillApplyServiceTest {
     @InjectMocks
     private FreightBillApplyService service;
 
-    private SalesOrderSourceItemSnapshot srcItem(Long id, String weightTon) {
+    private static final int SOURCE_QUANTITY = 10;
+
+    private SalesOrderSourceItemSnapshot srcItem(Long id, String pieceWeightTon) {
+        return srcItem(id, pieceWeightTon, null);
+    }
+
+    private SalesOrderSourceItemSnapshot srcItem(Long id, String pieceWeightTon, Integer remainingQuantity) {
         return new SalesOrderSourceItemSnapshot(
                 id, 1, 500L, "M001", "品牌A", "型钢", "螺纹钢", "HRB400", "12m", "吨",
-                700L, 800L, 30L, "结算公司A", 1L, "库房A", "B001", "b001", 10, "件",
-                new BigDecimal("1.250"), 100,
-                weightTon == null ? null : new BigDecimal(weightTon),
-                new BigDecimal("4000"), new BigDecimal("50000"),
-                weightTon == null ? null : new BigDecimal(weightTon));
+                700L, 800L, 30L, "结算公司A", 1L, "库房A", "B001", "b001", SOURCE_QUANTITY, "件",
+                pieceWeightTon == null ? null : new BigDecimal(pieceWeightTon), 100,
+                new BigDecimal("12.500"), new BigDecimal("4000"), new BigDecimal("50000"),
+                new BigDecimal("12.500"), remainingQuantity);
     }
 
     private SalesOrderSourceSnapshot srcOrder(Long id, String orderNo, String status,
@@ -66,10 +74,19 @@ class FreightBillApplyServiceTest {
     }
 
     private FreightBillItemRequest itemReq(Long id, Long sourceId) {
+        return itemReq(id, sourceId, null, null);
+    }
+
+    private FreightBillItemRequest itemReq(Long id, Long sourceId, Integer quantity, BigDecimal weightTon) {
+        return itemReq(id, sourceId, quantity, weightTon, new BigDecimal("1.250"));
+    }
+
+    private FreightBillItemRequest itemReq(Long id, Long sourceId, Integer quantity, BigDecimal weightTon,
+                                           BigDecimal pieceWeightTon) {
         return new FreightBillItemRequest(
                 id, "SO001", 30L, "结算公司A", 10L, "客户A", 20L, "项目A", 500L, "M001", "螺纹钢",
-                "品牌A", "型钢", "螺纹钢", "HRB400", "12m", 10, "件", new BigDecimal("1.250"), 100,
-                "B001", new BigDecimal("12.500"), 1L, "库房A", null, null, sourceId);
+                "品牌A", "型钢", "螺纹钢", "HRB400", "12m", quantity, "件", pieceWeightTon, 100,
+                "B001", weightTon, 1L, "库房A", null, null, sourceId);
     }
 
     private FreightBillRequest request(List<FreightBillItemRequest> items) {
@@ -80,42 +97,140 @@ class FreightBillApplyServiceTest {
     private void stubSources(SalesOrderSourceSnapshot order) {
         when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of(order.id()));
         when(salesOrderSourceQuery.findBySourceItemIds(any())).thenReturn(List.of(order));
-        // 多数校验分支在占用检查之前抛错，此 stub 可能未使用
-        lenient().when(sourceOrderRepository.findOccupiedSourceOrderIds(any(), any())).thenReturn(List.of());
+        lenient().when(sourceItemRepository.summarizeOccupiedQuantities(any(), any())).thenReturn(List.of());
+    }
+
+    private SourceItemOccupancySummary occupancy(Long sourceItemId, int quantity) {
+        return new SourceItemOccupancySummary() {
+            @Override
+            public Long getSourceSalesOrderItemId() {
+                return sourceItemId;
+            }
+
+            @Override
+            public Long getTotalQuantity() {
+                return (long) quantity;
+            }
+        };
     }
 
     // ---------- 正常路径 ----------
 
     @Test
     void applyItems_shouldApplyItemsAndSyncSources() {
-        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "12.500"))));
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
         FreightBill entity = new FreightBill();
 
         service.applyItems(entity, request(List.of(itemReq(null, 11L))), () -> 100L);
 
         assertThat(entity.getItems()).hasSize(1);
         assertThat(entity.getItems().get(0).getLineNo()).isEqualTo(1);
+        // 缺省数量=来源数量10, 重量=1.250*10=12.500
+        assertThat(entity.getItems().get(0).getQuantity()).isEqualTo(SOURCE_QUANTITY);
         assertThat(entity.getItems().get(0).getWeightTon()).isEqualByComparingTo("12.500");
         assertThat(entity.getItems().get(0).getMaterialName()).isEqualTo("品牌A");
         assertThat(entity.getTotalWeight()).isEqualByComparingTo("12.500");
         assertThat(entity.getTotalFreight()).isEqualByComparingTo("1250.00"); // 12.5 * 100
         assertThat(entity.getSourceOrders()).hasSize(1);
         assertThat(entity.getSourceOrders().iterator().next().getSourceSalesOrderId()).isEqualTo(1L);
+        assertThat(entity.getSourceItems()).hasSize(1);
+        assertThat(entity.getSourceItems().iterator().next().getQuantity()).isEqualTo(SOURCE_QUANTITY);
+        assertThat(entity.getSourceItems().iterator().next().isActiveFlag()).isTrue();
     }
 
     @Test
-    void applyItems_shouldSkipExistingSourceRelation() {
+    void applyItems_shouldApplyPartialQuantityAndRecomputeWeightAndFreight() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
         FreightBill entity = new FreightBill();
-        FreightBillSourceOrder existing = new FreightBillSourceOrder();
-        existing.setSourceSalesOrderId(1L);
-        existing.setSourceSalesOrderNo("SO001");
-        existing.setActiveFlag(true);
-        entity.getSourceOrders().add(existing);
-        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "12.500"))));
 
-        service.applyItems(entity, request(List.of(itemReq(null, 11L))), () -> 100L);
+        service.applyItems(entity, request(List.of(itemReq(null, 11L, 4, null))), () -> 100L);
 
-        assertThat(entity.getSourceOrders()).hasSize(1); // 已存在来源不重复添加
+        assertThat(entity.getItems().get(0).getQuantity()).isEqualTo(4);
+        assertThat(entity.getItems().get(0).getWeightTon()).isEqualByComparingTo("5.000");
+        assertThat(entity.getTotalWeight()).isEqualByComparingTo("5.000");
+        assertThat(entity.getTotalFreight()).isEqualByComparingTo("500.00");
+        assertThat(entity.getSourceItems().iterator().next().getQuantity()).isEqualTo(4);
+    }
+
+    @Test
+    void applyItems_shouldPreferExplicitWeighedWeightTon() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
+        FreightBill entity = new FreightBill();
+
+        service.applyItems(entity, request(List.of(itemReq(null, 11L, 4, new BigDecimal("4.800")))), () -> 100L);
+
+        assertThat(entity.getItems().get(0).getQuantity()).isEqualTo(4);
+        assertThat(entity.getItems().get(0).getWeightTon()).isEqualByComparingTo("4.800");
+        assertThat(entity.getTotalFreight()).isEqualByComparingTo("480.00");
+    }
+
+    @Test
+    void applyItems_shouldIgnoreNonPositiveExplicitWeightAndFallbackToPieceWeight() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
+        FreightBill entity = new FreightBill();
+
+        service.applyItems(entity, request(List.of(itemReq(null, 11L, 2, BigDecimal.ZERO))), () -> 100L);
+
+        assertThat(entity.getItems().get(0).getWeightTon()).isEqualByComparingTo("2.500");
+    }
+
+    @Test
+    void applyItems_shouldSupportPartialImportOfOrderSubset() {
+        SalesOrderSourceSnapshot order = srcOrder(1L, "SO001", StatusConstants.AUDITED,
+                List.of(srcItem(11L, "1.000"), srcItem(12L, "2.000")));
+        stubSources(order);
+        FreightBill entity = new FreightBill();
+
+        service.applyItems(entity, request(List.of(
+                itemReq(null, 12L, 3, null, new BigDecimal("2.000")))), () -> 100L);
+
+        assertThat(entity.getItems()).hasSize(1);
+        assertThat(entity.getItems().get(0).getSourceSalesOrderItemId()).isEqualTo(12L);
+        assertThat(entity.getItems().get(0).getQuantity()).isEqualTo(3);
+        assertThat(entity.getItems().get(0).getWeightTon()).isEqualByComparingTo("6.000");
+        assertThat(entity.getSourceOrders()).hasSize(1);
+        assertThat(entity.getSourceItems()).hasSize(1);
+    }
+
+    @Test
+    void applyItems_shouldSkipExistingSourceRelationAndReactivateReusedSourceItem() {
+        FreightBill entity = new FreightBill();
+        FreightBillSourceOrder existingOrder = new FreightBillSourceOrder();
+        existingOrder.setSourceSalesOrderId(1L);
+        existingOrder.setSourceSalesOrderNo("SO001");
+        existingOrder.setActiveFlag(true);
+        entity.getSourceOrders().add(existingOrder);
+        FreightBillSourceItem inactiveItem = new FreightBillSourceItem();
+        inactiveItem.setSourceSalesOrderItemId(11L);
+        inactiveItem.setActiveFlag(false);
+        entity.getSourceItems().add(inactiveItem);
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
+
+        service.applyItems(entity, request(List.of(itemReq(null, 11L, 2, null))), () -> 100L);
+
+        assertThat(entity.getSourceOrders()).hasSize(1);
+        assertThat(entity.getSourceItems()).hasSize(1);
+        assertThat(inactiveItem.isActiveFlag()).isTrue();
+        assertThat(inactiveItem.getQuantity()).isEqualTo(2);
+    }
+
+    @Test
+    void applyItems_shouldReleaseRemovedSourceItem() {
+        FreightBill entity = new FreightBill();
+        FreightBillSourceItem oldItem = new FreightBillSourceItem();
+        oldItem.setSourceSalesOrderItemId(99L);
+        oldItem.setActiveFlag(true);
+        entity.getSourceItems().add(oldItem);
+        FreightBillSourceOrder oldOrder = new FreightBillSourceOrder();
+        oldOrder.setSourceSalesOrderId(88L);
+        oldOrder.setActiveFlag(true);
+        entity.getSourceOrders().add(oldOrder);
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
+
+        service.applyItems(entity, request(List.of(itemReq(null, 11L, 2, null))), () -> 100L);
+
+        assertThat(oldItem.isActiveFlag()).isFalse();
+        assertThat(oldOrder.isActiveFlag()).isFalse();
     }
 
     // ---------- 校验失败 ----------
@@ -126,20 +241,26 @@ class FreightBillApplyServiceTest {
 
         assertThatThrownBy(() -> service.applyItems(new FreightBill(), request, () -> 100L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("整单导入");
+                .hasMessageContaining("不能为空或重复");
     }
 
     @Test
-    void applyItems_shouldRejectPartialImport() {
-        SalesOrderSourceSnapshot order = srcOrder(1L, "SO001", StatusConstants.AUDITED,
-                List.of(srcItem(11L, "1.000"), srcItem(12L, "2.000")));
-        when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of(1L));
-        when(salesOrderSourceQuery.findBySourceItemIds(any())).thenReturn(List.of(order));
-        FreightBillRequest request = request(List.of(itemReq(null, 11L)));
+    void applyItems_shouldRejectDuplicateSourceItemWithinSameBill() {
+        FreightBillRequest request = request(List.of(itemReq(null, 11L), itemReq(null, 11L)));
 
         assertThatThrownBy(() -> service.applyItems(new FreightBill(), request, () -> 100L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("全部明细");
+                .hasMessageContaining("不能为空或重复");
+    }
+
+    @Test
+    void applyItems_shouldRejectSourceItemOutsideRequestedOrders() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
+        FreightBillRequest request = request(List.of(itemReq(null, 999L)));
+
+        assertThatThrownBy(() -> service.applyItems(new FreightBill(), request, () -> 100L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源销售订单明细不存在");
     }
 
     @Test
@@ -164,63 +285,87 @@ class FreightBillApplyServiceTest {
     }
 
     @Test
-    void applyItems_shouldRejectNonPositiveWeight() {
-        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "0"))));
-        FreightBillRequest request = request(List.of(itemReq(null, 11L)));
+    void applyItems_shouldRejectQuantityExceedingSourceQuantity() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
+        FreightBillRequest request = request(List.of(itemReq(null, 11L, SOURCE_QUANTITY + 1, null)));
 
         assertThatThrownBy(() -> service.applyItems(new FreightBill(), request, () -> 100L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("重量小于等于0");
+                .hasMessageContaining("超过来源销售订单明细数量");
     }
 
     @Test
-    void applyItems_shouldRejectNegativeWeight() {
-        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "-1.000"))));
-        FreightBillRequest request = request(List.of(itemReq(null, 11L)));
-
-        assertThatThrownBy(() -> service.applyItems(new FreightBill(), request, () -> 100L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("重量小于等于0");
-    }
-
-    @Test
-    void applyItems_shouldRejectChangedSourceSet() {
-        FreightBill entity = new FreightBill();
-        FreightBillSourceOrder rel = new FreightBillSourceOrder();
-        rel.setSourceSalesOrderId(2L); // 已有来源 2，请求来源 1
-        rel.setActiveFlag(true);
-        entity.getSourceOrders().add(rel);
-        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "12.500"))));
-        FreightBillRequest request = request(List.of(itemReq(null, 11L)));
-
-        assertThatThrownBy(() -> service.applyItems(entity, request, () -> 100L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("保存后不能新增");
-    }
-
-    @Test
-    void applyItems_shouldRejectOccupiedSourceOrder() {
+    void applyItems_shouldRejectCumulativeOverOccupancy() {
+        // 其他物流单已占用 8 件，本单请求 3 件 → 累计超过来源数量 10
         when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of(1L));
         when(salesOrderSourceQuery.findBySourceItemIds(any()))
-                .thenReturn(List.of(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "12.500")))));
-        when(sourceOrderRepository.findOccupiedSourceOrderIds(any(), any())).thenReturn(List.of(1L));
-        FreightBillRequest request = request(List.of(itemReq(null, 11L)));
+                .thenReturn(List.of(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250")))));
+        when(sourceItemRepository.summarizeOccupiedQuantities(any(), any()))
+                .thenReturn(List.of(occupancy(11L, 8)));
+        FreightBillRequest request = request(List.of(itemReq(null, 11L, 3, null)));
 
         assertThatThrownBy(() -> service.applyItems(new FreightBill(), request, () -> 100L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("已关联其他物流单");
+                .hasMessageContaining("可导入数量不足");
     }
 
     @Test
-    void applyItems_shouldSkipOccupiedCheckWhenNoExistingSourceOrders() {
-        // entity 无来源（空集）→ assertSourceSetImmutable 通过；occupied 空 → 正常
-        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "12.500"))));
+    void applyItems_shouldAllowWithinRemainingOccupancy() {
+        when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of(1L));
+        when(salesOrderSourceQuery.findBySourceItemIds(any()))
+                .thenReturn(List.of(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250")))));
+        when(sourceItemRepository.summarizeOccupiedQuantities(any(), any()))
+                .thenReturn(List.of(occupancy(11L, 8)));
         FreightBill entity = new FreightBill();
 
-        service.applyItems(entity, request(List.of(itemReq(null, 11L))), () -> 100L);
+        service.applyItems(entity, request(List.of(itemReq(null, 11L, 2, null))), () -> 100L);
 
-        assertThat(entity.getItems()).hasSize(1);
-        verify(sourceOrderRepository).findOccupiedSourceOrderIds(any(), any());
+        assertThat(entity.getItems().get(0).getQuantity()).isEqualTo(2);
+    }
+
+    @Test
+    void applyItems_shouldRejectZeroQuantity() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
+        FreightBillRequest request = request(List.of(itemReq(null, 11L, 0, null)));
+
+        assertThatThrownBy(() -> service.applyItems(new FreightBill(), request, () -> 100L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("数量必须大于0");
+    }
+
+    @Test
+    void applyItems_shouldRejectNegativeQuantity() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
+        FreightBillRequest request = request(List.of(itemReq(null, 11L, -1, null)));
+
+        assertThatThrownBy(() -> service.applyItems(new FreightBill(), request, () -> 100L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("数量必须大于0");
+    }
+
+    @Test
+    void applyItems_shouldRejectNonPositiveWeightWhenPieceWeightMissing() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "0"))));
+        FreightBillRequest request = request(List.of(
+                itemReq(null, 11L, null, null, BigDecimal.ZERO)));
+
+        assertThatThrownBy(() -> service.applyItems(new FreightBill(), request, () -> 100L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("重量");
+    }
+
+    @Test
+    void applyItems_shouldRejectFixedFieldMismatch() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
+        FreightBillItemRequest mismatched = new FreightBillItemRequest(
+                null, "SO001", 30L, "结算公司A", 10L, "客户A", 20L, "项目A", 500L, "M001", "螺纹钢",
+                "品牌B", "型钢", "螺纹钢", "HRB400", "12m", 2, "件", new BigDecimal("1.250"), 100,
+                "B001", null, 1L, "库房A", null, null, 11L);
+        FreightBillRequest request = request(List.of(mismatched));
+
+        assertThatThrownBy(() -> service.applyItems(new FreightBill(), request, () -> 100L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("品牌与请求不一致");
     }
 
     /**
@@ -229,15 +374,48 @@ class FreightBillApplyServiceTest {
      */
     @Test
     void resolveSources_shouldLocateOrdersViaScalarProjectionBeforeLock() {
-        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "12.500"))));
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
 
         service.applyItems(new FreightBill(), request(List.of(itemReq(null, 11L))), () -> 100L);
 
-        // 先按标量投影定位父订单 ID 并加锁, 再读取完整快照。
         var order = org.mockito.Mockito.inOrder(
                 salesOrderSourceQuery, sourceAllocationLockService);
         order.verify(salesOrderSourceQuery).findOrderIdsBySourceItemIds(any());
         order.verify(sourceAllocationLockService).lockDocumentSources(any(), any(), any(), any());
         order.verify(salesOrderSourceQuery).findBySourceItemIds(any());
+    }
+
+    @Test
+    void applyItems_shouldExcludeCurrentBillWhenLoadingOccupancy() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
+        FreightBill entity = new FreightBill();
+        entity.setId(77L);
+
+        service.applyItems(entity, request(List.of(itemReq(null, 11L))), () -> 100L);
+
+        verify(sourceItemRepository).summarizeOccupiedQuantities(any(), eq(77L));
+    }
+
+    @Test
+    void applyItems_shouldNotQueryOccupancyWhenNoSourceItems() {
+        when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of());
+        when(salesOrderSourceQuery.findBySourceItemIds(any())).thenReturn(List.of());
+        FreightBillRequest request = request(List.of(itemReq(null, 11L)));
+
+        assertThatThrownBy(() -> service.applyItems(new FreightBill(), request, () -> 100L))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void applyItems_shouldTolerateNullOccupancySummary() {
+        when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of(1L));
+        when(salesOrderSourceQuery.findBySourceItemIds(any()))
+                .thenReturn(List.of(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250")))));
+        lenient().when(sourceItemRepository.summarizeOccupiedQuantities(any(), anyLong())).thenReturn(List.of());
+        FreightBill entity = new FreightBill();
+
+        service.applyItems(entity, request(List.of(itemReq(null, 11L, 1, null))), () -> 100L);
+
+        assertThat(entity.getItems()).hasSize(1);
     }
 }

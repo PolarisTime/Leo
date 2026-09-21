@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.sales.api.SalesOrderItemOccupancyQuery;
 import com.leo.erp.sales.api.SalesOrderSourceItemSnapshot;
 import com.leo.erp.sales.api.SalesOrderSourceSnapshot;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
@@ -14,9 +15,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -29,6 +32,9 @@ class SalesOrderLogisticsSourceQueryServiceTest {
 
     @Mock
     private SalesOrderRepository salesOrderRepository;
+
+    @Mock
+    private SalesOrderItemOccupancyQuery occupancyQuery;
 
     @InjectMocks
     private SalesOrderLogisticsSourceQueryService service;
@@ -182,5 +188,45 @@ class SalesOrderLogisticsSourceQueryServiceTest {
         assertThat(result).containsExactly(2L, 3L);
         verify(salesOrderRepository, org.mockito.Mockito.never())
                 .findAllWithItemsBySourceItemIds(any());
+    }
+
+    // ---------- 行级剩余数量 ----------
+
+    @Test
+    void findByOrderIds_shouldComputeRemainingQuantityFromOccupancy() {
+        SalesOrder order = order(1L, "SO001");
+        order.setItems(List.of(item(11L), item(12L)));
+        when(salesOrderRepository.findByIdInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        lenient().when(occupancyQuery.occupiedQuantities(any())).thenReturn(Map.of(11L, 4));
+
+        List<SalesOrderSourceSnapshot> result = service.findByOrderIds(List.of(1L));
+
+        SalesOrderSourceItemSnapshot occupiedItem = result.get(0).items().get(0);
+        SalesOrderSourceItemSnapshot freeItem = result.get(0).items().get(1);
+        assertThat(occupiedItem.remainingQuantity()).isEqualTo(6);
+        assertThat(freeItem.remainingQuantity()).isEqualTo(10);
+    }
+
+    @Test
+    void findByOrderIds_shouldNeverReturnNegativeRemainingQuantity() {
+        SalesOrder order = order(1L, "SO001");
+        order.setItems(List.of(item(11L)));
+        when(salesOrderRepository.findByIdInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        lenient().when(occupancyQuery.occupiedQuantities(any())).thenReturn(Map.of(11L, 99));
+
+        List<SalesOrderSourceSnapshot> result = service.findByOrderIds(List.of(1L));
+
+        assertThat(result.get(0).items().get(0).remainingQuantity()).isZero();
+    }
+
+    @Test
+    void findByOrderIds_shouldTreatMissingOccupancyAsFullRemaining() {
+        SalesOrder order = order(1L, "SO001");
+        order.setItems(List.of(item(11L)));
+        when(salesOrderRepository.findByIdInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+
+        List<SalesOrderSourceSnapshot> result = service.findByOrderIds(List.of(1L));
+
+        assertThat(result.get(0).items().get(0).remainingQuantity()).isEqualTo(10);
     }
 }

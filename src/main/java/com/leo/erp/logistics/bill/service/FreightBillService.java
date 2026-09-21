@@ -343,6 +343,7 @@ public class FreightBillService {
     protected void afterDelete(FreightBill entity) {
         documentChargeItemService.removeAll(MODULE_KEY, entity.getId());
         entity.getSourceOrders().forEach(source -> source.setActiveFlag(false));
+        entity.getSourceItems().forEach(source -> source.setActiveFlag(false));
         publishEvent(entity, "FREIGHT_BILL_DELETED", "删除", "删除物流单 " + entity.getBillNo());
     }
 

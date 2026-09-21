@@ -7,9 +7,11 @@ import java.math.BigDecimal;
 /**
  * 物流单明细请求。
  * <p>
- * 明细必须整单从销售订单导入（后端校验来源明细集合必须等于销售订单全部明细），
- * 保存时后端按 sourceSalesOrderItemId 从销售订单明细加载完整字段；其余字段仅为旧
- * 客户端兼容保留，不参与保存（后端以来源明细为准）。
+ * 明细按 {@code sourceSalesOrderItemId} 从销售订单行级导入，允许部分导入/拆分：
+ * 请求行必须是所选销售订单明细的子集，且单内不允许重复引用同一来源行。
+ * 品牌/规格/仓库/件重等固定字段以来源明细为准（显式提供时必须与来源一致）；
+ * {@code quantity} 缺省时自动引用来源快照数量，显式给出则以请求为准（不得超过来源剩余额度）；
+ * {@code weightTon} 显式给出且大于 0 时按过磅重量采用，否则按「来源件重 × 数量」换算。
  */
 public record FreightBillItemRequest(
         Long id,

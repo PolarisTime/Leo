@@ -85,7 +85,8 @@ public class FreightBillSalesOrderCandidateResponseAssembler {
                 item.weightTon(),
                 item.unitPrice(),
                 item.amount(),
-                item.originalWeightTon()
+                item.originalWeightTon(),
+                item.remainingQuantity()
         );
     }
 }

@@ -41,7 +41,8 @@ class CustomerStatementResponseAssemblerTest {
         SalesOrderSourceItemSnapshot sourceItem = new SalesOrderSourceItemSnapshot(
                 101L, 1, null, "M-001", "品牌", "类别", "材质", "规格", null,
                 "吨", null, null, null, null, null, null, null, null, 1, "吨",
-                BigDecimal.ONE, 1, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE
+                BigDecimal.ONE, 1, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE,
+                1
         );
         SalesOrderSourceSnapshot sourceOrder = new SalesOrderSourceSnapshot(
                 100L, "SO-001", null, null, null, 20L, "客户A", null, "项目A",

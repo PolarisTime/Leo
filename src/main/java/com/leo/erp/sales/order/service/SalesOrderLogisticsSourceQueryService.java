@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.sales.api.SalesOrderItemOccupancyQuery;
 import com.leo.erp.sales.api.SalesOrderLogisticsSourceQuery;
 import com.leo.erp.sales.api.SalesOrderSourceItemSnapshot;
 import com.leo.erp.sales.api.SalesOrderSourceSnapshot;
@@ -11,14 +12,20 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class SalesOrderLogisticsSourceQueryService implements SalesOrderLogisticsSourceQuery {
 
     private final SalesOrderRepository salesOrderRepository;
+    private final SalesOrderItemOccupancyQuery occupancyQuery;
 
-    public SalesOrderLogisticsSourceQueryService(SalesOrderRepository salesOrderRepository) {
+    public SalesOrderLogisticsSourceQueryService(SalesOrderRepository salesOrderRepository,
+                                                 SalesOrderItemOccupancyQuery occupancyQuery) {
         this.salesOrderRepository = salesOrderRepository;
+        this.occupancyQuery = occupancyQuery;
     }
 
     @Override
@@ -27,9 +34,7 @@ public class SalesOrderLogisticsSourceQueryService implements SalesOrderLogistic
         if (orderIds == null || orderIds.isEmpty()) {
             return List.of();
         }
-        return salesOrderRepository.findByIdInAndDeletedFlagFalse(orderIds).stream()
-                .map(this::toSnapshot)
-                .toList();
+        return toSnapshots(salesOrderRepository.findByIdInAndDeletedFlagFalse(orderIds));
     }
 
     @Override
@@ -38,9 +43,7 @@ public class SalesOrderLogisticsSourceQueryService implements SalesOrderLogistic
         if (sourceItemIds == null || sourceItemIds.isEmpty()) {
             return List.of();
         }
-        return salesOrderRepository.findAllWithItemsBySourceItemIds(sourceItemIds).stream()
-                .map(this::toSnapshot)
-                .toList();
+        return toSnapshots(salesOrderRepository.findAllWithItemsBySourceItemIds(sourceItemIds));
     }
 
     @Override
@@ -52,7 +55,22 @@ public class SalesOrderLogisticsSourceQueryService implements SalesOrderLogistic
         return salesOrderRepository.findOrderIdsBySourceItemIds(sourceItemIds);
     }
 
-    private SalesOrderSourceSnapshot toSnapshot(SalesOrder order) {
+    private List<SalesOrderSourceSnapshot> toSnapshots(List<SalesOrder> orders) {
+        if (orders.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> sourceItemIds = orders.stream()
+                .flatMap(order -> order.getItems().stream())
+                .map(SalesOrderItem::getId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, Integer> occupiedQuantities = occupancyQuery.occupiedQuantities(sourceItemIds);
+        return orders.stream()
+                .map(order -> toSnapshot(order, occupiedQuantities))
+                .toList();
+    }
+
+    private SalesOrderSourceSnapshot toSnapshot(SalesOrder order, Map<Long, Integer> occupiedQuantities) {
         return new SalesOrderSourceSnapshot(
                 order.getId(),
                 order.getOrderNo(),
@@ -72,11 +90,16 @@ public class SalesOrderLogisticsSourceQueryService implements SalesOrderLogistic
                 order.getStatus(),
                 order.isDeletedFlag(),
                 order.getRemark(),
-                order.getItems().stream().map(this::toItemSnapshot).toList()
+                order.getItems().stream()
+                        .map(item -> toItemSnapshot(item, occupiedQuantities))
+                        .toList()
         );
     }
 
-    private SalesOrderSourceItemSnapshot toItemSnapshot(SalesOrderItem item) {
+    private SalesOrderSourceItemSnapshot toItemSnapshot(SalesOrderItem item, Map<Long, Integer> occupiedQuantities) {
+        Integer remainingQuantity = item.getId() == null
+                ? null
+                : Math.max(item.getQuantity() - occupiedQuantities.getOrDefault(item.getId(), 0), 0);
         return new SalesOrderSourceItemSnapshot(
                 item.getId(),
                 item.getLineNo(),
@@ -103,7 +126,8 @@ public class SalesOrderLogisticsSourceQueryService implements SalesOrderLogistic
                 item.getWeightTon(),
                 item.getUnitPrice(),
                 item.getAmount(),
-                item.getOriginalWeightTon()
+                item.getOriginalWeightTon(),
+                remainingQuantity
         );
     }
 }

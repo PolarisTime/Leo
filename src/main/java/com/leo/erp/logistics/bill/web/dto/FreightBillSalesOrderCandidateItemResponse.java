@@ -28,6 +28,7 @@ public record FreightBillSalesOrderCandidateItemResponse(
         BigDecimal weightTon,
         BigDecimal unitPrice,
         BigDecimal amount,
-        BigDecimal originalWeightTon
+        BigDecimal originalWeightTon,
+        Integer remainingQuantity
 ) {
 }

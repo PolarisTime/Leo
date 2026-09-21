@@ -79,4 +79,7 @@ public class FreightBill extends AbstractAuditableEntity implements StatusAwareE
 
     @OneToMany(mappedBy = "freightBill", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<FreightBillSourceOrder> sourceOrders = new LinkedHashSet<>();
+
+    @OneToMany(mappedBy = "freightBill", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<FreightBillSourceItem> sourceItems = new LinkedHashSet<>();
 }
