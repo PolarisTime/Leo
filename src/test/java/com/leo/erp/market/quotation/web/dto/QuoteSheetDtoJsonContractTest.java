@@ -32,7 +32,8 @@ class QuoteSheetDtoJsonContractTest {
                 LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30.00"),
                 false, true, "报价", null,
                 List.of(new QuoteSheetResponse.BrandResponse(1L, "中天", new BigDecimal("30.00"), 0)),
-                List.of(new QuoteSheetResponse.ItemResponse(2L, 1, "螺纹钢", "HRB400E", 12, "9米",
+                List.of(new QuoteSheetResponse.ItemResponse(2L, 1, QuoteRowType.PRODUCT, "螺纹钢",
+                        "HRB400E", 12, "9米", "急单",
                         new BigDecimal("10.00000000"),
                         List.of(new QuoteSheetResponse.ItemPriceResponse(
                                 3L, "中天", new BigDecimal("3280.00"), 77L, "杭州物资")))),
@@ -47,6 +48,21 @@ class QuoteSheetDtoJsonContractTest {
         assertThat(json).contains("\"specQuantityLocked\":true");
         assertThat(json).contains("\"version\":\"7\"");
         assertThat(json).contains("\"rowType\":\"PRODUCT\"");
+        assertThat(json).contains("\"remark\":\"急单\"");
+    }
+
+    @Test
+    void request_deserializesItemRemark() throws Exception {
+        String json = "{\"name\":\"9月9日报单\",\"orderDate\":\"2026-09-09\",\"refDate\":\"2026-09-10\","
+                + "\"refPeriod\":\"9:30 上午\","
+                + "\"brands\":[{\"brandName\":\"中天\",\"freight\":30}],"
+                + "\"items\":[{\"rowType\":\"PRODUCT\",\"category\":\"螺纹钢\",\"material\":\"HRB400E\","
+                + "\"spec\":12,\"length\":\"9米\",\"ton\":10,\"remark\":\"发货前确认\","
+                + "\"prices\":[{\"brandName\":\"中天\",\"spotPrice\":3280}]}]}";
+
+        QuoteSheetRequest request = objectMapper.readValue(json, QuoteSheetRequest.class);
+
+        assertThat(request.items().get(0).remark()).isEqualTo("发货前确认");
     }
 
     @Test

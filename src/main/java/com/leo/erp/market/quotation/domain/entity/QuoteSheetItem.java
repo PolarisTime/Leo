@@ -57,6 +57,10 @@ public class QuoteSheetItem {
     @Column(name = "ton", precision = 18, scale = 8)
     private BigDecimal ton;
 
+    /** 商品行备注(隔断行为空)。 */
+    @Column(name = "remark", length = 255)
+    private String remark;
+
     /** LAZY 反向集合: 不参与 fetch join(避免与 items 双 bag), 按 50 一批懒加载避免 N+1。 */
     @OneToMany(mappedBy = "item", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @BatchSize(size = 50)

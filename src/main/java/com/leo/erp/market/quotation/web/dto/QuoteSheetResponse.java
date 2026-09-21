@@ -44,12 +44,19 @@ public record QuoteSheetResponse(
     }
 
     public record ItemResponse(Long id, Integer lineNo, QuoteRowType rowType, String category, String material,
-                               Integer spec, String length, BigDecimal ton, List<ItemPriceResponse> prices) {
+                               Integer spec, String length, String remark, BigDecimal ton,
+                               List<ItemPriceResponse> prices) {
 
-        /** 兼容旧调用方: 未显式传行类型时按商品行处理。 */
+        /** 兼容旧调用方: 未显式传行类型与行备注。 */
         public ItemResponse(Long id, Integer lineNo, String category, String material, Integer spec,
                             String length, BigDecimal ton, List<ItemPriceResponse> prices) {
-            this(id, lineNo, QuoteRowType.PRODUCT, category, material, spec, length, ton, prices);
+            this(id, lineNo, QuoteRowType.PRODUCT, category, material, spec, length, null, ton, prices);
+        }
+
+        /** 兼容旧调用方: 未携带行备注。 */
+        public ItemResponse(Long id, Integer lineNo, QuoteRowType rowType, String category, String material,
+                            Integer spec, String length, BigDecimal ton, List<ItemPriceResponse> prices) {
+            this(id, lineNo, rowType, category, material, spec, length, null, ton, prices);
         }
     }
 }

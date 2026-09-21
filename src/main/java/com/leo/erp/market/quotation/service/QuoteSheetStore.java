@@ -318,13 +318,14 @@ public class QuoteSheetStore {
         validateItemPrices(item, brandNames);
     }
 
-    /** 隔断行仅作视觉分组: 不得携带商品字段、吨位或现货价。 */
+    /** 隔断行仅作视觉分组: 不得携带商品字段、吨位、备注或现货价。 */
     private void validateSeparatorRow(QuoteSheetRequest.ItemRequest item) {
         boolean carriesProduct = !isBlank(item.category())
                 || !isBlank(item.material())
                 || item.spec() != null
                 || !isBlank(item.length())
-                || item.ton() != null;
+                || item.ton() != null
+                || !isBlank(item.remark());
         if (carriesProduct) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "隔断行不能携带商品信息");
         }
@@ -762,6 +763,7 @@ public class QuoteSheetStore {
             item.setSpec(null);
             item.setLength(null);
             item.setTon(null);
+            item.setRemark(null);
             item.getPrices().clear();
             return;
         }
@@ -770,6 +772,7 @@ public class QuoteSheetStore {
         item.setSpec(request.spec());
         item.setLength(request.length());
         item.setTon(request.ton());
+        item.setRemark(request.remark());
         Map<String, QuoteSheetItemPrice> existingByBrandName = new HashMap<>();
         for (QuoteSheetItemPrice price : item.getPrices()) {
             existingByBrandName.put(price.getBrandName(), price);
@@ -813,7 +816,7 @@ public class QuoteSheetStore {
     private QuoteSheetResponse.ItemResponse toItemResponse(QuoteSheetItem item) {
         return new QuoteSheetResponse.ItemResponse(
                 item.getId(), item.getLineNo(), item.getRowType(), item.getCategory(), item.getMaterial(),
-                item.getSpec(), item.getLength(), item.getTon(),
+                item.getSpec(), item.getLength(), item.getRemark(), item.getTon(),
                 item.getPrices().stream()
                         .map(price -> new QuoteSheetResponse.ItemPriceResponse(
                                 price.getId(), price.getBrandName(), price.getSpotPrice(),

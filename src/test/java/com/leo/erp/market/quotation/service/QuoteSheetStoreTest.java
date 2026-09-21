@@ -1664,6 +1664,55 @@ class QuoteSheetStoreTest {
         assertThat(write.item().prices()).isEmpty();
     }
 
+    // ------------------------------------------------------- 行级备注
+
+    /** 商品行备注随行保存, 并在响应中回传。 */
+    @Test
+    void create_persistsProductRowRemark() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 301L);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = store().create(requestWithItems(
+                List.of(itemRequestWithRemark("发货前确认", "10", "3280"))));
+
+        assertThat(response.items().get(0).remark()).isEqualTo("发货前确认");
+    }
+
+    /** 隔断行清空备注: 整体替换为隔断行后备注为 null。 */
+    @Test
+    void updateItem_clearsRemarkWhenConvertedToSeparator() {
+        QuoteSheet sheet = sheetWithItem(9L);
+        sheet.setVersion(1L);
+        sheet.getItems().get(0).setRemark("原备注");
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetItemWrite write = store().updateItem(9L, 301L, separatorRequest(), 1L);
+
+        assertThat(write.item().rowType()).isEqualTo(QuoteRowType.SEPARATOR);
+        assertThat(write.item().remark()).isNull();
+    }
+
+    /** 隔断行携带备注: 拒绝。 */
+    @Test
+    void create_rejectsSeparatorRowWithRemark() {
+        QuoteSheetRequest.ItemRequest bad = new QuoteSheetRequest.ItemRequest(
+                QuoteRowType.SEPARATOR, null, null, null, null, "隔断备注", null, List.of());
+        assertThatThrownBy(() -> store().create(requestWithItems(
+                List.of(itemRequest("螺纹钢", "HRB400E", 12, "10", "3280"), bad))))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    private static QuoteSheetRequest.ItemRequest itemRequestWithRemark(String remark, String ton,
+                                                                       String spotPrice) {
+        return new QuoteSheetRequest.ItemRequest(
+                QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米", remark, new BigDecimal(ton),
+                List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal(spotPrice), null)));
+    }
+
     /** 规格数量锁定期间: 新增隔断行同样被拒绝(隔断行也改变行结构)。 */
     @Test
     void addItem_rejectsSeparatorRowWhenSpecQuantityLocked() {
