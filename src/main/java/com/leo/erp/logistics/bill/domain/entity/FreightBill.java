@@ -5,6 +5,7 @@ import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -80,6 +81,8 @@ public class FreightBill extends AbstractAuditableEntity implements StatusAwareE
     @OneToMany(mappedBy = "freightBill", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<FreightBillSourceOrder> sourceOrders = new LinkedHashSet<>();
 
+    /** LAZY 行级来源占用: 仅编辑/删除路径访问, 不参与详情抓取图(避免多集合笛卡尔放大)。 */
     @OneToMany(mappedBy = "freightBill", cascade = CascadeType.ALL, orphanRemoval = true)
+    @BatchSize(size = 50)
     private Set<FreightBillSourceItem> sourceItems = new LinkedHashSet<>();
 }
