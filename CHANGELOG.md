@@ -1,3 +1,17 @@
+# [11.8.0](https://github.com/PolarisTime/Leo/compare/v11.7.2...v11.8.0) (2026-09-21)
+
+
+### Features
+
+* **logistics:** 物流单支持行级拆分与部分导入 ([571a276](https://github.com/PolarisTime/Leo/commit/571a276ea1e9758ab03955edeb5536d86c4b4b41))
+* **purchase:** 采购入库支持行级拆分与多订单合并 ([d495a31](https://github.com/PolarisTime/Leo/commit/d495a31a97351f286fce307d5848857e5b39eef1))
+* **sales:** 部分入库后按行放行销售并调整预付款抵扣 ([8dd39fe](https://github.com/PolarisTime/Leo/commit/8dd39fe5724b6a518332337049f21a30cc4ed403))
+
+
+### Performance Improvements
+
+* **logistics:** 物流单详情抓取图移除行级占用集合 ([bb26845](https://github.com/PolarisTime/Leo/commit/bb26845c11d511386b13bbc0114f9755cefe987d))
+
 ## [11.7.2](https://github.com/PolarisTime/Leo/compare/v11.7.1...v11.7.2) (2026-09-21)
 
 
