@@ -65,6 +65,9 @@ public class PurchaseInboundMutationGuardService {
     }
 
     void prepareStatusTransition(PurchaseInbound inbound, String currentStatus, String nextStatus) {
+        if (PurchaseInboundSourceStatusGuard.isReverseStatusTransition(currentStatus, nextStatus)) {
+            purchaseInboundSourceStatusGuard.lockReverseReferenceSources(inbound);
+        }
         lockSourcePurchaseOrderItems(inbound, null);
         if (!StatusConstants.DRAFT.equals(nextStatus)) {
             assertAuditableLineItems(inbound);
@@ -73,6 +76,7 @@ public class PurchaseInboundMutationGuardService {
     }
 
     void assertDeletionAllowed(PurchaseInbound inbound) {
+        purchaseInboundSourceStatusGuard.lockReverseReferenceSources(inbound);
         lockSourcePurchaseOrderItems(inbound, null);
         purchaseInboundSourceStatusGuard.assertDeletionAllowed(inbound);
     }

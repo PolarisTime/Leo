@@ -9,6 +9,7 @@ import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundItemRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -20,6 +21,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -151,6 +153,30 @@ class PurchaseInboundMutationGuardServiceTest {
     }
 
     @Test
+    void prepareStatusTransition_shouldAcquireReverseReferenceLocksBeforePurchaseOrderLock() {
+        PurchaseInbound entity = inbound(StatusConstants.AUDITED);
+        entity.setItems(List.of(item(11L, 5, null, null)));
+
+        service.prepareStatusTransition(entity, StatusConstants.AUDITED, StatusConstants.DRAFT);
+
+        InOrder inOrder = inOrder(purchaseInboundSourceStatusGuard, sourceAllocationLockService);
+        inOrder.verify(purchaseInboundSourceStatusGuard).lockReverseReferenceSources(entity);
+        inOrder.verify(sourceAllocationLockService).lockTradeItemSources(List.of(11L), List.of(), List.of());
+        inOrder.verify(purchaseInboundSourceStatusGuard).assertStatusTransitionAllowed(
+                entity, StatusConstants.AUDITED, StatusConstants.DRAFT);
+    }
+
+    @Test
+    void prepareStatusTransition_shouldNotPreLockReverseReferenceSourcesWhenAuditing() {
+        PurchaseInbound entity = inbound(StatusConstants.DRAFT);
+        entity.setItems(List.of(item(11L, 5, "过磅", "1.500")));
+
+        service.prepareStatusTransition(entity, StatusConstants.DRAFT, StatusConstants.AUDITED);
+
+        verify(purchaseInboundSourceStatusGuard, never()).lockReverseReferenceSources(any());
+    }
+
+    @Test
     void prepareStatusTransition_shouldRejectZeroQuantityOnAudit() {
         PurchaseInbound entity = inbound(StatusConstants.DRAFT);
         PurchaseInboundItem bad = item(11L, 0, null, null);
@@ -214,8 +240,10 @@ class PurchaseInboundMutationGuardServiceTest {
 
         service.assertDeletionAllowed(entity);
 
-        verify(sourceAllocationLockService).lockTradeItemSources(List.of(), List.of(), List.of());
-        verify(purchaseInboundSourceStatusGuard).assertDeletionAllowed(entity);
+        InOrder inOrder = inOrder(purchaseInboundSourceStatusGuard, sourceAllocationLockService);
+        inOrder.verify(purchaseInboundSourceStatusGuard).lockReverseReferenceSources(entity);
+        inOrder.verify(sourceAllocationLockService).lockTradeItemSources(List.of(), List.of(), List.of());
+        inOrder.verify(purchaseInboundSourceStatusGuard).assertDeletionAllowed(entity);
     }
 
     @Test

@@ -49,11 +49,15 @@ public class PurchaseInboundSourceStatusGuard {
             assertSourcePurchaseOrderNotCompleted(inbound);
             assertSourcePurchaseOrderFullyAllocated(inbound);
         }
-        if (StatusConstants.DRAFT.equals(nextStatus)
-                && (StatusConstants.AUDITED.equals(currentStatus)
-                || StatusConstants.INBOUND_COMPLETED.equals(currentStatus))) {
+        if (isReverseStatusTransition(currentStatus, nextStatus)) {
             assertNoActiveSalesOrderReferences(inbound, "反审核");
         }
+    }
+
+    static boolean isReverseStatusTransition(String currentStatus, String nextStatus) {
+        return StatusConstants.DRAFT.equals(nextStatus)
+                && (StatusConstants.AUDITED.equals(currentStatus)
+                || StatusConstants.INBOUND_COMPLETED.equals(currentStatus));
     }
 
     void assertDeletionAllowed(PurchaseInbound inbound) {
@@ -124,10 +128,41 @@ public class PurchaseInboundSourceStatusGuard {
         }
     }
 
+    /**
+     * 预锁反审核/删除需要检查的全部来源行（采购订单明细与采购入库明细）。
+     *
+     * <p>入库锁 rank 20/21 低于采购订单 30/31，因此必须在调用方持有采购订单锁之前调用，
+     * 由本方法一次性按全局顺序获取，避免与「先锁入库、再锁采购订单」的事务形成 AB-BA 死锁。
+     */
+    void lockReverseReferenceSources(PurchaseInbound inbound) {
+        ReverseReferenceSources references = resolveReverseReferenceSources(inbound);
+        sourceAllocationLockService.lockTradeItemSources(
+                references.sourceItemIds(), references.inboundItemIds(), List.of());
+    }
+
     private void assertNoActiveSalesOrderReferences(PurchaseInbound inbound, String action) {
+        ReverseReferenceSources references = resolveReverseReferenceSources(inbound);
+        if (references.sourceItemIds().isEmpty()) {
+            return;
+        }
+        sourceAllocationLockService.lockTradeItemSources(
+                references.sourceItemIds(), references.inboundItemIds(), List.of());
+        boolean referencedByPurchaseOrder =
+                purchaseOrderReferenceGuard.hasActivePurchaseOrderItemReferences(references.sourceItemIds());
+        boolean referencedByInbound = !references.inboundItemIds().isEmpty()
+                && purchaseOrderReferenceGuard.hasActiveInboundItemReferences(references.inboundItemIds());
+        if (referencedByPurchaseOrder || referencedByInbound) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "来源采购订单仍被销售订单引用，不能" + action + "采购入库，请先删除相关销售订单"
+            );
+        }
+    }
+
+    private ReverseReferenceSources resolveReverseReferenceSources(PurchaseInbound inbound) {
         List<Long> currentSourceItemIds = sourceItemIds(inbound);
         if (currentSourceItemIds.isEmpty()) {
-            return;
+            return new ReverseReferenceSources(List.of(), List.of());
         }
         List<Long> sourceItemIds = purchaseOrderItemQueryService.findActiveByIdIn(currentSourceItemIds).stream()
                 .map(PurchaseOrderItem::getPurchaseOrder)
@@ -145,17 +180,10 @@ public class PurchaseInboundSourceStatusGuard {
                 .distinct()
                 .sorted()
                 .toList();
-        sourceAllocationLockService.lockTradeItemSources(sourceItemIds, inboundItemIds, List.of());
-        boolean referencedByPurchaseOrder = !sourceItemIds.isEmpty()
-                && purchaseOrderReferenceGuard.hasActivePurchaseOrderItemReferences(sourceItemIds);
-        boolean referencedByInbound = !inboundItemIds.isEmpty()
-                && purchaseOrderReferenceGuard.hasActiveInboundItemReferences(inboundItemIds);
-        if (referencedByPurchaseOrder || referencedByInbound) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "来源采购订单仍被销售订单引用，不能" + action + "采购入库，请先删除相关销售订单"
-            );
-        }
+        return new ReverseReferenceSources(sourceItemIds, inboundItemIds);
+    }
+
+    private record ReverseReferenceSources(List<Long> sourceItemIds, List<Long> inboundItemIds) {
     }
 
     private List<Long> sourceItemIds(PurchaseInbound inbound) {
