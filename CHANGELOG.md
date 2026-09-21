@@ -1,3 +1,10 @@
+# [11.7.0](https://github.com/PolarisTime/Leo/compare/v11.6.0...v11.7.0) (2026-09-21)
+
+
+### Features
+
+* **quotation:** 报价单商品行支持行级备注 ([7b26168](https://github.com/PolarisTime/Leo/commit/7b2616854be28f427531a04d5ffb6ccb72693617))
+
 # [11.6.0](https://github.com/PolarisTime/Leo/compare/v11.5.1...v11.6.0) (2026-09-20)
 
 
