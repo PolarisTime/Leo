@@ -8,7 +8,6 @@ import com.leo.erp.purchase.api.PurchaseOrderSalesAllocationQuery;
 import com.leo.erp.purchase.api.PurchaseSupplierLedgerLock;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
-import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
@@ -21,22 +20,22 @@ import java.util.stream.Collectors;
 @Service
 public class PurchaseInboundCompletionSyncService {
 
-    private final PurchaseInboundRepository repository;
     private final PurchaseInboundSourceValidator sourceValidator;
     private final PurchaseInboundAllocationService allocationService;
+    private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
     private final PurchaseSupplierLedgerLock supplierLedgerLock;
     private final PurchaseOrderSalesAllocationQuery purchaseOrderSalesAllocationQuery;
     private final PurchaseOrderAuditPublisher purchaseOrderAuditPublisher;
 
-    public PurchaseInboundCompletionSyncService(PurchaseInboundRepository repository,
-                                                PurchaseInboundSourceValidator sourceValidator,
+    public PurchaseInboundCompletionSyncService(PurchaseInboundSourceValidator sourceValidator,
                                                 PurchaseInboundAllocationService allocationService,
+                                                PurchaseInboundItemQueryService purchaseInboundItemQueryService,
                                                 PurchaseSupplierLedgerLock supplierLedgerLock,
                                                 PurchaseOrderSalesAllocationQuery purchaseOrderSalesAllocationQuery,
                                                 PurchaseOrderAuditPublisher purchaseOrderAuditPublisher) {
-        this.repository = repository;
         this.sourceValidator = sourceValidator;
         this.allocationService = allocationService;
+        this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
         this.supplierLedgerLock = supplierLedgerLock;
         this.purchaseOrderSalesAllocationQuery = purchaseOrderSalesAllocationQuery;
         this.purchaseOrderAuditPublisher = purchaseOrderAuditPublisher;
@@ -114,19 +113,9 @@ public class PurchaseInboundCompletionSyncService {
         if (sourceItemIds.isEmpty()) {
             return;
         }
-        List<PurchaseInbound> allInbounds = repository
-                .findAllActiveBySourcePurchaseOrderItemIds(sourceItemIds);
-        boolean allInboundCompleted = allInbounds.stream()
-                .allMatch(i -> StatusConstants.INBOUND_COMPLETED.equals(i.getStatus()));
-        Map<Long, Integer> receivedQtyByItemId = allInbounds.stream()
-                .flatMap(inbound -> inbound.getItems().stream())
-                .filter(item -> item.getSourcePurchaseOrderItemId() != null)
-                .collect(Collectors.groupingBy(
-                        PurchaseInboundItem::getSourcePurchaseOrderItemId,
-                        Collectors.summingInt(
-                                item -> item.getQuantity() != null ? item.getQuantity() : 0
-                        )
-                ));
+        // 完成采购判定按累计有效入库件数: 未删除且状态为已审核/完成入库的入库单;
+        // 草稿不参与, 历史部分入库单无需回填为完成入库即可计入。
+        Map<Long, Integer> receivedQtyByItemId = loadEffectiveReceivedQuantityMap(sourceItemIds);
 
         boolean allFulfilled = purchaseOrder.getItems().stream().allMatch(item -> {
             int expected = item.getQuantity() != null ? item.getQuantity() : 0;
@@ -134,7 +123,7 @@ public class PurchaseInboundCompletionSyncService {
             return expected >= 1 && expected == actual;
         });
 
-        if (allInboundCompleted && allFulfilled) {
+        if (allFulfilled) {
             assertLegacyDirectSalesCapacityCovered(sourceItemIds, receivedQtyByItemId);
             if (!StatusConstants.PURCHASE_COMPLETED.equals(purchaseOrder.getStatus())) {
                 lockSupplierLedger(purchaseOrder);
@@ -184,6 +173,20 @@ public class PurchaseInboundCompletionSyncService {
                 );
             }
         }
+    }
+
+    /**
+     * 累计有效入库件数：仅统计未删除且状态为已审核/完成入库的入库单，草稿不参与完成度。
+     */
+    private Map<Long, Integer> loadEffectiveReceivedQuantityMap(List<Long> sourceItemIds) {
+        Map<Long, Integer> receivedQtyByItemId = new java.util.HashMap<>();
+        purchaseInboundItemQueryService
+                .summarizeEffectiveQuantityBySourcePurchaseOrderItemIds(sourceItemIds)
+                .forEach((sourceItemId, totalQuantity) -> receivedQtyByItemId.put(
+                        sourceItemId,
+                        totalQuantity == null ? 0 : Math.toIntExact(totalQuantity)
+                ));
+        return receivedQtyByItemId;
     }
 
     private void lockSupplierLedger(PurchaseOrder purchaseOrder) {

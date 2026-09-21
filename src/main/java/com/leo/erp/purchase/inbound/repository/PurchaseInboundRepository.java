@@ -71,16 +71,4 @@ public interface PurchaseInboundRepository extends JpaRepository<PurchaseInbound
      */
     @EntityGraph(attributePaths = "items")
     List<PurchaseInbound> findAllByIdIn(Collection<Long> ids);
-
-    @EntityGraph(attributePaths = "items")
-    @Query("""
-            select distinct inbound
-            from PurchaseInbound inbound
-            join inbound.items item
-            where inbound.deletedFlag = false
-              and item.sourcePurchaseOrderItemId in :sourcePurchaseOrderItemIds
-            """)
-    List<PurchaseInbound> findAllActiveBySourcePurchaseOrderItemIds(
-            @Param("sourcePurchaseOrderItemIds") Collection<Long> sourcePurchaseOrderItemIds
-    );
 }

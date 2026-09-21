@@ -7,7 +7,6 @@ import com.leo.erp.purchase.api.PurchaseOrderSalesAllocationQuery;
 import com.leo.erp.purchase.api.PurchaseSupplierLedgerLock;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
-import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
@@ -28,17 +27,21 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 采购入库完成度同步测试：完成采购仅按累计有效入库件数判定，
+ * 不再要求历史入库单全部为「完成入库」，草稿不计入。
+ */
 @ExtendWith(MockitoExtension.class)
 class PurchaseInboundCompletionSyncServiceTest {
-
-    @Mock
-    private PurchaseInboundRepository repository;
 
     @Mock
     private PurchaseInboundSourceValidator sourceValidator;
 
     @Mock
     private PurchaseInboundAllocationService allocationService;
+
+    @Mock
+    private PurchaseInboundItemQueryService purchaseInboundItemQueryService;
 
     @Mock
     private PurchaseSupplierLedgerLock supplierLedgerLock;
@@ -54,9 +57,9 @@ class PurchaseInboundCompletionSyncServiceTest {
     @BeforeEach
     void setUp() {
         service = new PurchaseInboundCompletionSyncService(
-                repository,
                 sourceValidator,
                 allocationService,
+                purchaseInboundItemQueryService,
                 supplierLedgerLock,
                 purchaseOrderSalesAllocationQuery,
                 purchaseOrderAuditPublisher
@@ -67,6 +70,12 @@ class PurchaseInboundCompletionSyncServiceTest {
         PurchaseInboundItem item = new PurchaseInboundItem();
         item.setSourcePurchaseOrderItemId(sourceItemId);
         item.setQuantity(quantity);
+        return item;
+    }
+
+    private PurchaseInboundItem inboundItemWithWeigh(Long sourceItemId, Integer quantity, String weighWeightTon) {
+        PurchaseInboundItem item = inboundItem(sourceItemId, quantity);
+        item.setWeighWeightTon(new java.math.BigDecimal(weighWeightTon));
         return item;
     }
 
@@ -96,6 +105,13 @@ class PurchaseInboundCompletionSyncServiceTest {
         order.setItems(new ArrayList<>(items));
         return order;
     }
+
+    private void stubEffectiveReceived(List<Long> sourceItemIds, Map<Long, Long> effectiveQuantityByItemId) {
+        when(purchaseInboundItemQueryService.summarizeEffectiveQuantityBySourcePurchaseOrderItemIds(sourceItemIds))
+                .thenReturn(effectiveQuantityByItemId);
+    }
+
+    // ---------- shouldCompleteInbound：当前单是否置完成入库 ----------
 
     @Test
     void shouldCompleteInbound_shouldReturnFalseWhenStatusNotAudited() {
@@ -158,6 +174,8 @@ class PurchaseInboundCompletionSyncServiceTest {
         assertThat(service.shouldCompleteInbound(inbound)).isTrue();
     }
 
+    // ---------- synchronizeSourcePurchaseOrders：订单「完成采购」判定 ----------
+
     @Test
     void synchronizeSourcePurchaseOrders_shouldDoNothingWhenNoSourceIds() {
         PurchaseInbound inbound = inbound(1L, StatusConstants.AUDITED, List.of(inboundItem(null, 10)));
@@ -174,8 +192,7 @@ class PurchaseInboundCompletionSyncServiceTest {
         PurchaseOrderItem sourceItem = orderItem(1L, 10, order);
         order.getItems().add(sourceItem);
         when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(1L))).thenReturn(Map.of(1L, sourceItem));
-        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(1L)))
-                .thenReturn(List.of(inbound(2L, StatusConstants.INBOUND_COMPLETED, List.of(inboundItem(1L, 10)))));
+        stubEffectiveReceived(List.of(1L), Map.of(1L, 10L));
         when(purchaseOrderSalesAllocationQuery.summarizeByPurchaseOrderItemIds(List.of(1L)))
                 .thenReturn(List.of());
 
@@ -185,6 +202,73 @@ class PurchaseInboundCompletionSyncServiceTest {
         verify(supplierLedgerLock).lock(10L, 20L);
         verify(purchaseOrderAuditPublisher).publish(order, "PURCHASE_ORDER_COMPLETED", "完成采购",
                 "采购订单状态 已审核 -> 完成采购");
+    }
+
+    /** 两张「已审核」部分入库单累计等于订单量即可完成采购，历史部分单无需是完成入库。 */
+    @Test
+    void synchronizeSourcePurchaseOrders_shouldCompleteWhenPartialAuditedInboundsSumToOrdered() {
+        PurchaseInbound trigger = inbound(2L, StatusConstants.AUDITED, List.of(inboundItem(1L, 5)));
+        PurchaseOrder order = purchaseOrder(500L, StatusConstants.AUDITED, 10L, 20L, new ArrayList<>());
+        PurchaseOrderItem sourceItem = orderItem(1L, 10, order);
+        order.getItems().add(sourceItem);
+        when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(1L))).thenReturn(Map.of(1L, sourceItem));
+        stubEffectiveReceived(List.of(1L), Map.of(1L, 10L));
+        when(purchaseOrderSalesAllocationQuery.summarizeByPurchaseOrderItemIds(List.of(1L)))
+                .thenReturn(List.of());
+
+        service.synchronizeSourcePurchaseOrders(trigger, false);
+
+        assertThat(order.getStatus()).isEqualTo(StatusConstants.PURCHASE_COMPLETED);
+    }
+
+    /** 过磅类别：完成度按件数口径判定，磅差（过磅重量）不影响是否完成采购。 */
+    @Test
+    void synchronizeSourcePurchaseOrders_shouldDecideCompletionByQuantityNotWeighDifference() {
+        PurchaseInbound trigger = inbound(2L, StatusConstants.AUDITED,
+                List.of(inboundItemWithWeigh(1L, 10, "9.800")));
+        PurchaseOrder order = purchaseOrder(500L, StatusConstants.AUDITED, 10L, 20L, new ArrayList<>());
+        PurchaseOrderItem sourceItem = orderItem(1L, 10, order);
+        order.getItems().add(sourceItem);
+        when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(1L))).thenReturn(Map.of(1L, sourceItem));
+        stubEffectiveReceived(List.of(1L), Map.of(1L, 10L));
+        when(purchaseOrderSalesAllocationQuery.summarizeByPurchaseOrderItemIds(List.of(1L)))
+                .thenReturn(List.of());
+
+        service.synchronizeSourcePurchaseOrders(trigger, false);
+
+        assertThat(order.getStatus()).isEqualTo(StatusConstants.PURCHASE_COMPLETED);
+    }
+
+    /** 只入一部分（有效入库累计仍小于订单量）时不得完成采购。 */
+    @Test
+    void synchronizeSourcePurchaseOrders_shouldNotCompleteWhenPartiallyReceived() {
+        PurchaseInbound trigger = inbound(2L, StatusConstants.AUDITED, List.of(inboundItem(1L, 5)));
+        PurchaseOrder order = purchaseOrder(500L, StatusConstants.AUDITED, 10L, 20L, new ArrayList<>());
+        PurchaseOrderItem sourceItem = orderItem(1L, 10, order);
+        order.getItems().add(sourceItem);
+        when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(1L))).thenReturn(Map.of(1L, sourceItem));
+        stubEffectiveReceived(List.of(1L), Map.of(1L, 5L));
+
+        service.synchronizeSourcePurchaseOrders(trigger, false);
+
+        assertThat(order.getStatus()).isEqualTo(StatusConstants.AUDITED);
+        verify(purchaseOrderAuditPublisher, never()).publish(any(), any(), any(), any());
+    }
+
+    /** 草稿不计入有效入库，因此有效累计为 0 时不完成采购。 */
+    @Test
+    void synchronizeSourcePurchaseOrders_shouldIgnoreDraftInboundsWhenCompleting() {
+        PurchaseInbound trigger = inbound(2L, StatusConstants.DRAFT, List.of(inboundItem(1L, 10)));
+        PurchaseOrder order = purchaseOrder(500L, StatusConstants.AUDITED, 10L, 20L, new ArrayList<>());
+        PurchaseOrderItem sourceItem = orderItem(1L, 10, order);
+        order.getItems().add(sourceItem);
+        when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(1L))).thenReturn(Map.of(1L, sourceItem));
+        stubEffectiveReceived(List.of(1L), Map.of());
+
+        service.synchronizeSourcePurchaseOrders(trigger, false);
+
+        assertThat(order.getStatus()).isEqualTo(StatusConstants.AUDITED);
+        verify(purchaseOrderAuditPublisher, never()).publish(any(), any(), any(), any());
     }
 
     @Test
@@ -197,7 +281,8 @@ class PurchaseInboundCompletionSyncServiceTest {
 
         service.synchronizeSourcePurchaseOrders(trigger, true);
 
-        verify(repository, never()).findAllActiveBySourcePurchaseOrderItemIds(any());
+        verify(purchaseInboundItemQueryService, never())
+                .summarizeEffectiveQuantityBySourcePurchaseOrderItemIds(any());
         verify(purchaseOrderAuditPublisher, never()).publish(any(), any(), any(), any());
     }
 
@@ -208,9 +293,14 @@ class PurchaseInboundCompletionSyncServiceTest {
         PurchaseOrderItem sourceItem = orderItem(1L, 10, order);
         order.getItems().add(sourceItem);
         when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(1L))).thenReturn(Map.of(1L, sourceItem));
-        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(1L)))
-                .thenReturn(List.of(inbound(2L, StatusConstants.AUDITED, List.of(inboundItem(1L, 10)))));
+        stubEffectiveReceived(List.of(1L), Map.of(1L, 10L));
 
+        service.synchronizeSourcePurchaseOrders(trigger, true);
+
+        // 累计有效入库仍等于订单量，不应被错误回退。
+        assertThat(order.getStatus()).isEqualTo(StatusConstants.PURCHASE_COMPLETED);
+
+        stubEffectiveReceived(List.of(1L), Map.of(1L, 5L));
         service.synchronizeSourcePurchaseOrders(trigger, true);
 
         assertThat(order.getStatus()).isEqualTo(StatusConstants.AUDITED);
@@ -225,8 +315,7 @@ class PurchaseInboundCompletionSyncServiceTest {
         PurchaseOrderItem sourceItem = orderItem(1L, 10, order);
         order.getItems().add(sourceItem);
         when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(1L))).thenReturn(Map.of(1L, sourceItem));
-        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(1L)))
-                .thenReturn(List.of(inbound(2L, StatusConstants.INBOUND_COMPLETED, List.of(inboundItem(1L, 10)))));
+        stubEffectiveReceived(List.of(1L), Map.of(1L, 10L));
         when(purchaseOrderSalesAllocationQuery.summarizeByPurchaseOrderItemIds(List.of(1L)))
                 .thenReturn(List.of(new PurchaseOrderSalesAllocation(1L, 15L)));
 
@@ -244,8 +333,7 @@ class PurchaseInboundCompletionSyncServiceTest {
         PurchaseOrderItem sourceItem = orderItem(1L, 10, order);
         order.getItems().add(sourceItem);
         when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(1L))).thenReturn(Map.of(1L, sourceItem));
-        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(1L)))
-                .thenReturn(List.of(inbound(2L, StatusConstants.INBOUND_COMPLETED, List.of(inboundItem(1L, 10)))));
+        stubEffectiveReceived(List.of(1L), Map.of(1L, 10L));
         when(purchaseOrderSalesAllocationQuery.summarizeByPurchaseOrderItemIds(List.of(1L)))
                 .thenReturn(List.of());
 

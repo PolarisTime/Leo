@@ -55,23 +55,20 @@ public class PurchaseOrderInboundCandidateQueryRepository {
                       OR LOWER(COALESCE(purchase_order.order_no, '')) LIKE :keyword ESCAPE '\\'
                       OR LOWER(COALESCE(purchase_order.supplier_name, '')) LIKE :keyword ESCAPE '\\'
                   )
-                  AND (
-                      SELECT COALESCE(SUM(source_item.quantity), 0)
-                      FROM po_purchase_order_item source_item
-                      WHERE source_item.order_id = purchase_order.id
-                  ) > 0
-                  AND NOT EXISTS (
+                  AND EXISTS (
                       SELECT 1
                       FROM po_purchase_order_item source_item
-                      JOIN po_purchase_inbound_item inbound_item
-                        ON inbound_item.source_purchase_order_item_id = source_item.id
-                      JOIN po_purchase_inbound inbound
-                        ON inbound.id = inbound_item.inbound_id
-                       AND inbound.deleted_flag = FALSE
                       WHERE source_item.order_id = purchase_order.id
-                        AND (:currentRecordId IS NULL OR inbound.id <> :currentRecordId)
-                      GROUP BY source_item.id
-                      HAVING SUM(inbound_item.quantity) > 0
+                        AND source_item.quantity >= 1
+                        AND source_item.quantity > COALESCE((
+                            SELECT SUM(inbound_item.quantity)
+                            FROM po_purchase_inbound_item inbound_item
+                            JOIN po_purchase_inbound inbound
+                              ON inbound.id = inbound_item.inbound_id
+                             AND inbound.deleted_flag = FALSE
+                            WHERE inbound_item.source_purchase_order_item_id = source_item.id
+                              AND (:currentRecordId IS NULL OR inbound.id <> :currentRecordId)
+                        ), 0)
                   )
             )
             """;

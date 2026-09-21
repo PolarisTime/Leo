@@ -95,13 +95,10 @@ public class PurchaseOrderAvailabilityService {
 
         Map<Long, Integer> result = new HashMap<>();
         for (PurchaseOrder order : orders) {
-            boolean hasInboundAllocation = order.getItems().stream().anyMatch(
-                    item -> allocatedQuantityMap.getOrDefault(item.getId(), 0) > 0
-            );
-            // 跨行总量用 long 累加: int 相加会在超大数量时回绕为负数, 导致订单被错误过滤。
-            long importableQuantity = hasInboundAllocation
-                    ? 0L
-                    : order.getItems().stream()
+            // 行级剩余量: 只要存在剩余行即为候选; 跨行总量用 long 累加,
+            // int 相加会在超大数量时回绕为负数, 导致订单被错误过滤。
+            long importableQuantity = order.getItems().stream()
+                    .filter(item -> item.getQuantity() != null && item.getQuantity() >= 1)
                     .mapToLong(item -> remainingQuantity(item, allocatedQuantityMap))
                     .sum();
             result.put(order.getId(), saturateToInt(importableQuantity));
@@ -121,12 +118,16 @@ public class PurchaseOrderAvailabilityService {
                 .toList();
     }
 
+    /** 占用总量超出 int 时收敛到 {@link Integer#MAX_VALUE}, 保证剩余量为 0 而不是溢出抛错。 */
     private Map<Long, Integer> toIntegerQuantityMap(Map<Long, Long> source) {
         Map<Long, Integer> target = new HashMap<>();
         if (source == null || source.isEmpty()) {
             return target;
         }
-        source.forEach((key, value) -> target.put(key, Math.toIntExact(value)));
+        source.forEach((key, value) -> target.put(
+                key,
+                value == null ? 0 : saturateToInt(value)
+        ));
         return target;
     }
 

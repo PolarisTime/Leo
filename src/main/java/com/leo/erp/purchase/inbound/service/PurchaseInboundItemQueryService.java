@@ -2,6 +2,7 @@ package com.leo.erp.purchase.inbound.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import org.springframework.stereotype.Service;
@@ -74,6 +75,30 @@ public class PurchaseInboundItemQueryService {
                 .collect(Collectors.toMap(
                         PurchaseInboundItemRepository.PurchaseOrderAllocationSummary::getSourcePurchaseOrderItemId,
                         PurchaseInboundItemRepository.PurchaseOrderAllocationSummary::getTotalQuantity
+                ));
+    }
+
+    /**
+     * 有效入库件数汇总：仅统计未删除且状态为已审核/完成入库的入库单，草稿不参与完成度判定。
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, Long> summarizeEffectiveQuantityBySourcePurchaseOrderItemIds(
+            Collection<Long> sourcePurchaseOrderItemIds
+    ) {
+        if (sourcePurchaseOrderItemIds == null || sourcePurchaseOrderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return repository.summarizeEffectiveWeightBySourcePurchaseOrderItemIdsExcludingInbound(
+                        sourcePurchaseOrderItemIds,
+                        null,
+                        List.of(StatusConstants.AUDITED, StatusConstants.INBOUND_COMPLETED)
+                )
+                .stream()
+                .collect(Collectors.toMap(
+                        PurchaseInboundItemRepository.PurchaseOrderEffectiveWeightSummary
+                                ::getSourcePurchaseOrderItemId,
+                        PurchaseInboundItemRepository.PurchaseOrderEffectiveWeightSummary
+                                ::getTotalQuantity
                 ));
     }
 

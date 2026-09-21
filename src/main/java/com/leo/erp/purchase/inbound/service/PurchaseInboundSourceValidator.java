@@ -24,6 +24,9 @@ import java.util.stream.Stream;
 @Service
 public class PurchaseInboundSourceValidator {
 
+    /** 表头采购订单号字段长度上限，与 po_purchase_inbound.purchase_order_no 列一致。 */
+    static final int MAX_PURCHASE_ORDER_NO_LENGTH = 256;
+
     private final PurchaseOrderItemQueryService purchaseOrderItemQueryService;
     private final PurchaseInboundAllocationService allocationService;
 
@@ -47,7 +50,6 @@ public class PurchaseInboundSourceValidator {
                 .toList();
         Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap =
                 loadSourcePurchaseOrderItemMap(affectedSourcePurchaseOrderItemIds);
-        assertSingleSourcePurchaseOrder(request, sourcePurchaseOrderItemIds, sourcePurchaseOrderItemMap);
         return new SourceValidationContext(
                 sourcePurchaseOrderItemIds,
                 affectedSourcePurchaseOrderItemIds,
@@ -56,46 +58,16 @@ public class PurchaseInboundSourceValidator {
         );
     }
 
-    private void assertSingleSourcePurchaseOrder(
-            PurchaseInboundRequest request,
-            List<Long> requestedSourceItemIds,
-            Map<Long, PurchaseOrderItem> sourceItemMap
-    ) {
-        Map<String, PurchaseOrder> sourceOrders = requestedSourceItemIds.stream()
-                .map(sourceItemMap::get)
-                .filter(java.util.Objects::nonNull)
-                .map(PurchaseOrderItem::getPurchaseOrder)
-                .filter(java.util.Objects::nonNull)
-                .collect(Collectors.toMap(
-                        this::sourceOrderIdentity,
-                        order -> order,
-                        (left, right) -> left,
-                        java.util.LinkedHashMap::new
-                ));
-        if (sourceOrders.size() > 1) {
+    /**
+     * 多来源合并后表头采购订单号由各来源订单号拼接而成，必须校验不超出列长度，避免数据库截断/写入失败。
+     */
+    void assertPurchaseOrderNoWithinLength(String purchaseOrderNo) {
+        if (purchaseOrderNo != null && purchaseOrderNo.length() > MAX_PURCHASE_ORDER_NO_LENGTH) {
             throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "一张采购入库单只能导入一张采购订单，不能混合多个来源单据"
+                    ErrorCode.VALIDATION_ERROR,
+                    "采购入库单采购订单号长度不能超过 " + MAX_PURCHASE_ORDER_NO_LENGTH + " 个字符"
             );
         }
-        if (sourceOrders.size() == 1) {
-            PurchaseOrder sourceOrder = sourceOrders.values().iterator().next();
-            String sourceOrderNo = BusinessDocumentValidator.trimToNull(sourceOrder.getOrderNo());
-            if (sourceOrderNo != null && !sourceOrderNo.equals(
-                    BusinessDocumentValidator.trimToNull(request.purchaseOrderNo()))) {
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_ERROR,
-                        "采购入库单采购订单号与来源采购订单不一致"
-                );
-            }
-        }
-    }
-
-    private String sourceOrderIdentity(PurchaseOrder order) {
-        if (order.getId() != null) {
-            return "ID:" + order.getId();
-        }
-        return "NO:" + BusinessDocumentValidator.trimToNull(order.getOrderNo());
     }
 
     private void assertNoDuplicateSourcePurchaseOrderItems(PurchaseInboundRequest request) {

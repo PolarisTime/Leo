@@ -131,9 +131,11 @@ public class PurchaseInboundApplyService {
         managedItems.clear();
         managedItems.addAll(items);
         managedItems.sort(Comparator.comparing(PurchaseInboundItem::getLineNo));
-        inbound.setPurchaseOrderNo(sourcePurchaseOrderNos.isEmpty()
+        String purchaseOrderNo = sourcePurchaseOrderNos.isEmpty()
                 ? request.purchaseOrderNo()
-                : String.join(", ", sourcePurchaseOrderNos));
+                : String.join(", ", sourcePurchaseOrderNos);
+        sourceValidator.assertPurchaseOrderNoWithinLength(purchaseOrderNo);
+        inbound.setPurchaseOrderNo(purchaseOrderNo);
         applyHeaderSupplier(inbound, request, sourcePurchaseOrderItemMap);
         inbound.setWarehouseId(resolveHeaderWarehouseId(request.warehouseId(), firstLineWarehouseId, warehouseIds));
         inbound.setWarehouseName(resolveHeaderWarehouseName(

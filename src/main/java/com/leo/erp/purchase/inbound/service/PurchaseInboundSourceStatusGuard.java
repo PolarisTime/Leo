@@ -8,16 +8,14 @@ import com.leo.erp.purchase.api.PurchaseOrderReferenceGuard;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
-import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 public class PurchaseInboundSourceStatusGuard {
@@ -47,7 +45,7 @@ public class PurchaseInboundSourceStatusGuard {
                                        String nextStatus) {
         if (StatusConstants.DRAFT.equals(currentStatus) && StatusConstants.AUDITED.equals(nextStatus)) {
             assertSourcePurchaseOrderNotCompleted(inbound);
-            assertSourcePurchaseOrderFullyAllocated(inbound);
+            assertSourceLinesWithinOrderedQuantity(inbound);
         }
         if (isReverseStatusTransition(currentStatus, nextStatus)) {
             assertNoActiveSalesOrderReferences(inbound, "反审核");
@@ -81,7 +79,12 @@ public class PurchaseInboundSourceStatusGuard {
         }
     }
 
-    private void assertSourcePurchaseOrderFullyAllocated(PurchaseInbound inbound) {
+    /**
+     * 行级审核校验：逐来源行要求订单量 ≥ 1，且累计入库量（其他入库单 + 本次）不得超过订单量。
+     *
+     * <p>允许部分审核：本单可只入库来源行的一部分，剩余部分由后续入库单继续完成。
+     */
+    private void assertSourceLinesWithinOrderedQuantity(PurchaseInbound inbound) {
         List<Long> inboundSourceItemIds = sourceItemIds(inbound);
         if (inboundSourceItemIds.isEmpty()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购入库缺少来源采购订单明细");
@@ -91,41 +94,43 @@ public class PurchaseInboundSourceStatusGuard {
         if (inboundSourceItems.size() != inboundSourceItemIds.size()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购入库的来源采购订单明细已失效");
         }
-        Set<Long> sourceOrderIds = inboundSourceItems.stream()
+        boolean sourceOrderMissing = inboundSourceItems.stream()
                 .map(PurchaseOrderItem::getPurchaseOrder)
-                .filter(Objects::nonNull)
-                .map(PurchaseOrder::getId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        if (sourceOrderIds.size() != 1) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "一张采购入库单必须且只能关联一张采购订单");
-        }
-
-        PurchaseOrder sourceOrder = inboundSourceItems.getFirst().getPurchaseOrder();
-        List<PurchaseOrderItem> sourceOrderItems = sourceOrder.getItems();
-        List<Long> sourceOrderItemIds = sourceOrderItems.stream()
-                .map(PurchaseOrderItem::getId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .sorted()
-                .toList();
-        if (sourceOrderItemIds.isEmpty() || sourceOrderItemIds.size() != sourceOrderItems.size()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购订单存在无效商品明细，不能审核采购入库");
+                .anyMatch(Objects::isNull);
+        if (sourceOrderMissing) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购入库的来源采购订单不存在");
         }
 
         Map<Long, Integer> allocatedQuantityMap =
-                allocationService.loadAllocatedQuantityMap(sourceOrderItemIds, null);
-        boolean fullyAllocated = sourceOrderItems.stream().allMatch(item -> {
-            int orderedQuantity = item.getQuantity() == null ? 0 : item.getQuantity();
-            int allocatedQuantity = allocatedQuantityMap.getOrDefault(item.getId(), 0);
-            return orderedQuantity >= 1 && allocatedQuantity == orderedQuantity;
-        });
-        if (!fullyAllocated) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "采购订单必须全部商品一次性完成入库，不允许分批审核"
-            );
+                allocationService.loadAllocatedQuantityMap(inboundSourceItemIds, inbound.getId());
+        Map<Long, Integer> currentQuantityMap = currentInboundQuantityMap(inbound);
+        for (PurchaseOrderItem sourceItem : inboundSourceItems) {
+            Long sourceItemKey = sourceItem.getId();
+            long orderedQuantity = sourceItem.getQuantity() == null ? 0L : sourceItem.getQuantity();
+            long cumulativeQuantity = (long) allocatedQuantityMap.getOrDefault(sourceItemKey, 0)
+                    + currentQuantityMap.getOrDefault(sourceItemKey, 0);
+            if (orderedQuantity < 1) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购订单明细数量必须大于0，不能审核采购入库");
+            }
+            if (cumulativeQuantity > orderedQuantity) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "来源采购订单明细 " + sourceItemKey + " 累计入库数量超过订单数量，不能审核采购入库"
+                );
+            }
         }
+    }
+
+    private Map<Long, Integer> currentInboundQuantityMap(PurchaseInbound inbound) {
+        Map<Long, Integer> quantityMap = new HashMap<>();
+        inbound.getItems().stream()
+                .filter(item -> item.getSourcePurchaseOrderItemId() != null)
+                .forEach(item -> quantityMap.merge(
+                        item.getSourcePurchaseOrderItemId(),
+                        item.getQuantity() == null ? 0 : item.getQuantity(),
+                        Integer::sum
+                ));
+        return quantityMap;
     }
 
     /**

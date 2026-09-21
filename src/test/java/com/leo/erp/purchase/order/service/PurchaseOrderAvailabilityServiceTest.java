@@ -142,8 +142,9 @@ class PurchaseOrderAvailabilityServiceTest {
         assertThat(result).containsEntry(100L, 0).hasSize(1);
     }
 
+    /** 行级剩余：部分占用后订单仍是候选，importableQuantity 为剩余件数，而非整单归零。 */
     @Test
-    void buildInboundImportableQuantityMap_shouldZeroOrderWithExistingInboundAllocation() {
+    void buildInboundImportableQuantityMap_shouldReturnRemainingWhenPartiallyAllocated() {
         PurchaseOrder allocatedOrder = order(100L, List.of(item(1L, 10), item(2L, 5)));
         PurchaseOrder freeOrder = order(200L, List.of(item(3L, 7)));
         when(purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(1L, 2L, 3L)))
@@ -152,7 +153,18 @@ class PurchaseOrderAvailabilityServiceTest {
         Map<Long, Integer> result = service.buildInboundImportableQuantityMap(
                 List.of(allocatedOrder, freeOrder), null);
 
-        assertThat(result).containsEntry(100L, 0).containsEntry(200L, 7);
+        assertThat(result).containsEntry(100L, 13).containsEntry(200L, 7);
+    }
+
+    @Test
+    void buildInboundImportableQuantityMap_shouldReturnZeroWhenEveryLineFullyAllocated() {
+        PurchaseOrder order = order(100L, List.of(item(1L, 10), item(2L, 5)));
+        when(purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(1L, 2L)))
+                .thenReturn(Map.of(1L, 10L, 2L, 5L));
+
+        Map<Long, Integer> result = service.buildInboundImportableQuantityMap(List.of(order), null);
+
+        assertThat(result).containsEntry(100L, 0);
     }
 
     @Test
@@ -164,9 +176,21 @@ class PurchaseOrderAvailabilityServiceTest {
 
         Map<Long, Integer> result = service.buildInboundImportableQuantityMap(List.of(order), 55L);
 
-        assertThat(result).containsEntry(100L, 0);
+        assertThat(result).containsEntry(100L, 13);
         verify(purchaseInboundItemQueryService, never())
                 .summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(org.mockito.ArgumentMatchers.any());
+    }
+
+    /** 负剩余行不得拉低总和：占用超过订单量时该行按 0 计。 */
+    @Test
+    void buildInboundImportableQuantityMap_shouldClampOverAllocatedLinesToZero() {
+        PurchaseOrder order = order(100L, List.of(item(1L, 10), item(2L, 5)));
+        when(purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(1L, 2L)))
+                .thenReturn(Map.of(1L, 12L, 2L, 1L));
+
+        Map<Long, Integer> result = service.buildInboundImportableQuantityMap(List.of(order), null);
+
+        assertThat(result).containsEntry(100L, 4);
     }
 
     @Test
