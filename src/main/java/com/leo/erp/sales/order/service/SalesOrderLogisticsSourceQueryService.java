@@ -43,6 +43,15 @@ public class SalesOrderLogisticsSourceQueryService implements SalesOrderLogistic
                 .toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<Long> findOrderIdsBySourceItemIds(Collection<Long> sourceItemIds) {
+        if (sourceItemIds == null || sourceItemIds.isEmpty()) {
+            return List.of();
+        }
+        return salesOrderRepository.findOrderIdsBySourceItemIds(sourceItemIds);
+    }
+
     private SalesOrderSourceSnapshot toSnapshot(SalesOrder order) {
         return new SalesOrderSourceSnapshot(
                 order.getId(),

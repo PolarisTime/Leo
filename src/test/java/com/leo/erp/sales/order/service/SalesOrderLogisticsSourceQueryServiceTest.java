@@ -163,4 +163,24 @@ class SalesOrderLogisticsSourceQueryServiceTest {
         assertThat(result.get(0).orderNo()).isEqualTo("SO002");
         verify(salesOrderRepository).findAllWithItemsBySourceItemIds(any());
     }
+
+    // ---------- findOrderIdsBySourceItemIds (A1 标量投影) ----------
+
+    @Test
+    void findOrderIdsBySourceItemIds_shouldReturnEmptyForNullAndEmptyInput() {
+        assertThat(service.findOrderIdsBySourceItemIds(null)).isEmpty();
+        assertThat(service.findOrderIdsBySourceItemIds(List.of())).isEmpty();
+        verifyNoInteractions(salesOrderRepository);
+    }
+
+    @Test
+    void findOrderIdsBySourceItemIds_shouldReturnOrderIdsWithoutLoadingEntities() {
+        when(salesOrderRepository.findOrderIdsBySourceItemIds(any())).thenReturn(List.of(2L, 3L));
+
+        List<Long> result = service.findOrderIdsBySourceItemIds(List.of(11L, 12L));
+
+        assertThat(result).containsExactly(2L, 3L);
+        verify(salesOrderRepository, org.mockito.Mockito.never())
+                .findAllWithItemsBySourceItemIds(any());
+    }
 }

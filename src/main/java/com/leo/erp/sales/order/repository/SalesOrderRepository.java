@@ -74,6 +74,19 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
             @Param("sourceItemIds") Collection<Long> sourceItemIds
     );
 
+    /**
+     * 仅投影来源明细所属的销售订单主键, 供加锁前定位父单据使用。
+     * <p>标量投影不会把 {@link SalesOrder} 实体载入持久化上下文, 从而避免加锁后
+     * 重查命中一级缓存中的旧快照(否则来源订单并发反审核时可能读到过期状态)。
+     */
+    @Query("""
+            select distinct item.salesOrder.id
+            from SalesOrderItem item
+            where item.salesOrder.deletedFlag = false
+              and item.id in :sourceItemIds
+            """)
+    List<Long> findOrderIdsBySourceItemIds(@Param("sourceItemIds") Collection<Long> sourceItemIds);
+
     /** 按物流单、销售出库等具体下游模块引用状态进行分页筛选。 */
     @Query("""
             select salesOrder

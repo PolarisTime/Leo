@@ -121,12 +121,12 @@ public class FreightBillApplyService {
         if (requestedItemIds.size() != requestedItems.size()) {
             throw business("物流单必须整单导入销售订单明细，来源明细ID不能为空或重复");
         }
-        List<SalesOrderSourceSnapshot> orders = salesOrderSourceQuery.findBySourceItemIds(requestedItemIds);
-        LinkedHashSet<Long> sourceOrderIds = orders.stream()
-                .map(SalesOrderSourceSnapshot::id)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+        // 加锁前只投影父订单主键, 不加载订单实体: 否则加锁后重查会命中一级缓存的旧快照,
+        // 来源订单并发反审核时可能读到过期状态(TOCTOU)。
+        LinkedHashSet<Long> sourceOrderIds = new LinkedHashSet<>(
+                salesOrderSourceQuery.findOrderIdsBySourceItemIds(requestedItemIds));
         sourceAllocationLockService.lockDocumentSources(List.of(), sourceOrderIds, List.of(), List.of());
-        orders = salesOrderSourceQuery.findBySourceItemIds(requestedItemIds);
+        List<SalesOrderSourceSnapshot> orders = salesOrderSourceQuery.findBySourceItemIds(requestedItemIds);
         validateOrders(orders);
         LinkedHashSet<Long> completeItemIds = orders.stream()
                 .flatMap(order -> order.items().stream())

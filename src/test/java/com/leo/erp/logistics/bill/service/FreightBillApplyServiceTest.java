@@ -78,6 +78,7 @@ class FreightBillApplyServiceTest {
     }
 
     private void stubSources(SalesOrderSourceSnapshot order) {
+        when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of(order.id()));
         when(salesOrderSourceQuery.findBySourceItemIds(any())).thenReturn(List.of(order));
         // 多数校验分支在占用检查之前抛错，此 stub 可能未使用
         lenient().when(sourceOrderRepository.findOccupiedSourceOrderIds(any(), any())).thenReturn(List.of());
@@ -132,6 +133,7 @@ class FreightBillApplyServiceTest {
     void applyItems_shouldRejectPartialImport() {
         SalesOrderSourceSnapshot order = srcOrder(1L, "SO001", StatusConstants.AUDITED,
                 List.of(srcItem(11L, "1.000"), srcItem(12L, "2.000")));
+        when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of(1L));
         when(salesOrderSourceQuery.findBySourceItemIds(any())).thenReturn(List.of(order));
         FreightBillRequest request = request(List.of(itemReq(null, 11L)));
 
@@ -142,6 +144,7 @@ class FreightBillApplyServiceTest {
 
     @Test
     void applyItems_shouldRejectEmptyOrders() {
+        when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of());
         when(salesOrderSourceQuery.findBySourceItemIds(any())).thenReturn(List.of());
         FreightBillRequest request = request(List.of(itemReq(null, 11L)));
 
@@ -197,6 +200,7 @@ class FreightBillApplyServiceTest {
 
     @Test
     void applyItems_shouldRejectOccupiedSourceOrder() {
+        when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of(1L));
         when(salesOrderSourceQuery.findBySourceItemIds(any()))
                 .thenReturn(List.of(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "12.500")))));
         when(sourceOrderRepository.findOccupiedSourceOrderIds(any(), any())).thenReturn(List.of(1L));
@@ -217,5 +221,23 @@ class FreightBillApplyServiceTest {
 
         assertThat(entity.getItems()).hasSize(1);
         verify(sourceOrderRepository).findOccupiedSourceOrderIds(any(), any());
+    }
+
+    /**
+     * 回归(A1): 加锁前不得加载销售订单实体快照, 只投影父订单主键,
+     * 否则加锁后重查会命中一级缓存的旧状态。
+     */
+    @Test
+    void resolveSources_shouldLocateOrdersViaScalarProjectionBeforeLock() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "12.500"))));
+
+        service.applyItems(new FreightBill(), request(List.of(itemReq(null, 11L))), () -> 100L);
+
+        // 先按标量投影定位父订单 ID 并加锁, 再读取完整快照。
+        var order = org.mockito.Mockito.inOrder(
+                salesOrderSourceQuery, sourceAllocationLockService);
+        order.verify(salesOrderSourceQuery).findOrderIdsBySourceItemIds(any());
+        order.verify(sourceAllocationLockService).lockDocumentSources(any(), any(), any(), any());
+        order.verify(salesOrderSourceQuery).findBySourceItemIds(any());
     }
 }
