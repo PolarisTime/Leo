@@ -1,6 +1,7 @@
 package com.leo.erp.sales.outbound.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.support.MaterialResolver;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
@@ -28,6 +29,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -120,7 +123,13 @@ class SalesOutboundApplyServiceTest {
 
     private void stubSingleSource(SalesOrder order, SalesOrderItem item) {
         when(salesOrderItemQueryService.findActiveByIdIn(any())).thenReturn(List.of(item));
-        when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
+        stubMaterialResolver();
+    }
+
+    private void stubMaterialResolver() {
+        MaterialResolver materialResolver = mock(MaterialResolver.class);
+        lenient().when(tradeItemMaterialSupport.prepareResolver()).thenReturn(materialResolver);
+        lenient().when(materialResolver.resolve(any(), any(), anyInt()))
                 .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
     }
 
@@ -162,8 +171,7 @@ class SalesOutboundApplyServiceTest {
         item.setWarehouseId(null); // 来源无仓库 → 走 warehouseSelectionSupport
         item.setWarehouseName(null);
         when(salesOrderItemQueryService.findActiveByIdIn(any())).thenReturn(List.of(item));
-        when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
-                .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
+        stubMaterialResolver();
         when(warehouseSelectionSupport.resolveWarehouse(any(), any(), anyInt(), anyBoolean()))
                 .thenReturn(new WarehouseSnapshot(9L, null, "选择仓库"));
         SalesOutbound entity = new SalesOutbound();
@@ -187,8 +195,7 @@ class SalesOutboundApplyServiceTest {
         SalesOrder orderB = salesOrder(2L, "SO002", StatusConstants.AUDITED, 99L, "客户A", 20L, "项目A", 30L, "结算公司A");
         when(salesOrderItemQueryService.findActiveByIdIn(any()))
                 .thenReturn(List.of(sourceItem(11L, 10, orderA), sourceItem(12L, 10, orderB)));
-        when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
-                .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
+        stubMaterialResolver();
 
         assertThatThrownBy(() -> service.applyItems(new SalesOutbound(),
                 request(null, "客户A", null, "项目A", null, null,
@@ -204,8 +211,7 @@ class SalesOutboundApplyServiceTest {
         SalesOrder orderB = salesOrder(2L, "SO002", StatusConstants.AUDITED, 10L, "客户A", 20L, "项目A", 99L, "结算公司B");
         when(salesOrderItemQueryService.findActiveByIdIn(any()))
                 .thenReturn(List.of(sourceItem(11L, 10, orderA), sourceItem(12L, 10, orderB)));
-        when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
-                .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
+        stubMaterialResolver();
 
         assertThatThrownBy(() -> service.applyItems(new SalesOutbound(),
                 request(null, "客户A", null, "项目A", null, null,
@@ -223,8 +229,7 @@ class SalesOutboundApplyServiceTest {
         itemB.setWarehouseId(2L);
         itemB.setWarehouseName("库房B");
         when(salesOrderItemQueryService.findActiveByIdIn(any())).thenReturn(List.of(itemA, itemB));
-        when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
-                .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
+        stubMaterialResolver();
         SalesOutbound entity = new SalesOutbound();
         entity.setId(5L);
 
@@ -294,8 +299,7 @@ class SalesOutboundApplyServiceTest {
         item.setWarehouseId(null);
         item.setWarehouseName(null);
         when(salesOrderItemQueryService.findActiveByIdIn(any())).thenReturn(List.of(item));
-        when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
-                .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
+        stubMaterialResolver();
         when(warehouseSelectionSupport.resolveWarehouse(any(), any(), anyInt(), anyBoolean()))
                 .thenReturn(new WarehouseSnapshot(null, null, null)); // 未解析出仓库
         SalesOutbound entity = new SalesOutbound();

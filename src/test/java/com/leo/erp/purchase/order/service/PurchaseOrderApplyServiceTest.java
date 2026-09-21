@@ -3,6 +3,7 @@ package com.leo.erp.purchase.order.service;
 import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.MaterialResolver;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
@@ -29,6 +30,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -66,7 +68,9 @@ class PurchaseOrderApplyServiceTest {
     }
 
     private void stubHappyPath() {
-        when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
+        MaterialResolver materialResolver = mock(MaterialResolver.class);
+        when(tradeItemMaterialSupport.prepareResolver()).thenReturn(materialResolver);
+        when(materialResolver.resolve(any(), any(), anyInt()))
                 .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
         when(warehouseSelectionSupport.resolveWarehouse(any(), any(), anyInt(), eq(true)))
                 .thenReturn(new WarehouseSnapshot(7L, "W001", "库房A"));
@@ -100,7 +104,9 @@ class PurchaseOrderApplyServiceTest {
 
     @Test
     void applyItems_shouldRejectBlankRequiredBatchNo() {
-        when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
+        MaterialResolver materialResolver = mock(MaterialResolver.class);
+        when(tradeItemMaterialSupport.prepareResolver()).thenReturn(materialResolver);
+        when(materialResolver.resolve(any(), any(), anyInt()))
                 .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
         when(warehouseSelectionSupport.resolveWarehouse(any(), any(), anyInt(), eq(true)))
                 .thenReturn(new WarehouseSnapshot(7L, "W001", "库房A"));
@@ -117,7 +123,9 @@ class PurchaseOrderApplyServiceTest {
 
     @Test
     void applyItems_shouldPropagateMaterialIdCodeMismatch() {
-        when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
+        MaterialResolver materialResolver = mock(MaterialResolver.class);
+        when(tradeItemMaterialSupport.prepareResolver()).thenReturn(materialResolver);
+        when(materialResolver.resolve(any(), any(), anyInt()))
                 .thenThrow(new BusinessException(ErrorCode.VALIDATION_ERROR, "第1行商品ID与编码不一致"));
         when(purchaseInboundItemQueryService.summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(any()))
                 .thenReturn(Map.of());

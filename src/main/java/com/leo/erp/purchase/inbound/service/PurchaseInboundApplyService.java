@@ -3,6 +3,7 @@ package com.leo.erp.purchase.inbound.service;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.common.support.MaterialResolver;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
@@ -70,6 +71,8 @@ public class PurchaseInboundApplyService {
                 nextIdSupplier,
                 PurchaseInboundItem::setId
         );
+        MaterialResolver materialResolver =
+                tradeItemMaterialSupport.prepareResolver();
 
         for (int i = 0; i < request.items().size(); i++) {
             PurchaseInboundItemRequest source = request.items().get(i);
@@ -81,7 +84,7 @@ public class PurchaseInboundApplyService {
             Long materialId = source.materialId() != null
                     ? source.materialId()
                     : sourceOrderItem == null ? null : sourceOrderItem.getMaterialId();
-            TradeMaterialSnapshot material = tradeItemMaterialSupport.resolveMaterial(
+            TradeMaterialSnapshot material = materialResolver.resolve(
                     materialId,
                     source.materialCode(),
                     lineNo

@@ -2,6 +2,7 @@ package com.leo.erp.sales.outbound.service;
 
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.common.support.MaterialResolver;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
@@ -58,6 +59,8 @@ public class SalesOutboundApplyService {
         );
         Map<Long, SalesOrderItem> sourceSalesOrderItemMap =
                 sourceService.loadSourceSalesOrderItemMap(request.items(), items);
+        MaterialResolver materialResolver =
+                tradeItemMaterialSupport.prepareResolver();
         Map<Long, Integer> requestSourceQuantityMap = new java.util.HashMap<>();
         LinkedHashSet<String> sourceSalesOrderNos = new LinkedHashSet<>();
         LinkedHashSet<SettlementCompanySnapshot> salesSettlementCompanies = new LinkedHashSet<>();
@@ -77,7 +80,8 @@ public class SalesOutboundApplyService {
                     item,
                     lineNo,
                     sourceSalesOrderItemMap,
-                    requestSourceQuantityMap
+                    requestSourceQuantityMap,
+                    materialResolver
             );
             sourceService.collectSourceSalesOrderNos(
                     sourceSalesOrderNos,
@@ -130,7 +134,8 @@ public class SalesOutboundApplyService {
                                       SalesOutboundItem item,
                                       int lineNo,
                                       Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
-                                      Map<Long, Integer> requestSourceQuantityMap) {
+                                      Map<Long, Integer> requestSourceQuantityMap,
+                                      MaterialResolver materialResolver) {
         item.setSalesOutbound(entity);
         item.setLineNo(lineNo);
         Long sourceSalesOrderItemId = sourceService.resolveSourceSalesOrderItemId(source, item, lineNo);
@@ -138,7 +143,7 @@ public class SalesOutboundApplyService {
                 sourceService.resolveSourceSalesOrderItem(sourceSalesOrderItemMap, sourceSalesOrderItemId, lineNo);
         // 前端精简保存 payload 后不发送材料编码，后端按来源明细重载；请求显式提供时才覆盖来源值。
         String requestedMaterialCode = trimToNull(source.materialCode());
-        TradeMaterialSnapshot material = tradeItemMaterialSupport.resolveMaterial(
+        TradeMaterialSnapshot material = materialResolver.resolve(
                 source.materialId() == null ? sourceSalesOrderItem.getMaterialId() : source.materialId(),
                 requestedMaterialCode != null ? requestedMaterialCode : sourceSalesOrderItem.getMaterialCode(),
                 lineNo

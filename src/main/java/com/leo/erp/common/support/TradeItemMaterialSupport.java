@@ -62,24 +62,66 @@ public class TradeItemMaterialSupport {
     }
 
     public TradeMaterialSnapshot resolveMaterial(Long materialId, String materialCode, int lineNo) {
-        String normalizedCode = normalizeMaterialCode(materialCode, lineNo);
-        if (materialId != null) {
-            TradeMaterialSnapshot resolved = loadActiveMaterialsFromCatalog().stream()
-                    .filter(material -> materialId.equals(material.materialId()))
-                    .findFirst()
-                    .orElseThrow(() -> new BusinessException(
+        return prepareResolver().resolve(materialId, materialCode, lineNo);
+    }
+
+    /**
+     * 请求级商品解析器: 只加载一次商品目录快照, 供同一请求的明细循环复用。
+     * <p>避免逐行调用 {@link #resolveMaterial} 时重复全量查询商品目录(复杂度 O(行数 × 商品总数)),
+     * 同时保持原有的存在性、停用与 ID/编码一致性校验语义。
+     */
+    public MaterialResolver prepareResolver() {
+        Map<Long, TradeMaterialSnapshot> byId = new LinkedHashMap<>();
+        Map<String, TradeMaterialSnapshot> byCode = new LinkedHashMap<>();
+        for (TradeMaterialSnapshot snapshot : loadActiveMaterialsFromCatalog()) {
+            if (snapshot.materialId() != null) {
+                byId.putIfAbsent(snapshot.materialId(), snapshot);
+            }
+            String code = normalizeOptionalMaterialCode(snapshot.materialCode());
+            if (code != null) {
+                byCode.putIfAbsent(code, snapshot);
+            }
+        }
+        return new CachingMaterialResolver(byId, byCode);
+    }
+
+    /** 单次请求内复用的商品解析器; 目录快照在创建时固定。 */
+    private final class CachingMaterialResolver implements MaterialResolver {
+
+        private final Map<Long, TradeMaterialSnapshot> byId;
+        private final Map<String, TradeMaterialSnapshot> byCode;
+
+        private CachingMaterialResolver(Map<Long, TradeMaterialSnapshot> byId,
+                                        Map<String, TradeMaterialSnapshot> byCode) {
+            this.byId = byId;
+            this.byCode = byCode;
+        }
+
+        @Override
+        public TradeMaterialSnapshot resolve(Long materialId, String materialCode, int lineNo) {
+            String normalizedCode = normalizeMaterialCode(materialCode, lineNo);
+            if (materialId != null) {
+                TradeMaterialSnapshot resolved = byId.get(materialId);
+                if (resolved == null) {
+                    throw new BusinessException(
                             ErrorCode.BUSINESS_ERROR,
                             "第" + lineNo + "行商品不存在或已停用"
-                    ));
-            if (!normalizedCode.equals(normalizeOptionalMaterialCode(resolved.materialCode()))) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                        "第" + lineNo + "行商品ID与编码不一致");
+                    );
+                }
+                if (!normalizedCode.equals(normalizeOptionalMaterialCode(resolved.materialCode()))) {
+                    throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                            "第" + lineNo + "行商品ID与编码不一致");
+                }
+                return resolved;
+            }
+
+            log.warn("identity_fallback module=trade-item field=materialId line={} reason=material-code", lineNo);
+            TradeMaterialSnapshot resolved = byCode.get(normalizedCode);
+            if (resolved == null) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "商品不存在: " + normalizedCode);
             }
             return resolved;
         }
-
-        log.warn("identity_fallback module=trade-item field=materialId line={} reason=material-code", lineNo);
-        return loadMaterialMap(List.of(normalizedCode)).get(normalizedCode);
     }
 
     public String normalizeMaterialCode(String materialCode, int lineNo) {

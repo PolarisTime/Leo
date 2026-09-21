@@ -4,6 +4,7 @@ import com.leo.erp.common.charge.api.DocumentChargeItemRequest;
 import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.common.support.MaterialResolver;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
@@ -84,12 +85,14 @@ public class PurchaseOrderApplyService {
                 purchaseInboundItemQueryService.summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(
                         items.stream().map(PurchaseOrderItem::getId).toList()
                 );
+        MaterialResolver materialResolver =
+                tradeItemMaterialSupport.prepareResolver();
 
         for (int index = 0; index < request.items().size(); index++) {
             PurchaseOrderItemRequest itemRequest = request.items().get(index);
             PurchaseOrderItem item = items.get(index);
             int lineNo = index + 1;
-            TradeMaterialSnapshot material = tradeItemMaterialSupport.resolveMaterial(
+            TradeMaterialSnapshot material = materialResolver.resolve(
                     itemRequest.materialId(),
                     itemRequest.materialCode(),
                     lineNo

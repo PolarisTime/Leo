@@ -6,6 +6,7 @@ import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.common.support.MaterialResolver;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.master.api.CustomerQuery;
@@ -165,13 +166,16 @@ public class SalesOrderApplyService {
                 nextIdSupplier,
                 SalesOrderItem::setId
         );
+        MaterialResolver materialResolver =
+                tradeItemMaterialSupport.prepareResolver();
         for (int i = 0; i < request.items().size(); i++) {
             ItemTotals itemTotals = applyItem(
                     entity,
                     request.items().get(i),
                     items.get(i),
                     i + 1,
-                    sourceContext
+                    sourceContext,
+                    materialResolver
             );
             totalWeight = totalWeight.add(itemTotals.weightTon());
             totalAmount = totalAmount.add(itemTotals.amount());
@@ -189,11 +193,12 @@ public class SalesOrderApplyService {
                                  SalesOrderItemRequest source,
                                  SalesOrderItem item,
                                  int lineNo,
-                                 SalesOrderSourceContext sourceContext) {
+                                 SalesOrderSourceContext sourceContext,
+                                 MaterialResolver materialResolver) {
         var sourceInboundItem = sourceAllocationService.resolveSourceInbound(source, sourceContext);
         Long sourceMaterialId = sourceInboundItem == null ? null : sourceInboundItem.materialId();
         Long sourceWarehouseId = sourceInboundItem == null ? null : sourceInboundItem.warehouseId();
-        TradeMaterialSnapshot material = tradeItemMaterialSupport.resolveMaterial(
+        TradeMaterialSnapshot material = materialResolver.resolve(
                 source.materialId() == null ? sourceMaterialId : source.materialId(),
                 source.materialCode(),
                 lineNo

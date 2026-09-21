@@ -1,6 +1,7 @@
 package com.leo.erp.sales.order.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.support.MaterialResolver;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
@@ -87,7 +88,9 @@ class SalesOrderApplyServiceTest {
         when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(project()));
         when(sourceAllocationService.prepareContext(any(), any(), any())).thenReturn(mock(SalesOrderSourceContext.class));
         // request.items 为空时明细级 stub 可能未使用
-        lenient().when(tradeItemMaterialSupport.resolveMaterial(any(), any(), anyInt()))
+        MaterialResolver materialResolver = mock(MaterialResolver.class);
+        lenient().when(tradeItemMaterialSupport.prepareResolver()).thenReturn(materialResolver);
+        lenient().when(materialResolver.resolve(any(), any(), anyInt()))
                 .thenReturn(new TradeMaterialSnapshot(500L, "M001"));
         lenient().when(weightResolver.resolvePieceWeightTon(any(), any())).thenReturn(new BigDecimal("1.250"));
         lenient().when(weightResolver.resolveWeightTon(any(), any(), any())).thenReturn(new BigDecimal("6.250"));
