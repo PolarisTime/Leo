@@ -1,3 +1,11 @@
+## [11.7.1](https://github.com/PolarisTime/Leo/compare/v11.7.0...v11.7.1) (2026-09-21)
+
+
+### Bug Fixes
+
+* **logistics:** 物流来源加锁前改用标量投影避免旧快照 ([2662830](https://github.com/PolarisTime/Leo/commit/26628304caa2d506c109c4b33ce3f466d2d4ad4b))
+* **purchase:** 采购入库候选数量改用 long 累加防溢出 ([dd18c78](https://github.com/PolarisTime/Leo/commit/dd18c78e748875f7ba675e493dd043ba8da2be65))
+
 # [11.7.0](https://github.com/PolarisTime/Leo/compare/v11.6.0...v11.7.0) (2026-09-21)
 
 
