@@ -1,3 +1,10 @@
+# [11.12.0](https://github.com/PolarisTime/Leo/compare/v11.11.0...v11.12.0) (2026-09-22)
+
+
+### Features
+
+* **market:** 新增西本新干线作为第二行情数据源 ([9b1b6fa](https://github.com/PolarisTime/Leo/commit/9b1b6fa93243570167141bcd4e1ef4e9b99423ee))
+
 # [11.11.0](https://github.com/PolarisTime/Leo/compare/v11.10.0...v11.11.0) (2026-09-22)
 
 
