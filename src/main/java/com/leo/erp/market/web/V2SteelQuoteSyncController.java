@@ -9,6 +9,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.market.service.SteelArticleQueryService;
 import com.leo.erp.market.service.SteelQuoteSyncService;
+import com.leo.erp.market.service.SteelxQuoteSyncService;
 import com.leo.erp.market.service.SteelQuoteSyncService.SyncResult;
 import com.leo.erp.market.web.dto.SteelQuoteSyncRequest;
 import com.leo.erp.market.web.dto.SteelQuoteSyncRecordResponse;
@@ -41,13 +42,16 @@ import java.time.ZoneId;
 public class V2SteelQuoteSyncController {
 
     private final SteelQuoteSyncService steelQuoteSyncService;
+    private final SteelxQuoteSyncService steelxQuoteSyncService;
     private final SteelArticleQueryService articleQueryService;
     private final ZoneId zone;
 
     public V2SteelQuoteSyncController(SteelQuoteSyncService steelQuoteSyncService,
+                                      SteelxQuoteSyncService steelxQuoteSyncService,
                                       SteelArticleQueryService articleQueryService,
                                       @Value("${leo.timezone:Asia/Shanghai}") String timezone) {
         this.steelQuoteSyncService = steelQuoteSyncService;
+        this.steelxQuoteSyncService = steelxQuoteSyncService;
         this.articleQueryService = articleQueryService;
         this.zone = ZoneId.of(timezone);
     }
@@ -70,6 +74,17 @@ public class V2SteelQuoteSyncController {
         LocalDate date = request != null && request.date() != null ? request.date() : LocalDate.now(zone);
         if (date.isAfter(LocalDate.now(zone))) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不能同步未来日期的行情");
+        }
+        // 西本: 按地区同步(每天一个价), 忽略 periods
+        if (request != null && "STEELX".equalsIgnoreCase(request.source())) {
+            java.util.List<SteelxQuoteSyncService.SyncResult> steelxResults =
+                    (request.region() == null || request.region().isBlank())
+                            ? steelxQuoteSyncService.syncAllRegions()
+                            : java.util.List.of(steelxQuoteSyncService.syncRegion(request.region()));
+            SteelxQuoteSyncService.SyncResult lastX = steelxResults.get(steelxResults.size() - 1);
+            int rowsX = steelxResults.stream().mapToInt(SteelxQuoteSyncService.SyncResult::rowCount).sum();
+            return ResponseEntity.accepted().body(new SteelQuoteSyncResponse(lastX.articleId(), lastX.articleUrl(),
+                    lastX.articleDate(), "1000", "上午", java.util.List.of("上午"), rowsX, true));
         }
         java.util.List<String> requestedPeriods = request != null ? request.periods() : java.util.List.of();
         java.util.List<SyncResult> results = steelQuoteSyncService.syncAll(date, requestedPeriods);

@@ -24,6 +24,10 @@ import java.util.Optional;
 @Service
 public class SteelQuoteStore {
 
+    /** 数据源标识。 */
+    public static final String SOURCE_MYSTEEL = "MYSTEEL";
+    public static final String SOURCE_STEELX = "STEELX";
+
     private final SteelArticleRepository articleRepository;
     private final SteelQuoteRepository quoteRepository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
@@ -56,6 +60,7 @@ public class SteelQuoteStore {
         article.setPeriod(period.label());
         article.setRowCount(rows.size());
         article.setMarket(market);
+        article.setSource(SOURCE_MYSTEEL);
         article.setFetchedAt(now);
         try {
             articleRepository.saveAndFlush(article);
@@ -72,9 +77,9 @@ public class SteelQuoteStore {
 
     private void upsertQuote(SteelArticle article, SteelQuoteRow row, LocalDateTime scrapedAt) {
         Optional<SteelQuote> existing = quoteRepository
-                .findByQuoteDateAndPeriodAndBreedAndSpecAndMaterialAndFactoryAndDeletedFlagFalse(
-                        article.getArticleDate(), article.getPeriod(), row.breed(), row.spec(),
-                        row.material(), row.factory());
+                .findBySourceAndMarketAndQuoteDateAndPeriodAndBreedAndSpecAndMaterialAndFactoryAndDeletedFlagFalse(
+                        article.getSource(), article.getMarket(), article.getArticleDate(), article.getPeriod(),
+                        row.breed(), row.spec(), row.material(), row.factory());
         if (existing.isPresent()) {
             SteelQuote quote = existing.get();
             quote.setPrice(row.price());
@@ -87,6 +92,7 @@ public class SteelQuoteStore {
         SteelQuote quote = new SteelQuote();
         quote.setId(snowflakeIdGenerator.nextId());
         quote.setArticleId(article.getId());
+        quote.setSource(article.getSource());
         quote.setMarket(article.getMarket());
         quote.setQuoteDate(article.getArticleDate());
         quote.setPeriod(article.getPeriod());
@@ -97,6 +103,81 @@ public class SteelQuoteStore {
         quote.setPrice(row.price());
         quote.setChangeVal(row.change());
         quote.setRemark(row.remark());
+        quote.setScrapedAt(scrapedAt);
+        quoteRepository.save(quote);
+    }
+
+    /**
+     * 西本报价入库: 每地区每日一个价, 无品牌(factory 存空串), period 固定上午。
+     * 同一 URL 已入库时幂等返回既有文章。
+     */
+    @Transactional
+    public SteelArticle persistSteelxArticle(String articleUrl,
+                                             com.leo.erp.market.steelx.SteelxArticleParser.TitleInfo title,
+                                             String region,
+                                             List<com.leo.erp.market.steelx.SteelxArticleParser.SteelxQuoteRow> rows,
+                                             String source) {
+        Optional<SteelArticle> existing =
+                articleRepository.findBySourceAndArticleUrlAndDeletedFlagFalse(source, articleUrl);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        LocalDateTime now = LocalDateTime.now();
+        SteelArticle article = new SteelArticle();
+        article.setId(snowflakeIdGenerator.nextId());
+        article.setArticleUrl(articleUrl);
+        article.setArticleDate(title.articleDate());
+        // 西本无发布时间, 以抓取时刻 HHmm 记录; period 固定上午。
+        article.setArticleTime(LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HHmm")));
+        article.setTitle(title.fullTitle());
+        article.setPeriod(com.leo.erp.market.service.SteelxQuoteSyncService.PERIOD_MORNING);
+        article.setRowCount(rows.size());
+        article.setMarket(region);
+        article.setSource(source);
+        article.setFetchedAt(now);
+        try {
+            articleRepository.saveAndFlush(article);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            return articleRepository.findBySourceAndArticleUrlAndDeletedFlagFalse(source, articleUrl)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_ERROR, "西本行情文章入库冲突"));
+        }
+        for (com.leo.erp.market.steelx.SteelxArticleParser.SteelxQuoteRow row : rows) {
+            upsertSteelxQuote(article, row, now);
+        }
+        return article;
+    }
+
+    private void upsertSteelxQuote(SteelArticle article,
+                                   com.leo.erp.market.steelx.SteelxArticleParser.SteelxQuoteRow row,
+                                   LocalDateTime scrapedAt) {
+        // 西本无品牌: factory 统一空串, 长度并入备注以便溯源(如 12米)。
+        String factory = "";
+        Optional<SteelQuote> existing = quoteRepository
+                .findBySourceAndMarketAndQuoteDateAndPeriodAndBreedAndSpecAndMaterialAndFactoryAndDeletedFlagFalse(
+                        article.getSource(), article.getMarket(), article.getArticleDate(), article.getPeriod(),
+                        row.breed(), row.spec(), row.material(), factory);
+        String remark = row.length() == null ? null : row.length();
+        if (existing.isPresent()) {
+            SteelQuote quote = existing.get();
+            quote.setPrice(row.price());
+            quote.setRemark(remark);
+            quote.setScrapedAt(scrapedAt);
+            quoteRepository.save(quote);
+            return;
+        }
+        SteelQuote quote = new SteelQuote();
+        quote.setId(snowflakeIdGenerator.nextId());
+        quote.setArticleId(article.getId());
+        quote.setSource(article.getSource());
+        quote.setMarket(article.getMarket());
+        quote.setQuoteDate(article.getArticleDate());
+        quote.setPeriod(article.getPeriod());
+        quote.setBreed(row.breed());
+        quote.setSpec(row.spec());
+        quote.setMaterial(row.material());
+        quote.setFactory(factory);
+        quote.setPrice(row.price());
+        quote.setRemark(remark);
         quote.setScrapedAt(scrapedAt);
         quoteRepository.save(quote);
     }

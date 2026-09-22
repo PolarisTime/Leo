@@ -16,6 +16,8 @@ public record ProjectResponse(
         String status,
         String priceFloatMode,
         BigDecimal priceFloatValue,
+        String quoteSource,
+        String quoteRegion,
         String remark
 ) {
     public ProjectResponse(Long id,
@@ -28,6 +30,6 @@ public record ProjectResponse(
                            String status,
                            String remark) {
         this(id, projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
-                null, customerCode, null, null, status, null, null, remark);
+                null, customerCode, null, null, status, null, null, null, null, remark);
     }
 }

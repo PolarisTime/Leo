@@ -66,6 +66,14 @@ public class Project extends AbstractAuditableEntity {
     @Column(name = "last_price_rule_id")
     private Long lastPriceRuleId;
 
+    /** 默认取价数据源: MYSTEEL/STEELX; 空=MYSTEEL。 */
+    @Column(name = "quote_source", length = 16)
+    private String quoteSource;
+
+    /** 默认取价地区(西本城市中文名); 空=杭州。 */
+    @Column(name = "quote_region", length = 32)
+    private String quoteRegion;
+
     @Column(name = "remark", length = 255)
     private String remark;
 }

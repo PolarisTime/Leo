@@ -56,12 +56,32 @@ public class SteelQuoteMatchService {
         this.properties = properties;
     }
 
-    /** 按日期+时段匹配全部实体商品; 未传日期/时段时取最新文章的日期与时段。 */
+    /** 按日期+时段匹配全部实体商品(Mysteel 默认源); 未传日期/时段时取最新文章的日期与时段。 */
     @Transactional(readOnly = true)
     public List<MaterialPriceMatchResponse> match(LocalDate date, String period) {
+        return match(date, period, SteelQuoteStore.SOURCE_MYSTEEL, null);
+    }
+
+    /**
+     * 按数据源+地区匹配全部实体商品。
+     * <ul>
+     *   <li>MYSTEEL: 按品牌别名匹配, 地区固定配置市场(杭州);</li>
+     *   <li>STEELX: 忽略品牌, 按 品名+规格+材质 匹配, 地区为城市中文名。</li>
+     * </ul>
+     */
+    @Transactional(readOnly = true)
+    public List<MaterialPriceMatchResponse> match(LocalDate date, String period, String source, String region) {
+        boolean steelx = SteelQuoteStore.SOURCE_STEELX.equalsIgnoreCase(source);
+        String effectiveSource = steelx ? SteelQuoteStore.SOURCE_STEELX : SteelQuoteStore.SOURCE_MYSTEEL;
+        String market = steelx
+                ? (region == null || region.isBlank() ? properties.getMarket() : region.trim())
+                : properties.getMarket();
+
         Optional<SteelArticle> latest = date == null
-                ? articleRepository.findFirstByDeletedFlagFalseOrderByArticleDateDescArticleTimeDesc()
-                : articleRepository.findFirstByArticleDateAndDeletedFlagFalseOrderByArticleTimeDesc(date);
+                ? articleRepository.findFirstBySourceAndMarketAndDeletedFlagFalseOrderByArticleDateDescArticleTimeDesc(
+                        effectiveSource, market)
+                : articleRepository.findFirstBySourceAndMarketAndArticleDateAndDeletedFlagFalseOrderByArticleTimeDesc(
+                        effectiveSource, market, date);
         if (latest.isEmpty()) {
             return List.of();
         }
@@ -69,15 +89,77 @@ public class SteelQuoteMatchService {
         LocalDate quoteDate = article.getArticleDate();
         String quotePeriod = period != null ? period : article.getPeriod();
 
-        Map<QuoteKey, SteelQuote> index = indexQuotes(quoteRepository
-                .findByQuoteDateAndPeriodAndDeletedFlagFalse(quoteDate, quotePeriod));
+        List<SteelQuote> quotes = quoteRepository
+                .findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
+                        effectiveSource, market, quoteDate, quotePeriod);
         List<MaterialQuery.MaterialSnapshot> materials = materialQuery.findActiveProducts();
 
         List<MaterialPriceMatchResponse> rows = new ArrayList<>(materials.size());
         for (MaterialQuery.MaterialSnapshot material : materials) {
-            rows.add(matchOne(material, quoteDate, quotePeriod, index));
+            rows.add(steelx
+                    ? matchOneNonBranded(material, quoteDate, quotePeriod, quotes)
+                    : matchOne(material, quoteDate, quotePeriod, indexQuotes(quotes)));
         }
         return rows;
+    }
+
+    /**
+     * 西本无品牌匹配: 品名(类别映射) + 规格覆盖 + 材质 命中即可, 品牌忽略。
+     * 精确规格优先; 12 米由备注(长度)标记, 需与商品长度一致。
+     */
+    private MaterialPriceMatchResponse matchOneNonBranded(MaterialQuery.MaterialSnapshot material,
+                                                          LocalDate quoteDate, String quotePeriod,
+                                                          List<SteelQuote> quotes) {
+        String materialName = material.material();
+        if (properties.getMatch().getIgnoredMaterials().contains(materialName)) {
+            return noPrice(material, quoteDate, quotePeriod);
+        }
+        String category = material.category();
+        String breed = properties.getMatch().getBreedMap().getOrDefault(category, category);
+        Integer erpSpec = parseSpec(material.spec());
+        if (erpSpec == null) {
+            return noPrice(material, quoteDate, quotePeriod);
+        }
+        String erpLength = normalizeLength(material.length());
+        List<SteelQuote> candidates = new ArrayList<>();
+        for (SteelQuote quote : quotes) {
+            if (!breed.equals(quote.getBreed()) || !materialName.equals(quote.getMaterial())
+                    || !specCovers(quote.getSpec(), erpSpec)) {
+                continue;
+            }
+            String quoteLength = normalizeLength(quote.getRemark());
+            if (!java.util.Objects.equals(quoteLength, erpLength)) {
+                continue;
+            }
+            candidates.add(quote);
+        }
+        if (candidates.isEmpty()) {
+            return noPrice(material, quoteDate, quotePeriod);
+        }
+        SteelQuote selected = candidates.stream()
+                .min((a, b) -> {
+                    boolean exactA = isExactSpec(a.getSpec());
+                    boolean exactB = isExactSpec(b.getSpec());
+                    if (exactA != exactB) {
+                        return exactA ? -1 : 1;
+                    }
+                    return a.getSpec().compareTo(b.getSpec());
+                })
+                .orElseThrow();
+        BigDecimal price = selected.getPrice();
+        return new MaterialPriceMatchResponse(material.id(), material.materialCode(), material.brand(),
+                materialName, category, material.spec(), material.length(), STATUS_MATCHED,
+                selected.getFactory(), selected.getSpec(), false, price, price, "基准价",
+                selected.getChangeVal(), selected.getRemark(), quoteDate, quotePeriod);
+    }
+
+    /** 归一化长度: 空/无米数视为 9米(螺纹钢基准), 兼容 "12米"/"12 米"/"-"。 */
+    private static String normalizeLength(String length) {
+        if (length == null) {
+            return "9米";
+        }
+        String digits = length.replaceAll("[^0-9]", "");
+        return digits.isEmpty() ? "9米" : digits + "米";
     }
 
     private MaterialPriceMatchResponse matchOne(MaterialQuery.MaterialSnapshot material, LocalDate quoteDate,

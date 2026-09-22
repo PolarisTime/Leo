@@ -21,7 +21,11 @@ public record ProjectOptionResponse(
         /** 网价固定浮动幅度(元/吨), 非负。 */
         BigDecimal priceFloatValue,
         /** 项目上次交付核定使用的价格规定ID(用于默认选中)。 */
-        @JsonSerialize(using = ToStringSerializer.class) Long lastPriceRuleId
+        @JsonSerialize(using = ToStringSerializer.class) Long lastPriceRuleId,
+        /** 默认取价数据源: MYSTEEL/STEELX。 */
+        String quoteSource,
+        /** 默认取价地区(西本城市中文名)。 */
+        String quoteRegion
 ) {
 
     public ProjectOptionResponse(Long id,
@@ -33,7 +37,7 @@ public record ProjectOptionResponse(
                                  String projectName,
                                  String projectNameAbbr) {
         this(id, label, value, customerId, customerCode, projectCode, projectName,
-                projectNameAbbr, null, null, null, null, null);
+                projectNameAbbr, null, null, null, null, null, null, null);
     }
 
     public ProjectOptionResponse(Long id,
@@ -47,6 +51,6 @@ public record ProjectOptionResponse(
                                  Long settlementCompanyId,
                                  String settlementCompanyName) {
         this(id, label, value, customerId, customerCode, projectCode, projectName,
-                projectNameAbbr, settlementCompanyId, settlementCompanyName, null, null, null);
+                projectNameAbbr, settlementCompanyId, settlementCompanyName, null, null, null, null, null);
     }
 }

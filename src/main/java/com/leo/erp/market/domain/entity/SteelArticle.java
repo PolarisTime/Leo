@@ -38,6 +38,10 @@ public class SteelArticle extends AbstractAuditableEntity {
     @Column(name = "row_count", nullable = false)
     private Integer rowCount;
 
+    /** 数据源: MYSTEEL/STEELX。 */
+    @Column(name = "source", nullable = false, length = 16)
+    private String source;
+
     @Column(name = "market", nullable = false, length = 16)
     private String market;
 

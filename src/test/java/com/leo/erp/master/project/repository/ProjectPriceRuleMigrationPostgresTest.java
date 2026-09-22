@@ -44,6 +44,15 @@ class ProjectPriceRuleMigrationPostgresTest {
         assertThat(columnNullable("so_sales_order", "price_float_value")).isTrue();
     }
 
+    @Test
+    void v161_steelQuoteAndProject_haveSourceColumns() {
+        assertThat(columnType("mk_steel_quote", "source")).isEqualTo("character varying");
+        assertThat(columnNullable("mk_steel_quote", "source")).isFalse();
+        assertThat(columnType("mk_steel_article", "source")).isEqualTo("character varying");
+        assertThat(columnNullable("md_project", "quote_source")).isTrue();
+        assertThat(columnNullable("md_project", "quote_region")).isTrue();
+    }
+
     private String columnType(String table, String column) {
         return jdbc.queryForObject("""
                 SELECT data_type FROM information_schema.columns

@@ -15,6 +15,14 @@ public interface SteelArticleRepository extends JpaRepository<SteelArticle, Long
 
     Optional<SteelArticle> findByArticleUrlAndDeletedFlagFalse(String articleUrl);
 
+    Optional<SteelArticle> findBySourceAndArticleUrlAndDeletedFlagFalse(String source, String articleUrl);
+
+    Optional<SteelArticle> findFirstBySourceAndMarketAndDeletedFlagFalseOrderByArticleDateDescArticleTimeDesc(
+            String source, String market);
+
+    Optional<SteelArticle> findFirstBySourceAndMarketAndArticleDateAndDeletedFlagFalseOrderByArticleTimeDesc(
+            String source, String market, LocalDate articleDate);
+
     Optional<SteelArticle> findFirstByDeletedFlagFalseOrderByArticleDateDescArticleTimeDesc();
 
     Optional<SteelArticle> findFirstByArticleDateAndDeletedFlagFalseOrderByArticleTimeDesc(LocalDate articleDate);

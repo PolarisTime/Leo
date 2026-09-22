@@ -311,6 +311,32 @@ leo:
         length-premiums:
           - length: 12米
             premium: 30
+
+    # 西本新干线(steelx2.com)行情: 按地区报价, 无品牌, 每天仅一个价
+    steelx-quote:
+      enabled: ${LEO_MARKET_STEELX_QUOTE_ENABLED:true}
+      source: ${LEO_MARKET_STEELX_QUOTE_SOURCE:STEELX}
+      quotation-path: ${LEO_MARKET_STEELX_QUOTE_PATH:/city/Quotation/quotation/1/index.html}
+      request-timeout-ms: ${LEO_MARKET_STEELX_QUOTE_REQUEST_TIMEOUT_MS:20000}
+      fetch-ssh-host: ${LEO_MARKET_STEELX_QUOTE_FETCH_SSH_HOST:}
+      rate-limit-millis: ${LEO_MARKET_STEELX_QUOTE_RATE_LIMIT_MILLIS:1000}
+      # 城市中文名 -> 子域名 slug; 仅列出支持的地区(列表承载, Spring 属性不支持中文键)
+      regions:
+        - name: 杭州
+          slug: hangzhou
+        - name: 上海
+          slug: shanghai
+        - name: 宁波
+          slug: ningbo
+        - name: 嘉兴
+          slug: jiaxing
+        - name: 绍兴
+          slug: shaoxing
+      sync:
+        enabled: ${LEO_MARKET_STEELX_QUOTE_SYNC_ENABLED:true}
+        # 西本每日仅一个价(上午发布), 默认 10:20 抓取
+        cron: ${LEO_MARKET_STEELX_QUOTE_SYNC_CRON:0 20 10 * * *}
+        zone: ${LEO_MARKET_STEELX_QUOTE_SYNC_ZONE:Asia/Shanghai}
   auth:
     login-protection:
       # 是否启用登录失败次数保护

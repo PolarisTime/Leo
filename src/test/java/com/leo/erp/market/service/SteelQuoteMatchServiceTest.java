@@ -43,7 +43,8 @@ class SteelQuoteMatchServiceTest {
     @Test
     void match_mapsAliasBreedAndLengthPremium() {
         stubLatestArticle();
-        when(quoteRepository.findByQuoteDateAndPeriodAndDeletedFlagFalse(QUOTE_DATE, "下午"))
+        when(quoteRepository.findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
+                        "MYSTEEL", "杭州", QUOTE_DATE, "下午"))
                 .thenReturn(List.of(quote("浙江万泰", "螺纹钢", "HRB400E", "Φ16-25", "3160", "货少")));
         when(materialQuery.findActiveProducts()).thenReturn(List.of(
                 material(1L, "M001", "万泰", "HRB400E", "直条", "16", "12米"),
@@ -67,7 +68,8 @@ class SteelQuoteMatchServiceTest {
     @Test
     void match_prefersExactSpecOverRange() {
         stubLatestArticle();
-        when(quoteRepository.findByQuoteDateAndPeriodAndDeletedFlagFalse(QUOTE_DATE, "下午"))
+        when(quoteRepository.findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
+                        "MYSTEEL", "杭州", QUOTE_DATE, "下午"))
                 .thenReturn(List.of(
                         quote("中天", "螺纹钢", "HRB400E", "Φ16-25", "3100", ""),
                         quote("中天", "螺纹钢", "HRB400E", "Φ18", "3120", "")));
@@ -83,7 +85,8 @@ class SteelQuoteMatchServiceTest {
     @Test
     void match_prefersSingleSpecPriceInRemark() {
         stubLatestArticle();
-        when(quoteRepository.findByQuoteDateAndPeriodAndDeletedFlagFalse(QUOTE_DATE, "下午"))
+        when(quoteRepository.findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
+                        "MYSTEEL", "杭州", QUOTE_DATE, "下午"))
                 .thenReturn(List.of(quote("中天", "螺纹钢", "HRB400E", "Φ16-25", "3100", "Φ18:3130;货少")));
         when(materialQuery.findActiveProducts())
                 .thenReturn(List.of(material(1L, "M001", "中天", "HRB400E", "直条", "18", "9米")));
@@ -99,7 +102,8 @@ class SteelQuoteMatchServiceTest {
     @Test
     void match_ignoresConfiguredMaterials() {
         stubLatestArticle();
-        when(quoteRepository.findByQuoteDateAndPeriodAndDeletedFlagFalse(QUOTE_DATE, "下午"))
+        when(quoteRepository.findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
+                        "MYSTEEL", "杭州", QUOTE_DATE, "下午"))
                 .thenReturn(List.of());
         when(materialQuery.findActiveProducts())
                 .thenReturn(List.of(material(1L, "M001", "万泰", "HRB500E", "直条", "16", "9米")));
@@ -114,7 +118,8 @@ class SteelQuoteMatchServiceTest {
     @Test
     void match_unknownBrandFallsBackToNoPrice() {
         stubLatestArticle();
-        when(quoteRepository.findByQuoteDateAndPeriodAndDeletedFlagFalse(QUOTE_DATE, "下午"))
+        when(quoteRepository.findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
+                        "MYSTEEL", "杭州", QUOTE_DATE, "下午"))
                 .thenReturn(List.of(quote("中天", "盘螺", "HRB400E", "Φ8-10", "3510", "")));
         when(materialQuery.findActiveProducts()).thenReturn(List.of(
                 material(1L, "M001", "新澎辉", "HRB400E", "盘螺", "8", "-"),
@@ -133,7 +138,8 @@ class SteelQuoteMatchServiceTest {
     @Test
     void match_returnsNoPriceWhenNoQuotes() {
         stubLatestArticle();
-        when(quoteRepository.findByQuoteDateAndPeriodAndDeletedFlagFalse(QUOTE_DATE, "下午"))
+        when(quoteRepository.findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
+                        "MYSTEEL", "杭州", QUOTE_DATE, "下午"))
                 .thenReturn(List.of());
         when(materialQuery.findActiveProducts())
                 .thenReturn(List.of(material(1L, "M001", "中天", "HRB400E", "直条", "16", "9米")));
@@ -148,9 +154,10 @@ class SteelQuoteMatchServiceTest {
     @Test
     void match_usesRequestedPeriodOverArticlePeriod() {
         SteelArticle article = article();
-        when(articleRepository.findFirstByArticleDateAndDeletedFlagFalseOrderByArticleTimeDesc(QUOTE_DATE))
-                .thenReturn(Optional.of(article));
-        when(quoteRepository.findByQuoteDateAndPeriodAndDeletedFlagFalse(QUOTE_DATE, "上午"))
+        when(articleRepository.findFirstBySourceAndMarketAndArticleDateAndDeletedFlagFalseOrderByArticleTimeDesc(
+                "MYSTEEL", "杭州", QUOTE_DATE)).thenReturn(Optional.of(article));
+        when(quoteRepository.findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
+                        "MYSTEEL", "杭州", QUOTE_DATE, "上午"))
                 .thenReturn(List.of(quote("中天", "螺纹钢", "HRB400E", "Φ16", "3140", "")));
         when(materialQuery.findActiveProducts())
                 .thenReturn(List.of(material(1L, "M001", "中天", "HRB400E", "直条", "16", "9米")));
@@ -165,9 +172,10 @@ class SteelQuoteMatchServiceTest {
     @Test
     void match_defaultsToLatestArticleWhenDateMissing() {
         SteelArticle article = article();
-        when(articleRepository.findFirstByDeletedFlagFalseOrderByArticleDateDescArticleTimeDesc())
-                .thenReturn(Optional.of(article));
-        when(quoteRepository.findByQuoteDateAndPeriodAndDeletedFlagFalse(QUOTE_DATE, "下午"))
+        when(articleRepository.findFirstBySourceAndMarketAndDeletedFlagFalseOrderByArticleDateDescArticleTimeDesc(
+                "MYSTEEL", "杭州")).thenReturn(Optional.of(article));
+        when(quoteRepository.findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
+                        "MYSTEEL", "杭州", QUOTE_DATE, "下午"))
                 .thenReturn(List.of(quote("中天", "螺纹钢", "HRB400E", "Φ16", "3140", "")));
         when(materialQuery.findActiveProducts())
                 .thenReturn(List.of(material(1L, "M001", "中天", "HRB400E", "直条", "16", "9米")));
@@ -181,8 +189,8 @@ class SteelQuoteMatchServiceTest {
 
     @Test
     void match_returnsEmptyWhenNoArticle() {
-        when(articleRepository.findFirstByDeletedFlagFalseOrderByArticleDateDescArticleTimeDesc())
-                .thenReturn(Optional.empty());
+        when(articleRepository.findFirstBySourceAndMarketAndDeletedFlagFalseOrderByArticleDateDescArticleTimeDesc(
+                "MYSTEEL", "杭州")).thenReturn(Optional.empty());
 
         assertThat(service().match(null, null)).isEmpty();
     }
@@ -209,8 +217,8 @@ class SteelQuoteMatchServiceTest {
     }
 
     private void stubLatestArticle() {
-        when(articleRepository.findFirstByArticleDateAndDeletedFlagFalseOrderByArticleTimeDesc(QUOTE_DATE))
-                .thenReturn(Optional.of(article()));
+        when(articleRepository.findFirstBySourceAndMarketAndArticleDateAndDeletedFlagFalseOrderByArticleTimeDesc(
+                "MYSTEEL", "杭州", QUOTE_DATE)).thenReturn(Optional.of(article()));
     }
 
     private SteelArticle article() {
@@ -223,6 +231,7 @@ class SteelQuoteMatchServiceTest {
         article.setPeriod("下午");
         article.setRowCount(1);
         article.setMarket("杭州");
+        article.setSource("MYSTEEL");
         article.setFetchedAt(QUOTE_DATE.atTime(15, 45));
         return article;
     }
@@ -248,5 +257,53 @@ class SteelQuoteMatchServiceTest {
     private MaterialQuery.MaterialSnapshot material(Long id, String code, String brand, String materialName,
                                                     String category, String spec, String length) {
         return new MaterialQuery.MaterialSnapshot(id, code, brand, materialName, category, spec, length);
+    }
+
+    @Test
+    void match_steelxIgnoresBrandAndMatchesByBreedSpecMaterial() {
+        SteelArticle steelx = article();
+        steelx.setSource("STEELX");
+        steelx.setMarket("杭州");
+        steelx.setPeriod("上午");
+        when(articleRepository.findFirstBySourceAndMarketAndDeletedFlagFalseOrderByArticleDateDescArticleTimeDesc(
+                "STEELX", "杭州")).thenReturn(Optional.of(steelx));
+        SteelQuote q = quote("", "螺纹钢", "HRB400E", "Φ12", "3560", null);
+        q.setSource("STEELX");
+        when(quoteRepository.findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
+                "STEELX", "杭州", QUOTE_DATE, "上午")).thenReturn(List.of(q));
+        when(materialQuery.findActiveProducts()).thenReturn(List.of(
+                material(1L, "M001", "任意品牌", "HRB400E", "直条", "12", "9米"),
+                material(2L, "M002", "另一品牌", "HRB400E", "直条", "12", "9米")));
+
+        List<MaterialPriceMatchResponse> rows = service().match(null, null, "STEELX", "杭州");
+
+        // 忽略品牌: 两种品牌同规格同为 3560
+        assertThat(rows).hasSize(2);
+        assertThat(rows).allMatch(r -> "匹配".equals(r.status()));
+        assertThat(rows).allMatch(r -> r.price().compareTo(new java.math.BigDecimal("3560")) == 0);
+    }
+
+    @Test
+    void match_steelxTwelveMeterRequiresLengthMatch() {
+        SteelArticle steelx = article();
+        steelx.setSource("STEELX");
+        steelx.setMarket("杭州");
+        steelx.setPeriod("上午");
+        when(articleRepository.findFirstBySourceAndMarketAndDeletedFlagFalseOrderByArticleDateDescArticleTimeDesc(
+                "STEELX", "杭州")).thenReturn(Optional.of(steelx));
+        SteelQuote q12 = quote("", "螺纹钢", "HRB400E", "Φ12", "3580", "12米");
+        q12.setSource("STEELX");
+        when(quoteRepository.findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
+                "STEELX", "杭州", QUOTE_DATE, "上午")).thenReturn(List.of(q12));
+        when(materialQuery.findActiveProducts()).thenReturn(List.of(
+                material(1L, "M001", "品牌", "HRB400E", "直条", "12", "12米"),
+                material(2L, "M002", "品牌", "HRB400E", "直条", "12", "9米")));
+
+        List<MaterialPriceMatchResponse> rows = service().match(null, null, "STEELX", "杭州");
+
+        // 仅 12 米行命中(备注标记长度); 9 米行无价
+        assertThat(rows.get(0).status()).isEqualTo("匹配");
+        assertThat(rows.get(0).price()).isEqualByComparingTo("3580");
+        assertThat(rows.get(1).status()).isEqualTo("无网价");
     }
 }

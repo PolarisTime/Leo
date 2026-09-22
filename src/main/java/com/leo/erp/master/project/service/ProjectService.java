@@ -47,6 +47,9 @@ public class ProjectService {
     /** 网价浮动方向常量。 */
     private static final String PRICE_FLOAT_ADD = "ADD";
     private static final String PRICE_FLOAT_SUBTRACT = "SUBTRACT";
+    /** 取价数据源常量。 */
+    private static final String PRICE_SOURCE_MYSTEEL = "MYSTEEL";
+    private static final String PRICE_SOURCE_STEELX = "STEELX";
     private static final CrudStatusGuard<Project> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
     private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
@@ -179,7 +182,9 @@ public class ProjectService {
                         project.getSettlementCompanyName(),
                         project.getPriceFloatMode(),
                         project.getPriceFloatValue(),
-                        project.getLastPriceRuleId()
+                        project.getLastPriceRuleId(),
+                        project.getQuoteSource(),
+                        project.getQuoteRegion()
                 ))
                 .toList();
     }
@@ -206,6 +211,7 @@ public class ProjectService {
                         request.projectAddress(), request.projectManager(), request.customerId(),
                         request.customerCode(), settlementCompanyId, settlementCompanyName,
                         request.status(), request.priceFloatMode(), request.priceFloatValue(),
+                    request.quoteSource(), request.quoteRegion(),
                         request.remark()
                 ),
                 entity
@@ -228,6 +234,7 @@ public class ProjectService {
         entity.setSettlementCompanyName(trimToNull(request.settlementCompanyName()));
         entity.setStatus(request.status());
         applyPriceFloat(entity, request);
+        applyQuoteSource(entity, request);
         entity.setRemark(trimToNull(request.remark()));
     }
 
@@ -247,6 +254,19 @@ public class ProjectService {
         }
         entity.setPriceFloatMode(mode);
         entity.setPriceFloatValue(TradeItemCalculator.scaleAmount(request.priceFloatValue()));
+    }
+
+    /** 归一化取价数据源与地区: 仅允许 MYSTEEL/STEELX; 空视为默认(MYSTEEL/杭州)。 */
+    private void applyQuoteSource(Project entity, ProjectRequest request) {
+        String source = trimToNull(request.quoteSource());
+        if (source == null) {
+            entity.setQuoteSource(null);
+        } else if (PRICE_SOURCE_MYSTEEL.equals(source) || PRICE_SOURCE_STEELX.equals(source)) {
+            entity.setQuoteSource(source);
+        } else {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "取价数据源仅支持 MYSTEEL 或 STEELX");
+        }
+        entity.setQuoteRegion(trimToNull(request.quoteRegion()));
     }
 
     private Project saveCreatedProject(Project entity) {
@@ -303,6 +323,8 @@ public class ProjectService {
                 request.status(),
                 request.priceFloatMode(),
                 request.priceFloatValue(),
+                request.quoteSource(),
+                request.quoteRegion(),
                 request.remark()
         ), customer.getDefaultSettlementCompanyId(), customer.getDefaultSettlementCompanyName());
     }
@@ -322,6 +344,7 @@ public class ProjectService {
                     request.projectAddress(), request.projectManager(), request.customerId(),
                     request.customerCode(), settlementCompanyId, settlementCompanyName,
                     request.status(), request.priceFloatMode(), request.priceFloatValue(),
+                    request.quoteSource(), request.quoteRegion(),
                     request.remark()
             );
         }
@@ -332,6 +355,7 @@ public class ProjectService {
                 request.projectAddress(), request.projectManager(), request.customerId(),
                 request.customerCode(), company.id(), company.name(),
                 request.status(), request.priceFloatMode(), request.priceFloatValue(),
+                    request.quoteSource(), request.quoteRegion(),
                 request.remark()
         );
     }

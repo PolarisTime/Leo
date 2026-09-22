@@ -16,5 +16,12 @@ public interface SteelQuoteRepository extends JpaRepository<SteelQuote, Long>,
 
     List<SteelQuote> findByQuoteDateAndPeriodAndDeletedFlagFalse(LocalDate quoteDate, String period);
 
+    Optional<SteelQuote> findBySourceAndMarketAndQuoteDateAndPeriodAndBreedAndSpecAndMaterialAndFactoryAndDeletedFlagFalse(
+            String source, String market, LocalDate quoteDate, String period, String breed, String spec,
+            String material, String factory);
+
+    List<SteelQuote> findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
+            String source, String market, LocalDate quoteDate, String period);
+
     List<SteelQuote> findByArticleIdAndDeletedFlagFalse(Long articleId);
 }

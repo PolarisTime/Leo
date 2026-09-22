@@ -28,6 +28,10 @@ public record ProjectRequest(
         /** 网价固定浮动幅度(元/吨), 非负。 */
         @PositiveOrZero(message = "网价浮动幅度不能为负")
         BigDecimal priceFloatValue,
+        /** 默认取价数据源: MYSTEEL/STEELX。 */
+        String quoteSource,
+        /** 默认取价地区(西本城市中文名)。 */
+        String quoteRegion,
         String remark
 ) {
     public ProjectRequest(String projectCode,
@@ -39,7 +43,26 @@ public record ProjectRequest(
                           String status,
                           String remark) {
         this(projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
-                null, customerCode, null, null, status, null, null, remark);
+                null, customerCode, null, null, status, null, null, null, null, remark);
+    }
+
+    /** 兼容旧调用方: 未携带取价数据源。 */
+    public ProjectRequest(String projectCode,
+                          String projectName,
+                          String projectNameAbbr,
+                          String projectAddress,
+                          String projectManager,
+                          Long customerId,
+                          String customerCode,
+                          Long settlementCompanyId,
+                          String settlementCompanyName,
+                          String status,
+                          String priceFloatMode,
+                          BigDecimal priceFloatValue,
+                          String remark) {
+        this(projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
+                customerId, customerCode, settlementCompanyId, settlementCompanyName,
+                status, priceFloatMode, priceFloatValue, null, null, remark);
     }
 
     /** 兼容旧调用方: 未携带网价浮动。 */
@@ -56,6 +79,6 @@ public record ProjectRequest(
                           String remark) {
         this(projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
                 customerId, customerCode, settlementCompanyId, settlementCompanyName,
-                status, null, null, remark);
+                status, null, null, null, null, remark);
     }
 }

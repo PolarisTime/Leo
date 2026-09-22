@@ -39,6 +39,8 @@ public class V2MaterialPriceMatchController {
     public List<MaterialPriceMatchResponse> match(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate quoteDate,
             @RequestParam(required = false) String period,
+            @RequestParam(required = false, defaultValue = "MYSTEEL") String source,
+            @RequestParam(required = false) String region,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String brand,
             @RequestParam(defaultValue = "0") int page,
@@ -51,7 +53,7 @@ public class V2MaterialPriceMatchController {
                     "size 必须在1到" + MAX_PAGE_SIZE + "之间");
         }
         LocalDate effectiveDate = quoteDate;
-        List<MaterialPriceMatchResponse> rows = steelQuoteMatchService.match(effectiveDate, period);
+        List<MaterialPriceMatchResponse> rows = steelQuoteMatchService.match(effectiveDate, period, source, region);
         return rows.stream()
                 .filter(row -> status == null || status.isBlank() || status.equals(row.status()))
                 .filter(row -> brand == null || brand.isBlank() || brand.equals(row.brand()))
