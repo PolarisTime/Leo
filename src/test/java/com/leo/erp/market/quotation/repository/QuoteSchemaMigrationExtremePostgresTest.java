@@ -112,6 +112,15 @@ class QuoteSchemaMigrationExtremePostgresTest {
     }
 
     @Test
+    void v158_quoteItem_purchasedNotNullDefaultFalse_andEntityDefaultsFalse() {
+        ColumnMeta purchased = column("mk_quote_item", "purchased");
+        assertThat(purchased.type()).isEqualTo("boolean");
+        assertThat(purchased.nullable()).isFalse();
+        assertThat(purchased.defaultValue()).contains("false");
+        assertThat(new QuoteSheetItem().isPurchased()).isFalse();
+    }
+
+    @Test
     void v144_editLockTable_hasUniqueSheetAndOwnerSnapshot() {
         assertThat(column("mk_quote_sheet_edit_lock", "sheet_id").type()).isEqualTo("bigint");
         assertThat(column("mk_quote_sheet_edit_lock", "sheet_id").nullable()).isFalse();

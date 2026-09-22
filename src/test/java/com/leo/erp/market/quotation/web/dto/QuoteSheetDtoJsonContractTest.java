@@ -107,4 +107,31 @@ class QuoteSheetDtoJsonContractTest {
         assertThat(request.items().get(0).spec()).isEqualTo(12);
         assertThat(request.items().get(0).prices().get(0).spotPrice()).isEqualByComparingTo("3280");
     }
+
+    @Test
+    void request_deserializesPurchasedFlag() throws Exception {
+        String json = "{\"name\":\"9月9日报单\",\"orderDate\":\"2026-09-09\",\"refDate\":\"2026-09-10\","
+                + "\"refPeriod\":\"9:30 上午\",\"brands\":[{\"brandName\":\"中天\",\"freight\":30}],"
+                + "\"items\":[{\"category\":\"螺纹钢\",\"material\":\"HRB400E\",\"spec\":12,\"length\":\"9米\","
+                + "\"ton\":10,\"purchased\":true,\"prices\":[{\"brandName\":\"中天\",\"spotPrice\":3280}]}]}";
+
+        QuoteSheetRequest request = objectMapper.readValue(json, QuoteSheetRequest.class);
+
+        assertThat(request.items().get(0).purchased()).isTrue();
+    }
+
+    @Test
+    void response_serializesPurchasedFlag() throws Exception {
+        QuoteSheetResponse response = new QuoteSheetResponse(
+                1L, "1", "报单", null, null,
+                LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30.00"),
+                false, false, "报价", null, List.of(),
+                List.of(new QuoteSheetResponse.ItemResponse(2L, 1, QuoteRowType.PRODUCT, "螺纹钢",
+                        "HRB400E", 12, "9米", null, new BigDecimal("10.00000000"), true, List.of())),
+                null, null, 1L);
+
+        String json = objectMapper.writeValueAsString(response);
+
+        assertThat(json).contains("\"purchased\":true");
+    }
 }

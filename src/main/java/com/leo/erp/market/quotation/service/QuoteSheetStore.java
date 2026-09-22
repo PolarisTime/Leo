@@ -764,6 +764,7 @@ public class QuoteSheetStore {
             item.setLength(null);
             item.setTon(null);
             item.setRemark(null);
+            item.setPurchased(false);
             item.getPrices().clear();
             return;
         }
@@ -773,6 +774,10 @@ public class QuoteSheetStore {
         item.setLength(request.length());
         item.setTon(request.ton());
         item.setRemark(request.remark());
+        // 未显式携带(null)时保留原值, 兼容旧调用方与仅改价的分片请求。
+        if (request.purchased() != null) {
+            item.setPurchased(request.purchased());
+        }
         Map<String, QuoteSheetItemPrice> existingByBrandName = new HashMap<>();
         for (QuoteSheetItemPrice price : item.getPrices()) {
             existingByBrandName.put(price.getBrandName(), price);
@@ -816,7 +821,7 @@ public class QuoteSheetStore {
     private QuoteSheetResponse.ItemResponse toItemResponse(QuoteSheetItem item) {
         return new QuoteSheetResponse.ItemResponse(
                 item.getId(), item.getLineNo(), item.getRowType(), item.getCategory(), item.getMaterial(),
-                item.getSpec(), item.getLength(), item.getRemark(), item.getTon(),
+                item.getSpec(), item.getLength(), item.getRemark(), item.getTon(), item.isPurchased(),
                 item.getPrices().stream()
                         .map(price -> new QuoteSheetResponse.ItemPriceResponse(
                                 price.getId(), price.getBrandName(), price.getSpotPrice(),

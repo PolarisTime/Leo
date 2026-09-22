@@ -1779,4 +1779,74 @@ class QuoteSheetStoreTest {
                 .containsExactly(1, 2, 3);
         assertThat(response.items().get(1).prices()).isEmpty();
     }
+
+    /** 已采购标记: 行级写显式 true 时落库, 响应回读为 true。 */
+    @Test
+    void updateItem_persistsPurchasedFlag() {
+        QuoteSheet sheet = sheetWithItem(9L);
+        sheet.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetItemWrite write = store().updateItem(9L, 301L,
+                new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
+                        null, new BigDecimal("10"), true,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
+                1L);
+
+        assertThat(write.item().purchased()).isTrue();
+        assertThat(sheet.getItems().get(0).isPurchased()).isTrue();
+    }
+
+    /** 已采购标记: 请求未携带(null)时保留原值, 兼容仅改价的分片请求。 */
+    @Test
+    void updateItem_nullPurchased_retainsExistingFlag() {
+        QuoteSheet sheet = sheetWithItem(9L);
+        sheet.setVersion(1L);
+        sheet.getItems().get(0).setPurchased(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetItemWrite write = store().updateItem(9L, 301L,
+                new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
+                        null, new BigDecimal("10"), null,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
+                1L);
+
+        assertThat(write.item().purchased()).isTrue();
+    }
+
+    /** 已采购标记: 整单替换显式 false 时清除; 隔断行恒为 false。 */
+    @Test
+    void update_replaceOwnerClearsPurchased() {
+        QuoteSheet sheet = sheetWithItem(9L);
+        sheet.setVersion(1L);
+        sheet.getItems().get(0).setPurchased(true);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = store().update(9L,
+                requestWithItems(List.of(new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT,
+                        "螺纹钢", "HRB400E", 12, "9米", null, new BigDecimal("10"), false,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))))),
+                1L);
+
+        assertThat(response.items().get(0).purchased()).isFalse();
+    }
+
+    /** 隔断行即使请求携带 purchased=true 也不落库(保持 false)。 */
+    @Test
+    void updateItem_separatorRowIgnoresPurchased() {
+        QuoteSheet sheet = sheetWithItem(9L);
+        sheet.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetItemWrite write = store().updateItem(9L, 301L,
+                new QuoteSheetRequest.ItemRequest(QuoteRowType.SEPARATOR, null, null, null, null,
+                        null, null, true, List.of()),
+                1L);
+
+        assertThat(write.item().purchased()).isFalse();
+    }
 }

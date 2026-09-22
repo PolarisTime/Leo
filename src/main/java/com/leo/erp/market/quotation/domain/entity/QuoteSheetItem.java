@@ -61,6 +61,10 @@ public class QuoteSheetItem {
     @Column(name = "remark", length = 255)
     private String remark;
 
+    /** 是否已采购: 勾选后前端遮蔽吨位之后的品牌价格列; 隔断行恒为 false。 */
+    @Column(name = "purchased", nullable = false)
+    private boolean purchased = false;
+
     /** LAZY 反向集合: 不参与 fetch join(避免与 items 双 bag), 按 50 一批懒加载避免 N+1。 */
     @OneToMany(mappedBy = "item", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @BatchSize(size = 50)
