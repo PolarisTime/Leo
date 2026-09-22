@@ -78,6 +78,9 @@ class SalesOrderServiceTest {
     @Mock
     private PermissionChecker permissionChecker;
 
+    @Mock
+    private SalesOrderPriceRuleService priceRuleService;
+
     @InjectMocks
     private SalesOrderService service;
 

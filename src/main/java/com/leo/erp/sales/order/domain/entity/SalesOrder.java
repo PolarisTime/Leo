@@ -75,6 +75,19 @@ public class SalesOrder extends AbstractAuditableEntity implements StatusAwareEn
     @Column(name = "remark", length = 255)
     private String remark;
 
+    // ===== 交付核定价格规定快照(保证历史可读, 不随规则变更/删除失真) =====
+    @Column(name = "price_rule_id")
+    private Long priceRuleId;
+
+    @Column(name = "price_rule_name", length = 64)
+    private String priceRuleName;
+
+    @Column(name = "price_float_mode", length = 8)
+    private String priceFloatMode;
+
+    @Column(name = "price_float_value", precision = 12, scale = 2)
+    private BigDecimal priceFloatValue;
+
     @OneToMany(mappedBy = "salesOrder", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SalesOrderItem> items = new ArrayList<>();
 }

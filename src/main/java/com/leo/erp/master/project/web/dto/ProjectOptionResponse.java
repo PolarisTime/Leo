@@ -19,7 +19,9 @@ public record ProjectOptionResponse(
         /** 网价浮动方向: ADD加价/SUBTRACT减价; 空表示不浮动。 */
         String priceFloatMode,
         /** 网价固定浮动幅度(元/吨), 非负。 */
-        BigDecimal priceFloatValue
+        BigDecimal priceFloatValue,
+        /** 项目上次交付核定使用的价格规定ID(用于默认选中)。 */
+        @JsonSerialize(using = ToStringSerializer.class) Long lastPriceRuleId
 ) {
 
     public ProjectOptionResponse(Long id,
@@ -31,7 +33,7 @@ public record ProjectOptionResponse(
                                  String projectName,
                                  String projectNameAbbr) {
         this(id, label, value, customerId, customerCode, projectCode, projectName,
-                projectNameAbbr, null, null, null, null);
+                projectNameAbbr, null, null, null, null, null);
     }
 
     public ProjectOptionResponse(Long id,
@@ -45,6 +47,6 @@ public record ProjectOptionResponse(
                                  Long settlementCompanyId,
                                  String settlementCompanyName) {
         this(id, label, value, customerId, customerCode, projectCode, projectName,
-                projectNameAbbr, settlementCompanyId, settlementCompanyName, null, null);
+                projectNameAbbr, settlementCompanyId, settlementCompanyName, null, null, null);
     }
 }

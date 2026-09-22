@@ -31,6 +31,10 @@ public record SalesOrderResponse(
         String status,
         boolean deletedFlag,
         String remark,
+        @JsonSerialize(using = ToStringSerializer.class) Long priceRuleId,
+        String priceRuleName,
+        String priceFloatMode,
+        BigDecimal priceFloatValue,
         List<SalesOrderItemResponse> items,
         List<DocumentChargeItemResponse> chargeItems,
         boolean referencedByFreightBill,
@@ -62,7 +66,7 @@ public record SalesOrderResponse(
                               List<DocumentChargeItemResponse> chargeItems) {
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
-                totalAmount, status, deletedFlag, remark, items, chargeItems, false, false, null, null, null);
+                totalAmount, status, deletedFlag, remark, null, null, null, null, items, chargeItems, false, false, null, null, null);
     }
 
     public SalesOrderResponse withReferenceFlags(boolean referencedByFreightBill,
@@ -70,7 +74,8 @@ public record SalesOrderResponse(
         return new SalesOrderResponse(
                 id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
-                totalAmount, status, deletedFlag, remark, items, chargeItems, referencedByFreightBill,
+                totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
+                priceFloatValue, items, chargeItems, referencedByFreightBill,
                 referencedBySalesOutbound, deliveredQuantity, returnedQuantity, deliveredNetQuantity
         );
     }
@@ -81,7 +86,8 @@ public record SalesOrderResponse(
         return new SalesOrderResponse(
                 id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
-                totalAmount, status, deletedFlag, remark, items, chargeItems, referencedByFreightBill,
+                totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
+                priceFloatValue, items, chargeItems, referencedByFreightBill,
                 referencedBySalesOutbound, deliveredQuantity, returnedQuantity, deliveredNetQuantity
         );
     }
@@ -107,7 +113,8 @@ public record SalesOrderResponse(
                               List<SalesOrderItemResponse> items) {
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
-                totalAmount, status, deletedFlag, remark, items, List.of(), false, false, null, null, null);
+                totalAmount, status, deletedFlag, remark, null, null, null, null, items, List.of(), false, false,
+                null, null, null);
     }
 
     public SalesOrderResponse(Long id,

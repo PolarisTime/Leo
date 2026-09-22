@@ -62,6 +62,10 @@ public class Project extends AbstractAuditableEntity {
     @Column(name = "price_float_value", precision = 12, scale = 2)
     private BigDecimal priceFloatValue;
 
+    /** 上次交付核定使用的价格规定ID(项目级记忆)。 */
+    @Column(name = "last_price_rule_id")
+    private Long lastPriceRuleId;
+
     @Column(name = "remark", length = 255)
     private String remark;
 }

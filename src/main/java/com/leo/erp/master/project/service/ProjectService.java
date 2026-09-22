@@ -178,7 +178,8 @@ public class ProjectService {
                         project.getSettlementCompanyId(),
                         project.getSettlementCompanyName(),
                         project.getPriceFloatMode(),
-                        project.getPriceFloatValue()
+                        project.getPriceFloatValue(),
+                        project.getLastPriceRuleId()
                 ))
                 .toList();
     }

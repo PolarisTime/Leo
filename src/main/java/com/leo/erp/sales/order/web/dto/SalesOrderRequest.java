@@ -23,6 +23,8 @@ public record SalesOrderRequest(
         @jakarta.validation.constraints.NotBlank String salesName,
         String status,
         String remark,
+        /** 交付核定所选价格规定ID(可选); 服务端据此按网价赋价并快照。 */
+        Long priceRuleId,
         @Valid @NotEmpty List<SalesOrderItemRequest> items,
         @Valid List<DocumentChargeItemRequest> chargeItems,
         boolean audit
@@ -32,6 +34,29 @@ public record SalesOrderRequest(
         if (chargeItems == null) {
             chargeItems = List.of();
         }
+    }
+
+    /** 兼容旧调用方: 未携带价格规定。 */
+    public SalesOrderRequest(String orderNo,
+                             String purchaseInboundNo,
+                             String purchaseOrderNo,
+                             String customerCode,
+                             Long customerId,
+                             String customerName,
+                             Long projectId,
+                             String projectName,
+                             Long settlementCompanyId,
+                             String settlementCompanyName,
+                             LocalDate deliveryDate,
+                             String salesName,
+                             String status,
+                             String remark,
+                             List<SalesOrderItemRequest> items,
+                             List<DocumentChargeItemRequest> chargeItems,
+                             boolean audit) {
+        this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
+                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, status, remark,
+                null, items, chargeItems, audit);
     }
     public SalesOrderRequest(String orderNo,
                              String purchaseInboundNo,
@@ -48,7 +73,8 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
-                settlementCompanyId, settlementCompanyName, deliveryDate, salesName, status, remark, items, List.of(), false);
+                settlementCompanyId, settlementCompanyName, deliveryDate, salesName, status, remark, null, items,
+                List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -64,7 +90,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
-                null, null, deliveryDate, salesName, status, remark, items, List.of(), false);
+                null, null, deliveryDate, salesName, status, remark, null, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -79,7 +105,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, null, customerCode, null, customerName, projectId, projectName,
-                null, null, deliveryDate, salesName, status, remark, items, List.of(), false);
+                null, null, deliveryDate, salesName, status, remark, null, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -92,7 +118,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, null, null, null, customerName, null, projectName,
-                null, null, deliveryDate, salesName, status, remark, items, List.of(), false);
+                null, null, deliveryDate, salesName, status, remark, null, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -106,7 +132,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, null, null, customerName, null, projectName,
-                null, null, deliveryDate, salesName, status, remark, items, List.of(), false);
+                null, null, deliveryDate, salesName, status, remark, null, items, List.of(), false);
     }
 
 }

@@ -5,7 +5,10 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.support.OptionLimits;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.master.project.service.ProjectService;
+import com.leo.erp.master.project.service.ProjectPriceRuleService;
 import com.leo.erp.master.project.web.dto.ProjectOptionResponse;
+import com.leo.erp.master.project.web.dto.ProjectPriceRuleRequest;
+import com.leo.erp.master.project.web.dto.ProjectPriceRuleResponse;
 import com.leo.erp.master.project.web.dto.ProjectRequest;
 import com.leo.erp.master.project.web.dto.ProjectResponse;
 import com.leo.erp.security.permission.PermissionCodes;
@@ -27,6 +30,7 @@ import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2NoContent;
+import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.http.ResponseEntity;
 
 @RestController
@@ -36,9 +40,12 @@ import org.springframework.http.ResponseEntity;
 public class V2ProjectController {
 
     private final ProjectService projectService;
+    private final ProjectPriceRuleService priceRuleService;
 
-    public V2ProjectController(ProjectService projectService) {
+    public V2ProjectController(ProjectService projectService,
+                               ProjectPriceRuleService priceRuleService) {
         this.projectService = projectService;
+        this.priceRuleService = priceRuleService;
     }
 
     @GetMapping("/options")
@@ -78,5 +85,22 @@ public class V2ProjectController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         projectService.delete(id);
         return V2ResponseSupport.noContent();
+    }
+
+    @Operation(summary = "查询项目价格规定")
+    @GetMapping("/{id}/price-rules")
+    @RequirePermission(PermissionCodes.PROJECTS_READ)
+    public List<ProjectPriceRuleResponse> priceRules(@PathVariable Long id) {
+        return priceRuleService.list(id);
+    }
+
+    @Operation(summary = "整体替换项目价格规定(新增/更新/软删/重排)")
+    @IdempotencyRequired
+    @PutMapping("/{id}/price-rules")
+    @RequirePermission(PermissionCodes.PROJECTS_UPDATE)
+    public List<ProjectPriceRuleResponse> replacePriceRules(
+            @PathVariable Long id,
+            @Valid @RequestBody List<ProjectPriceRuleRequest> requests) {
+        return priceRuleService.replace(id, requests);
     }
 }

@@ -49,6 +49,7 @@ public class SalesOrderService {
     private final SalesOrderMutationGuardService mutationGuardService;
     private final SalesOrderWorkflowService workflowService;
     private final PermissionChecker permissionChecker;
+    private final SalesOrderPriceRuleService priceRuleService;
 
     @Autowired
     public SalesOrderService(SalesOrderRepository repository,
@@ -57,7 +58,8 @@ public class SalesOrderService {
                              SalesOrderQueryService queryService,
                              SalesOrderMutationGuardService mutationGuardService,
                              SalesOrderWorkflowService workflowService,
-                             PermissionChecker permissionChecker) {
+                             PermissionChecker permissionChecker,
+                             SalesOrderPriceRuleService priceRuleService) {
         this.idGenerator = idGenerator;
         this.repository = repository;
         this.documentChargeItemService = documentChargeItemService;
@@ -65,6 +67,7 @@ public class SalesOrderService {
         this.mutationGuardService = mutationGuardService;
         this.workflowService = workflowService;
         this.permissionChecker = permissionChecker;
+        this.priceRuleService = priceRuleService;
     }
 
     @Transactional(readOnly = true)
@@ -130,6 +133,10 @@ public class SalesOrderService {
     @Transactional
     public SalesOrderResponse updateAndComplete(Long id, SalesOrderRequest request) {
         updateOrder(id, withStatus(request, StatusConstants.DELIVERY_VERIFICATION));
+        // 应用交付核定所选价格规定: 校验归属、快照到单据、记录项目上次使用。
+        SalesOrder order = requireEntity(id);
+        priceRuleService.applyPriceRule(order, request.priceRuleId());
+        repository.save(order);
         return completeSalesOrder(id);
     }
 
@@ -311,6 +318,7 @@ public class SalesOrderService {
                 request.salesName(),
                 request.status(),
                 request.remark(),
+                request.priceRuleId(),
                 request.items(),
                 request.chargeItems(),
                 request.audit()
@@ -346,6 +354,7 @@ public class SalesOrderService {
                 request.salesName(),
                 status,
                 request.remark(),
+                request.priceRuleId(),
                 request.items(),
                 request.chargeItems(),
                 request.audit()
@@ -369,6 +378,7 @@ public class SalesOrderService {
                 request.salesName(),
                 entity.getStatus(),
                 request.remark(),
+                request.priceRuleId(),
                 request.items(),
                 request.chargeItems(),
                 request.audit()
