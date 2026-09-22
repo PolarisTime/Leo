@@ -106,8 +106,7 @@ class ProjectServiceTest {
     }
 
     @Test
-    void create_trimsUserVisibleStrings() {
-        Project[] savedHolder = new Project[1];
+    void create_trimsUserVisibleStrings() {        Project[] savedHolder = new Project[1];
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
                 .thenReturn(Optional.of(customer(7L, "C007", null, null)));
         when(snowflakeIdGenerator.nextId()).thenReturn(100L);
@@ -291,5 +290,77 @@ class ProjectServiceTest {
         assertThat(cacheable.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
         assertThat(cacheable.key()).isEqualTo("'leo:project:all:' + #customerId");
         assertThat(cacheable.unless()).isEqualTo("#result == null || #result.isEmpty()");
+    }
+
+    @Test
+    void create_persistsPriceFloatAdd() {
+        Project[] savedHolder = new Project[1];
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L);
+        when(codeIssuanceService.resolve(eq("project"), any(), anyString())).thenReturn("111");
+        when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
+            Project entity = invocation.getArgument(0);
+            savedHolder[0] = entity;
+            return entity;
+        });
+
+        service().create(new ProjectRequest("111", "项目A", null, null, null,
+                7L, "C007", null, null, "正常", "ADD",
+                new java.math.BigDecimal("30.00"), null));
+
+        Project entity = savedHolder[0];
+        assertThat(entity.getPriceFloatMode()).isEqualTo("ADD");
+        assertThat(entity.getPriceFloatValue()).isEqualByComparingTo("30.00");
+    }
+
+    @Test
+    void create_clearsFloatWhenModeAbsent() {
+        Project[] savedHolder = new Project[1];
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L);
+        when(codeIssuanceService.resolve(eq("project"), any(), anyString())).thenReturn("111");
+        when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
+            Project entity = invocation.getArgument(0);
+            savedHolder[0] = entity;
+            return entity;
+        });
+
+        // 未配置方向时应清空幅度, 避免残留半配置
+        service().create(new ProjectRequest("111", "项目A", null, null, null,
+                7L, "C007", null, null, "正常", null,
+                new java.math.BigDecimal("30.00"), null));
+
+        Project entity = savedHolder[0];
+        assertThat(entity.getPriceFloatMode()).isNull();
+        assertThat(entity.getPriceFloatValue()).isNull();
+    }
+
+    @Test
+    void create_rejectsInvalidFloatMode() {
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+
+        assertThatThrownBy(() -> service().create(new ProjectRequest("111", "项目A", null, null, null,
+                7L, "C007", null, null, "正常", "UP",
+                new java.math.BigDecimal("30.00"), null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(projectRepository, never()).save(any(Project.class));
+    }
+
+    @Test
+    void create_rejectsFloatModeWithoutValue() {
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+
+        assertThatThrownBy(() -> service().create(new ProjectRequest("111", "项目A", null, null, null,
+                7L, "C007", null, null, "正常", "SUBTRACT", null, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(projectRepository, never()).save(any(Project.class));
     }
 }

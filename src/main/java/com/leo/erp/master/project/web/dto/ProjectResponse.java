@@ -1,5 +1,7 @@
 package com.leo.erp.master.project.web.dto;
 
+import java.math.BigDecimal;
+
 public record ProjectResponse(
         Long id,
         String projectCode,
@@ -12,6 +14,8 @@ public record ProjectResponse(
         Long settlementCompanyId,
         String settlementCompanyName,
         String status,
+        String priceFloatMode,
+        BigDecimal priceFloatValue,
         String remark
 ) {
     public ProjectResponse(Long id,
@@ -24,6 +28,6 @@ public record ProjectResponse(
                            String status,
                            String remark) {
         this(id, projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
-                null, customerCode, null, null, status, remark);
+                null, customerCode, null, null, status, null, null, remark);
     }
 }

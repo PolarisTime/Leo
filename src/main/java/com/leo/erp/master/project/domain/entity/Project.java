@@ -9,6 +9,8 @@ import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
 @Getter
 @Setter
 @Entity
@@ -51,6 +53,14 @@ public class Project extends AbstractAuditableEntity {
 
     @Column(name = "status", nullable = false, length = 16)
     private String status;
+
+    /** 网价浮动方向: ADD加价/SUBTRACT减价; null 表示不启用网价浮动。 */
+    @Column(name = "price_float_mode", length = 8)
+    private String priceFloatMode;
+
+    /** 网价固定浮动幅度(元/吨), 非负; 与 priceFloatMode 同时为空或同时有值。 */
+    @Column(name = "price_float_value", precision = 12, scale = 2)
+    private BigDecimal priceFloatValue;
 
     @Column(name = "remark", length = 255)
     private String remark;

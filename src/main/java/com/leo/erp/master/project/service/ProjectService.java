@@ -13,6 +13,7 @@ import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
+import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
@@ -43,6 +44,9 @@ public class ProjectService {
     private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
     private static final String CODE_MODULE_KEY = "project";
     private static final String PROJECT_OPTIONS_CACHE_KEY = "leo:project:all";
+    /** 网价浮动方向常量。 */
+    private static final String PRICE_FLOAT_ADD = "ADD";
+    private static final String PRICE_FLOAT_SUBTRACT = "SUBTRACT";
     private static final CrudStatusGuard<Project> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
     private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
@@ -172,7 +176,9 @@ public class ProjectService {
                         project.getProjectName(),
                         project.getProjectNameAbbr(),
                         project.getSettlementCompanyId(),
-                        project.getSettlementCompanyName()
+                        project.getSettlementCompanyName(),
+                        project.getPriceFloatMode(),
+                        project.getPriceFloatValue()
                 ))
                 .toList();
     }
@@ -198,7 +204,8 @@ public class ProjectService {
                         request.projectCode(), request.projectName(), request.projectNameAbbr(),
                         request.projectAddress(), request.projectManager(), request.customerId(),
                         request.customerCode(), settlementCompanyId, settlementCompanyName,
-                        request.status(), request.remark()
+                        request.status(), request.priceFloatMode(), request.priceFloatValue(),
+                        request.remark()
                 ),
                 entity
         );
@@ -219,7 +226,26 @@ public class ProjectService {
         entity.setSettlementCompanyId(request.settlementCompanyId());
         entity.setSettlementCompanyName(trimToNull(request.settlementCompanyName()));
         entity.setStatus(request.status());
+        applyPriceFloat(entity, request);
         entity.setRemark(trimToNull(request.remark()));
+    }
+
+    /** 归一化并校验网价浮动: 方向与幅度必须同时为空或同时有值; 方向仅允许 ADD/SUBTRACT。 */
+    private void applyPriceFloat(Project entity, ProjectRequest request) {
+        String mode = trimToNull(request.priceFloatMode());
+        if (mode == null) {
+            entity.setPriceFloatMode(null);
+            entity.setPriceFloatValue(null);
+            return;
+        }
+        if (!PRICE_FLOAT_ADD.equals(mode) && !PRICE_FLOAT_SUBTRACT.equals(mode)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "网价浮动方向仅支持加价或减价");
+        }
+        if (request.priceFloatValue() == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请填写网价浮动幅度");
+        }
+        entity.setPriceFloatMode(mode);
+        entity.setPriceFloatValue(TradeItemCalculator.scaleAmount(request.priceFloatValue()));
     }
 
     private Project saveCreatedProject(Project entity) {
@@ -274,6 +300,8 @@ public class ProjectService {
                 fallbackSettlementCompanyId,
                 fallbackSettlementCompanyName,
                 request.status(),
+                request.priceFloatMode(),
+                request.priceFloatValue(),
                 request.remark()
         ), customer.getDefaultSettlementCompanyId(), customer.getDefaultSettlementCompanyName());
     }
@@ -292,7 +320,8 @@ public class ProjectService {
                     request.projectCode(), request.projectName(), request.projectNameAbbr(),
                     request.projectAddress(), request.projectManager(), request.customerId(),
                     request.customerCode(), settlementCompanyId, settlementCompanyName,
-                    request.status(), request.remark()
+                    request.status(), request.priceFloatMode(), request.priceFloatValue(),
+                    request.remark()
             );
         }
         SettlementCompanySnapshot company = companySettingService
@@ -301,7 +330,8 @@ public class ProjectService {
                 request.projectCode(), request.projectName(), request.projectNameAbbr(),
                 request.projectAddress(), request.projectManager(), request.customerId(),
                 request.customerCode(), company.id(), company.name(),
-                request.status(), request.remark()
+                request.status(), request.priceFloatMode(), request.priceFloatValue(),
+                request.remark()
         );
     }
 
