@@ -1,3 +1,10 @@
+# [11.13.0](https://github.com/PolarisTime/Leo/compare/v11.12.0...v11.13.0) (2026-09-22)
+
+
+### Features
+
+* **quotation:** 报单比价支持西本按规格取价(无品牌) ([5dcdf8c](https://github.com/PolarisTime/Leo/commit/5dcdf8cedbe943d43e9226fa0a268f1a1bba437a))
+
 # [11.12.0](https://github.com/PolarisTime/Leo/compare/v11.11.0...v11.12.0) (2026-09-22)
 
 
