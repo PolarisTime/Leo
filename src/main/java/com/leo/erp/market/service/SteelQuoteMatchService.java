@@ -39,6 +39,8 @@ public class SteelQuoteMatchService {
 
     static final String STATUS_MATCHED = "匹配";
     static final String STATUS_NO_PRICE = "无网价";
+    /** 西本无品牌: 统一以虚拟品牌「基准价」标识, 供前端识别与按规格取价。 */
+    public static final String VIRTUAL_BRAND = "基准价";
     private static final String SPEC_PREFIX = "Φ";
     private static final String LENGTH_METER_SUFFIX = "米";
 
@@ -147,7 +149,7 @@ public class SteelQuoteMatchService {
                 })
                 .orElseThrow();
         BigDecimal price = selected.getPrice();
-        return new MaterialPriceMatchResponse(material.id(), material.materialCode(), material.brand(),
+        return new MaterialPriceMatchResponse(material.id(), material.materialCode(), VIRTUAL_BRAND,
                 materialName, category, material.spec(), material.length(), STATUS_MATCHED,
                 selected.getFactory(), selected.getSpec(), false, price, price, "基准价",
                 selected.getChangeVal(), selected.getRemark(), quoteDate, quotePeriod);

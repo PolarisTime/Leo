@@ -16,6 +16,7 @@ import com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository;
 import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
+import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.api.SupplierQuery;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -55,18 +56,35 @@ public class QuoteSheetStore {
     private final QuoteProjectConfigRepository quoteProjectConfigRepository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final SupplierQuery supplierQuery;
+    private final ProjectQuery projectQuery;
     private final EntityManager entityManager;
 
     public QuoteSheetStore(QuoteSheetRepository repository,
                            QuoteProjectConfigRepository quoteProjectConfigRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            SupplierQuery supplierQuery,
+                           ProjectQuery projectQuery,
                            EntityManager entityManager) {
         this.repository = repository;
         this.quoteProjectConfigRepository = quoteProjectConfigRepository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.supplierQuery = supplierQuery;
+        this.projectQuery = projectQuery;
         this.entityManager = entityManager;
+    }
+
+    /** 西本模式虚拟品牌名(无品牌, 按规格一个价)。 */
+    public static final String STEELX_VIRTUAL_BRAND = "基准价";
+    private static final String SOURCE_STEELX = "STEELX";
+
+    /** 项目取价数据源是否为西本(无品牌)。 */
+    private boolean isSteelxProject(Long projectId) {
+        if (projectId == null) {
+            return false;
+        }
+        return projectQuery.findActiveById(projectId)
+                .map(snapshot -> SOURCE_STEELX.equalsIgnoreCase(snapshot.quoteSource()))
+                .orElse(false);
     }
 
     @Transactional
@@ -398,6 +416,10 @@ public class QuoteSheetStore {
      */
     private Optional<QuoteProjectConfig> effectiveProjectConfig(Long projectId) {
         if (projectId == null) {
+            return Optional.empty();
+        }
+        // 西本项目无品牌: 忽略品牌配置, 由请求携带虚拟品牌快照。
+        if (isSteelxProject(projectId)) {
             return Optional.empty();
         }
         return quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(projectId)

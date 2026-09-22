@@ -40,7 +40,7 @@ class QuoteProjectConfigStoreTest {
     private EntityManager entityManager;
 
     private QuoteProjectConfigStore store() {
-        return new QuoteProjectConfigStore(repository, snowflakeIdGenerator, entityManager);
+        return new QuoteProjectConfigStore(repository, snowflakeIdGenerator, entityManager, null);
     }
 
     @Test

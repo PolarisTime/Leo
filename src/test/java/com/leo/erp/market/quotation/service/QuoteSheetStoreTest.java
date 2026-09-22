@@ -54,11 +54,14 @@ class QuoteSheetStoreTest {
     private SupplierQuery supplierQuery;
 
     @Mock
+    private com.leo.erp.master.api.ProjectQuery projectQuery;
+
+    @Mock
     private EntityManager entityManager;
 
     private QuoteSheetStore store() {
         return new QuoteSheetStore(repository, quoteProjectConfigRepository, snowflakeIdGenerator,
-                supplierQuery, entityManager);
+                supplierQuery, projectQuery, entityManager);
     }
 
     @Test
@@ -1848,5 +1851,30 @@ class QuoteSheetStoreTest {
                 1L);
 
         assertThat(write.item().purchased()).isFalse();
+    }
+
+    /** 西本项目忽略品牌配置, 请求携带虚拟品牌「基准价」时按该虚拟品牌放行并入库。 */
+    @Test
+    void create_steelxProject_acceptsVirtualBrandRuleAndPersists() {
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer(i -> i.getArgument(0));
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 301L);
+        when(projectQuery.findActiveById(77L)).thenReturn(java.util.Optional.of(
+                new com.leo.erp.master.api.ProjectQuery.ProjectSnapshot(
+                        77L, "西本项目", "西本", 1L, "C1", null, null, "STEELX")));
+
+        QuoteSheetRequest request = new QuoteSheetRequest(
+                "9月9日报单", 77L, "西本项目", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10),
+                "9:30 上午", new BigDecimal("30"), false, false, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("基准价", BigDecimal.ZERO, 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米",
+                        new BigDecimal("10"),
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("基准价", new BigDecimal("3560"), null)))));
+
+        QuoteSheetResponse response = store().create(request);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).prices()).hasSize(1);
+        assertThat(response.items().get(0).prices().get(0).brandName()).isEqualTo("基准价");
+        assertThat(response.items().get(0).prices().get(0).spotPrice()).isEqualByComparingTo("3560");
     }
 }

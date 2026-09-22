@@ -43,7 +43,8 @@ public class ProjectQueryService implements ProjectQuery {
                 project.getCustomerId(),
                 project.getCustomerCode(),
                 project.getSettlementCompanyId(),
-                project.getSettlementCompanyName()
+                project.getSettlementCompanyName(),
+                project.getQuoteSource()
         );
     }
 }

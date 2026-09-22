@@ -117,15 +117,31 @@ public class SteelQuoteStore {
                                              String region,
                                              List<com.leo.erp.market.steelx.SteelxArticleParser.SteelxQuoteRow> rows,
                                              String source) {
+        // 西本页面 URL 每天相同(仅内容按日更新), 故以 "URL#日期" 作为文章唯一键, 保证按日幂等。
+        String datedUrl = articleUrl + "#" + title.articleDate();
         Optional<SteelArticle> existing =
-                articleRepository.findBySourceAndArticleUrlAndDeletedFlagFalse(source, articleUrl);
+                articleRepository.findBySourceAndArticleUrlAndDeletedFlagFalse(source, datedUrl);
         if (existing.isPresent()) {
             return existing.get();
+        }
+        // 唯一键不含 deleted_flag: 软删文章占用同一 URL 时复活并更新, 避免插入撞唯一键。
+        Optional<SteelArticle> softDeleted =
+                articleRepository.findBySourceAndArticleUrl(source, datedUrl);
+        if (softDeleted.isPresent()) {
+            SteelArticle revived = softDeleted.get();
+            revived.setDeletedFlag(false);
+            revived.setArticleDate(title.articleDate());
+            revived.setTitle(title.fullTitle());
+            revived.setRowCount(rows.size());
+            revived.setMarket(region);
+            revived.setFetchedAt(LocalDateTime.now());
+            articleRepository.saveAndFlush(revived);
+            return revived;
         }
         LocalDateTime now = LocalDateTime.now();
         SteelArticle article = new SteelArticle();
         article.setId(snowflakeIdGenerator.nextId());
-        article.setArticleUrl(articleUrl);
+        article.setArticleUrl(datedUrl);
         article.setArticleDate(title.articleDate());
         // 西本无发布时间, 以抓取时刻 HHmm 记录; period 固定上午。
         article.setArticleTime(LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HHmm")));
@@ -138,7 +154,7 @@ public class SteelQuoteStore {
         try {
             articleRepository.saveAndFlush(article);
         } catch (org.springframework.dao.DataIntegrityViolationException ex) {
-            return articleRepository.findBySourceAndArticleUrlAndDeletedFlagFalse(source, articleUrl)
+            return articleRepository.findBySourceAndArticleUrl(source, datedUrl)
                     .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_ERROR, "西本行情文章入库冲突"));
         }
         for (com.leo.erp.market.steelx.SteelxArticleParser.SteelxQuoteRow row : rows) {
@@ -152,13 +168,16 @@ public class SteelQuoteStore {
                                    LocalDateTime scrapedAt) {
         // 西本无品牌: factory 统一空串, 长度并入备注以便溯源(如 12米)。
         String factory = "";
+        // 含软删查询: 同键软删行占用唯一键时复活(唯一键不含 deleted_flag)。
         Optional<SteelQuote> existing = quoteRepository
-                .findBySourceAndMarketAndQuoteDateAndPeriodAndBreedAndSpecAndMaterialAndFactoryAndDeletedFlagFalse(
+                .findBySourceAndMarketAndQuoteDateAndPeriodAndBreedAndSpecAndMaterialAndFactory(
                         article.getSource(), article.getMarket(), article.getArticleDate(), article.getPeriod(),
                         row.breed(), row.spec(), row.material(), factory);
         String remark = row.length() == null ? null : row.length();
         if (existing.isPresent()) {
             SteelQuote quote = existing.get();
+            quote.setDeletedFlag(false);
+            quote.setArticleId(article.getId());
             quote.setPrice(row.price());
             quote.setRemark(remark);
             quote.setScrapedAt(scrapedAt);

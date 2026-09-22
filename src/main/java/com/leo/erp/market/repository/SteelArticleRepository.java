@@ -17,6 +17,9 @@ public interface SteelArticleRepository extends JpaRepository<SteelArticle, Long
 
     Optional<SteelArticle> findBySourceAndArticleUrlAndDeletedFlagFalse(String source, String articleUrl);
 
+    /** 含软删: 唯一键(source,article_url)不含 deleted_flag, 复用同一 URL 时需复活软删文章。 */
+    Optional<SteelArticle> findBySourceAndArticleUrl(String source, String articleUrl);
+
     Optional<SteelArticle> findFirstBySourceAndMarketAndDeletedFlagFalseOrderByArticleDateDescArticleTimeDesc(
             String source, String market);
 

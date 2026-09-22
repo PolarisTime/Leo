@@ -23,5 +23,10 @@ public interface SteelQuoteRepository extends JpaRepository<SteelQuote, Long>,
     List<SteelQuote> findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
             String source, String market, LocalDate quoteDate, String period);
 
+    /** 含软删: 唯一键不含 deleted_flag, 同键软删占用时需复活。 */
+    Optional<SteelQuote> findBySourceAndMarketAndQuoteDateAndPeriodAndBreedAndSpecAndMaterialAndFactory(
+            String source, String market, LocalDate quoteDate, String period, String breed, String spec,
+            String material, String factory);
+
     List<SteelQuote> findByArticleIdAndDeletedFlagFalse(Long articleId);
 }

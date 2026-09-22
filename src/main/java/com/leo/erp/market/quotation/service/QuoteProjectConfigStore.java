@@ -35,13 +35,26 @@ public class QuoteProjectConfigStore {
     private final QuoteProjectConfigRepository repository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final EntityManager entityManager;
+    private final com.leo.erp.master.api.ProjectQuery projectQuery;
 
     public QuoteProjectConfigStore(QuoteProjectConfigRepository repository,
                                    SnowflakeIdGenerator snowflakeIdGenerator,
-                                   EntityManager entityManager) {
+                                   EntityManager entityManager,
+                                   com.leo.erp.master.api.ProjectQuery projectQuery) {
         this.repository = repository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.entityManager = entityManager;
+        this.projectQuery = projectQuery;
+    }
+
+    /** 项目取价数据源(MYSTEEL/STEELX)。 */
+    private String quoteSourceOf(Long projectId) {
+        if (projectId == null || projectQuery == null) {
+            return null;
+        }
+        return projectQuery.findActiveById(projectId)
+                .map(com.leo.erp.master.api.ProjectQuery.ProjectSnapshot::quoteSource)
+                .orElse(null);
     }
 
     /** 查询项目配置; 未配置时返回默认空配置(不落库)。 */
@@ -50,7 +63,8 @@ public class QuoteProjectConfigStore {
         return repository.findByProjectIdAndDeletedFlagFalse(projectId)
                 .map(this::toResponse)
                 .orElseGet(() -> new QuoteProjectConfigResponse(
-                        projectId, DEFAULT_LENGTH_PREMIUM, false, List.of(), List.of(), null, List.of(), 0L));
+                        projectId, DEFAULT_LENGTH_PREMIUM, false, List.of(), List.of(), null, List.of(), 0L,
+                        quoteSourceOf(projectId)));
     }
 
     /** 保存项目配置(不存在则创建, 存在则整体替换)。每次调用开启独立事务。 */
@@ -168,7 +182,8 @@ public class QuoteProjectConfigStore {
                 split(entity.getDesignatedBrands()),
                 entity.getRemark(),
                 brands,
-                entity.getVersion());
+                entity.getVersion(),
+                quoteSourceOf(entity.getProjectId()));
     }
 
     private static boolean differs(BigDecimal left, BigDecimal right) {
