@@ -4,10 +4,9 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
-import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceItem;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceOrder;
-import com.leo.erp.logistics.bill.repository.FreightBillSourceItemRepository;
-import com.leo.erp.logistics.bill.repository.FreightBillSourceItemRepository.SourceItemOccupancySummary;
+import com.leo.erp.logistics.bill.repository.FreightBillItemRepository;
+import com.leo.erp.logistics.bill.repository.FreightBillItemRepository.FreightBillItemOccupancySummary;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.sales.api.SalesOrderLogisticsSourceQuery;
@@ -42,7 +41,7 @@ class FreightBillApplyServiceTest {
     private SalesOrderLogisticsSourceQuery salesOrderSourceQuery;
 
     @Mock
-    private FreightBillSourceItemRepository sourceItemRepository;
+    private FreightBillItemRepository itemRepository;
 
     @Mock
     private SourceAllocationLockService sourceAllocationLockService;
@@ -97,11 +96,11 @@ class FreightBillApplyServiceTest {
     private void stubSources(SalesOrderSourceSnapshot order) {
         when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of(order.id()));
         when(salesOrderSourceQuery.findBySourceItemIds(any())).thenReturn(List.of(order));
-        lenient().when(sourceItemRepository.summarizeOccupiedQuantities(any(), any())).thenReturn(List.of());
+        lenient().when(itemRepository.summarizeOccupiedQuantities(any(), any())).thenReturn(List.of());
     }
 
-    private SourceItemOccupancySummary occupancy(Long sourceItemId, int quantity) {
-        return new SourceItemOccupancySummary() {
+    private FreightBillItemOccupancySummary occupancy(Long sourceItemId, int quantity) {
+        return new FreightBillItemOccupancySummary() {
             @Override
             public Long getSourceSalesOrderItemId() {
                 return sourceItemId;
@@ -133,9 +132,6 @@ class FreightBillApplyServiceTest {
         assertThat(entity.getTotalFreight()).isEqualByComparingTo("1250.00"); // 12.5 * 100
         assertThat(entity.getSourceOrders()).hasSize(1);
         assertThat(entity.getSourceOrders().iterator().next().getSourceSalesOrderId()).isEqualTo(1L);
-        assertThat(entity.getSourceItems()).hasSize(1);
-        assertThat(entity.getSourceItems().iterator().next().getQuantity()).isEqualTo(SOURCE_QUANTITY);
-        assertThat(entity.getSourceItems().iterator().next().isActiveFlag()).isTrue();
     }
 
     @Test
@@ -149,7 +145,6 @@ class FreightBillApplyServiceTest {
         assertThat(entity.getItems().get(0).getWeightTon()).isEqualByComparingTo("5.000");
         assertThat(entity.getTotalWeight()).isEqualByComparingTo("5.000");
         assertThat(entity.getTotalFreight()).isEqualByComparingTo("500.00");
-        assertThat(entity.getSourceItems().iterator().next().getQuantity()).isEqualTo(4);
     }
 
     @Test
@@ -189,38 +184,29 @@ class FreightBillApplyServiceTest {
         assertThat(entity.getItems().get(0).getQuantity()).isEqualTo(3);
         assertThat(entity.getItems().get(0).getWeightTon()).isEqualByComparingTo("6.000");
         assertThat(entity.getSourceOrders()).hasSize(1);
-        assertThat(entity.getSourceItems()).hasSize(1);
     }
 
     @Test
-    void applyItems_shouldSkipExistingSourceRelationAndReactivateReusedSourceItem() {
+    void applyItems_shouldReuseExistingSourceOrderRelationWithoutDuplicating() {
         FreightBill entity = new FreightBill();
         FreightBillSourceOrder existingOrder = new FreightBillSourceOrder();
         existingOrder.setSourceSalesOrderId(1L);
         existingOrder.setSourceSalesOrderNo("SO001");
         existingOrder.setActiveFlag(true);
         entity.getSourceOrders().add(existingOrder);
-        FreightBillSourceItem inactiveItem = new FreightBillSourceItem();
-        inactiveItem.setSourceSalesOrderItemId(11L);
-        inactiveItem.setActiveFlag(false);
-        entity.getSourceItems().add(inactiveItem);
         stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
 
         service.applyItems(entity, request(List.of(itemReq(null, 11L, 2, null))), () -> 100L);
 
         assertThat(entity.getSourceOrders()).hasSize(1);
-        assertThat(entity.getSourceItems()).hasSize(1);
-        assertThat(inactiveItem.isActiveFlag()).isTrue();
-        assertThat(inactiveItem.getQuantity()).isEqualTo(2);
+        assertThat(existingOrder.isActiveFlag()).isTrue();
+        assertThat(entity.getItems()).hasSize(1);
+        assertThat(entity.getItems().get(0).getQuantity()).isEqualTo(2);
     }
 
     @Test
-    void applyItems_shouldReleaseRemovedSourceItem() {
+    void applyItems_shouldReleaseRemovedSourceItemLine() {
         FreightBill entity = new FreightBill();
-        FreightBillSourceItem oldItem = new FreightBillSourceItem();
-        oldItem.setSourceSalesOrderItemId(99L);
-        oldItem.setActiveFlag(true);
-        entity.getSourceItems().add(oldItem);
         FreightBillSourceOrder oldOrder = new FreightBillSourceOrder();
         oldOrder.setSourceSalesOrderId(88L);
         oldOrder.setActiveFlag(true);
@@ -229,7 +215,9 @@ class FreightBillApplyServiceTest {
 
         service.applyItems(entity, request(List.of(itemReq(null, 11L, 2, null))), () -> 100L);
 
-        assertThat(oldItem.isActiveFlag()).isFalse();
+        // 被移除的来源行随明细行一起释放：占用改为按 lg_freight_bill_item 聚合，行删除即释放。
+        assertThat(entity.getItems()).hasSize(1);
+        assertThat(entity.getItems().get(0).getSourceSalesOrderItemId()).isEqualTo(11L);
         assertThat(oldOrder.isActiveFlag()).isFalse();
     }
 
@@ -300,7 +288,7 @@ class FreightBillApplyServiceTest {
         when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of(1L));
         when(salesOrderSourceQuery.findBySourceItemIds(any()))
                 .thenReturn(List.of(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250")))));
-        when(sourceItemRepository.summarizeOccupiedQuantities(any(), any()))
+        when(itemRepository.summarizeOccupiedQuantities(any(), any()))
                 .thenReturn(List.of(occupancy(11L, 8)));
         FreightBillRequest request = request(List.of(itemReq(null, 11L, 3, null)));
 
@@ -314,7 +302,7 @@ class FreightBillApplyServiceTest {
         when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of(1L));
         when(salesOrderSourceQuery.findBySourceItemIds(any()))
                 .thenReturn(List.of(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250")))));
-        when(sourceItemRepository.summarizeOccupiedQuantities(any(), any()))
+        when(itemRepository.summarizeOccupiedQuantities(any(), any()))
                 .thenReturn(List.of(occupancy(11L, 8)));
         FreightBill entity = new FreightBill();
 
@@ -393,7 +381,7 @@ class FreightBillApplyServiceTest {
 
         service.applyItems(entity, request(List.of(itemReq(null, 11L))), () -> 100L);
 
-        verify(sourceItemRepository).summarizeOccupiedQuantities(any(), eq(77L));
+        verify(itemRepository).summarizeOccupiedQuantities(any(), eq(77L));
     }
 
     @Test
@@ -411,7 +399,7 @@ class FreightBillApplyServiceTest {
         when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of(1L));
         when(salesOrderSourceQuery.findBySourceItemIds(any()))
                 .thenReturn(List.of(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250")))));
-        lenient().when(sourceItemRepository.summarizeOccupiedQuantities(any(), anyLong())).thenReturn(List.of());
+        lenient().when(itemRepository.summarizeOccupiedQuantities(any(), anyLong())).thenReturn(List.of());
         FreightBill entity = new FreightBill();
 
         service.applyItems(entity, request(List.of(itemReq(null, 11L, 1, null))), () -> 100L);

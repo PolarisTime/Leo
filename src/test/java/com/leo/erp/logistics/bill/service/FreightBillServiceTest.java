@@ -8,7 +8,6 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
-import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceItem;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceOrder;
 import com.leo.erp.logistics.bill.mapper.FreightBillMapper;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
@@ -242,14 +241,10 @@ class FreightBillServiceTest {
         FreightBillSourceOrder source = new FreightBillSourceOrder();
         source.setActiveFlag(true);
         entity.getSourceOrders().add(source);
-        FreightBillSourceItem sourceItem = new FreightBillSourceItem();
-        sourceItem.setActiveFlag(true);
-        entity.getSourceItems().add(sourceItem);
 
         service.afterDelete(entity);
 
         assertThat(source.isActiveFlag()).isFalse();
-        assertThat(sourceItem.isActiveFlag()).isFalse();
         verify(businessOperationEventPublisher).publish(eq("FREIGHT_BILL_DELETED"), anyString(), anyString(),
                 anyString(), anyString(), eq(5L), anyString(), anyString());
     }

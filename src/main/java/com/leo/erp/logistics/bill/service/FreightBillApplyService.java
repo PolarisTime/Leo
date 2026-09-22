@@ -6,9 +6,8 @@ import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
-import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceItem;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceOrder;
-import com.leo.erp.logistics.bill.repository.FreightBillSourceItemRepository;
+import com.leo.erp.logistics.bill.repository.FreightBillItemRepository;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
@@ -40,14 +39,14 @@ public class FreightBillApplyService {
     );
 
     private final SalesOrderLogisticsSourceQuery salesOrderSourceQuery;
-    private final FreightBillSourceItemRepository sourceItemRepository;
+    private final FreightBillItemRepository itemRepository;
     private final SourceAllocationLockService sourceAllocationLockService;
 
     public FreightBillApplyService(SalesOrderLogisticsSourceQuery salesOrderSourceQuery,
-                                   FreightBillSourceItemRepository sourceItemRepository,
+                                   FreightBillItemRepository itemRepository,
                                    SourceAllocationLockService sourceAllocationLockService) {
         this.salesOrderSourceQuery = salesOrderSourceQuery;
-        this.sourceItemRepository = sourceItemRepository;
+        this.itemRepository = itemRepository;
         this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
@@ -62,7 +61,6 @@ public class FreightBillApplyService {
                 nextId,
                 FreightBillItem::setId
         );
-        Map<Long, Integer> appliedQuantityByItemId = new LinkedHashMap<>();
         BigDecimal totalWeight = BigDecimal.ZERO;
         for (int index = 0; index < request.items().size(); index++) {
             FreightBillItem item = items.get(index);
@@ -73,14 +71,12 @@ public class FreightBillApplyService {
                     .get(source.sourceSalesOrderItemId());
             int quantity = resolveQuantity(source, sourceItem, sourceSnapshot, index + 1);
             applyItem(entity, item, source, sourceItem, sourceOrder, quantity, index + 1);
-            appliedQuantityByItemId.merge(sourceItem.id(), quantity, Integer::sum);
             totalWeight = totalWeight.add(item.getWeightTon());
         }
         entity.getItems().sort(java.util.Comparator.comparing(FreightBillItem::getLineNo));
         entity.setTotalWeight(TradeItemCalculator.scaleWeightTon(totalWeight));
         entity.setTotalFreight(totalWeight.multiply(request.unitPrice())
                 .setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING));
-        syncSourceItems(entity, appliedQuantityByItemId, nextId);
         syncSourceOrders(entity, sourceSnapshot.orders(), nextId);
     }
 
@@ -251,9 +247,9 @@ public class FreightBillApplyService {
 
     private Map<Long, Integer> loadOccupiedQuantities(FreightBill entity, Set<Long> sourceItemIds) {
         Map<Long, Integer> occupied = new LinkedHashMap<>();
-        List<FreightBillSourceItemRepository.SourceItemOccupancySummary> summaries =
-                sourceItemRepository.summarizeOccupiedQuantities(sourceItemIds, entity.getId());
-        for (FreightBillSourceItemRepository.SourceItemOccupancySummary summary : summaries) {
+        List<FreightBillItemRepository.FreightBillItemOccupancySummary> summaries =
+                itemRepository.summarizeOccupiedQuantities(sourceItemIds, entity.getId());
+        for (FreightBillItemRepository.FreightBillItemOccupancySummary summary : summaries) {
             occupied.put(summary.getSourceSalesOrderItemId(), Math.toIntExact(summary.getTotalQuantity()));
         }
         return occupied;
@@ -266,36 +262,6 @@ public class FreightBillApplyService {
         for (SalesOrderSourceSnapshot order : orders) {
             if (!ALLOWED_SOURCE_STATUS.contains(order.status())) {
                 throw business("销售订单" + order.orderNo() + "当前状态不能生成物流单");
-            }
-        }
-    }
-
-    /**
-     * 按来源销售订单明细 diff 维护行级占用：新增/更新占用数量，移除的来源行置为非活跃以释放额度。
-     * 已存在的占用行复用（重新激活）而非新建，避免 (物流单, 来源明细) 唯一约束冲突。
-     */
-    private void syncSourceItems(FreightBill entity,
-                                 Map<Long, Integer> quantityByItemId,
-                                 LongSupplier nextId) {
-        // 保留非活跃历史占用行（唯一约束不区分 active），重新引用时复用并重新激活，避免重复插入冲突。
-        Map<Long, FreightBillSourceItem> existingByItemId = entity.getSourceItems().stream()
-                .collect(Collectors.toMap(FreightBillSourceItem::getSourceSalesOrderItemId, item -> item,
-                        (left, right) -> left));
-        for (Map.Entry<Long, Integer> entry : quantityByItemId.entrySet()) {
-            FreightBillSourceItem relation = existingByItemId.get(entry.getKey());
-            if (relation == null) {
-                relation = new FreightBillSourceItem();
-                relation.setId(nextId.getAsLong());
-                relation.setFreightBill(entity);
-                relation.setSourceSalesOrderItemId(entry.getKey());
-                entity.getSourceItems().add(relation);
-            }
-            relation.setQuantity(entry.getValue());
-            relation.setActiveFlag(true);
-        }
-        for (FreightBillSourceItem existing : entity.getSourceItems()) {
-            if (!quantityByItemId.containsKey(existing.getSourceSalesOrderItemId())) {
-                existing.setActiveFlag(false);
             }
         }
     }

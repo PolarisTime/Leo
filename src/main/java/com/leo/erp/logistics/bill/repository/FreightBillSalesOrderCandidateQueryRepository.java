@@ -73,15 +73,13 @@ public class FreightBillSalesOrderCandidateQueryRepository {
                       FROM so_sales_order_item source_item
                       WHERE source_item.order_id = sales_order.id
                         AND COALESCE(source_item.quantity, 0) > COALESCE((
-                            SELECT SUM(relation.quantity)
-                            FROM lg_freight_bill_source_item relation
+                            SELECT SUM(item.quantity)
+                            FROM lg_freight_bill_item item
                             JOIN lg_freight_bill bill
-                              ON bill.id = relation.freight_bill_id
+                              ON bill.id = item.bill_id
                              AND bill.deleted_flag = FALSE
-                            WHERE relation.active_flag = TRUE
-                              AND relation.source_sales_order_item_id = source_item.id
-                              AND (:currentRecordId IS NULL
-                                   OR relation.freight_bill_id <> :currentRecordId)
+                            WHERE item.source_sales_order_item_id = source_item.id
+                              AND (:currentRecordId IS NULL OR bill.id <> :currentRecordId)
                         ), 0)
                   )
             )
