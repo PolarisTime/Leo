@@ -1,3 +1,10 @@
+# [11.14.0](https://github.com/PolarisTime/Leo/compare/v11.13.0...v11.14.0) (2026-09-22)
+
+
+### Features
+
+* **market:** 行情同步支持切换 Mysteel/西本数据源 ([9e5db98](https://github.com/PolarisTime/Leo/commit/9e5db98c6e4bba846a2fca7efd7d30c8d12213a6))
+
 # [11.13.0](https://github.com/PolarisTime/Leo/compare/v11.12.0...v11.13.0) (2026-09-22)
 
 
