@@ -1,3 +1,10 @@
+## [11.8.1](https://github.com/PolarisTime/Leo/compare/v11.8.0...v11.8.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* **logistics:** 物流行级占用改以明细为唯一数量真源 ([087d260](https://github.com/PolarisTime/Leo/commit/087d260f921071cae225a762d8b0a498786ce1cf))
+
 # [11.8.0](https://github.com/PolarisTime/Leo/compare/v11.7.2...v11.8.0) (2026-09-21)
 
 
