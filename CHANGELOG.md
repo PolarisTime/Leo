@@ -1,3 +1,10 @@
+# [11.10.0](https://github.com/PolarisTime/Leo/compare/v11.9.0...v11.10.0) (2026-09-22)
+
+
+### Features
+
+* **master:** 项目资料支持网价浮动约定 ([bc45780](https://github.com/PolarisTime/Leo/commit/bc45780133139afb9e6cedbdc7507d9bfe58031b))
+
 # [11.9.0](https://github.com/PolarisTime/Leo/compare/v11.8.1...v11.9.0) (2026-09-22)
 
 
