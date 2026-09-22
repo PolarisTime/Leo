@@ -1,3 +1,10 @@
+# [11.11.0](https://github.com/PolarisTime/Leo/compare/v11.10.0...v11.11.0) (2026-09-22)
+
+
+### Features
+
+* **master:** 项目支持多条价格规定并交付核定选用 ([e00d1c4](https://github.com/PolarisTime/Leo/commit/e00d1c482346c2756de01369cd4606c2c820a550))
+
 # [11.10.0](https://github.com/PolarisTime/Leo/compare/v11.9.0...v11.10.0) (2026-09-22)
 
 
