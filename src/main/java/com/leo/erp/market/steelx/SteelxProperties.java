@@ -120,11 +120,26 @@ public class SteelxProperties {
 
     /** 拼接指定地区的报价页 URL。 */
     public String quotationUrl(String region) {
+        return quotationUrl(region, null);
+    }
+
+    /**
+     * 拼接指定地区指定日期的报价页 URL。
+     * 日期为空时为当日 URL; 非空时插入 {@code /yyyymmdd} 路径段(历史报价)。
+     */
+    public String quotationUrl(String region, java.time.LocalDate date) {
         String slug = regionMap().get(region == null ? null : region.trim());
         if (slug == null) {
             throw new IllegalArgumentException("不支持的地区: " + region);
         }
-        return "https://" + slug + ".steelx2.com" + quotationPath;
+        String path = quotationPath;
+        if (date != null) {
+            int lastSlash = path.lastIndexOf('/');
+            String prefix = path.substring(0, lastSlash);
+            String suffix = path.substring(lastSlash);
+            path = prefix + "/" + date.format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE) + suffix;
+        }
+        return "https://" + slug + ".steelx2.com" + path;
     }
 
     public List<String> supportedRegions() {

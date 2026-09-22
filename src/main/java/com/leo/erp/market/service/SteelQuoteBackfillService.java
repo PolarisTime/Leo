@@ -19,13 +19,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class SteelQuoteBackfillService {
 
     private final SteelQuoteSyncService syncService;
+    private final SteelxQuoteSyncService steelxSyncService;
     private final ExecutorService executor;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile SteelQuoteBackfillStatusResponse status =
             new SteelQuoteBackfillStatusResponse(false, null, null, null, null, 0, 0, 0, java.util.List.of());
 
-    public SteelQuoteBackfillService(SteelQuoteSyncService syncService) {
+    public SteelQuoteBackfillService(SteelQuoteSyncService syncService,
+                                     SteelxQuoteSyncService steelxSyncService) {
         this.syncService = syncService;
+        this.steelxSyncService = steelxSyncService;
         this.executor = new ThreadPoolExecutor(
                 1, 1, 0L, TimeUnit.MILLISECONDS,
                 new LinkedBlockingQueue<>(),
@@ -43,14 +46,53 @@ public class SteelQuoteBackfillService {
 
     /** 提交补数任务; 已有任务进行中返回 false。 */
     public boolean submit(LocalDate from, LocalDate to) {
+        return submit(from, to, null, null);
+    }
+
+    /** 提交补数任务; source=STEELX 时按地区逐日抓取(历史 URL)。 */
+    public boolean submit(LocalDate from, LocalDate to, String source, String region) {
         if (!running.compareAndSet(false, true)) {
             return false;
         }
         Instant startedAt = Instant.now();
         status = new SteelQuoteBackfillStatusResponse(true, from, to, startedAt, null, 0, 0, 0,
                 java.util.List.of());
-        executor.submit(() -> run(from, to, startedAt));
+        boolean steelx = "STEELX".equalsIgnoreCase(source);
+        executor.submit(() -> {
+            if (steelx) {
+                runSteelx(from, to, startedAt, region);
+            } else {
+                run(from, to, startedAt);
+            }
+        });
         return true;
+    }
+
+    /** 西本补数: 逐日(跳过周末)按地区抓取历史报价; 已有则幂等复用。 */
+    private void runSteelx(LocalDate from, LocalDate to, Instant startedAt, String region) {
+        int syncedDays = 0;
+        int failedDays = 0;
+        int totalRows = 0;
+        java.util.List<SteelQuoteSyncService.BackfillFailure> failures = new java.util.ArrayList<>();
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            java.time.DayOfWeek dow = date.getDayOfWeek();
+            if (dow == java.time.DayOfWeek.SATURDAY || dow == java.time.DayOfWeek.SUNDAY) {
+                continue;
+            }
+            try {
+                SteelxQuoteSyncService.SyncResult result = (region == null || region.isBlank())
+                        ? steelxSyncService.syncAllRegions(date).get(0)
+                        : steelxSyncService.syncRegion(region, date);
+                syncedDays++;
+                totalRows += result.rowCount();
+            } catch (RuntimeException ex) {
+                failedDays++;
+                failures.add(new SteelQuoteSyncService.BackfillFailure(date, ex.getMessage()));
+            }
+        }
+        status = new SteelQuoteBackfillStatusResponse(false, from, to, startedAt, Instant.now(),
+                syncedDays, failedDays, totalRows, failures);
+        running.set(false);
     }
 
     private void run(LocalDate from, LocalDate to, Instant startedAt) {

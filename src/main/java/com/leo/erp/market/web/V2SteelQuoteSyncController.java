@@ -77,10 +77,11 @@ public class V2SteelQuoteSyncController {
         }
         // 西本: 按地区同步(每天一个价), 忽略 periods
         if (request != null && "STEELX".equalsIgnoreCase(request.source())) {
+            java.time.LocalDate steelxDate = request.date();
             java.util.List<SteelxQuoteSyncService.SyncResult> steelxResults =
                     (request.region() == null || request.region().isBlank())
-                            ? steelxQuoteSyncService.syncAllRegions()
-                            : java.util.List.of(steelxQuoteSyncService.syncRegion(request.region()));
+                            ? steelxQuoteSyncService.syncAllRegions(steelxDate)
+                            : java.util.List.of(steelxQuoteSyncService.syncRegion(request.region(), steelxDate));
             SteelxQuoteSyncService.SyncResult lastX = steelxResults.get(steelxResults.size() - 1);
             int rowsX = steelxResults.stream().mapToInt(SteelxQuoteSyncService.SyncResult::rowCount).sum();
             return ResponseEntity.accepted().body(new SteelQuoteSyncResponse(lastX.articleId(), lastX.articleUrl(),

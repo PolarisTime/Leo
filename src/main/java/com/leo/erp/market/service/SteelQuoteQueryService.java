@@ -31,21 +31,30 @@ public class SteelQuoteQueryService {
     @Transactional(readOnly = true)
     public Page<SteelQuoteResponse> page(PageQuery query, LocalDate quoteDate, String period, String breed,
                                          String spec, String material, String factory, String changeDirection) {
+        return page(query, quoteDate, period, breed, spec, material, factory, changeDirection, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SteelQuoteResponse> page(PageQuery query, LocalDate quoteDate, String period, String breed,
+                                         String spec, String material, String factory, String changeDirection,
+                                         String source, String market) {
         Pageable pageable = query.toPageable("id");
         Specification<SteelQuote> specification = buildSpecification(quoteDate, period, breed, spec, material,
-                factory, changeDirection);
+                factory, changeDirection, source, market);
         return quoteRepository.findAll(specification, pageable).map(SteelQuoteResponse::from);
     }
 
     private Specification<SteelQuote> buildSpecification(LocalDate quoteDate, String period, String breed,
                                                          String spec, String material, String factory,
-                                                         String changeDirection) {
+                                                         String changeDirection, String source, String market) {
         return (root, criteriaQuery, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(Specs.notDeletedPredicate(root, builder));
             if (quoteDate != null) {
                 predicates.add(builder.equal(root.get("quoteDate"), quoteDate));
             }
+            requireEqual(predicates, builder, root, "source", source);
+            requireEqual(predicates, builder, root, "market", market);
             requireEqual(predicates, builder, root, "period", period);
             requireEqual(predicates, builder, root, "breed", breed);
             requireEqual(predicates, builder, root, "spec", spec);

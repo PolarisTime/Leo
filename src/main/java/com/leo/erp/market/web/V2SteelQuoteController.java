@@ -42,9 +42,11 @@ public class V2SteelQuoteController {
             @RequestParam(required = false) String spec,
             @RequestParam(required = false) String material,
             @RequestParam(required = false) String factory,
-            @RequestParam(required = false) String change) {
+            @RequestParam(required = false) String change,
+            @RequestParam(required = false) String source,
+            @RequestParam(required = false) String region) {
         Page<SteelQuoteResponse> page = steelQuoteQueryService.page(query, quoteDate, period, breed, spec,
-                material, factory, change);
+                material, factory, change, source, region);
         return PageResponse.from(page);
     }
 }

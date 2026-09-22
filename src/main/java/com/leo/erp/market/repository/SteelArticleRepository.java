@@ -33,5 +33,8 @@ public interface SteelArticleRepository extends JpaRepository<SteelArticle, Long
     List<SteelArticle> findByArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
             LocalDate from, LocalDate to);
 
+    List<SteelArticle> findBySourceAndMarketAndArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
+            String source, String market, LocalDate from, LocalDate to);
+
     Page<SteelArticle> findByDeletedFlagFalse(Pageable pageable);
 }

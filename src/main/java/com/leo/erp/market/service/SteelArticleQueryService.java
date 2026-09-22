@@ -35,9 +35,15 @@ public class SteelArticleQueryService {
                 .map(SteelQuoteSyncRecordResponse::from);
     }
 
-    /** 行情日历: 区间内有行情的日期、各日可用时段与时段行数。 */
+    /** 行情日历(Mysteel 默认源)。 */
     @Transactional(readOnly = true)
     public List<SteelQuoteCalendarResponse> calendar(LocalDate from, LocalDate to) {
+        return calendar(from, to, null, null);
+    }
+
+    /** 行情日历: 区间内有行情的日期、各日可用时段与时段行数; 可按数据源/地区过滤。 */
+    @Transactional(readOnly = true)
+    public List<SteelQuoteCalendarResponse> calendar(LocalDate from, LocalDate to, String source, String market) {
         if (from == null || to == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "from/to 不能为空");
         }
@@ -46,8 +52,15 @@ public class SteelArticleQueryService {
         }
         Map<LocalDate, List<String>> periodsByDate = new LinkedHashMap<>();
         Map<LocalDate, Map<String, Integer>> rowsByDate = new HashMap<>();
-        for (SteelArticle article : articleRepository
-                .findByArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(from, to)) {
+        java.util.List<SteelArticle> articles =
+                (source == null || source.isBlank())
+                        ? articleRepository
+                                .findByArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
+                                        from, to)
+                        : articleRepository
+                                .findBySourceAndMarketAndArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
+                                        source, market, from, to);
+        for (SteelArticle article : articles) {
             String period = article.getPeriod();
             if (period == null || period.isBlank()) {
                 continue;

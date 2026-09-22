@@ -74,7 +74,7 @@ public class V2SteelQuoteBackfillController {
         if (to.isAfter(today)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不能补未来日期");
         }
-        boolean accepted = backfillService.submit(from, to);
+        boolean accepted = backfillService.submit(from, to, request.source(), request.region());
         if (!accepted) {
             throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "已有补数任务进行中, 请稍后再试");
         }

@@ -47,9 +47,23 @@ public class SteelxQuoteSyncService {
 
     /** 同步指定地区当前报价(幂等: 同 URL 已入库则复用)。 */
     public SyncResult syncRegion(String region) {
+        return syncRegion(region, null);
+    }
+
+    /** 同步指定地区指定日期报价(date 为空表示当日)。 */
+    public SyncResult syncRegion(String region, LocalDate date) {
         String normalized = requireSupportedRegion(region);
-        String url = properties.quotationUrl(normalized);
+        String url = properties.quotationUrl(normalized, date);
         return syncUrl(url, normalized);
+    }
+
+    /** 同步所有已配置地区的指定日期报价(date 为空表示当日)。 */
+    public List<SyncResult> syncAllRegions(LocalDate date) {
+        List<SyncResult> results = new ArrayList<>();
+        for (String region : properties.supportedRegions()) {
+            results.add(syncRegion(region, date));
+        }
+        return results;
     }
 
     /** 同步所有已配置地区的当前报价。 */

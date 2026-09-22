@@ -33,7 +33,9 @@ public class V2SteelQuoteCalendarController {
     @RequirePermission(PermissionCodes.STEEL_QUOTE_CALENDARS_READ)
     public List<SteelQuoteCalendarResponse> list(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return articleQueryService.calendar(from, to);
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String source,
+            @RequestParam(required = false) String region) {
+        return articleQueryService.calendar(from, to, source, region);
     }
 }
