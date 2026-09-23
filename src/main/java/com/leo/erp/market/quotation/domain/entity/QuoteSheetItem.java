@@ -65,6 +65,14 @@ public class QuoteSheetItem {
     @Column(name = "purchased", nullable = false)
     private boolean purchased = false;
 
+    /** 关联采购订单标识(可空): 该行吨位计入此订单的已开吨位。隔断行恒为空。 */
+    @Column(name = "purchase_order_id")
+    private Long purchaseOrderId;
+
+    /** 关联采购订单号快照(保存时写入), 保证订单号变更/删除后仍可读。 */
+    @Column(name = "purchase_order_no", length = 64)
+    private String purchaseOrderNo;
+
     /** LAZY 反向集合: 不参与 fetch join(避免与 items 双 bag), 按 50 一批懒加载避免 N+1。 */
     @OneToMany(mappedBy = "item", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @BatchSize(size = 50)

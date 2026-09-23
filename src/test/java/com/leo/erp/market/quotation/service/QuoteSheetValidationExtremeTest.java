@@ -57,11 +57,14 @@ class QuoteSheetValidationExtremeTest {
     private com.leo.erp.master.api.ProjectQuery projectQuery;
 
     @Mock
+    private com.leo.erp.purchase.api.PurchaseOrderOptionQuery purchaseOrderOptionQuery;
+
+    @Mock
     private EntityManager entityManager;
 
     private QuoteSheetStore store() {
         return new QuoteSheetStore(repository, quoteProjectConfigRepository, snowflakeIdGenerator,
-                supplierQuery, projectQuery, entityManager);
+                supplierQuery, projectQuery, purchaseOrderOptionQuery, entityManager);
     }
 
     /**

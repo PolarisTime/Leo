@@ -12,6 +12,7 @@ import com.leo.erp.market.quotation.service.QuoteSheetItemWrite;
 import com.leo.erp.market.quotation.service.QuoteSheetService;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
+import com.leo.erp.market.quotation.web.dto.PurchaseOrderTonnageResponse;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.security.support.SecurityPrincipal;
@@ -19,6 +20,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -36,6 +39,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Tag(name = "比价报价单")
 @RestController
@@ -71,6 +75,20 @@ public class V2QuoteSheetController {
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_READ)
     public QuoteSheetResponse detail(@PathVariable Long id) {
         return quoteSheetService.detail(id);
+    }
+
+    @Operation(summary = "采购订单已开吨位汇总",
+            description = "列出采购订单及其订货吨数、报单已开吨位与剩余可开吨(订货 - 已开), "
+                    + "供吨位列关联采购订单时选择与展示。传 purchaseOrderIds 按 id 汇总, "
+                    + "否则按 keyword/status 列出选项; 可选 excludeSheetId 排除当前报价单自身已保存吨位。")
+    @GetMapping("/purchase-order-tonnages")
+    @RequirePermission(PermissionCodes.QUOTE_SHEETS_READ)
+    public List<PurchaseOrderTonnageResponse> purchaseOrderTonnages(
+            @RequestParam(required = false) @Size(max = 200) List<@Positive Long> purchaseOrderIds,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long excludeSheetId) {
+        return quoteSheetService.summarizeTonnages(purchaseOrderIds, keyword, status, excludeSheetId);
     }
 
     @Operation(summary = "创建报价单")

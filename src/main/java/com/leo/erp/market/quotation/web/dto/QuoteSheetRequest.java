@@ -50,34 +50,42 @@ public record QuoteSheetRequest(
      * {@code rowType} 为空按 {@code PRODUCT}(商品行)处理, 兼容历史请求; 商品字段的"必填"校验
      * 因隔断行可空而无法用注解表达, 统一由服务层按行类型校验(见 {@code QuoteSheetStore.validate})。
      */
-    public record ItemRequest(
-            QuoteRowType rowType,
-            @Size(max = 16, message = "类别过长") String category,
-            @Size(max = 16, message = "材质过长") String material,
-            Integer spec,
-            @Size(max = 16, message = "长度过长") String length,
-            @Size(max = 255, message = "备注过长") String remark,
-            @DecimalMin(value = "0", message = "吨数不能为负") BigDecimal ton,
-            Boolean purchased,
-            @Valid List<ItemPriceRequest> prices
-    ) {
+        public record ItemRequest(
+                QuoteRowType rowType,
+                @Size(max = 16, message = "类别过长") String category,
+                @Size(max = 16, message = "材质过长") String material,
+                Integer spec,
+                @Size(max = 16, message = "长度过长") String length,
+                @Size(max = 255, message = "备注过长") String remark,
+                @DecimalMin(value = "0", message = "吨数不能为负") BigDecimal ton,
+                Boolean purchased,
+                Long purchaseOrderId,
+                @Valid List<ItemPriceRequest> prices
+        ) {
 
-        /** 兼容旧调用方: 未显式传行类型时按商品行处理。 */
-        public ItemRequest(String category, String material, Integer spec, String length,
-                           BigDecimal ton, List<ItemPriceRequest> prices) {
-            this(null, category, material, spec, length, null, ton, null, prices);
-        }
+            /** 兼容旧调用方: 未显式传行类型时按商品行处理。 */
+            public ItemRequest(String category, String material, Integer spec, String length,
+                               BigDecimal ton, List<ItemPriceRequest> prices) {
+                this(null, category, material, spec, length, null, ton, null, null, prices);
+            }
 
-        /** 兼容旧调用方: 未携带行备注。 */
-        public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
-                           String length, BigDecimal ton, List<ItemPriceRequest> prices) {
-            this(rowType, category, material, spec, length, null, ton, null, prices);
-        }
+            /** 兼容旧调用方: 未携带行备注。 */
+            public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
+                               String length, BigDecimal ton, List<ItemPriceRequest> prices) {
+                this(rowType, category, material, spec, length, null, ton, null, null, prices);
+            }
 
-        /** 兼容旧调用方: 未携带已采购标记。 */
-        public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
-                           String length, String remark, BigDecimal ton, List<ItemPriceRequest> prices) {
-            this(rowType, category, material, spec, length, remark, ton, null, prices);
+            /** 兼容旧调用方: 未携带已采购标记。 */
+            public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
+                               String length, String remark, BigDecimal ton, List<ItemPriceRequest> prices) {
+                this(rowType, category, material, spec, length, remark, ton, null, null, prices);
+            }
+
+            /** 兼容旧调用方: 未携带关联采购订单。 */
+            public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
+                               String length, String remark, BigDecimal ton, Boolean purchased,
+                               List<ItemPriceRequest> prices) {
+                this(rowType, category, material, spec, length, remark, ton, purchased, null, prices);
+            }
         }
-    }
 }

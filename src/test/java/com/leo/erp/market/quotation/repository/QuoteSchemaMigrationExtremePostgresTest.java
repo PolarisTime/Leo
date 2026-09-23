@@ -121,6 +121,21 @@ class QuoteSchemaMigrationExtremePostgresTest {
     }
 
     @Test
+    void v162_quoteItem_purchaseOrderLinkNullable_andEntityDefaultsNull() {
+        ColumnMeta orderId = column("mk_quote_item", "purchase_order_id");
+        assertThat(orderId.type()).isEqualTo("bigint");
+        assertThat(orderId.nullable()).isTrue();
+        ColumnMeta orderNo = column("mk_quote_item", "purchase_order_no");
+        assertThat(orderNo.type()).isEqualTo("character varying");
+        assertThat(orderNo.maxLength()).isEqualTo(64);
+        assertThat(orderNo.nullable()).isTrue();
+
+        assertThat(new QuoteSheetItem().getPurchaseOrderId()).isNull();
+        assertThat(new QuoteSheetItem().getPurchaseOrderNo()).isNull();
+        assertThat(indexNames("mk_quote_item")).contains("idx_quote_item_purchase_order");
+    }
+
+    @Test
     void v144_editLockTable_hasUniqueSheetAndOwnerSnapshot() {
         assertThat(column("mk_quote_sheet_edit_lock", "sheet_id").type()).isEqualTo("bigint");
         assertThat(column("mk_quote_sheet_edit_lock", "sheet_id").nullable()).isFalse();
@@ -165,6 +180,13 @@ class QuoteSchemaMigrationExtremePostgresTest {
         return jdbc.queryForList("""
                 select column_name from information_schema.columns
                 where table_schema = 'public' and table_name = ?
+                """, String.class, table);
+    }
+
+    private List<String> indexNames(String table) {
+        return jdbc.queryForList("""
+                select indexname from pg_indexes
+                where schemaname = 'public' and tablename = ?
                 """, String.class, table);
     }
 

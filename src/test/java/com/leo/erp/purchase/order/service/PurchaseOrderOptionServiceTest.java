@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.service;
 
+import com.leo.erp.purchase.api.PurchaseOrderOptionQuery;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderOptionResponse;
@@ -18,6 +19,8 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -63,5 +66,32 @@ class PurchaseOrderOptionServiceTest {
                 .isEqualByComparingTo("10");
         assertThat(new PurchaseOrderOptionService(repository).sumOrderedWeight(List.of()))
                 .isEqualByComparingTo("0");
+    }
+
+    @Test
+    void listActiveByIds_mapsByIdAndDeduplicates() {
+        PurchaseOrder order = new PurchaseOrder();
+        order.setId(88L);
+        order.setOrderNo("PO-88");
+        order.setSupplierName("沙钢");
+        order.setTotalWeight(new BigDecimal("40.5"));
+        order.setStatus("正常");
+        when(repository.findByIdInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+
+        List<PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot> snapshots =
+                new PurchaseOrderOptionService(repository).listActiveByIds(List.of(88L, 88L));
+
+        assertThat(snapshots).hasSize(1);
+        assertThat(snapshots.get(0).orderNo()).isEqualTo("PO-88");
+        assertThat(snapshots.get(0).totalWeight()).isEqualByComparingTo("40.5");
+    }
+
+    @Test
+    void listActiveByIds_emptyOrNullIdsReturnsEmptyWithoutQuerying() {
+        PurchaseOrderOptionService service = new PurchaseOrderOptionService(repository);
+
+        assertThat(service.listActiveByIds(List.of())).isEmpty();
+        assertThat(service.listActiveByIds(null)).isEmpty();
+        verify(repository, never()).findByIdInAndDeletedFlagFalse(any());
     }
 }

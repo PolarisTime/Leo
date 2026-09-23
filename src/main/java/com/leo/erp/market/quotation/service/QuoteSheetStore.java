@@ -18,6 +18,7 @@ import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.api.SupplierQuery;
+import com.leo.erp.purchase.api.PurchaseOrderOptionQuery;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.criteria.Predicate;
@@ -57,6 +58,7 @@ public class QuoteSheetStore {
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final SupplierQuery supplierQuery;
     private final ProjectQuery projectQuery;
+    private final PurchaseOrderOptionQuery purchaseOrderOptionQuery;
     private final EntityManager entityManager;
 
     public QuoteSheetStore(QuoteSheetRepository repository,
@@ -64,12 +66,14 @@ public class QuoteSheetStore {
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            SupplierQuery supplierQuery,
                            ProjectQuery projectQuery,
+                           PurchaseOrderOptionQuery purchaseOrderOptionQuery,
                            EntityManager entityManager) {
         this.repository = repository;
         this.quoteProjectConfigRepository = quoteProjectConfigRepository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.supplierQuery = supplierQuery;
         this.projectQuery = projectQuery;
+        this.purchaseOrderOptionQuery = purchaseOrderOptionQuery;
         this.entityManager = entityManager;
     }
 
@@ -787,6 +791,8 @@ public class QuoteSheetStore {
             item.setTon(null);
             item.setRemark(null);
             item.setPurchased(false);
+            item.setPurchaseOrderId(null);
+            item.setPurchaseOrderNo(null);
             item.getPrices().clear();
             return;
         }
@@ -800,6 +806,7 @@ public class QuoteSheetStore {
         if (request.purchased() != null) {
             item.setPurchased(request.purchased());
         }
+        applyPurchaseOrderLink(item, request.purchaseOrderId());
         Map<String, QuoteSheetItemPrice> existingByBrandName = new HashMap<>();
         for (QuoteSheetItemPrice price : item.getPrices()) {
             existingByBrandName.put(price.getBrandName(), price);
@@ -826,6 +833,26 @@ public class QuoteSheetStore {
         item.getPrices().addAll(reconciled);
     }
 
+    /**
+     * 应用行级采购订单关联: null 表示解除关联(清空快照)。
+     * <p>整行替换语义下请求总是显式携带该字段, 因此 null 一律视为解除;
+     * 非空时校验订单存在(未删除)并写入订单号快照, 供订单号变更/删除后仍可读。</p>
+     */
+    private void applyPurchaseOrderLink(QuoteSheetItem item, Long purchaseOrderId) {
+        if (purchaseOrderId == null) {
+            item.setPurchaseOrderId(null);
+            item.setPurchaseOrderNo(null);
+            return;
+        }
+        String orderNo = purchaseOrderOptionQuery.listActiveByIds(List.of(purchaseOrderId)).stream()
+                .findFirst()
+                .map(PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot::orderNo)
+                .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "采购订单不存在或已删除: " + purchaseOrderId));
+        item.setPurchaseOrderId(purchaseOrderId);
+        item.setPurchaseOrderNo(orderNo);
+    }
+
     private QuoteSheetResponse toResponse(QuoteSheet entity) {
         List<QuoteSheetResponse.BrandResponse> brands = entity.getBrands().stream()
                 .map(brand -> new QuoteSheetResponse.BrandResponse(
@@ -844,6 +871,7 @@ public class QuoteSheetStore {
         return new QuoteSheetResponse.ItemResponse(
                 item.getId(), item.getLineNo(), item.getRowType(), item.getCategory(), item.getMaterial(),
                 item.getSpec(), item.getLength(), item.getRemark(), item.getTon(), item.isPurchased(),
+                item.getPurchaseOrderId(), item.getPurchaseOrderNo(),
                 item.getPrices().stream()
                         .map(price -> new QuoteSheetResponse.ItemPriceResponse(
                                 price.getId(), price.getBrandName(), price.getSpotPrice(),
