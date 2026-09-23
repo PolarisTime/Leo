@@ -61,7 +61,13 @@ public class QuoteSheetItem {
     @Column(name = "remark", length = 255)
     private String remark;
 
-    /** 关联采购订单标识(可空): 该行吨位计入此订单的已开吨位。隔断行恒为空。 */
+    /**
+     * 关联采购订单标识(可空): 计划态引用, 仅用于吨位提示与预估, 不做额度扣减。
+     * <p>刻意不加外键: 采购订单删除后本行需保留历史关联与订单号快照(见
+     * {@link #purchaseOrderNo}), 加 FK 的 RESTRICT 会阻断订单删除、SET NULL 会静默丢链路,
+     * 均不符合"计划态留痕"的定位。并发写入时存在极小的 TOCTOU 窗口(校验后订单被删),
+     * 因不承担资金/库存后果, 可接受。</p>
+     */
     @Column(name = "purchase_order_id")
     private Long purchaseOrderId;
 
