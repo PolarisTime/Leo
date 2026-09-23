@@ -1786,17 +1786,20 @@ class QuoteSheetStoreTest {
         assertThat(response.items().get(1).prices()).isEmpty();
     }
 
-    /** 已采购标记: 行级写显式 true 时落库, 响应回读为 true。 */
+    /** 已采购由关联推导: 行级写关联采购订单后, 实体与响应均视为已采购。 */
     @Test
-    void updateItem_persistsPurchasedFlag() {
+    void updateItem_withPurchaseOrder_isDerivedPurchased() {
         QuoteSheet sheet = sheetWithItem(9L);
         sheet.setVersion(1L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
         when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(purchaseOrderOptionQuery.listActiveByIds(List.of(88L))).thenReturn(List.of(
+                new com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot(
+                        88L, "PO-88", "沙钢", new BigDecimal("40.5"), "正常", null)));
 
         QuoteSheetItemWrite write = store().updateItem(9L, 301L,
                 new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
-                        null, new BigDecimal("10"), true,
+                        null, new BigDecimal("10"), 88L,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
                 1L);
 
@@ -1804,12 +1807,35 @@ class QuoteSheetStoreTest {
         assertThat(sheet.getItems().get(0).isPurchased()).isTrue();
     }
 
-    /** 已采购标记: 请求未携带(null)时保留原值, 兼容仅改价的分片请求。 */
+    /**
+     * 反标记回归: 解除采购订单关联后, 实体与响应都必须回到"未采购",
+     * 不得因历史 purchased 标记残留而在刷新后再次显示已采购。
+     */
     @Test
-    void updateItem_nullPurchased_retainsExistingFlag() {
+    void update_clearsPurchaseOrderLink_derivesNotPurchased() {
         QuoteSheet sheet = sheetWithItem(9L);
         sheet.setVersion(1L);
-        sheet.getItems().get(0).setPurchased(true);
+        sheet.getItems().get(0).setPurchaseOrderId(88L);
+        sheet.getItems().get(0).setPurchaseOrderNo("PO-88");
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = store().update(9L,
+                requestWithItems(List.of(new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT,
+                        "螺纹钢", "HRB400E", 12, "9米", null, new BigDecimal("10"), null,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))))),
+                1L);
+
+        assertThat(response.items().get(0).purchaseOrderId()).isNull();
+        assertThat(response.items().get(0).purchased()).isFalse();
+        assertThat(sheet.getItems().get(0).isPurchased()).isFalse();
+    }
+
+    /** 未关联采购订单的商品行恒为未采购(不再有独立布尔标记可写)。 */
+    @Test
+    void updateItem_withoutPurchaseOrder_isNotPurchased() {
+        QuoteSheet sheet = sheetWithItem(9L);
+        sheet.setVersion(1L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
         when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
 
@@ -1819,30 +1845,12 @@ class QuoteSheetStoreTest {
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
                 1L);
 
-        assertThat(write.item().purchased()).isTrue();
+        assertThat(write.item().purchased()).isFalse();
     }
 
-    /** 已采购标记: 整单替换显式 false 时清除; 隔断行恒为 false。 */
+    /** 隔断行不携带采购订单关联, 恒为未采购。 */
     @Test
-    void update_replaceOwnerClearsPurchased() {
-        QuoteSheet sheet = sheetWithItem(9L);
-        sheet.setVersion(1L);
-        sheet.getItems().get(0).setPurchased(true);
-        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
-        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
-
-        QuoteSheetResponse response = store().update(9L,
-                requestWithItems(List.of(new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT,
-                        "螺纹钢", "HRB400E", 12, "9米", null, new BigDecimal("10"), false,
-                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))))),
-                1L);
-
-        assertThat(response.items().get(0).purchased()).isFalse();
-    }
-
-    /** 隔断行即使请求携带 purchased=true 也不落库(保持 false)。 */
-    @Test
-    void updateItem_separatorRowIgnoresPurchased() {
+    void updateItem_separatorRowIsNeverPurchased() {
         QuoteSheet sheet = sheetWithItem(9L);
         sheet.setVersion(1L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
@@ -1850,10 +1858,11 @@ class QuoteSheetStoreTest {
 
         QuoteSheetItemWrite write = store().updateItem(9L, 301L,
                 new QuoteSheetRequest.ItemRequest(QuoteRowType.SEPARATOR, null, null, null, null,
-                        null, null, true, List.of()),
+                        null, null, null, List.of()),
                 1L);
 
         assertThat(write.item().purchased()).isFalse();
+        assertThat(write.item().purchaseOrderId()).isNull();
     }
 
     /** 西本项目忽略品牌配置, 请求携带虚拟品牌「基准价」时按该虚拟品牌放行并入库。 */
@@ -1881,29 +1890,6 @@ class QuoteSheetStoreTest {
         assertThat(response.items().get(0).prices().get(0).spotPrice()).isEqualByComparingTo("3560");
     }
 
-    /** 关联采购订单: 校验存在后写入订单号快照, 并回显 purchaseOrderId/No。 */
-    @Test
-    void updateItem_withPurchaseOrderLink_snapshotsOrderNo() {
-        QuoteSheet sheet = sheetWithItem(9L);
-        sheet.setVersion(1L);
-        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
-        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
-        when(purchaseOrderOptionQuery.listActiveByIds(List.of(88L))).thenReturn(List.of(
-                new com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot(
-                        88L, "PO-88", "沙钢", new BigDecimal("40.5"), "正常", null)));
-
-        QuoteSheetItemWrite write = store().updateItem(9L, 301L,
-                new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
-                        null, new BigDecimal("10"), null, 88L,
-                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
-                1L);
-
-        assertThat(write.item().purchaseOrderId()).isEqualTo(88L);
-        assertThat(write.item().purchaseOrderNo()).isEqualTo("PO-88");
-        assertThat(sheet.getItems().get(0).getPurchaseOrderId()).isEqualTo(88L);
-        assertThat(sheet.getItems().get(0).getPurchaseOrderNo()).isEqualTo("PO-88");
-    }
-
     /** 关联采购订单: 订单不存在或已删除时拒绝(422)。 */
     @Test
     void updateItem_withUnknownPurchaseOrder_isRejected() {
@@ -1914,49 +1900,10 @@ class QuoteSheetStoreTest {
 
         assertThatThrownBy(() -> store().updateItem(9L, 301L,
                 new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
-                        null, new BigDecimal("10"), null, 999L,
+                        null, new BigDecimal("10"), 999L,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
                 1L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("采购订单不存在");
-    }
-
-    /** 关联采购订单: null 表示解除关联并清空快照。 */
-    @Test
-    void update_replacesWithNullPurchaseOrder_clearsLink() {
-        QuoteSheet sheet = sheetWithItem(9L);
-        sheet.setVersion(1L);
-        sheet.getItems().get(0).setPurchaseOrderId(88L);
-        sheet.getItems().get(0).setPurchaseOrderNo("PO-88");
-        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
-        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
-
-        QuoteSheetResponse response = store().update(9L,
-                requestWithItems(List.of(new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT,
-                        "螺纹钢", "HRB400E", 12, "9米", null, new BigDecimal("10"), null, null,
-                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))))),
-                1L);
-
-        assertThat(response.items().get(0).purchaseOrderId()).isNull();
-        assertThat(response.items().get(0).purchaseOrderNo()).isNull();
-    }
-
-    /** 隔断行不携带采购订单关联(保持为空)。 */
-    @Test
-    void updateItem_separatorRowClearsPurchaseOrderLink() {
-        QuoteSheet sheet = sheetWithItem(9L);
-        sheet.setVersion(1L);
-        sheet.getItems().get(0).setPurchaseOrderId(88L);
-        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
-        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
-
-        QuoteSheetItemWrite write = store().updateItem(9L, 301L,
-                new QuoteSheetRequest.ItemRequest(QuoteRowType.SEPARATOR, null, null, null, null,
-                        null, null, null, 88L, List.of()),
-                1L);
-
-        assertThat(write.item().purchaseOrderId()).isNull();
-        assertThat(write.item().purchaseOrderNo()).isNull();
-        verify(purchaseOrderOptionQuery, never()).listActiveByIds(any());
     }
 }

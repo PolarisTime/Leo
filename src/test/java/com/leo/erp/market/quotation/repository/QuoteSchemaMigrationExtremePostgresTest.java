@@ -112,11 +112,9 @@ class QuoteSchemaMigrationExtremePostgresTest {
     }
 
     @Test
-    void v158_quoteItem_purchasedNotNullDefaultFalse_andEntityDefaultsFalse() {
-        ColumnMeta purchased = column("mk_quote_item", "purchased");
-        assertThat(purchased.type()).isEqualTo("boolean");
-        assertThat(purchased.nullable()).isFalse();
-        assertThat(purchased.defaultValue()).contains("false");
+    void v163_dropsPurchasedColumn_andEntityDerivesItFromPurchaseOrder() {
+        // 已采购改由采购订单关联推导: V158 引入的独立列在 V163 删除。
+        assertThat(columnNames("mk_quote_item")).doesNotContain("purchased");
         assertThat(new QuoteSheetItem().isPurchased()).isFalse();
     }
 

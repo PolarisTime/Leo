@@ -790,7 +790,6 @@ public class QuoteSheetStore {
             item.setLength(null);
             item.setTon(null);
             item.setRemark(null);
-            item.setPurchased(false);
             item.setPurchaseOrderId(null);
             item.setPurchaseOrderNo(null);
             item.getPrices().clear();
@@ -802,10 +801,7 @@ public class QuoteSheetStore {
         item.setLength(request.length());
         item.setTon(request.ton());
         item.setRemark(request.remark());
-        // 未显式携带(null)时保留原值, 兼容旧调用方与仅改价的分片请求。
-        if (request.purchased() != null) {
-            item.setPurchased(request.purchased());
-        }
+        // 已采购由关联采购订单推导: 仅需应用行级关联, 不再写入独立标记。
         applyPurchaseOrderLink(item, request.purchaseOrderId());
         Map<String, QuoteSheetItemPrice> existingByBrandName = new HashMap<>();
         for (QuoteSheetItemPrice price : item.getPrices()) {
