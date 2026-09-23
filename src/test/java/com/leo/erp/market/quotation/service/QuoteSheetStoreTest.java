@@ -1793,7 +1793,7 @@ class QuoteSheetStoreTest {
         sheet.setVersion(1L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
         when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
-        when(purchaseOrderOptionQuery.listActiveByIds(List.of(88L))).thenReturn(List.of(
+        when(purchaseOrderOptionQuery.listActiveByIds(any())).thenReturn(List.of(
                 new com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot(
                         88L, "PO-88", "沙钢", new BigDecimal("40.5"), "正常", null)));
 
@@ -1896,7 +1896,7 @@ class QuoteSheetStoreTest {
         QuoteSheet sheet = sheetWithItem(9L);
         sheet.setVersion(1L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
-        when(purchaseOrderOptionQuery.listActiveByIds(List.of(999L))).thenReturn(List.of());
+        when(purchaseOrderOptionQuery.listActiveByIds(any())).thenReturn(List.of());
 
         assertThatThrownBy(() -> store().updateItem(9L, 301L,
                 new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
@@ -1905,5 +1905,34 @@ class QuoteSheetStoreTest {
                 1L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("采购订单不存在");
+    }
+
+    /** 整单替换: 多行关联同一/不同订单时只批量查询一次(避免逐行 N+1)。 */
+    @Test
+    void update_multiRowPurchaseOrderLinks_usesSingleBatchQuery() {
+        QuoteSheet sheet = sheetWithItem(9L);
+        sheet.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(purchaseOrderOptionQuery.listActiveByIds(any())).thenReturn(List.of(
+                new com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot(
+                        88L, "PO-88", "沙钢", new BigDecimal("40.5"), "正常", null),
+                new com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot(
+                        99L, "PO-99", "中天", new BigDecimal("10"), "正常", null)));
+
+        QuoteSheetResponse response = store().update(9L,
+                requestWithItems(List.of(
+                        new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
+                                null, new BigDecimal("10"), 88L,
+                                List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
+                        new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "盘螺", "HRB400E", 8, "9米",
+                                null, new BigDecimal("5"), 99L,
+                                List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3300"), null))))),
+                1L);
+
+        assertThat(response.items()).extracting(QuoteSheetResponse.ItemResponse::purchaseOrderNo)
+                .containsExactly("PO-88", "PO-99");
+        // 两行 → 只发一次批量查询
+        verify(purchaseOrderOptionQuery, org.mockito.Mockito.times(1)).listActiveByIds(any());
     }
 }

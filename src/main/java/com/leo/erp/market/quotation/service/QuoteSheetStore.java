@@ -144,7 +144,8 @@ public class QuoteSheetStore {
                 replaceBrands(entity, request.brands());
             }
             syncBrandSnapshot(entity, config);
-            replaceItems(entity, request.items(), resolveSupplierNames(request.items()));
+            replaceItems(entity, request.items(), resolveSupplierNames(request.items()),
+                    resolvePurchaseOrderNos(request.items()));
             if (!headerChanged) {
                 entityManager.lock(entity, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
             }
@@ -213,7 +214,8 @@ public class QuoteSheetStore {
                 .max(Integer::compareTo)
                 .orElse(0) + 1;
         Map<Long, String> supplierNames = resolveSupplierNames(List.of(request));
-        QuoteSheetItem item = buildItem(sheet, request, nextLineNo, supplierNames);
+        Map<Long, String> purchaseOrderNos = resolvePurchaseOrderNos(List.of(request));
+        QuoteSheetItem item = buildItem(sheet, request, nextLineNo, supplierNames, purchaseOrderNos);
         sheet.getItems().add(item);
         repository.saveAndFlush(sheet);
         return new QuoteSheetItemWrite(toItemResponse(item), sheet.getVersion());
@@ -231,7 +233,8 @@ public class QuoteSheetStore {
         QuoteSheetItem item = requireItem(sheet, itemId);
         checkSpecQuantityLockedForItemUpdate(sheet, item, request);
         Map<Long, String> supplierNames = resolveSupplierNames(List.of(request));
-        applyItem(item, request, supplierNames);
+        Map<Long, String> purchaseOrderNos = resolvePurchaseOrderNos(List.of(request));
+        applyItem(item, request, supplierNames, purchaseOrderNos);
         repository.saveAndFlush(sheet);
         return new QuoteSheetItemWrite(toItemResponse(item), sheet.getVersion());
     }
@@ -614,7 +617,8 @@ public class QuoteSheetStore {
     private void apply(QuoteSheet entity, QuoteSheetRequest request) {
         applyHeader(entity, request, false);
         replaceBrands(entity, request.brands());
-        replaceItems(entity, request.items(), resolveSupplierNames(request.items()));
+        replaceItems(entity, request.items(), resolveSupplierNames(request.items()),
+                resolvePurchaseOrderNos(request.items()));
     }
 
     /**
@@ -735,7 +739,7 @@ public class QuoteSheetStore {
      * 因此按升序重编号不会在同一 flush 内产生 {@code uk_quote_item_line} 瞬时重复。</p>
      */
     private void replaceItems(QuoteSheet entity, List<QuoteSheetRequest.ItemRequest> requests,
-                              Map<Long, String> supplierNames) {
+                              Map<Long, String> supplierNames, Map<Long, String> purchaseOrderNos) {
         List<QuoteSheetItem> existing = sortedByLineNo(entity.getItems());
         List<QuoteSheetItem> reconciled = new ArrayList<>();
         int lineNo = 0;
@@ -748,7 +752,7 @@ public class QuoteSheetStore {
                 item.setSheet(entity);
             }
             item.setLineNo(lineNo);
-            applyItem(item, request, supplierNames);
+            applyItem(item, request, supplierNames, purchaseOrderNos);
             reconciled.add(item);
         }
         entity.getItems().clear();
@@ -764,12 +768,12 @@ public class QuoteSheetStore {
     }
 
     private QuoteSheetItem buildItem(QuoteSheet sheet, QuoteSheetRequest.ItemRequest request, int lineNo,
-                                     Map<Long, String> supplierNames) {
+                                     Map<Long, String> supplierNames, Map<Long, String> purchaseOrderNos) {
         QuoteSheetItem item = new QuoteSheetItem();
         item.setId(snowflakeIdGenerator.nextId());
         item.setSheet(sheet);
         item.setLineNo(lineNo);
-        applyItem(item, request, supplierNames);
+        applyItem(item, request, supplierNames, purchaseOrderNos);
         return item;
     }
 
@@ -779,7 +783,7 @@ public class QuoteSheetStore {
      * {@code uk_quote_item_price(item_id, brand_name)} 冲突。
      */
     private void applyItem(QuoteSheetItem item, QuoteSheetRequest.ItemRequest request,
-                           Map<Long, String> supplierNames) {
+                           Map<Long, String> supplierNames, Map<Long, String> purchaseOrderNos) {
         QuoteRowType rowType = resolveRowType(request);
         item.setRowType(rowType);
         if (rowType == QuoteRowType.SEPARATOR) {
@@ -802,7 +806,7 @@ public class QuoteSheetStore {
         item.setTon(request.ton());
         item.setRemark(request.remark());
         // 已采购由关联采购订单推导: 仅需应用行级关联, 不再写入独立标记。
-        applyPurchaseOrderLink(item, request.purchaseOrderId());
+        applyPurchaseOrderLink(item, request.purchaseOrderId(), purchaseOrderNos);
         Map<String, QuoteSheetItemPrice> existingByBrandName = new HashMap<>();
         for (QuoteSheetItemPrice price : item.getPrices()) {
             existingByBrandName.put(price.getBrandName(), price);
@@ -832,21 +836,51 @@ public class QuoteSheetStore {
     /**
      * 应用行级采购订单关联: null 表示解除关联(清空快照)。
      * <p>整行替换语义下请求总是显式携带该字段, 因此 null 一律视为解除;
-     * 非空时校验订单存在(未删除)并写入订单号快照, 供订单号变更/删除后仍可读。</p>
+     * 非空时从批量解析结果取订单号快照(订单存在性已在 {@link #resolvePurchaseOrderNos} 校验),
+     * 供订单号变更/删除后仍可读。</p>
      */
-    private void applyPurchaseOrderLink(QuoteSheetItem item, Long purchaseOrderId) {
+    private void applyPurchaseOrderLink(QuoteSheetItem item, Long purchaseOrderId,
+                                        Map<Long, String> purchaseOrderNos) {
         if (purchaseOrderId == null) {
             item.setPurchaseOrderId(null);
             item.setPurchaseOrderNo(null);
             return;
         }
-        String orderNo = purchaseOrderOptionQuery.listActiveByIds(List.of(purchaseOrderId)).stream()
-                .findFirst()
-                .map(PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot::orderNo)
-                .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR,
-                        "采购订单不存在或已删除: " + purchaseOrderId));
         item.setPurchaseOrderId(purchaseOrderId);
-        item.setPurchaseOrderNo(orderNo);
+        item.setPurchaseOrderNo(purchaseOrderNos.get(purchaseOrderId));
+    }
+
+    /**
+     * 批量解析行级采购订单号快照(一次查询覆盖整单全部行, 避免逐行查询的 N+1);
+     * 任一订单不存在或已删除即抛 422。
+     */
+    private Map<Long, String> resolvePurchaseOrderNos(List<QuoteSheetRequest.ItemRequest> items) {
+        Set<Long> orderIds = new LinkedHashSet<>();
+        if (items != null) {
+            for (QuoteSheetRequest.ItemRequest item : items) {
+                if (item == null || resolveRowType(item) == QuoteRowType.SEPARATOR) {
+                    continue;
+                }
+                if (item.purchaseOrderId() != null) {
+                    orderIds.add(item.purchaseOrderId());
+                }
+            }
+        }
+        if (orderIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, String> orderNos = new HashMap<>();
+        for (PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot snapshot
+                : purchaseOrderOptionQuery.listActiveByIds(orderIds)) {
+            orderNos.put(snapshot.id(), snapshot.orderNo());
+        }
+        for (Long orderId : orderIds) {
+            if (!orderNos.containsKey(orderId)) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "采购订单不存在或已删除: " + orderId);
+            }
+        }
+        return orderNos;
     }
 
     private QuoteSheetResponse toResponse(QuoteSheet entity) {

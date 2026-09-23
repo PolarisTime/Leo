@@ -11,7 +11,6 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -72,21 +71,6 @@ public class PurchaseOrderOptionService implements PurchaseOrderOptionQuery {
         return repository.findByIdInAndDeletedFlagFalse(distinctIds).stream()
                 .map(PurchaseOrderOptionService::toSnapshot)
                 .toList();
-    }
-
-    /** 订购吨数合计(未删除订单), 供"已开吨"汇总预留。 */
-    @Transactional(readOnly = true)
-    public BigDecimal sumOrderedWeight(List<Long> orderIds) {
-        if (orderIds == null || orderIds.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-        Specification<PurchaseOrder> specification = (root, query, builder) -> builder.and(
-                Specs.notDeletedPredicate(root, builder),
-                root.get("id").in(orderIds));
-        return repository.findAll(specification).stream()
-                .map(PurchaseOrder::getTotalWeight)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private static PurchaseOrderOptionSnapshot toSnapshot(PurchaseOrder order) {

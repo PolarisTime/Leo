@@ -53,22 +53,6 @@ class PurchaseOrderOptionServiceTest {
     }
 
     @Test
-    void sumOrderedWeight_sumsNotNullWeights() {
-        PurchaseOrder a = new PurchaseOrder();
-        a.setId(1L);
-        a.setTotalWeight(new BigDecimal("10"));
-        PurchaseOrder b = new PurchaseOrder();
-        b.setId(2L);
-        b.setTotalWeight(null);
-        when(repository.findAll(any(Specification.class))).thenReturn(List.of(a, b));
-
-        assertThat(new PurchaseOrderOptionService(repository).sumOrderedWeight(List.of(1L, 2L)))
-                .isEqualByComparingTo("10");
-        assertThat(new PurchaseOrderOptionService(repository).sumOrderedWeight(List.of()))
-                .isEqualByComparingTo("0");
-    }
-
-    @Test
     void listActiveByIds_mapsByIdAndDeduplicates() {
         PurchaseOrder order = new PurchaseOrder();
         order.setId(88L);
