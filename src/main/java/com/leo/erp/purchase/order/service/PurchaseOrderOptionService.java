@@ -85,10 +85,12 @@ public class PurchaseOrderOptionService implements PurchaseOrderOptionQuery {
         String like = (keyword == null || keyword.isBlank())
                 ? null
                 : "%" + keyword.trim().toLowerCase() + "%";
+        // 关键字在 SQL 层过滤后再截断: 结果上限针对"匹配行", 而非过滤前的全部行,
+        // 避免匹配行落在前 N 条之外时搜不到。
         return purchaseOrderItemRepository
-                .findActiveItemOptions(like, normalizeStatus(status), purchaseOrderId)
+                .findActiveItemOptions(like, normalizeStatus(status), purchaseOrderId,
+                        PageRequest.of(0, MAX_OPTIONS))
                 .stream()
-                .limit(MAX_OPTIONS)
                 .map(PurchaseOrderOptionService::toItemSnapshot)
                 .toList();
     }

@@ -798,6 +798,7 @@ public class QuoteSheetStore {
             item.setLength(null);
             item.setTon(null);
             item.setRemark(null);
+            item.setLocked(false);
             item.setPurchaseOrderId(null);
             item.setPurchaseOrderNo(null);
             item.setPurchaseOrderItemId(null);
@@ -810,9 +811,19 @@ public class QuoteSheetStore {
         item.setLength(request.length());
         item.setTon(request.ton());
         item.setRemark(request.remark());
-        // 已采购由关联采购订单推导: 仅需应用行级关联, 不再写入独立标记。
-        applyPurchaseOrderLink(item, request.purchaseOrderId(), request.purchaseOrderItemId(),
-                purchaseOrderLinks);
+        // locked 未携带(null)时保留原值, 兼容仅改价的分片请求。
+        if (request.locked() != null) {
+            item.setLocked(request.locked());
+        }
+        // 门禁: 仅锁定行可关联采购订单; 未锁定(含刚解锁)时强制清除关联与快照。
+        if (!item.isLocked()) {
+            item.setPurchaseOrderId(null);
+            item.setPurchaseOrderNo(null);
+            item.setPurchaseOrderItemId(null);
+        } else {
+            applyPurchaseOrderLink(item, request.purchaseOrderId(), request.purchaseOrderItemId(),
+                    purchaseOrderLinks);
+        }
         Map<String, QuoteSheetItemPrice> existingByBrandName = new HashMap<>();
         for (QuoteSheetItemPrice price : item.getPrices()) {
             existingByBrandName.put(price.getBrandName(), price);
@@ -881,6 +892,10 @@ public class QuoteSheetStore {
                 if (item == null || resolveRowType(item) == QuoteRowType.SEPARATOR) {
                     continue;
                 }
+                // 显式解锁的行会被门禁清除关联, 无需解析其采购订单(避免对已删订单误报)。
+                if (Boolean.FALSE.equals(item.locked())) {
+                    continue;
+                }
                 if (item.purchaseOrderId() != null) {
                     orderIds.add(item.purchaseOrderId());
                 }
@@ -933,6 +948,7 @@ public class QuoteSheetStore {
         return new QuoteSheetResponse.ItemResponse(
                 item.getId(), item.getLineNo(), item.getRowType(), item.getCategory(), item.getMaterial(),
                 item.getSpec(), item.getLength(), item.getRemark(), item.getTon(), item.isPurchased(),
+                item.isLocked(),
                 item.getPurchaseOrderId(), item.getPurchaseOrderNo(), item.getPurchaseOrderItemId(),
                 item.getPrices().stream()
                         .map(price -> new QuoteSheetResponse.ItemPriceResponse(

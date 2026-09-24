@@ -1799,10 +1799,11 @@ class QuoteSheetStoreTest {
 
         QuoteSheetItemWrite write = store().updateItem(9L, 301L,
                 new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
-                        null, new BigDecimal("10"), 88L,
+                        null, new BigDecimal("10"), true, 88L, null,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
                 1L);
 
+        assertThat(write.item().locked()).isTrue();
         assertThat(write.item().purchased()).isTrue();
         assertThat(sheet.getItems().get(0).isPurchased()).isTrue();
     }
@@ -1923,10 +1924,10 @@ class QuoteSheetStoreTest {
         QuoteSheetResponse response = store().update(9L,
                 requestWithItems(List.of(
                         new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
-                                null, new BigDecimal("10"), 88L,
+                                null, new BigDecimal("10"), true, 88L, null,
                                 List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
                         new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "盘螺", "HRB400E", 8, "9米",
-                                null, new BigDecimal("5"), 99L,
+                                null, new BigDecimal("5"), true, 99L, null,
                                 List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3300"), null))))),
                 1L);
 
@@ -1934,5 +1935,46 @@ class QuoteSheetStoreTest {
                 .containsExactly("PO-88", "PO-99");
         // 两行 → 只发一次批量查询
         verify(purchaseOrderOptionQuery, org.mockito.Mockito.times(1)).listActiveByIds(any());
+    }
+    /** 门禁: 未锁定行即使请求携带采购订单关联也被强制清除。 */
+    @Test
+    void updateItem_unlockedRow_clearsPurchaseOrderLink() {
+        QuoteSheet sheet = sheetWithItem(9L);
+        sheet.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetItemWrite write = store().updateItem(9L, 301L,
+                new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
+                        null, new BigDecimal("10"), false, 88L, null,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
+                1L);
+
+        assertThat(write.item().locked()).isFalse();
+        assertThat(write.item().purchaseOrderId()).isNull();
+        assertThat(write.item().purchased()).isFalse();
+    }
+
+    /** 门禁: 已锁定并关联的行, 解锁时清除关联与快照。 */
+    @Test
+    void updateItem_unlockExistingLinkedRow_clearsLink() {
+        QuoteSheet sheet = sheetWithItem(9L);
+        sheet.setVersion(1L);
+        QuoteSheetItem item = sheet.getItems().get(0);
+        item.setLocked(true);
+        item.setPurchaseOrderId(88L);
+        item.setPurchaseOrderNo("PO-88");
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetItemWrite write = store().updateItem(9L, 301L,
+                new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
+                        null, new BigDecimal("10"), false, 88L, null,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
+                1L);
+
+        assertThat(write.item().locked()).isFalse();
+        assertThat(write.item().purchaseOrderId()).isNull();
+        assertThat(write.item().purchaseOrderNo()).isNull();
     }
 }

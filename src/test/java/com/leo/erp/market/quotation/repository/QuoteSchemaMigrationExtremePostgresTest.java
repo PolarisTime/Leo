@@ -145,6 +145,15 @@ class QuoteSchemaMigrationExtremePostgresTest {
     }
 
     @Test
+    void v165_quoteItem_lockedNotNullDefaultFalse_andEntityDefaultsFalse() {
+        ColumnMeta locked = column("mk_quote_item", "locked");
+        assertThat(locked.type()).isEqualTo("boolean");
+        assertThat(locked.nullable()).isFalse();
+        assertThat(locked.defaultValue()).contains("false");
+        assertThat(new QuoteSheetItem().isLocked()).isFalse();
+    }
+
+    @Test
     void v144_editLockTable_hasUniqueSheetAndOwnerSnapshot() {
         assertThat(column("mk_quote_sheet_edit_lock", "sheet_id").type()).isEqualTo("bigint");
         assertThat(column("mk_quote_sheet_edit_lock", "sheet_id").nullable()).isFalse();

@@ -101,7 +101,7 @@ class PurchaseOrderOptionServiceTest {
         item.setSpec("12");
         item.setLength("9米");
         item.setWeightTon(new BigDecimal("6.0"));
-        when(purchaseOrderItemRepository.findActiveItemOptions(any(), any(), any()))
+        when(purchaseOrderItemRepository.findActiveItemOptions(any(), any(), any(), any()))
                 .thenReturn(List.of(item));
 
         List<PurchaseOrderOptionQuery.PurchaseOrderItemOptionSnapshot> options =

@@ -62,6 +62,13 @@ public class QuoteSheetItem {
     private String remark;
 
     /**
+     * 是否锁定: 未锁定不可关联采购订单; 解锁时服务端清除该行采购订单关联。
+     * <p>锁定表示该行商品规格与报单吨位已定稿。隔断行恒为 false。</p>
+     */
+    @Column(name = "locked", nullable = false)
+    private boolean locked = false;
+
+    /**
      * 关联采购订单标识(可空): 计划态引用, 仅用于吨位提示与预估, 不做额度扣减。
      * <p>刻意不加外键: 采购订单删除后本行需保留历史关联与订单号快照(见
      * {@link #purchaseOrderNo}), 加 FK 的 RESTRICT 会阻断订单删除、SET NULL 会静默丢链路,

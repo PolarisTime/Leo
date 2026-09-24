@@ -60,6 +60,7 @@ public record QuoteSheetRequest(
                 @Size(max = 16, message = "长度过长") String length,
                 @Size(max = 255, message = "备注过长") String remark,
                 @DecimalMin(value = "0", message = "吨数不能为负") BigDecimal ton,
+                Boolean locked,
                 Long purchaseOrderId,
                 Long purchaseOrderItemId,
                 @Valid List<ItemPriceRequest> prices
@@ -68,26 +69,26 @@ public record QuoteSheetRequest(
             /** 兼容旧调用方: 未显式传行类型时按商品行处理。 */
             public ItemRequest(String category, String material, Integer spec, String length,
                                BigDecimal ton, List<ItemPriceRequest> prices) {
-                this(null, category, material, spec, length, null, ton, null, null, prices);
+                this(null, category, material, spec, length, null, ton, null, null, null, prices);
             }
 
             /** 兼容旧调用方: 未携带行备注。 */
             public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
                                String length, BigDecimal ton, List<ItemPriceRequest> prices) {
-                this(rowType, category, material, spec, length, null, ton, null, null, prices);
+                this(rowType, category, material, spec, length, null, ton, null, null, null, prices);
             }
 
             /** 兼容旧调用方: 未携带行备注。 */
             public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
                                String length, String remark, BigDecimal ton, List<ItemPriceRequest> prices) {
-                this(rowType, category, material, spec, length, remark, ton, null, null, prices);
+                this(rowType, category, material, spec, length, remark, ton, null, null, null, prices);
             }
 
             /** 兼容旧调用方: 未携带订单明细行关联。 */
             public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
                                String length, String remark, BigDecimal ton, Long purchaseOrderId,
                                List<ItemPriceRequest> prices) {
-                this(rowType, category, material, spec, length, remark, ton, purchaseOrderId, null, prices);
+                this(rowType, category, material, spec, length, remark, ton, null, purchaseOrderId, null, prices);
             }
         }
 }
