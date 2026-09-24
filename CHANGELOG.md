@@ -1,3 +1,20 @@
+# [11.15.0](https://github.com/PolarisTime/Leo/compare/v11.14.0...v11.15.0) (2026-09-24)
+
+
+### Bug Fixes
+
+* **quotation:** 已采购改由采购订单关联推导, 修复反标记刷新后复现 ([660e0d0](https://github.com/PolarisTime/Leo/commit/660e0d02f680daf39224e3327f615f8f9e8834fc))
+
+
+### Features
+
+* **quotation:** 报单比价吨位支持关联采购订单并扣减已开吨位 ([64f4206](https://github.com/PolarisTime/Leo/commit/64f42063c11a4591635ba7223f10b0decf23d8ea))
+
+
+### Performance Improvements
+
+* **quotation:** 采购订单关联改批量解析, 清理死代码 ([74d1b0b](https://github.com/PolarisTime/Leo/commit/74d1b0bb9e134d4e02beff2b93f3ad34a50a859e))
+
 # [11.14.0](https://github.com/PolarisTime/Leo/compare/v11.13.0...v11.14.0) (2026-09-22)
 
 
