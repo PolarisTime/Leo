@@ -49,24 +49,6 @@ public interface QuoteSheetRepository extends JpaRepository<QuoteSheet, Long>,
     Optional<QuoteSheet> findActiveForUpdate(@Param("id") Long id);
 
     /**
-     * 按采购订单汇总报单已开吨位: 汇总全部未删除报价单商品行中关联该订单的 ton。
-     * <p>可选 {@code excludeSheetId} 排除指定单据, 供前端在编辑当前单据时叠加本地未保存吨位,
-     * 避免把当前单据已保存的吨位重复计入。</p>
-     *
-     * @return 每行 {@code [purchaseOrderId(Long), totalTon(BigDecimal or null)]}
-     */
-    @Query("""
-            select item.purchaseOrderId, sum(item.ton)
-            from QuoteSheetItem item
-            where item.purchaseOrderId in :purchaseOrderIds
-              and item.sheet.deletedFlag = false
-              and (:excludeSheetId is null or item.sheet.id <> :excludeSheetId)
-            group by item.purchaseOrderId
-            """)
-    List<Object[]> sumIssuedTonByPurchaseOrderIds(@Param("purchaseOrderIds") Collection<Long> purchaseOrderIds,
-                                                  @Param("excludeSheetId") Long excludeSheetId);
-
-    /**
      * 按采购订单明细行汇总报单已开吨位: 按规格扣减的唯一真源。
      * <p>仅统计 {@code purchaseOrderItemId} 非空的商品行; 未回填的历史行不参与行级口径。</p>
      *

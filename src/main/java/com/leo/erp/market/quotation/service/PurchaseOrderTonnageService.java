@@ -31,8 +31,6 @@ import java.util.stream.Collectors;
 @Service
 public class PurchaseOrderTonnageService {
 
-    private static final int MAX_OPTIONS = 200;
-
     private final QuoteSheetRepository quoteSheetRepository;
     private final PurchaseOrderOptionQuery purchaseOrderOptionQuery;
 
@@ -89,7 +87,6 @@ public class PurchaseOrderTonnageService {
                         row -> (Long) row[0],
                         row -> row[1] == null ? BigDecimal.ZERO : (BigDecimal) row[1]));
         return items.stream()
-                .limit(MAX_OPTIONS)
                 .map(item -> toResponse(item, issuedByItemId.getOrDefault(
                         item.purchaseOrderItemId(), BigDecimal.ZERO)))
                 .toList();

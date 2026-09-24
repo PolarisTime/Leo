@@ -88,8 +88,8 @@ public class V2QuoteSheetController {
             @RequestParam(required = false) @Size(max = 200) List<@Positive Long> purchaseOrderItemIds,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) Long purchaseOrderId,
-            @RequestParam(required = false) Long excludeSheetId) {
+            @RequestParam(required = false) @Positive Long purchaseOrderId,
+            @RequestParam(required = false) @Positive Long excludeSheetId) {
         return quoteSheetService.summarizeTonnages(
                 purchaseOrderItemIds, keyword, status, purchaseOrderId, excludeSheetId);
     }

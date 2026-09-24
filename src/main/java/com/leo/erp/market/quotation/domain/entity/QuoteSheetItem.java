@@ -62,8 +62,9 @@ public class QuoteSheetItem {
     private String remark;
 
     /**
-     * 是否锁定: 未锁定不可关联采购订单; 解锁时服务端清除该行采购订单关联。
-     * <p>锁定表示该行商品规格与报单吨位已定稿。隔断行恒为 false。</p>
+     * 是否锁定: 作为关联采购订单的前置门禁, 未锁定不可关联采购订单;
+     * 解锁时服务端清除该行采购订单关联与订单号快照。
+     * <p>锁定仅控制「可否关联采购订单」, 不冻结规格/长度/吨位等本行字段的编辑。隔断行恒为 false。</p>
      */
     @Column(name = "locked", nullable = false)
     private boolean locked = false;
