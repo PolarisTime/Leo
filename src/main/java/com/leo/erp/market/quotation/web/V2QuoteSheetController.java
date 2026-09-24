@@ -77,18 +77,21 @@ public class V2QuoteSheetController {
         return quoteSheetService.detail(id);
     }
 
-    @Operation(summary = "采购订单已开吨位汇总",
-            description = "列出采购订单及其订货吨数、报单已开吨位与剩余可开吨(订货 - 已开), "
-                    + "供吨位列关联采购订单时选择与展示。传 purchaseOrderIds 按 id 汇总, "
-                    + "否则按 keyword/status 列出选项; 可选 excludeSheetId 排除当前报价单自身已保存吨位。")
+    @Operation(summary = "采购订单明细行已开吨位汇总",
+            description = "列出采购订单明细行(按规格)及其订货吨数、报单已开吨位与剩余可开吨(订货 - 已开), "
+                    + "供吨位列按规格关联时选择与展示。传 purchaseOrderItemIds 按 id 汇总, "
+                    + "否则按 keyword/status/purchaseOrderId 列出选项; "
+                    + "可选 excludeSheetId 排除当前报价单自身已保存吨位。")
     @GetMapping("/purchase-order-tonnages")
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_READ)
     public List<PurchaseOrderTonnageResponse> purchaseOrderTonnages(
-            @RequestParam(required = false) @Size(max = 200) List<@Positive Long> purchaseOrderIds,
+            @RequestParam(required = false) @Size(max = 200) List<@Positive Long> purchaseOrderItemIds,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long purchaseOrderId,
             @RequestParam(required = false) Long excludeSheetId) {
-        return quoteSheetService.summarizeTonnages(purchaseOrderIds, keyword, status, excludeSheetId);
+        return quoteSheetService.summarizeTonnages(
+                purchaseOrderItemIds, keyword, status, purchaseOrderId, excludeSheetId);
     }
 
     @Operation(summary = "创建报价单")

@@ -65,4 +65,21 @@ public interface QuoteSheetRepository extends JpaRepository<QuoteSheet, Long>,
             """)
     List<Object[]> sumIssuedTonByPurchaseOrderIds(@Param("purchaseOrderIds") Collection<Long> purchaseOrderIds,
                                                   @Param("excludeSheetId") Long excludeSheetId);
+
+    /**
+     * 按采购订单明细行汇总报单已开吨位: 按规格扣减的唯一真源。
+     * <p>仅统计 {@code purchaseOrderItemId} 非空的商品行; 未回填的历史行不参与行级口径。</p>
+     *
+     * @return 每行 {@code [purchaseOrderItemId(Long), totalTon(BigDecimal or null)]}
+     */
+    @Query("""
+            select item.purchaseOrderItemId, sum(item.ton)
+            from QuoteSheetItem item
+            where item.purchaseOrderItemId in :purchaseOrderItemIds
+              and item.sheet.deletedFlag = false
+              and (:excludeSheetId is null or item.sheet.id <> :excludeSheetId)
+            group by item.purchaseOrderItemId
+            """)
+    List<Object[]> sumIssuedTonByPurchaseOrderItemIds(@Param("purchaseOrderItemIds") Collection<Long> purchaseOrderItemIds,
+                                                      @Param("excludeSheetId") Long excludeSheetId);
 }

@@ -76,6 +76,14 @@ public class QuoteSheetItem {
     private String purchaseOrderNo;
 
     /**
+     * 关联采购订单明细行标识(可空): 按规格扣减已开吨位的真源。
+     * <p>同为计划态引用, 不加外键(理由同 {@link #purchaseOrderId}); 空表示未关联到具体规格行,
+     * 该行吨位不计入行级扣减(历史数据未回填时保持空)。</p>
+     */
+    @Column(name = "purchase_order_item_id")
+    private Long purchaseOrderItemId;
+
+    /**
      * 是否已采购(派生, 不落库): 关联了采购订单即视为已采购。
      * <p>隔断行不携带采购订单, 恒为 false。</p>
      */

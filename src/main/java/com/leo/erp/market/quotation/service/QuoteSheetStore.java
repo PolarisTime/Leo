@@ -33,6 +33,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -145,7 +146,7 @@ public class QuoteSheetStore {
             }
             syncBrandSnapshot(entity, config);
             replaceItems(entity, request.items(), resolveSupplierNames(request.items()),
-                    resolvePurchaseOrderNos(request.items()));
+                    resolvePurchaseOrderLinks(request.items()));
             if (!headerChanged) {
                 entityManager.lock(entity, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
             }
@@ -214,8 +215,8 @@ public class QuoteSheetStore {
                 .max(Integer::compareTo)
                 .orElse(0) + 1;
         Map<Long, String> supplierNames = resolveSupplierNames(List.of(request));
-        Map<Long, String> purchaseOrderNos = resolvePurchaseOrderNos(List.of(request));
-        QuoteSheetItem item = buildItem(sheet, request, nextLineNo, supplierNames, purchaseOrderNos);
+        Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks = resolvePurchaseOrderLinks(List.of(request));
+        QuoteSheetItem item = buildItem(sheet, request, nextLineNo, supplierNames, purchaseOrderLinks);
         sheet.getItems().add(item);
         repository.saveAndFlush(sheet);
         return new QuoteSheetItemWrite(toItemResponse(item), sheet.getVersion());
@@ -233,8 +234,8 @@ public class QuoteSheetStore {
         QuoteSheetItem item = requireItem(sheet, itemId);
         checkSpecQuantityLockedForItemUpdate(sheet, item, request);
         Map<Long, String> supplierNames = resolveSupplierNames(List.of(request));
-        Map<Long, String> purchaseOrderNos = resolvePurchaseOrderNos(List.of(request));
-        applyItem(item, request, supplierNames, purchaseOrderNos);
+        Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks = resolvePurchaseOrderLinks(List.of(request));
+        applyItem(item, request, supplierNames, purchaseOrderLinks);
         repository.saveAndFlush(sheet);
         return new QuoteSheetItemWrite(toItemResponse(item), sheet.getVersion());
     }
@@ -618,7 +619,7 @@ public class QuoteSheetStore {
         applyHeader(entity, request, false);
         replaceBrands(entity, request.brands());
         replaceItems(entity, request.items(), resolveSupplierNames(request.items()),
-                resolvePurchaseOrderNos(request.items()));
+                resolvePurchaseOrderLinks(request.items()));
     }
 
     /**
@@ -739,7 +740,8 @@ public class QuoteSheetStore {
      * 因此按升序重编号不会在同一 flush 内产生 {@code uk_quote_item_line} 瞬时重复。</p>
      */
     private void replaceItems(QuoteSheet entity, List<QuoteSheetRequest.ItemRequest> requests,
-                              Map<Long, String> supplierNames, Map<Long, String> purchaseOrderNos) {
+                              Map<Long, String> supplierNames,
+                              Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
         List<QuoteSheetItem> existing = sortedByLineNo(entity.getItems());
         List<QuoteSheetItem> reconciled = new ArrayList<>();
         int lineNo = 0;
@@ -752,7 +754,7 @@ public class QuoteSheetStore {
                 item.setSheet(entity);
             }
             item.setLineNo(lineNo);
-            applyItem(item, request, supplierNames, purchaseOrderNos);
+            applyItem(item, request, supplierNames, purchaseOrderLinks);
             reconciled.add(item);
         }
         entity.getItems().clear();
@@ -768,12 +770,13 @@ public class QuoteSheetStore {
     }
 
     private QuoteSheetItem buildItem(QuoteSheet sheet, QuoteSheetRequest.ItemRequest request, int lineNo,
-                                     Map<Long, String> supplierNames, Map<Long, String> purchaseOrderNos) {
+                                     Map<Long, String> supplierNames,
+                                     Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
         QuoteSheetItem item = new QuoteSheetItem();
         item.setId(snowflakeIdGenerator.nextId());
         item.setSheet(sheet);
         item.setLineNo(lineNo);
-        applyItem(item, request, supplierNames, purchaseOrderNos);
+        applyItem(item, request, supplierNames, purchaseOrderLinks);
         return item;
     }
 
@@ -783,7 +786,8 @@ public class QuoteSheetStore {
      * {@code uk_quote_item_price(item_id, brand_name)} 冲突。
      */
     private void applyItem(QuoteSheetItem item, QuoteSheetRequest.ItemRequest request,
-                           Map<Long, String> supplierNames, Map<Long, String> purchaseOrderNos) {
+                           Map<Long, String> supplierNames,
+                           Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
         QuoteRowType rowType = resolveRowType(request);
         item.setRowType(rowType);
         if (rowType == QuoteRowType.SEPARATOR) {
@@ -796,6 +800,7 @@ public class QuoteSheetStore {
             item.setRemark(null);
             item.setPurchaseOrderId(null);
             item.setPurchaseOrderNo(null);
+            item.setPurchaseOrderItemId(null);
             item.getPrices().clear();
             return;
         }
@@ -806,7 +811,8 @@ public class QuoteSheetStore {
         item.setTon(request.ton());
         item.setRemark(request.remark());
         // 已采购由关联采购订单推导: 仅需应用行级关联, 不再写入独立标记。
-        applyPurchaseOrderLink(item, request.purchaseOrderId(), purchaseOrderNos);
+        applyPurchaseOrderLink(item, request.purchaseOrderId(), request.purchaseOrderItemId(),
+                purchaseOrderLinks);
         Map<String, QuoteSheetItemPrice> existingByBrandName = new HashMap<>();
         for (QuoteSheetItemPrice price : item.getPrices()) {
             existingByBrandName.put(price.getBrandName(), price);
@@ -834,28 +840,42 @@ public class QuoteSheetStore {
     }
 
     /**
-     * 应用行级采购订单关联: null 表示解除关联(清空快照)。
+     * 应用行级采购订单关联: null 表示解除关联(清空订单与明细快照)。
      * <p>整行替换语义下请求总是显式携带该字段, 因此 null 一律视为解除;
-     * 非空时从批量解析结果取订单号快照(订单存在性已在 {@link #resolvePurchaseOrderNos} 校验),
-     * 供订单号变更/删除后仍可读。</p>
+     * 非空时从批量解析结果取订单号快照(存在性已在 {@link #resolvePurchaseOrderLinks} 校验),
+     * 供订单号变更/删除后仍可读。明细行 id 同为计划态引用, 不校验规格一致性(前端已保证)。</p>
      */
     private void applyPurchaseOrderLink(QuoteSheetItem item, Long purchaseOrderId,
-                                        Map<Long, String> purchaseOrderNos) {
+                                        Long purchaseOrderItemId,
+                                        Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
         if (purchaseOrderId == null) {
             item.setPurchaseOrderId(null);
             item.setPurchaseOrderNo(null);
+            item.setPurchaseOrderItemId(null);
             return;
         }
+        PurchaseOrderLinkSnapshot link = purchaseOrderLinks.get(purchaseOrderId);
         item.setPurchaseOrderId(purchaseOrderId);
-        item.setPurchaseOrderNo(purchaseOrderNos.get(purchaseOrderId));
+        item.setPurchaseOrderNo(link == null ? null : link.orderNo());
+        item.setPurchaseOrderItemId(
+                purchaseOrderItemId != null && link != null && link.itemIds().contains(purchaseOrderItemId)
+                        ? purchaseOrderItemId
+                        : null);
+    }
+
+    /** 订单关联快照: 订单号 + 该订单下有效明细行 id 集合(构建期可变)。 */
+    private record PurchaseOrderLinkSnapshot(String orderNo, Set<Long> itemIds) {
     }
 
     /**
-     * 批量解析行级采购订单号快照(一次查询覆盖整单全部行, 避免逐行查询的 N+1);
-     * 任一订单不存在或已删除即抛 422。
+     * 批量解析行级采购订单关联(一次查询覆盖整单全部行, 避免逐行查询的 N+1)。
+     * <p>订单存在性通过批量订单查询校验; 显式给出的明细行必须真实存在且属于对应订单,
+     * 否则明细关联置空(保留订单级关联), 不因个别明细失效而拒绝整单保存。</p>
      */
-    private Map<Long, String> resolvePurchaseOrderNos(List<QuoteSheetRequest.ItemRequest> items) {
+    private Map<Long, PurchaseOrderLinkSnapshot> resolvePurchaseOrderLinks(
+            List<QuoteSheetRequest.ItemRequest> items) {
         Set<Long> orderIds = new LinkedHashSet<>();
+        Set<Long> itemIds = new LinkedHashSet<>();
         if (items != null) {
             for (QuoteSheetRequest.ItemRequest item : items) {
                 if (item == null || resolveRowType(item) == QuoteRowType.SEPARATOR) {
@@ -864,23 +884,35 @@ public class QuoteSheetStore {
                 if (item.purchaseOrderId() != null) {
                     orderIds.add(item.purchaseOrderId());
                 }
+                if (item.purchaseOrderItemId() != null) {
+                    itemIds.add(item.purchaseOrderItemId());
+                }
             }
         }
         if (orderIds.isEmpty()) {
             return Map.of();
         }
-        Map<Long, String> orderNos = new HashMap<>();
+        Map<Long, PurchaseOrderLinkSnapshot> resolved = new HashMap<>();
         for (PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot snapshot
                 : purchaseOrderOptionQuery.listActiveByIds(orderIds)) {
-            orderNos.put(snapshot.id(), snapshot.orderNo());
+            resolved.put(snapshot.id(), new PurchaseOrderLinkSnapshot(snapshot.orderNo(), new HashSet<>()));
         }
         for (Long orderId : orderIds) {
-            if (!orderNos.containsKey(orderId)) {
+            if (!resolved.containsKey(orderId)) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR,
                         "采购订单不存在或已删除: " + orderId);
             }
         }
-        return orderNos;
+        if (!itemIds.isEmpty()) {
+            for (PurchaseOrderOptionQuery.PurchaseOrderItemOptionSnapshot item
+                    : purchaseOrderOptionQuery.listActiveItemsByIds(itemIds)) {
+                PurchaseOrderLinkSnapshot link = resolved.get(item.purchaseOrderId());
+                if (link != null) {
+                    link.itemIds().add(item.purchaseOrderItemId());
+                }
+            }
+        }
+        return resolved;
     }
 
     private QuoteSheetResponse toResponse(QuoteSheet entity) {
@@ -901,7 +933,7 @@ public class QuoteSheetStore {
         return new QuoteSheetResponse.ItemResponse(
                 item.getId(), item.getLineNo(), item.getRowType(), item.getCategory(), item.getMaterial(),
                 item.getSpec(), item.getLength(), item.getRemark(), item.getTon(), item.isPurchased(),
-                item.getPurchaseOrderId(), item.getPurchaseOrderNo(),
+                item.getPurchaseOrderId(), item.getPurchaseOrderNo(), item.getPurchaseOrderItemId(),
                 item.getPrices().stream()
                         .map(price -> new QuoteSheetResponse.ItemPriceResponse(
                                 price.getId(), price.getBrandName(), price.getSpotPrice(),

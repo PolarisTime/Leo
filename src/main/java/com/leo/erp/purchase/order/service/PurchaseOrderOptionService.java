@@ -3,6 +3,8 @@ package com.leo.erp.purchase.order.service;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.purchase.api.PurchaseOrderOptionQuery;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
+import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
+import com.leo.erp.purchase.order.repository.PurchaseOrderItemRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderOptionResponse;
 import org.springframework.data.domain.PageRequest;
@@ -23,9 +25,12 @@ public class PurchaseOrderOptionService implements PurchaseOrderOptionQuery {
     private static final int MAX_OPTIONS = 200;
 
     private final PurchaseOrderRepository repository;
+    private final PurchaseOrderItemRepository purchaseOrderItemRepository;
 
-    public PurchaseOrderOptionService(PurchaseOrderRepository repository) {
+    public PurchaseOrderOptionService(PurchaseOrderRepository repository,
+                                      PurchaseOrderItemRepository purchaseOrderItemRepository) {
         this.repository = repository;
+        this.purchaseOrderItemRepository = purchaseOrderItemRepository;
     }
 
     @Transactional(readOnly = true)
@@ -71,6 +76,55 @@ public class PurchaseOrderOptionService implements PurchaseOrderOptionQuery {
         return repository.findByIdInAndDeletedFlagFalse(distinctIds).stream()
                 .map(PurchaseOrderOptionService::toSnapshot)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PurchaseOrderItemOptionSnapshot> listActiveItemOptions(String keyword, String status,
+                                                                       Long purchaseOrderId) {
+        String like = (keyword == null || keyword.isBlank())
+                ? null
+                : "%" + keyword.trim().toLowerCase() + "%";
+        return purchaseOrderItemRepository
+                .findActiveItemOptions(like, normalizeStatus(status), purchaseOrderId)
+                .stream()
+                .limit(MAX_OPTIONS)
+                .map(PurchaseOrderOptionService::toItemSnapshot)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PurchaseOrderItemOptionSnapshot> listActiveItemsByIds(Collection<Long> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) {
+            return List.of();
+        }
+        List<Long> distinctIds = itemIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (distinctIds.isEmpty()) {
+            return List.of();
+        }
+        return purchaseOrderItemRepository.findActiveItemOptionsByIdIn(distinctIds).stream()
+                .map(PurchaseOrderOptionService::toItemSnapshot)
+                .toList();
+    }
+
+    private static String normalizeStatus(String status) {
+        return (status == null || status.isBlank()) ? null : status;
+    }
+
+    private static PurchaseOrderItemOptionSnapshot toItemSnapshot(PurchaseOrderItem item) {
+        PurchaseOrder order = item.getPurchaseOrder();
+        return new PurchaseOrderItemOptionSnapshot(
+                order.getId(),
+                item.getId(),
+                order.getOrderNo(),
+                order.getSupplierName(),
+                item.getCategory(),
+                item.getMaterial(),
+                item.getSpec(),
+                item.getLength(),
+                item.getWeightTon(),
+                order.getStatus());
     }
 
     private static PurchaseOrderOptionSnapshot toSnapshot(PurchaseOrder order) {

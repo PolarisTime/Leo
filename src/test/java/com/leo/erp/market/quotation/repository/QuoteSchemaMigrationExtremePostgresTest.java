@@ -134,6 +134,17 @@ class QuoteSchemaMigrationExtremePostgresTest {
     }
 
     @Test
+    void v164_quoteItem_purchaseOrderItemLinkNullable_andEntityDefaultsNull() {
+        ColumnMeta itemId = column("mk_quote_item", "purchase_order_item_id");
+        assertThat(itemId.type()).isEqualTo("bigint");
+        assertThat(itemId.nullable()).isTrue();
+
+        assertThat(new QuoteSheetItem().getPurchaseOrderItemId()).isNull();
+        assertThat(indexNames("mk_quote_item"))
+                .contains("idx_quote_item_purchase_order_item");
+    }
+
+    @Test
     void v144_editLockTable_hasUniqueSheetAndOwnerSnapshot() {
         assertThat(column("mk_quote_sheet_edit_lock", "sheet_id").type()).isEqualTo("bigint");
         assertThat(column("mk_quote_sheet_edit_lock", "sheet_id").nullable()).isFalse();

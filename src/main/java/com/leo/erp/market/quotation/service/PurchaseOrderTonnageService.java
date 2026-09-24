@@ -3,7 +3,7 @@ package com.leo.erp.market.quotation.service;
 import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
 import com.leo.erp.market.quotation.web.dto.PurchaseOrderTonnageResponse;
 import com.leo.erp.purchase.api.PurchaseOrderOptionQuery;
-import com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot;
+import com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderItemOptionSnapshot;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,14 +17,15 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 采购订单吨位汇总: 订货吨数 - 报单已开吨位 = 剩余可开吨。
+ * 采购订单明细行吨位汇总: 订货吨数 - 报单已开吨位 = 剩余可开吨, 按「订单明细行(规格)」核算。
  * <p><b>计划态提示</b>: 只读查询, 供比价报价单吨位列的采购订单下拉与"已开/剩余"展示;
  * 不参与写校验、不做额度扣减、不回写采购订单。超额仅前端提示, 允许保存。</p>
- * <p>口径边界:
+ * <p>口径:
  * <ul>
- *   <li>扣减粒度到「采购订单」而非订单明细行, 同一订单下不同规格的吨位会汇总到同一口径;
- *       若业务后续要求按规格核对或真做额度扣减, 需另建行级占用(参考 V156 物流行级占用表);</li>
- *   <li>已开吨位仅统计未删除的报价单(不含未保存改动), 报价单当前无"作废"状态。</li>
+ *   <li>扣减粒度到「订单明细行」, 同一订单下不同规格各自核算;</li>
+ *   <li>已开吨位仅统计未删除报价单中带 {@code purchaseOrderItemId} 的商品行(不含未保存改动);
+ *       历史未回填明细行的报单不计入行级口径, 会体现在该规格"剩余偏多";</li>
+ *   <li>报价单当前无"作废"状态, 软删报价单不计入。</li>
  * </ul>
  */
 @Service
@@ -42,66 +43,74 @@ public class PurchaseOrderTonnageService {
     }
 
     /**
-     * 按关键字/状态列出采购订单及其订货/已开/剩余吨位, 供吨位列下拉选择。
+     * 按关键字/状态列出采购订单明细行及其订货/已开/剩余吨位, 供吨位列下拉选择。
      *
-     * @param excludeSheetId 排除的报价单标识(编辑当前单据时排除自身已保存吨位), 可为空
+     * @param purchaseOrderId 可空; 指定时仅返回该订单的明细行
+     * @param excludeSheetId  排除的报价单标识(编辑当前单据时排除自身已保存吨位), 可为空
      */
     @Transactional(readOnly = true)
-    public List<PurchaseOrderTonnageResponse> listOptions(String keyword, String status, Long excludeSheetId) {
-        List<PurchaseOrderOptionSnapshot> orders = purchaseOrderOptionQuery.listActiveOptions(keyword, status);
-        if (orders.isEmpty()) {
-            return List.of();
-        }
-        return attachTonnage(orders, excludeSheetId);
+    public List<PurchaseOrderTonnageResponse> listOptions(String keyword, String status,
+                                                          Long purchaseOrderId, Long excludeSheetId) {
+        return attachTonnage(
+                purchaseOrderOptionQuery.listActiveItemOptions(keyword, status, purchaseOrderId),
+                excludeSheetId);
     }
 
     /**
-     * 汇总指定采购订单的订货/已开/剩余吨位。
+     * 汇总指定采购订单明细行的订货/已开/剩余吨位(用于回显已关联行)。
      *
-     * @param purchaseOrderIds 采购订单标识(去重; 空返回空列表)
-     * @param excludeSheetId   排除的报价单标识(编辑当前单据时排除自身已保存吨位), 可为空
+     * @param purchaseOrderItemIds 订单明细行标识(去重; 空返回空列表)
+     * @param excludeSheetId       排除的报价单标识, 可为空
      */
     @Transactional(readOnly = true)
-    public List<PurchaseOrderTonnageResponse> summarize(Collection<Long> purchaseOrderIds, Long excludeSheetId) {
-        if (purchaseOrderIds == null || purchaseOrderIds.isEmpty()) {
+    public List<PurchaseOrderTonnageResponse> summarize(Collection<Long> purchaseOrderItemIds,
+                                                        Long excludeSheetId) {
+        if (purchaseOrderItemIds == null || purchaseOrderItemIds.isEmpty()) {
             return List.of();
         }
-        Set<Long> distinctIds = purchaseOrderIds.stream()
+        Set<Long> distinctIds = purchaseOrderItemIds.stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (distinctIds.isEmpty()) {
             return List.of();
         }
-        return attachTonnage(purchaseOrderOptionQuery.listActiveByIds(distinctIds), excludeSheetId);
+        return attachTonnage(
+                purchaseOrderOptionQuery.listActiveItemsByIds(distinctIds), excludeSheetId);
     }
 
-    private List<PurchaseOrderTonnageResponse> attachTonnage(List<PurchaseOrderOptionSnapshot> orders,
+    private List<PurchaseOrderTonnageResponse> attachTonnage(List<PurchaseOrderItemOptionSnapshot> items,
                                                              Long excludeSheetId) {
-        Set<Long> orderIds = orders.stream()
-                .map(PurchaseOrderOptionSnapshot::id)
+        Set<Long> itemIds = items.stream()
+                .map(PurchaseOrderItemOptionSnapshot::purchaseOrderItemId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-        Map<Long, BigDecimal> issuedByOrderId = quoteSheetRepository
-                .sumIssuedTonByPurchaseOrderIds(orderIds, excludeSheetId).stream()
+        Map<Long, BigDecimal> issuedByItemId = quoteSheetRepository
+                .sumIssuedTonByPurchaseOrderItemIds(itemIds, excludeSheetId).stream()
                 .collect(Collectors.toMap(
                         row -> (Long) row[0],
                         row -> row[1] == null ? BigDecimal.ZERO : (BigDecimal) row[1]));
-        return orders.stream()
+        return items.stream()
                 .limit(MAX_OPTIONS)
-                .map(order -> toResponse(order, issuedByOrderId.getOrDefault(order.id(), BigDecimal.ZERO)))
+                .map(item -> toResponse(item, issuedByItemId.getOrDefault(
+                        item.purchaseOrderItemId(), BigDecimal.ZERO)))
                 .toList();
     }
 
-    private static PurchaseOrderTonnageResponse toResponse(PurchaseOrderOptionSnapshot order,
+    private static PurchaseOrderTonnageResponse toResponse(PurchaseOrderItemOptionSnapshot item,
                                                            BigDecimal issuedWeight) {
-        BigDecimal orderedWeight = order.totalWeight() == null ? BigDecimal.ZERO : order.totalWeight();
+        BigDecimal orderedWeight = item.orderedWeight() == null ? BigDecimal.ZERO : item.orderedWeight();
         BigDecimal issued = issuedWeight == null ? BigDecimal.ZERO : issuedWeight;
         return new PurchaseOrderTonnageResponse(
-                order.id(),
-                order.orderNo(),
-                order.supplierName(),
+                item.purchaseOrderId(),
+                item.purchaseOrderItemId(),
+                item.orderNo(),
+                item.supplierName(),
+                item.category(),
+                item.material(),
+                item.spec(),
+                item.length(),
                 orderedWeight,
                 issued,
                 orderedWeight.subtract(issued),
-                order.status());
+                item.status());
     }
 }

@@ -36,4 +36,34 @@ public interface PurchaseOrderItemRepository extends JpaRepository<PurchaseOrder
             order by item.id
             """)
     List<Long> findActiveIdsByPurchaseOrderId(@Param("purchaseOrderId") Long purchaseOrderId);
+
+    /**
+     * 查询未删除采购订单的明细行(含订单快照), 供报单比价按规格关联。
+     * <p>关键字匹配订单号/供应商; 可按订单与状态过滤; 按订单倒序、订单内行号升序。</p>
+     */
+    @Query("""
+            select item
+            from PurchaseOrderItem item
+            join fetch item.purchaseOrder purchaseOrder
+            where purchaseOrder.deletedFlag = false
+              and (:status is null or purchaseOrder.status = :status)
+              and (:purchaseOrderId is null or purchaseOrder.id = :purchaseOrderId)
+              and (:keyword is null
+                   or lower(purchaseOrder.orderNo) like :keyword
+                   or lower(purchaseOrder.supplierName) like :keyword)
+            order by purchaseOrder.id desc, item.lineNo asc
+            """)
+    List<PurchaseOrderItem> findActiveItemOptions(@Param("keyword") String keyword,
+                                                  @Param("status") String status,
+                                                  @Param("purchaseOrderId") Long purchaseOrderId);
+
+    /** 按明细行 id 批量查询未删除订单的明细行(含订单快照)。 */
+    @Query("""
+            select item
+            from PurchaseOrderItem item
+            join fetch item.purchaseOrder purchaseOrder
+            where purchaseOrder.deletedFlag = false
+              and item.id in :itemIds
+            """)
+    List<PurchaseOrderItem> findActiveItemOptionsByIdIn(@Param("itemIds") Collection<Long> itemIds);
 }

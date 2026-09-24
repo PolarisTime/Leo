@@ -46,11 +46,12 @@ public class QuoteSheetService {
 
     /** 采购订单已开吨位汇总(只读): 传 ids 按 id 汇总, 否则按关键字/状态列出选项。 */
     public java.util.List<com.leo.erp.market.quotation.web.dto.PurchaseOrderTonnageResponse> summarizeTonnages(
-            java.util.List<Long> purchaseOrderIds, String keyword, String status, Long excludeSheetId) {
-        if (purchaseOrderIds != null && !purchaseOrderIds.isEmpty()) {
-            return purchaseOrderTonnageService.summarize(purchaseOrderIds, excludeSheetId);
+            java.util.List<Long> purchaseOrderItemIds, String keyword, String status,
+            Long purchaseOrderId, Long excludeSheetId) {
+        if (purchaseOrderItemIds != null && !purchaseOrderItemIds.isEmpty()) {
+            return purchaseOrderTonnageService.summarize(purchaseOrderItemIds, excludeSheetId);
         }
-        return purchaseOrderTonnageService.listOptions(keyword, status, excludeSheetId);
+        return purchaseOrderTonnageService.listOptions(keyword, status, purchaseOrderId, excludeSheetId);
     }
 
     public Page<QuoteSheetResponse> page(PageQuery query, LocalDate orderDate, Long projectId, String keyword) {
