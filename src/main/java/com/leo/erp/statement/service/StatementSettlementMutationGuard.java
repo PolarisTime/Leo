@@ -1,5 +1,6 @@
 package com.leo.erp.statement.service;
 
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.statement.api.StatementSettlementAllocationPort;
@@ -74,8 +75,8 @@ public class StatementSettlementMutationGuard {
     }
 
     public enum StatementType {
-        CUSTOMER("客户对账单", "已收款", null),
-        FREIGHT("物流对账单", "已付款", "物流商");
+        CUSTOMER("客户对账单", StatusConstants.RECEIVED, null),
+        FREIGHT("物流对账单", StatusConstants.PAID, "物流商");
 
         private final String displayName;
         private final String settlementLabel;

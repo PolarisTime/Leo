@@ -1,5 +1,6 @@
 package com.leo.erp.finance.ledgeradjustment.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
@@ -26,7 +27,7 @@ import java.util.Set;
 @Service
 public class LedgerAdjustmentService {
 
-    private static final String MODULE_KEY = "ledger-adjustment";
+    private static final String MODULE_KEY = ModuleKeys.LEDGER_ADJUSTMENT;
     private static final CrudStatusGuard<LedgerAdjustment> STATUS_GUARD = CrudStatusGuard.forStatusAwareEntities();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
 

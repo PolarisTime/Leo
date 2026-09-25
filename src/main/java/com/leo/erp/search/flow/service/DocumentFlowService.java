@@ -1,5 +1,6 @@
 package com.leo.erp.search.flow.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.search.flow.web.dto.DocumentFlowLink;
@@ -39,12 +40,12 @@ import java.util.regex.Pattern;
 @Service
 public class DocumentFlowService {
 
-    public static final String TYPE_PURCHASE_ORDER = "purchase-order";
-    public static final String TYPE_PURCHASE_INBOUND = "purchase-inbound";
-    public static final String TYPE_SALES_ORDER = "sales-order";
-    public static final String TYPE_SALES_OUTBOUND = "sales-outbound";
-    public static final String TYPE_SALES_RETURN = "sales-return";
-    public static final String TYPE_FREIGHT_BILL = "freight-bill";
+    public static final String TYPE_PURCHASE_ORDER = ModuleKeys.PURCHASE_ORDER;
+    public static final String TYPE_PURCHASE_INBOUND = ModuleKeys.PURCHASE_INBOUND;
+    public static final String TYPE_SALES_ORDER = ModuleKeys.SALES_ORDER;
+    public static final String TYPE_SALES_OUTBOUND = ModuleKeys.SALES_OUTBOUND;
+    public static final String TYPE_SALES_RETURN = ModuleKeys.SALES_RETURN;
+    public static final String TYPE_FREIGHT_BILL = ModuleKeys.FREIGHT_BILL;
 
     private static final Pattern REFERENCE_SPLITTER = Pattern.compile("[,，、;；\\s]+");
 

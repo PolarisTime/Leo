@@ -1,5 +1,6 @@
 package com.leo.erp.master.project.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
@@ -42,7 +43,7 @@ import java.util.Set;
 public class ProjectService {
 
     private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
-    private static final String CODE_MODULE_KEY = "project";
+    private static final String CODE_MODULE_KEY = ModuleKeys.PROJECT;
     private static final String PROJECT_OPTIONS_CACHE_KEY = "leo:project:all";
     /** 网价浮动方向常量。 */
     private static final String PRICE_FLOAT_ADD = "ADD";

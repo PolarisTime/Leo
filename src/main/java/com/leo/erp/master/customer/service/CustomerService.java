@@ -1,5 +1,6 @@
 package com.leo.erp.master.customer.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
@@ -43,7 +44,7 @@ import java.util.stream.Collectors;
 public class CustomerService implements RedisCacheHealthCheck {
 
     private static final String CUSTOMER_CACHE_KEY = "leo:customer:all";
-    private static final String CODE_MODULE_KEY = "customer";
+    private static final String CODE_MODULE_KEY = ModuleKeys.CUSTOMER;
     private static final CrudStatusGuard<Customer> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
     private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();

@@ -115,7 +115,7 @@ public class SalesOrderCompletionSyncService {
             publishStatusEvent(
                     order,
                     "SALES_ORDER_DELIVERY_VERIFIED",
-                    "交付核定",
+                    StatusConstants.DELIVERY_VERIFICATION,
                     "销售订单状态 已审核 -> 交付核定"
             );
             return true;

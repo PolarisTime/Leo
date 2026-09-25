@@ -1,5 +1,6 @@
 package com.leo.erp.statement.freight.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.AttachmentQuery;
 import com.leo.erp.attachment.api.AttachmentView;
 import com.leo.erp.logistics.api.FreightBillStatementSourceQuery;
@@ -18,7 +19,7 @@ import java.util.stream.Collectors;
 @Service
 public class FreightStatementViewAssembler {
 
-    private static final String MODULE_KEY = "freight-statement";
+    private static final String MODULE_KEY = ModuleKeys.FREIGHT_STATEMENT;
 
     private final AttachmentQuery attachmentQuery;
     private final FreightBillStatementSourceQuery sourceQuery;

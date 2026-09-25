@@ -1,5 +1,6 @@
 package com.leo.erp.master.warehouse.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
@@ -33,7 +34,7 @@ import java.util.Set;
 @Service
 public class WarehouseService {
 
-    private static final String CODE_MODULE_KEY = "warehouse";
+    private static final String CODE_MODULE_KEY = ModuleKeys.WAREHOUSE;
     private static final String WAREHOUSE_OPTIONS_CACHE_KEY = "leo:warehouse:all";
     private static final CrudStatusGuard<Warehouse> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();

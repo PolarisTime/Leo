@@ -1,5 +1,6 @@
 package com.leo.erp.logistics.bill.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.charge.api.DocumentChargeItemResponse;
 import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.api.PageFilter;
@@ -45,7 +46,7 @@ public class FreightBillService {
 
     private static final Logger log = LoggerFactory.getLogger(FreightBillService.class);
     private static final String[] SEARCH_FIELDS = {"billNo", "carrierCode", "carrierName"};
-    private static final String MODULE_KEY = "freight-bill";
+    private static final String MODULE_KEY = ModuleKeys.FREIGHT_BILL;
     private static final CrudStatusGuard<FreightBill> STATUS_GUARD = CrudStatusGuard.forStatusAwareEntities();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
 

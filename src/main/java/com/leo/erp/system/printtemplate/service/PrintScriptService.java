@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.AttachmentRecordAccess;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
@@ -26,8 +27,8 @@ import java.util.function.Function;
 @Service
 public class PrintScriptService {
 
-    private static final String SALES_ORDER_MODULE = "sales-order";
-    private static final String FREIGHT_STATEMENT_MODULE = "freight-statement";
+    private static final String SALES_ORDER_MODULE = ModuleKeys.SALES_ORDER;
+    private static final String FREIGHT_STATEMENT_MODULE = ModuleKeys.FREIGHT_STATEMENT;
     private static final String PDF_FORM_TEMPLATE_TYPE = "PDF_FORM";
     private static final String GROUP_HEADER_SOURCE = "source";
     private static final String GROUP_HEADER_PROJECT = "project";

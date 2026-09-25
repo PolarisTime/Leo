@@ -20,6 +20,9 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class SteelxFetcher {
 
+    /** SSH 远端 curl 完成后允许的额外等待秒数(连接/传输开销)。 */
+    private static final long SSH_WAIT_GRACE_SECONDS = 10;
+
     private static final String USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
 
@@ -69,7 +72,9 @@ public class SteelxFetcher {
     /** 经跳板机 SSH 远程 curl 取数。 */
     private String fetchViaSsh(String url, String what) {
         String safeUrl = url.replace("'", "'\\''");
-        String remoteCommand = "curl -sSL --max-time 25 -A '" + USER_AGENT + "' '" + safeUrl + "'";
+        long timeoutSeconds = Math.max(1, properties.getRequestTimeoutMs() / 1000);
+        String remoteCommand = "curl -sSL --max-time " + timeoutSeconds
+                + " -A '" + USER_AGENT + "' '" + safeUrl + "'";
         List<String> command = List.of(
                 "ssh",
                 "-o", "BatchMode=yes",
@@ -81,7 +86,7 @@ public class SteelxFetcher {
             Process process = new ProcessBuilder(command).start();
             byte[] out = process.getInputStream().readAllBytes();
             byte[] err = process.getErrorStream().readAllBytes();
-            if (!process.waitFor(35, TimeUnit.SECONDS)) {
+            if (!process.waitFor(timeoutSeconds + SSH_WAIT_GRACE_SECONDS, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, what + "远程取数超时");
             }

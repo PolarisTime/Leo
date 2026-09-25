@@ -1,5 +1,6 @@
 package com.leo.erp.auth.service;
 
+import com.leo.erp.system.operationlog.support.OperationLogConstants;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.web.dto.LoginRequest;
 import com.leo.erp.auth.web.dto.TokenResponse;
@@ -37,7 +38,7 @@ public class AuthService {
         sessionManagementService.findActiveSessionForLogout(refreshToken).ifPresent(session -> {
             UserAccount user = sessionManagementService.findUserById(session.getUserId());
             tokenIssuanceService.revokeSession(session);
-            loginService.recordAuthenticationLog("退出登录", user, user == null ? null : user.getLoginName(), ctx, "成功", "退出成功");
+            loginService.recordAuthenticationLog(OperationLogConstants.ACTION_LOGOUT, user, user == null ? null : user.getLoginName(), ctx, OperationLogConstants.RESULT_SUCCESS, "退出成功");
         });
     }
 

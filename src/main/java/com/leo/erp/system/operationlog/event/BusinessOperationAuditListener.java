@@ -1,5 +1,6 @@
 package com.leo.erp.system.operationlog.event;
 
+import com.leo.erp.system.operationlog.support.OperationLogConstants;
 import com.leo.erp.system.operationlog.service.OperationLogCommand;
 import com.leo.erp.system.operationlog.service.OperationLogService;
 import org.springframework.modulith.events.ApplicationModuleListener;
@@ -25,7 +26,7 @@ public class BusinessOperationAuditListener {
                 "EVENT",
                 resolveEventPath(event.eventType()),
                 null,
-                "成功",
+                OperationLogConstants.RESULT_SUCCESS,
                 event.remark(),
                 event.aggregateId(),
                 event.moduleKey(),

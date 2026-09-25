@@ -1,5 +1,6 @@
 package com.leo.erp.master.supplier.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
@@ -45,7 +46,7 @@ import java.util.Set;
 public class SupplierService implements RedisCacheHealthCheck {
 
     private static final String SUPPLIER_CACHE_KEY = "leo:supplier:all";
-    private static final String CODE_MODULE_KEY = "supplier";
+    private static final String CODE_MODULE_KEY = ModuleKeys.SUPPLIER;
     private static final int BRAND_NAME_MAX_LENGTH = 64;
     private static final CrudStatusGuard<Supplier> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();

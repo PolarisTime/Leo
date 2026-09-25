@@ -274,7 +274,7 @@ public class CompanySettingService implements RedisCacheHealthCheck {
         entity.setBankName(primaryAccount == null ? "" : primaryAccount.bankName());
         entity.setBankAccount(primaryAccount == null ? "" : primaryAccount.bankAccount());
         entity.setSettlementAccountsJson(settlementAccountCodec.write(settlementAccounts));
-        entity.setStatus(request.status() != null ? request.status() : "正常");
+        entity.setStatus(request.status() != null ? request.status() : StatusConstants.NORMAL);
         entity.setRemark(request.remark());
     }
 

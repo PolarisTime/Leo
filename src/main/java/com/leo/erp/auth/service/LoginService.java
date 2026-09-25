@@ -1,5 +1,6 @@
 package com.leo.erp.auth.service;
 
+import com.leo.erp.system.operationlog.support.OperationLogConstants;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.domain.enums.UserStatus;
 import com.leo.erp.auth.repository.UserAccountRepository;
@@ -53,7 +54,7 @@ public class LoginService {
                 .orElseThrow(() -> invalidCredentials(normalizedLoginName, ctx));
 
         if (user.getStatus() != UserStatus.NORMAL) {
-            recordAuthenticationLog("登录失败", user, normalizedLoginName, ctx, "失败", "账户已禁用");
+            recordAuthenticationLog(OperationLogConstants.ACTION_LOGIN_FAILED, user, normalizedLoginName, ctx, OperationLogConstants.RESULT_FAILURE, "账户已禁用");
             throw new BusinessException(ErrorCode.FORBIDDEN, "账户已禁用");
         }
 
@@ -70,12 +71,12 @@ public class LoginService {
 
     private BadCredentialsException invalidCredentials(String loginName, AuthRequestContext ctx) {
         loginAttemptService.recordFailure(loginName);
-        recordAuthenticationLog("登录失败", null, loginName, ctx, "失败", "账号或密码错误");
+        recordAuthenticationLog(OperationLogConstants.ACTION_LOGIN_FAILED, null, loginName, ctx, OperationLogConstants.RESULT_FAILURE, "账号或密码错误");
         return new BadCredentialsException("账号或密码错误");
     }
 
     void recordLoginSuccess(UserAccount user, AuthRequestContext ctx) {
-        recordAuthenticationLog("登录", user, user == null ? null : user.getLoginName(), ctx, "成功", "登录成功");
+        recordAuthenticationLog(OperationLogConstants.ACTION_LOGIN, user, user == null ? null : user.getLoginName(), ctx, OperationLogConstants.RESULT_SUCCESS, "登录成功");
     }
 
     void recordAuthenticationLog(String actionType,
@@ -105,6 +106,8 @@ public class LoginService {
         if (requestPath != null && !requestPath.isBlank()) {
             return requestPath;
         }
-        return "退出登录".equals(actionType) ? "/auth/logout" : "/auth/login";
+        return OperationLogConstants.ACTION_LOGOUT.equals(actionType)
+                ? OperationLogConstants.PATH_LOGOUT
+                : OperationLogConstants.PATH_LOGIN;
     }
 }

@@ -83,7 +83,7 @@ public class SalesOrderWorkflowService {
         salesOrderApplyService.validateCustomerSnapshot(order);
         order.setStatus(StatusConstants.SALES_COMPLETED);
         SalesOrder saved = saveService.saveStatus(order);
-        publishEvent(saved, "SALES_ORDER_COMPLETED", "完成销售",
+        publishEvent(saved, "SALES_ORDER_COMPLETED", StatusConstants.SALES_COMPLETED,
                 "销售订单状态 " + currentStatus + " -> " + saved.getStatus());
         return queryService.toDetailResponse(saved);
     }

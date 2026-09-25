@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.charge.api.DocumentChargeItemRequest;
 import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
@@ -24,7 +25,7 @@ import java.util.function.LongSupplier;
 @Service
 public class PurchaseOrderApplyService {
 
-    private static final String MODULE_KEY = "purchase-order";
+    private static final String MODULE_KEY = ModuleKeys.PURCHASE_ORDER;
 
     private final TradeItemMaterialSupport tradeItemMaterialSupport;
     private final WarehouseSelectionSupport warehouseSelectionSupport;

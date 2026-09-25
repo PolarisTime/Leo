@@ -8,6 +8,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.CrudOperationLogger;
 import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.material.domain.entity.MaterialCategory;
@@ -117,7 +118,7 @@ public class MaterialCategoryService {
     @Cacheable(value = CacheConfig.CACHE_OPTIONS, key = "'" + MATERIAL_CATEGORY_OPTIONS_CACHE_KEY + "'",
             unless = "#result == null || #result.isEmpty()")
     public List<MaterialCategoryOptionResponse> options() {
-        return repository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常")
+        return repository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc(StatusConstants.NORMAL)
                 .stream()
                 .map(materialCategoryMapper::toOptionResponse)
                 .toList();
@@ -141,7 +142,9 @@ public class MaterialCategoryService {
         entity.setCategoryName(required(request.categoryName(), "类别名称"));
         entity.setSortOrder(request.sortOrder() == null ? 0 : request.sortOrder());
         entity.setPurchaseWeighRequired(Boolean.TRUE.equals(request.purchaseWeighRequired()));
-        entity.setStatus(request.status() == null || request.status().isBlank() ? "正常" : request.status().trim());
+        entity.setStatus(request.status() == null || request.status().isBlank()
+                ? StatusConstants.NORMAL
+                : request.status().trim());
         entity.setRemark(optional(request.remark()));
     }
 

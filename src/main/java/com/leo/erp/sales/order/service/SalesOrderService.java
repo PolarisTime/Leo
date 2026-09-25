@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.charge.service.DocumentChargeItemService;
@@ -38,7 +39,7 @@ import java.util.Set;
 @Service
 public class SalesOrderService {
 
-    private static final String MODULE_KEY = "sales-order";
+    private static final String MODULE_KEY = ModuleKeys.SALES_ORDER;
     private static final CrudStatusGuard<SalesOrder> STATUS_GUARD = CrudStatusGuard.forStatusAwareEntities();
     private static final Logger log = LoggerFactory.getLogger(SalesOrderService.class);
 

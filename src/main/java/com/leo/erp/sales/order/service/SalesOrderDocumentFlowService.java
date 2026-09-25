@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.sales.order.web.dto.SalesOrderDocumentFlowLink;
@@ -23,10 +24,10 @@ import java.util.Map;
 @Service
 public class SalesOrderDocumentFlowService {
 
-    private static final String TYPE_SALES_ORDER = "sales-order";
-    private static final String TYPE_SALES_OUTBOUND = "sales-outbound";
-    private static final String TYPE_SALES_RETURN = "sales-return";
-    private static final String TYPE_CUSTOMER_STATEMENT = "customer-statement";
+    private static final String TYPE_SALES_ORDER = ModuleKeys.SALES_ORDER;
+    private static final String TYPE_SALES_OUTBOUND = ModuleKeys.SALES_OUTBOUND;
+    private static final String TYPE_SALES_RETURN = ModuleKeys.SALES_RETURN;
+    private static final String TYPE_CUSTOMER_STATEMENT = ModuleKeys.CUSTOMER_STATEMENT;
 
     private static final String ORDER_SQL = """
             SELECT id, order_no, status, total_amount, total_weight, delivery_date

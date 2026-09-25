@@ -33,9 +33,9 @@ public class OperationLogResultCollector {
 
     public String resolveResultStatus(int responseStatus, Exception ex) {
         if (ex != null || responseStatus >= 400) {
-            return "失败";
+            return OperationLogConstants.RESULT_FAILURE;
         }
-        return "成功";
+        return OperationLogConstants.RESULT_SUCCESS;
     }
 
     public String resolveBusinessNo(HttpServletRequest request, OperationLogMetadata metadata) {

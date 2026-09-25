@@ -1,5 +1,6 @@
 package com.leo.erp.system.operationlog.service;
 
+import com.leo.erp.system.operationlog.support.OperationLogConstants;
 import com.leo.erp.auth.api.AccountQuery;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
@@ -172,7 +173,8 @@ public class OperationLogService {
         if (normalized == null) {
             return null;
         }
-        if (!"成功".equals(normalized) && !"失败".equals(normalized)) {
+        if (!OperationLogConstants.RESULT_SUCCESS.equals(normalized)
+                && !OperationLogConstants.RESULT_FAILURE.equals(normalized)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "resultStatus 不合法");
         }
         return normalized;

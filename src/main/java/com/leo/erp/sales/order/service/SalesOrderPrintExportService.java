@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.PrecisionConstants;
@@ -37,7 +38,7 @@ import java.util.List;
 @Service
 public class SalesOrderPrintExportService {
 
-    private static final String MODULE_KEY = "sales-order";
+    private static final String MODULE_KEY = ModuleKeys.SALES_ORDER;
     private static final String PRINT_ACTION = "print";
     private static final String CELL_TYPE_NUMBER = "number";
     private static final String CELL_TYPE_PIECE_WEIGHT = "pieceWeight";

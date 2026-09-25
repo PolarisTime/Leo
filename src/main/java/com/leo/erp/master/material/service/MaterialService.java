@@ -1,5 +1,6 @@
 package com.leo.erp.master.material.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -29,7 +30,7 @@ import java.util.Set;
 @Service
 public class MaterialService {
 
-    private static final String CODE_MODULE_KEY = "material";
+    private static final String CODE_MODULE_KEY = ModuleKeys.MATERIAL;
     private static final CrudStatusGuard<Material> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
 

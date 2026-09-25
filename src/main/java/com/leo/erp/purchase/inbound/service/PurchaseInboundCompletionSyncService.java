@@ -131,7 +131,7 @@ public class PurchaseInboundCompletionSyncService {
                 publishStatusEvent(
                         purchaseOrder,
                         "PURCHASE_ORDER_COMPLETED",
-                        "完成采购",
+                        StatusConstants.PURCHASE_COMPLETED,
                         "采购订单状态 已审核 -> 完成采购"
                 );
             }

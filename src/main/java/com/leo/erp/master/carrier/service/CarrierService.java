@@ -1,5 +1,6 @@
 package com.leo.erp.master.carrier.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
@@ -43,7 +44,7 @@ import java.util.Set;
 public class CarrierService implements RedisCacheHealthCheck {
 
     private static final String CARRIER_CACHE_KEY = "leo:carrier:all";
-    private static final String CODE_MODULE_KEY = "carrier";
+    private static final String CODE_MODULE_KEY = ModuleKeys.CARRIER;
     private static final String CARRIER_NAME_UNIQUE_INDEX = "uk_md_carrier_carrier_name_active";
     private static final int MAX_CARRIER_NAME_LENGTH = 128;
     private static final CrudStatusGuard<Carrier> STATUS_GUARD = CrudStatusGuard.withoutStatus();

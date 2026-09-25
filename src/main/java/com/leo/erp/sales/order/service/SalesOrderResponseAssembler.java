@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.charge.api.DocumentChargeItemResponse;
 import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
@@ -17,7 +18,7 @@ import java.util.stream.Collectors;
 @Service
 public class SalesOrderResponseAssembler {
 
-    private static final String CHARGE_MODULE_KEY = "sales-order";
+    private static final String CHARGE_MODULE_KEY = ModuleKeys.SALES_ORDER;
 
     private final SalesOrderMapper salesOrderMapper;
     private final DocumentChargeItemService documentChargeItemService;
