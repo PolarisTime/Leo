@@ -1,5 +1,6 @@
 package com.leo.erp.master.material.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.master.material.domain.entity.MaterialCategory;
 import jakarta.persistence.LockModeType;
@@ -18,7 +19,7 @@ public interface MaterialCategoryRepository extends JpaRepository<MaterialCatego
 
     @Override
     default String moduleKey() {
-        return "material-category";
+        return ModuleKeys.MATERIAL_CATEGORY;
     }
 
     @Override

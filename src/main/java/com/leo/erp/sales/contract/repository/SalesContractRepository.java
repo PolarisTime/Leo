@@ -1,5 +1,6 @@
 package com.leo.erp.sales.contract.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.sales.contract.domain.entity.SalesContract;
 import jakarta.persistence.LockModeType;
@@ -18,7 +19,7 @@ public interface SalesContractRepository extends JpaRepository<SalesContract, Lo
 
     @Override
     default String moduleKey() {
-        return "sales-contract";
+        return ModuleKeys.SALES_CONTRACT;
     }
 
     @Override

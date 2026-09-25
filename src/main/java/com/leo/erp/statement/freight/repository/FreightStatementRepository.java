@@ -1,5 +1,6 @@
 package com.leo.erp.statement.freight.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import jakarta.persistence.LockModeType;
@@ -19,7 +20,7 @@ public interface FreightStatementRepository extends JpaRepository<FreightStateme
 
     @Override
     default String moduleKey() {
-        return "freight-statement";
+        return ModuleKeys.FREIGHT_STATEMENT;
     }
 
     @Override

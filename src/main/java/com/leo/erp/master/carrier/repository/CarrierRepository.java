@@ -1,5 +1,6 @@
 package com.leo.erp.master.carrier.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.master.carrier.domain.entity.Carrier;
 import jakarta.persistence.LockModeType;
@@ -17,7 +18,7 @@ public interface CarrierRepository extends JpaRepository<Carrier, Long>, JpaSpec
 
     @Override
     default String moduleKey() {
-        return "carrier";
+        return ModuleKeys.CARRIER;
     }
 
     @Override

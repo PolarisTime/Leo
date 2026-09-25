@@ -1,5 +1,6 @@
 package com.leo.erp.search.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.search.repository.GlobalSearchDocument;
 import com.leo.erp.search.repository.GlobalSearchDocumentRepository;
@@ -17,15 +18,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class GlobalSearchService {
     private static final int MAX_TOTAL_LIMIT = 50;
     private static final List<String> DEFAULT_MODULE_KEYS = List.of(
-            "purchase-order",
-            "purchase-inbound",
-            "sales-order",
-            "sales-outbound",
-            "freight-bill",
-            "customer-statement",
-            "freight-statement",
-            "receipt",
-            "payment"
+            ModuleKeys.PURCHASE_ORDER,
+            ModuleKeys.PURCHASE_INBOUND,
+            ModuleKeys.SALES_ORDER,
+            ModuleKeys.SALES_OUTBOUND,
+            ModuleKeys.FREIGHT_BILL,
+            ModuleKeys.CUSTOMER_STATEMENT,
+            ModuleKeys.FREIGHT_STATEMENT,
+            ModuleKeys.RECEIPT,
+            ModuleKeys.PAYMENT
     );
 
     private final GlobalSearchDocumentRepository documentRepository;

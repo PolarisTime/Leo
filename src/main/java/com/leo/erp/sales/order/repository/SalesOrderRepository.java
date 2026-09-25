@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import org.springframework.data.domain.Page;
@@ -23,7 +24,7 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
 
     @Override
     default String moduleKey() {
-        return "sales-order";
+        return ModuleKeys.SALES_ORDER;
     }
 
     @Override

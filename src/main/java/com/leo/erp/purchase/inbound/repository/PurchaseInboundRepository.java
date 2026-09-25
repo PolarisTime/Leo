@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.inbound.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import jakarta.persistence.LockModeType;
@@ -21,7 +22,7 @@ public interface PurchaseInboundRepository extends JpaRepository<PurchaseInbound
 
     @Override
     default String moduleKey() {
-        return "purchase-inbound";
+        return ModuleKeys.PURCHASE_INBOUND;
     }
 
     @Override

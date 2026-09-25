@@ -1,5 +1,6 @@
 package com.leo.erp.finance.receipt.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import jakarta.persistence.LockModeType;
@@ -18,7 +19,7 @@ public interface ReceiptRepository extends JpaRepository<Receipt, Long>, JpaSpec
 
     @Override
     default String moduleKey() {
-        return "receipt";
+        return ModuleKeys.RECEIPT;
     }
 
     @Override

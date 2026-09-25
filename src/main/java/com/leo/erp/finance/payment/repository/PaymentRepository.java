@@ -1,5 +1,6 @@
 package com.leo.erp.finance.payment.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import jakarta.persistence.LockModeType;
@@ -18,7 +19,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long>, JpaSpec
 
     @Override
     default String moduleKey() {
-        return "payment";
+        return ModuleKeys.PAYMENT;
     }
 
     @Override

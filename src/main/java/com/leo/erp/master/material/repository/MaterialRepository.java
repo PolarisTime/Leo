@@ -1,5 +1,6 @@
 package com.leo.erp.master.material.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.common.support.MaterialCatalog;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
@@ -20,7 +21,7 @@ public interface MaterialRepository extends JpaRepository<Material, Long>, JpaSp
 
     @Override
     default String moduleKey() {
-        return "material";
+        return ModuleKeys.MATERIAL;
     }
 
     @Override

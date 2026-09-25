@@ -1,5 +1,6 @@
 package com.leo.erp.master.supplier.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
 import jakarta.persistence.LockModeType;
@@ -17,7 +18,7 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long>, JpaSp
 
     @Override
     default String moduleKey() {
-        return "supplier";
+        return ModuleKeys.SUPPLIER;
     }
 
     @Override

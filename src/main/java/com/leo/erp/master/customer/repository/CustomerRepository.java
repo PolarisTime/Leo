@@ -1,5 +1,6 @@
 package com.leo.erp.master.customer.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import jakarta.persistence.LockModeType;
@@ -17,7 +18,7 @@ public interface CustomerRepository extends JpaRepository<Customer, Long>, JpaSp
 
     @Override
     default String moduleKey() {
-        return "customer";
+        return ModuleKeys.CUSTOMER;
     }
 
     @Override

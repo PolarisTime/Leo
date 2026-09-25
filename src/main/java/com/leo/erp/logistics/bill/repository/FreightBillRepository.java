@@ -1,5 +1,6 @@
 package com.leo.erp.logistics.bill.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import jakarta.persistence.LockModeType;
@@ -19,7 +20,7 @@ public interface FreightBillRepository extends JpaRepository<FreightBill, Long>,
 
     @Override
     default String moduleKey() {
-        return "freight-bill";
+        return ModuleKeys.FREIGHT_BILL;
     }
 
     @Override

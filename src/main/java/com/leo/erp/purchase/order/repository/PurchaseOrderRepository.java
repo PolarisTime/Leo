@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import jakarta.persistence.LockModeType;
@@ -24,7 +25,7 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
 
     @Override
     default String moduleKey() {
-        return "purchase-order";
+        return ModuleKeys.PURCHASE_ORDER;
     }
 
     @Override

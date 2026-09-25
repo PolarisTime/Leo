@@ -1,5 +1,6 @@
 package com.leo.erp.master.warehouse.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.WarehouseCatalog;
@@ -21,7 +22,7 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, Long>, Jpa
 
     @Override
     default String moduleKey() {
-        return "warehouse";
+        return ModuleKeys.WAREHOUSE;
     }
 
     @Override

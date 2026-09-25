@@ -1,5 +1,6 @@
 package com.leo.erp.sales.returns.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.sales.returns.domain.entity.SalesReturn;
 import jakarta.persistence.LockModeType;
@@ -21,7 +22,7 @@ public interface SalesReturnRepository extends JpaRepository<SalesReturn, Long>,
 
     @Override
     default String moduleKey() {
-        return "sales-return";
+        return ModuleKeys.SALES_RETURN;
     }
 
     @Override

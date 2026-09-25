@@ -1,5 +1,6 @@
 package com.leo.erp.statement.customer.repository;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import jakarta.persistence.LockModeType;
@@ -19,7 +20,7 @@ public interface CustomerStatementRepository extends JpaRepository<CustomerState
 
     @Override
     default String moduleKey() {
-        return "customer-statement";
+        return ModuleKeys.CUSTOMER_STATEMENT;
     }
 
     @Override
