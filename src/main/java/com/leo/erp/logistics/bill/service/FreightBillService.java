@@ -450,7 +450,7 @@ public class FreightBillService {
     private void publishEvent(FreightBill bill, String eventType, String actionType, String remark) {
         businessOperationEventPublisher.publish(
                 eventType,
-                "freight-bill",
+                ModuleKeys.FREIGHT_BILL,
                 "物流单",
                 actionType,
                 "FreightBill",

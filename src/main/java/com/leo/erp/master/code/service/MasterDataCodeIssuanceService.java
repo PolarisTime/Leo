@@ -1,5 +1,6 @@
 package com.leo.erp.master.code.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.AfterCommitExecutor;
@@ -19,13 +20,13 @@ public class MasterDataCodeIssuanceService {
     private static final Duration ISSUANCE_TTL = Duration.ofHours(2);
     private static final String KEY_PREFIX = "master-data:code-issuance:";
     private static final Map<String, String> MODULE_LABELS = Map.of(
-            "material", "商品",
+            ModuleKeys.MATERIAL, "商品",
             "material-categories", "商品类别",
-            "customer", "客户",
-            "supplier", "供应商",
-            "carrier", "物流商",
-            "warehouse", "仓库",
-            "project", "项目"
+            ModuleKeys.CUSTOMER, "客户",
+            ModuleKeys.SUPPLIER, "供应商",
+            ModuleKeys.CARRIER, "物流商",
+            ModuleKeys.WAREHOUSE, "仓库",
+            ModuleKeys.PROJECT, "项目"
     );
 
     private final SnowflakeIdGenerator snowflakeIdGenerator;

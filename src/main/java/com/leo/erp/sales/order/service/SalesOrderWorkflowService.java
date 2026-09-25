@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
@@ -114,7 +115,7 @@ public class SalesOrderWorkflowService {
     private void publishEvent(SalesOrder order, String eventType, String actionType, String remark) {
         businessOperationEventPublisher.publish(
                 eventType,
-                "sales-order",
+                ModuleKeys.SALES_ORDER,
                 "销售订单",
                 actionType,
                 "SalesOrder",

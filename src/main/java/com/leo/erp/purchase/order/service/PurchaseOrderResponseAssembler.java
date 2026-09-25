@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
@@ -51,7 +52,7 @@ public class PurchaseOrderResponseAssembler {
                                 salesAllocatedQuantityMap
                         ))
                         .toList(),
-                documentChargeItemService.list("purchase-order", order.getId()),
+                documentChargeItemService.list(ModuleKeys.PURCHASE_ORDER, order.getId()),
                 response.referencedBySalesOrder(),
                 response.referencedByPurchaseInbound()
         );

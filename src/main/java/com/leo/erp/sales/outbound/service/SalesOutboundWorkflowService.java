@@ -1,5 +1,6 @@
 package com.leo.erp.sales.outbound.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
@@ -186,7 +187,7 @@ public class SalesOutboundWorkflowService {
     private void publishEvent(SalesOutbound outbound, String eventType, String actionType, String remark) {
         businessOperationEventPublisher.publish(
                 eventType,
-                "sales-outbound",
+                ModuleKeys.SALES_OUTBOUND,
                 "销售出库",
                 actionType,
                 "SalesOutbound",

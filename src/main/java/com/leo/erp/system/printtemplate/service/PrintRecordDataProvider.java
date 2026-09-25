@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -98,7 +99,7 @@ class PrintRecordDataProvider {
     }
 
     private String statementGroupingColumns(String moduleKey) {
-        if ("customer-statement".equals(moduleKey)) {
+        if (ModuleKeys.CUSTOMER_STATEMENT.equals(moduleKey)) {
             return "source_no, quantity_unit, source_sales_order_item_id, "
                     + "COALESCE((SELECT so.delivery_date::text FROM so_sales_order_item soi "
                     + "JOIN so_sales_order so ON so.id = soi.order_id "
@@ -107,7 +108,7 @@ class PrintRecordDataProvider {
                     + "'' AS customer_name, '' AS project_name, '' AS source_freight_bill_id, "
                     + "'' AS source_freight_bill_unit_price, '' AS source_freight_bill_total_freight";
         }
-        if ("freight-statement".equals(moduleKey)) {
+        if (ModuleKeys.FREIGHT_STATEMENT.equals(moduleKey)) {
             return "source_no, customer_name, project_name, quantity_unit, source_freight_bill_id, "
                     + "'' AS delivery_date, '' AS source_sales_order_item_id, "
                     + "COALESCE((SELECT fb.unit_price FROM lg_freight_bill fb "

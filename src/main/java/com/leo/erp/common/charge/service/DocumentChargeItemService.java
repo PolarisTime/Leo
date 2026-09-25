@@ -1,5 +1,6 @@
 package com.leo.erp.common.charge.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.charge.api.DocumentChargeItemRequest;
 import com.leo.erp.common.charge.api.DocumentChargeItemResponse;
 import com.leo.erp.common.charge.domain.entity.DocumentChargeItem;
@@ -28,7 +29,7 @@ public class DocumentChargeItemService {
 
     /** 允许接入费用明细的单据模块白名单，防止通用表被任意 moduleKey 写入。 */
     private static final Set<String> ALLOWED_MODULE_KEYS = Set.of(
-            "purchase-order", "sales-order", "freight-bill"
+            ModuleKeys.PURCHASE_ORDER, ModuleKeys.SALES_ORDER, ModuleKeys.FREIGHT_BILL
     );
 
     private final DocumentChargeItemRepository repository;

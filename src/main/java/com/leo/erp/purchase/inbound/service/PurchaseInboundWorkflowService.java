@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.inbound.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.inventory.api.InventorySourceDocumentType;
 import com.leo.erp.inventory.api.InventoryTransactionCommand;
@@ -133,7 +134,7 @@ public class PurchaseInboundWorkflowService {
     private void publishEvent(PurchaseInbound inbound, String eventType, String actionType, String remark) {
         businessOperationEventPublisher.publish(
                 eventType,
-                "purchase-inbound",
+                ModuleKeys.PURCHASE_INBOUND,
                 "采购入库",
                 actionType,
                 "PurchaseInbound",

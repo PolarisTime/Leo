@@ -1,5 +1,6 @@
 package com.leo.erp.sales.returns.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
@@ -168,7 +169,7 @@ public class SalesReturnWorkflowService {
     private void publishEvent(SalesReturn salesReturn, String eventType, String actionType, String remark) {
         businessOperationEventPublisher.publish(
                 eventType,
-                "sales-return",
+                ModuleKeys.SALES_RETURN,
                 "销售退货单",
                 actionType,
                 "SalesReturn",

@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
@@ -32,7 +33,11 @@ public class SalesOrderQueryService {
     private static final String[] SALES_ORDER_SEARCH_FIELDS = {"orderNo", "purchaseOrderNo", "customerName", "projectName"};
     private static final String[] PRODUCT_SEARCH_FIELDS = {"materialCode", "brand", "material", "spec"};
     private static final Set<String> REFERENCED_BY_VALUES =
-            Set.of("freight-bill", "sales-outbound", "none");
+            Set.of(
+                    ModuleKeys.FREIGHT_BILL,
+                    ModuleKeys.SALES_OUTBOUND,
+                    "none"
+            );
 
     private final SalesOrderRepository repository;
     private final SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository;

@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.service;
 
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
@@ -34,7 +35,11 @@ public class PurchaseOrderQueryService {
     private static final LocalDateTime MIN_PENDING_ORDER_DATE = LocalDateTime.of(1, 1, 1, 0, 0);
     private static final LocalDateTime MAX_PENDING_ORDER_DATE_EXCLUSIVE = LocalDateTime.of(10000, 1, 1, 0, 0);
     private static final Set<String> REFERENCED_BY_VALUES =
-            Set.of("sales-order", "purchase-inbound", "none");
+            Set.of(
+                    ModuleKeys.SALES_ORDER,
+                    ModuleKeys.PURCHASE_INBOUND,
+                    "none"
+            );
 
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderReferenceQueryRepository referenceQueryRepository;
