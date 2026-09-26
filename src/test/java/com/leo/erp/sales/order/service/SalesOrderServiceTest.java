@@ -111,9 +111,19 @@ class SalesOrderServiceTest {
         Authentication auth = mock(Authentication.class);
         lenient().when(auth.isAuthenticated()).thenReturn(true);
         lenient().when(auth.getPrincipal()).thenReturn(principal);
+        // 授予全局通配，避免状态变更的受控动作权限门禁干扰单元测试的数据/流程断言。
+        lenient().when(auth.getAuthorities())
+                .thenReturn((java.util.Collection) List.of(
+                        new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                                PermissionCodes.WILDCARD)));
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(auth);
         SecurityContextHolder.setContext(context);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     // ---------- page 委派 ----------

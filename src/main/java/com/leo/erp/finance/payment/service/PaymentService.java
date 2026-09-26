@@ -1,5 +1,7 @@
 package com.leo.erp.finance.payment.service;
 
+import com.leo.erp.common.support.ModuleKeys;
+import com.leo.erp.security.permission.StatusTransitionPermissionGuard;
 import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
@@ -154,6 +156,7 @@ public class PaymentService {
         if (currentStatus.equals(nextStatus)) {
             return toSavedResponse(entity);
         }
+        StatusTransitionPermissionGuard.requireForTransition(ModuleKeys.PAYMENT, currentStatus, nextStatus);
         STATUS_GUARD.validateStatusTransition(allowedStatusTransitions(), currentStatus, nextStatus);
         beforeStatusUpdate(entity, currentStatus, nextStatus);
         STATUS_GUARD.writeStatus(entity, nextStatus);

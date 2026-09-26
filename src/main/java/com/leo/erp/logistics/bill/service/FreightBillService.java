@@ -1,5 +1,6 @@
 package com.leo.erp.logistics.bill.service;
 
+import com.leo.erp.security.permission.StatusTransitionPermissionGuard;
 import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.ModuleKeys;
@@ -203,6 +204,7 @@ public class FreightBillService {
         if (currentStatus.equals(nextStatus)) {
             return toSavedResponse(entity);
         }
+        StatusTransitionPermissionGuard.requireForTransition(MODULE_KEY, currentStatus, nextStatus);
         STATUS_GUARD.validateStatusTransition(allowedStatusTransitions(), currentStatus, nextStatus);
         beforeStatusUpdate(entity, currentStatus, nextStatus);
         STATUS_GUARD.writeStatus(entity, nextStatus);
