@@ -114,7 +114,7 @@ public class SteelQuoteSyncService {
             } catch (Exception ex) {
                 failed++;
                 failures.add(new BackfillFailure(date, ex.getMessage()));
-                log.warn("行情补数失败: {} - {}", date, ex.getMessage());
+                log.warn("行情补数失败: {} - {}", date, ex.getMessage(), ex);
             }
         }
         log.info("行情补数结束: 成功 {} 天, 失败 {} 天, 共 {} 行", synced, failed, totalRows);

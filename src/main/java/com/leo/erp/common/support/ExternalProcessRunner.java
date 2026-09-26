@@ -18,7 +18,9 @@ public class ExternalProcessRunner {
 
     public ProcessResult run(ProcessBuilder processBuilder, Duration timeout, String actionName) throws IOException, InterruptedException {
         Process process = start(processBuilder);
-        CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> readOutput(process.getInputStream()));
+        java.util.function.Supplier<String> rawRead = () -> readOutput(process.getInputStream());
+        java.util.function.Supplier<String> readTask = MdcContextSupport.wrap(rawRead);
+        CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(readTask);
 
         boolean finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
         if (!finished) {

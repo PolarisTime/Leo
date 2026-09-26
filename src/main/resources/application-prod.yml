@@ -37,6 +37,12 @@ spring:
     # 生产迁移必须显式选择阶段上限，禁止随着制品中的脚本自动迁移到 latest
     target: ${SPRING_FLYWAY_TARGET:}
 
+server:
+  tomcat:
+    accesslog:
+      # 生产默认开启访问日志(含 traceId), 落盘到 LEO_LOG_PATH
+      enabled: ${LEO_ACCESS_LOG_ENABLED:true}
+
 management:
   server:
     # 指标端口仅绑定本机，由同机 Prometheus 拉取，不经过业务 Nginx。
@@ -45,7 +51,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,prometheus
+        include: ${LEO_MANAGEMENT_ENDPOINTS:health,prometheus,loggers}
   tracing:
     sampling:
       # 生产默认按 10% 采样；排障时可临时通过环境变量提高。

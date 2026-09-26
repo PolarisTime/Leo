@@ -259,7 +259,7 @@ public class GlobalExceptionHandler {
             PessimisticLockingFailureException ex,
             HttpServletRequest request
     ) {
-        log.warn("获取数据库锁失败: {}", ex.getMessage());
+        log.warn("获取数据库锁失败: {}", ex.getMessage(), ex);
         return failure(
                 request,
                 HttpStatus.CONFLICT,

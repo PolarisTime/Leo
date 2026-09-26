@@ -1,5 +1,6 @@
 package com.leo.erp.market.service;
 
+import com.leo.erp.common.support.MdcContextSupport;
 import com.leo.erp.market.web.dto.SteelQuoteBackfillStatusResponse;
 import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Service;
@@ -58,13 +59,14 @@ public class SteelQuoteBackfillService {
         status = new SteelQuoteBackfillStatusResponse(true, from, to, startedAt, null, 0, 0, 0,
                 java.util.List.of());
         boolean steelx = "STEELX".equalsIgnoreCase(source);
-        executor.submit(() -> {
+        // 捕获提交线程的 MDC(traceId/spanId), 使后台补数日志与触发请求同链路。
+        executor.submit(MdcContextSupport.wrap(() -> {
             if (steelx) {
                 runSteelx(from, to, startedAt, region);
             } else {
                 run(from, to, startedAt);
             }
-        });
+        }));
         return true;
     }
 

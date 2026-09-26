@@ -137,7 +137,7 @@ public class HttpIdempotencyService {
             );
             return updated != null && updated == 1L;
         } catch (Exception ex) {
-            log.warn("Failed to mark HTTP idempotency key completed: key={}, reason={}", scopedKey, ex.getMessage());
+            log.warn("Failed to mark HTTP idempotency key completed: key={}, reason={}", scopedKey, ex.getMessage(), ex);
             return false;
         }
     }
@@ -153,7 +153,7 @@ public class HttpIdempotencyService {
                     PENDING_PREFIX + fingerprint
             );
         } catch (RuntimeException ex) {
-            log.warn("Failed to release HTTP idempotency key: key={}, reason={}", scopedKey, ex.getMessage());
+            log.warn("Failed to release HTTP idempotency key: key={}, reason={}", scopedKey, ex.getMessage(), ex);
         }
     }
 
@@ -170,7 +170,7 @@ public class HttpIdempotencyService {
             byte[] json = Base64.getDecoder().decode(encodedResponse);
             return Decision.duplicateCompleted(objectMapper.readValue(json, CachedResponse.class));
         } catch (Exception ex) {
-            log.error("Failed to decode cached HTTP idempotency response: key={}, reason={}", scopedKey, ex.getMessage());
+            log.error("Failed to decode cached HTTP idempotency response: key={}, reason={}", scopedKey, ex.getMessage(), ex);
             return Decision.unavailable();
         }
     }
