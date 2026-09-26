@@ -1,5 +1,6 @@
 package com.leo.erp.attachment.service.storage;
 
+import com.leo.erp.attachment.support.AttachmentStorageTypes;
 import com.leo.erp.attachment.config.AttachmentProperties;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -18,7 +19,7 @@ import java.nio.file.Paths;
 @Component
 public class LocalAttachmentStorage implements AttachmentStorage {
 
-    private static final String PREFIX = "local:";
+    private static final String PREFIX = AttachmentStorageTypes.LOCAL_PREFIX;
 
     private final AttachmentProperties properties;
     private final AttachmentContentCryptor contentCryptor;
@@ -31,7 +32,7 @@ public class LocalAttachmentStorage implements AttachmentStorage {
 
     @Override
     public String type() {
-        return "local";
+        return AttachmentStorageTypes.LOCAL;
     }
 
     @Override

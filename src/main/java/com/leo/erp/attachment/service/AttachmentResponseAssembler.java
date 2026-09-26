@@ -1,5 +1,6 @@
 package com.leo.erp.attachment.service;
 
+import com.leo.erp.attachment.support.AttachmentStorageTypes;
 import com.leo.erp.attachment.api.AttachmentView;
 import com.leo.erp.attachment.domain.entity.AttachmentFile;
 import com.leo.erp.attachment.support.AttachmentMediaTypes;
@@ -14,8 +15,8 @@ import java.util.Locale;
 @Service
 public class AttachmentResponseAssembler {
 
-    private static final String STORAGE_TYPE_LOCAL = "local";
-    private static final String STORAGE_TYPE_S3 = "s3";
+    private static final String STORAGE_TYPE_LOCAL = AttachmentStorageTypes.LOCAL;
+    private static final String STORAGE_TYPE_S3 = AttachmentStorageTypes.S3;
 
     public AttachmentView toResponse(AttachmentFile entity, String moduleKey) {
         AttachmentPresentation presentation = toPresentation(entity, moduleKey);

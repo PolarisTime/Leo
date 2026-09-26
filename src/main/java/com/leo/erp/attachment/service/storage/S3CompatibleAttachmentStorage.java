@@ -1,5 +1,6 @@
 package com.leo.erp.attachment.service.storage;
 
+import com.leo.erp.attachment.support.AttachmentStorageTypes;
 import com.leo.erp.attachment.config.AttachmentProperties;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.attachment.support.AttachmentCryptoConstants;
@@ -62,7 +63,7 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
 
     @Override
     public String type() {
-        return "s3";
+        return AttachmentStorageTypes.S3;
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.leo.erp.attachment.service;
 
+import com.leo.erp.attachment.support.AttachmentStorageTypes;
 import com.leo.erp.attachment.support.AttachmentCryptoConstants;
 import com.leo.erp.attachment.support.AttachmentMediaTypes;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -202,8 +203,8 @@ public class AttachmentManifestExportService implements AttachmentManifestExport
         if (storagePath == null || storagePath.isBlank()) {
             return "";
         }
-        if (storagePath.startsWith("s3:")) {
-            String path = storagePath.substring("s3:".length());
+        if (storagePath.startsWith(AttachmentStorageTypes.S3_PREFIX)) {
+            String path = storagePath.substring(AttachmentStorageTypes.S3_PREFIX.length());
             int slashIndex = path.indexOf('/');
             return slashIndex < 0 ? path : path.substring(slashIndex + 1);
         }

@@ -1,5 +1,6 @@
 package com.leo.erp.attachment.service.storage;
 
+import com.leo.erp.attachment.support.AttachmentStorageTypes;
 import com.leo.erp.attachment.config.AttachmentProperties;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -13,7 +14,7 @@ import java.nio.charset.StandardCharsets;
 @Component
 public class S3PathParser {
 
-    private static final String PREFIX = "s3:";
+    private static final String PREFIX = AttachmentStorageTypes.S3_PREFIX;
 
     public record ParsedStoragePath(String bucket, String objectKey) {}
 

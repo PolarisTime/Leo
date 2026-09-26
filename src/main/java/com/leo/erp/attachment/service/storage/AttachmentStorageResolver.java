@@ -1,5 +1,6 @@
 package com.leo.erp.attachment.service.storage;
 
+import com.leo.erp.attachment.support.AttachmentStorageTypes;
 import com.leo.erp.attachment.config.AttachmentProperties;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -97,7 +98,7 @@ public class AttachmentStorageResolver {
                 }
             }
         }
-        AttachmentStorage local = storageByType.get("local");
+        AttachmentStorage local = storageByType.get(AttachmentStorageTypes.LOCAL);
         if (local != null) {
             return local;
         }
@@ -106,7 +107,7 @@ public class AttachmentStorageResolver {
 
     private String normalizedType(String type) {
         if (type == null || type.isBlank()) {
-            return "local";
+            return AttachmentStorageTypes.LOCAL;
         }
         return type.trim().toLowerCase(Locale.ROOT);
     }

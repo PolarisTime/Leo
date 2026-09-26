@@ -1,5 +1,6 @@
 package com.leo.erp.attachment.config;
 
+import com.leo.erp.attachment.support.AttachmentStorageTypes;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.util.unit.DataSize;
@@ -32,7 +33,7 @@ public class AttachmentProperties {
 
     public static class Storage {
 
-        private String type = "local";
+        private String type = AttachmentStorageTypes.LOCAL;
 
         private String keyPrefix = "attachments";
 
