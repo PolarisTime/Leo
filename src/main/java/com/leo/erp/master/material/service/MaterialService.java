@@ -1,5 +1,6 @@
 package com.leo.erp.master.material.service;
 
+import com.leo.erp.master.material.domain.MaterialTypes;
 import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
@@ -182,7 +183,7 @@ public class MaterialService {
         entity.setMaterialType(MaterialRequest.TYPE_EXPENSE);
         entity.setBrand("");
         entity.setMaterial(requireText(request.material(), "名称不能为空"));
-        entity.setCategory("附加费用");
+        entity.setCategory(MaterialTypes.EXPENSE_CATEGORY);
         entity.setSpec("");
         entity.setLength("");
         String unit = requireText(request.unit(), "单位不能为空");

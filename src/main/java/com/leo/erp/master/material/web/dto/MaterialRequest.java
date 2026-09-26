@@ -1,5 +1,6 @@
 package com.leo.erp.master.material.web.dto;
 
+import com.leo.erp.master.material.domain.MaterialTypes;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
@@ -50,9 +51,9 @@ public record MaterialRequest(
 ) {
 
     /** 实体商品类型常量。 */
-    public static final String TYPE_PHYSICAL = "实体商品";
+    public static final String TYPE_PHYSICAL = MaterialTypes.PHYSICAL;
     /** 附加费用类型常量。 */
-    public static final String TYPE_EXPENSE = "附加费用";
+    public static final String TYPE_EXPENSE = MaterialTypes.EXPENSE;
 
     public boolean isExpense() {
         return TYPE_EXPENSE.equals(materialType);

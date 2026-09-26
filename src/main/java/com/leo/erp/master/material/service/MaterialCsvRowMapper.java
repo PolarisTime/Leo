@@ -1,5 +1,6 @@
 package com.leo.erp.master.material.service;
 
+import com.leo.erp.master.material.domain.MaterialTypes;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import org.springframework.stereotype.Component;
@@ -16,7 +17,9 @@ class MaterialCsvRowMapper {
                                     int rowNumber) {
         String materialType = resolveMaterialType(row, headerIndexes);
         boolean expense = MaterialImportData.TYPE_EXPENSE.equals(materialType);
-        String category = expense ? "附加费用" : requiredValue(row, headerIndexes, "category", "类别", rowNumber);
+        String category = expense
+                    ? MaterialTypes.EXPENSE_CATEGORY
+                    : requiredValue(row, headerIndexes, "category", "类别", rowNumber);
         MaterialImportData data = new MaterialImportData(
                 materialCode(row, headerIndexes),
                 expense ? "" : requiredValue(row, headerIndexes, "brand", "品牌", rowNumber),

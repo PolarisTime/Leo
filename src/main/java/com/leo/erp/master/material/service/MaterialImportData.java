@@ -1,5 +1,6 @@
 package com.leo.erp.master.material.service;
 
+import com.leo.erp.master.material.domain.MaterialTypes;
 import java.math.BigDecimal;
 
 record MaterialImportData(
@@ -18,8 +19,8 @@ record MaterialImportData(
         String materialType
 ) {
 
-    static final String TYPE_PHYSICAL = "实体商品";
-    static final String TYPE_EXPENSE = "附加费用";
+    static final String TYPE_PHYSICAL = MaterialTypes.PHYSICAL;
+    static final String TYPE_EXPENSE = MaterialTypes.EXPENSE;
 
     boolean isExpense() {
         return TYPE_EXPENSE.equals(materialType);

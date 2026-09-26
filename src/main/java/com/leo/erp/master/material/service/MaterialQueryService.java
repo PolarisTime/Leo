@@ -1,5 +1,6 @@
 package com.leo.erp.master.material.service;
 
+import com.leo.erp.master.material.domain.MaterialTypes;
 import com.leo.erp.master.api.MaterialQuery;
 import com.leo.erp.master.material.repository.MaterialRepository;
 import org.springframework.stereotype.Service;
@@ -11,7 +12,7 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class MaterialQueryService implements MaterialQuery {
 
-    private static final String PRODUCT_TYPE = "实体商品";
+    private static final String PRODUCT_TYPE = MaterialTypes.PHYSICAL;
 
     private final MaterialRepository materialRepository;
 

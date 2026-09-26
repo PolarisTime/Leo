@@ -1,5 +1,6 @@
 package com.leo.erp.master.material.service;
 
+import com.leo.erp.master.material.domain.MaterialTypes;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.master.material.domain.MaterialSnapshot;
@@ -153,7 +154,7 @@ public class MaterialSpreadsheetImportService {
                 row.materialCode(),
                 expense ? "" : row.brand(),
                 row.material(),
-                expense ? "附加费用" : row.category(),
+                expense ? MaterialTypes.EXPENSE_CATEGORY : row.category(),
                 expense ? "" : row.spec(),
                 expense ? "" : row.length(),
                 row.unit(),
