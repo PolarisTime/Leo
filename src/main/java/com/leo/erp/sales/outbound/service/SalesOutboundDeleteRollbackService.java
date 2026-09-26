@@ -1,5 +1,6 @@
 package com.leo.erp.sales.outbound.service;
 
+import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
@@ -106,7 +107,7 @@ public class SalesOutboundDeleteRollbackService {
         businessOperationEventPublisher.publish(
                 "SALES_ORDER_REOPENED_AFTER_OUTBOUND_DELETED",
                 ModuleKeys.SALES_ORDER,
-                "销售订单",
+                ModuleCatalog.moduleName(ModuleKeys.SALES_ORDER),
                 "退回草稿",
                 "SalesOrder",
                 order.getId(),

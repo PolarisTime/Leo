@@ -19,6 +19,18 @@ public class ModuleCatalog {
         return MODULE_NAME_MAP.getOrDefault(normalizedModuleKey, moduleKey);
     }
 
+    /** 按模块键返回中文显示名(静态入口, 供事件发布/日志等无需注入 catalog 的场景复用)。 */
+    public static String moduleName(String moduleKey) {
+        if (moduleKey == null) {
+            return null;
+        }
+        String normalized = moduleKey.trim()
+                .replaceFirst("^/+", "")
+                .toLowerCase(Locale.ROOT);
+        normalized = MODULE_ALIAS_MAP.getOrDefault(normalized, normalized);
+        return MODULE_NAME_MAP.getOrDefault(normalized, moduleKey);
+    }
+
     public boolean containsModule(String moduleKey) {
         return moduleKey != null && MODULE_NAME_MAP.containsKey(normalizeModuleKey(moduleKey));
     }

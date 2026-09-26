@@ -1,5 +1,6 @@
 package com.leo.erp.statement.freight.service;
 
+import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.support.StatusConstants;
@@ -163,7 +164,7 @@ public class FreightStatementWorkflowService {
         businessOperationEventPublisher.publish(
                 eventType,
                 ModuleKeys.FREIGHT_STATEMENT,
-                "物流对账单",
+                ModuleCatalog.moduleName(ModuleKeys.FREIGHT_STATEMENT),
                 actionType,
                 "FreightStatement",
                 statement.getId(),

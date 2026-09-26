@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.audit;
 
+import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.system.operationlog.event.BusinessOperationEvent;
@@ -23,7 +24,7 @@ public class PurchaseOrderAuditPublisher {
         BusinessOperationEvent operation = businessOperationEventPublisher.publish(
                 eventType,
                 ModuleKeys.PURCHASE_ORDER,
-                "采购订单",
+                ModuleCatalog.moduleName(ModuleKeys.PURCHASE_ORDER),
                 actionType,
                 "PurchaseOrder",
                 order.getId(),

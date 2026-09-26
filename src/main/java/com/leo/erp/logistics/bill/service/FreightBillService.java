@@ -1,5 +1,6 @@
 package com.leo.erp.logistics.bill.service;
 
+import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.charge.api.DocumentChargeItemResponse;
 import com.leo.erp.common.charge.service.DocumentChargeItemService;
@@ -451,7 +452,7 @@ public class FreightBillService {
         businessOperationEventPublisher.publish(
                 eventType,
                 ModuleKeys.FREIGHT_BILL,
-                "物流单",
+                ModuleCatalog.moduleName(ModuleKeys.FREIGHT_BILL),
                 actionType,
                 "FreightBill",
                 bill.getId(),

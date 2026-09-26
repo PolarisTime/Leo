@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
@@ -141,7 +142,7 @@ public class SalesOrderCompletionSyncService {
         businessOperationEventPublisher.publish(
                 eventType,
                 ModuleKeys.SALES_ORDER,
-                "销售订单",
+                ModuleCatalog.moduleName(ModuleKeys.SALES_ORDER),
                 actionType,
                 "SalesOrder",
                 order.getId(),
