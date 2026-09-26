@@ -65,16 +65,6 @@ public class S3PathParser {
         return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
-    public String hostHeader(URI uri) {
-        int port = uri.getPort();
-        if (port < 0) {
-            return uri.getHost();
-        }
-        boolean defaultPort = ("http".equalsIgnoreCase(uri.getScheme()) && port == 80)
-                || ("https".equalsIgnoreCase(uri.getScheme()) && port == 443);
-        return defaultPort ? uri.getHost() : uri.getHost() + ":" + port;
-    }
-
     public String normalizedEndpointPath(String rawPath) {
         if (rawPath == null || rawPath.isBlank() || "/".equals(rawPath)) {
             return "";
