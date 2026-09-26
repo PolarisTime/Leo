@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.leo.erp.common.support.SqlIdentifier;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.error.BusinessException;
@@ -22,7 +23,7 @@ public class PrintRuntimeProperties {
     private static final String PRICE_SCALE_KEY = "price";
     private static final String QUANTITY_FORMAT = "quantity";
     private static final String DEFAULT_TEMPLATE_VALUE = "";
-    private static final Pattern SQL_IDENTIFIER = Pattern.compile("[a-z][a-z0-9_]*");
+    private static final Pattern SQL_IDENTIFIER = SqlIdentifier.PATTERN;
 
     private final JsonNode root;
 

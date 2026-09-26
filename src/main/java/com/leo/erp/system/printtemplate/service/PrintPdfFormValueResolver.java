@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.leo.erp.system.printtemplate.support.PrintPlaceholders;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.leo.erp.common.support.PrecisionConstants;
 import org.springframework.stereotype.Service;
@@ -15,7 +16,7 @@ import java.util.regex.Pattern;
 @Service
 public class PrintPdfFormValueResolver {
 
-    private static final Pattern TEMPLATE_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z0-9_]+)}");
+    private static final Pattern TEMPLATE_PLACEHOLDER = PrintPlaceholders.TEMPLATE;
 
     private final PrintRuntimeProperties runtimeProperties;
 

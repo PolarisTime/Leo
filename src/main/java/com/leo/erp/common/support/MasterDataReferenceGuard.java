@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 @Service
 public class MasterDataReferenceGuard {
 
-    private static final Pattern SQL_IDENTIFIER = Pattern.compile("[a-z][a-z0-9_]*");
+    private static final Pattern SQL_IDENTIFIER = SqlIdentifier.PATTERN;
 
     private final JdbcTemplate jdbc;
 

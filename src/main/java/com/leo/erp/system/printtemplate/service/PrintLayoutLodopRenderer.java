@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.leo.erp.system.printtemplate.support.PrintPlaceholders;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.error.BusinessException;
@@ -21,7 +22,7 @@ import java.util.regex.Pattern;
 @Component
 public class PrintLayoutLodopRenderer {
 
-    private static final Pattern TEMPLATE_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z0-9_]+)}");
+    private static final Pattern TEMPLATE_PLACEHOLDER = PrintPlaceholders.TEMPLATE;
 
     private final ObjectMapper objectMapper;
     private final PrintRuntimeProperties runtimeProperties;
