@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.attachment.support.AttachmentCryptoConstants;
 import com.leo.erp.common.error.ErrorCode;
 import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.ContentDisposition;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -29,6 +30,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -286,9 +288,13 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
     }
 
     private String contentDisposition(boolean inline, String fileName) {
-        String disposition = inline ? "inline" : "attachment";
-        String safeFileName = fileName == null ? "download" : fileName.replace("\"", "");
-        return String.format(Locale.ROOT, "%s; filename=\"%s\"", disposition, safeFileName);
+        String safeFileName = fileName == null || fileName.isBlank() ? "download" : fileName;
+        ContentDisposition disposition = (inline
+                ? ContentDisposition.inline()
+                : ContentDisposition.attachment())
+                .filename(safeFileName, StandardCharsets.UTF_8)
+                .build();
+        return disposition.toString();
     }
 
     private String describeS3Error(S3Exception ex) {
