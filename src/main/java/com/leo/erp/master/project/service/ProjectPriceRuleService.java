@@ -1,5 +1,6 @@
 package com.leo.erp.master.project.service;
 
+import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -145,7 +146,7 @@ public class ProjectPriceRuleService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "项目ID不能为空");
         }
         return projectRepository.findByIdAndDeletedFlagFalse(projectId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "项目不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, ValidationMessages.PROJECT_NOT_FOUND));
     }
 
     private static String requireText(String value, String message) {

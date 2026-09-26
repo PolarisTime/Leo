@@ -1,5 +1,6 @@
 package com.leo.erp.finance.ledgeradjustment.service;
 
+import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
@@ -230,7 +231,7 @@ public class LedgerAdjustmentService {
 
     private String resolveCreateBusinessNo(Long entityId) {
         if (entityId == null || entityId <= 0) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "业务单据雪花ID尚未分配");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.SNOWFLAKE_ID_NOT_ASSIGNED);
         }
         return String.valueOf(entityId);
     }

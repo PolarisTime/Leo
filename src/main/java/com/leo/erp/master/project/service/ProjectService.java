@@ -1,5 +1,6 @@
 package com.leo.erp.master.project.service;
 
+import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
@@ -130,7 +131,7 @@ public class ProjectService {
             return toResponse(entity);
         }
         STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
-        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.STATUS_CHANGE_UNSUPPORTED);
     }
 
     @Transactional
@@ -163,7 +164,7 @@ public class ProjectService {
             unless = "#result == null || #result.isEmpty()")
     public List<ProjectOptionResponse> listActiveOptions(Long customerId) {
         Customer customer = customerRepository.findByIdAndDeletedFlagFalse(customerId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.CUSTOMER_NOT_FOUND));
         String customerCode = trimToNull(customer.getCustomerCode());
         return projectRepository.findActiveOptionsByCustomerIdentity(
                         customer.getId(),
@@ -192,7 +193,7 @@ public class ProjectService {
 
     private Project requireActiveProject(Long id) {
         return projectRepository.findByIdAndDeletedFlagFalse(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "项目不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, ValidationMessages.PROJECT_NOT_FOUND));
     }
 
     private ProjectRequest normalizeCreateRequest(ProjectRequest request) {
@@ -291,7 +292,7 @@ public class ProjectService {
         Customer customer;
         if (request.customerId() == null) {
             customer = customerRepository.findByCustomerCodeAndDeletedFlagFalse(requestedCustomerCode)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.CUSTOMER_NOT_FOUND));
             log.warn(
                     "identity fallback used: module=project, field=customerId, "
                             + "reason=legacy-customer-code, resolvedId={}",
@@ -299,7 +300,7 @@ public class ProjectService {
             );
         } else {
             customer = customerRepository.findByIdAndDeletedFlagFalse(request.customerId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.CUSTOMER_NOT_FOUND));
         }
         String customerCode = trimToNull(customer.getCustomerCode());
         if (requestedCustomerCode != null && !requestedCustomerCode.equals(customerCode)) {
@@ -366,7 +367,7 @@ public class ProjectService {
             return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
         }
         Customer customer = customerRepository.findByIdAndDeletedFlagFalse(customerId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.CUSTOMER_NOT_FOUND));
         String customerCode = trimToNull(customer.getCustomerCode());
         return (root, query, criteriaBuilder) -> criteriaBuilder.or(
                 criteriaBuilder.equal(root.get("customerId"), customer.getId()),

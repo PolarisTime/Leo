@@ -1,5 +1,6 @@
 package com.leo.erp.sales.returns.service;
 
+import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
@@ -289,7 +290,7 @@ public class SalesReturnService {
 
     private String resolveCreateBusinessNo(Long entityId) {
         if (entityId == null || entityId <= 0) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "业务单据雪花ID尚未分配");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.SNOWFLAKE_ID_NOT_ASSIGNED);
         }
         return String.valueOf(entityId);
     }

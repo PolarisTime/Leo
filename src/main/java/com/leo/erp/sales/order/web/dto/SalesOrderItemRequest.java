@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.web.dto;
 
+import com.leo.erp.common.support.ValidationMessages;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
@@ -34,7 +35,7 @@ public record SalesOrderItemRequest(
         @NotNull @DecimalMin("0.00")
         @Digits(integer = 10, fraction = 2, message = "单价整数位不能超过10位，小数位不能超过2位")
         BigDecimal unitPrice,
-        @Digits(integer = 12, fraction = 2, message = "金额整数位不能超过12位，小数位不能超过2位")
+        @Digits(integer = 12, fraction = 2, message = ValidationMessages.AMOUNT_PRECISION)
         BigDecimal amount
 ) {
     public SalesOrderItemRequest(Long id,

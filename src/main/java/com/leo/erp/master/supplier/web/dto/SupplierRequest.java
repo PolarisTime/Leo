@@ -1,5 +1,6 @@
 package com.leo.erp.master.supplier.web.dto;
 
+import com.leo.erp.common.support.ValidationMessages;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -14,7 +15,7 @@ public record SupplierRequest(
         String contactName,
         String contactPhone,
         String city,
-        @NotBlank(message = "状态不能为空")
+        @NotBlank(message = ValidationMessages.STATUS_REQUIRED)
         String status,
         String remark,
         @Size(max = 200, message = "经营品牌数量不能超过200个")

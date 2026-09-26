@@ -1,5 +1,6 @@
 package com.leo.erp.master.customer.web.dto;
 
+import com.leo.erp.common.support.ValidationMessages;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -17,7 +18,7 @@ public record CustomerRequest(
         String projectAddress,
         @NotNull(message = "默认结算主体不能为空")
         Long defaultSettlementCompanyId,
-        @NotBlank(message = "状态不能为空")
+        @NotBlank(message = ValidationMessages.STATUS_REQUIRED)
         String status,
         String remark
 ) {

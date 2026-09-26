@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.ModuleCatalog;
@@ -111,7 +112,7 @@ public class PrintTemplateRequestNormalizer {
             return new SettlementCompanySnapshot(null, null);
         }
         var company = companySettingRepository.findByIdAndDeletedFlagFalse(settlementCompanyId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR, "结算主体不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR, ValidationMessages.SETTLEMENT_COMPANY_NOT_FOUND));
         return new SettlementCompanySnapshot(company.getId(), company.getCompanyName());
     }
 

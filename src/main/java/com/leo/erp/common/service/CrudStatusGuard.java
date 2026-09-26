@@ -1,5 +1,6 @@
 package com.leo.erp.common.service;
 
+import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.StatusAwareEntity;
@@ -26,7 +27,7 @@ public final class CrudStatusGuard<E> {
         return new CrudStatusGuard<>(
                 entity -> Optional.empty(),
                 (entity, status) -> {
-                    throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
+                    throw new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.STATUS_CHANGE_UNSUPPORTED);
                 }
         );
     }
@@ -52,7 +53,7 @@ public final class CrudStatusGuard<E> {
 
     public String normalizeRequiredStatus(String status) {
         if (status == null || status.isBlank()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "状态不能为空");
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, ValidationMessages.STATUS_REQUIRED);
         }
         return status.trim();
     }
@@ -107,7 +108,7 @@ public final class CrudStatusGuard<E> {
                                          String currentStatus,
                                          String nextStatus) {
         if (allowedTransitions.isEmpty()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.STATUS_CHANGE_UNSUPPORTED);
         }
         boolean invalidStatus = currentStatus == null || currentStatus.isBlank()
                 || nextStatus == null || nextStatus.isBlank();

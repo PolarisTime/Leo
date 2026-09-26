@@ -1,5 +1,6 @@
 package com.leo.erp.finance.receipt.service;
 
+import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessDocumentValidator;
@@ -34,7 +35,7 @@ public class ReceiptPartyIdentityResolver {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "客户ID不能为空");
         }
         CustomerQuery.CustomerSnapshot customer = customerQuery.findActiveById(request.customerId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.CUSTOMER_NOT_FOUND));
         BusinessDocumentValidator.requireSameText(
                 request.customerName(),
                 customer.name(),
@@ -67,7 +68,7 @@ public class ReceiptPartyIdentityResolver {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商ID不能为空");
         }
         SupplierQuery.SupplierSnapshot supplier = supplierQuery.findActiveById(request.counterpartyId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.SUPPLIER_NOT_FOUND));
         BusinessDocumentValidator.requireSameText(
                 request.counterpartyName(),
                 supplier.name(),
@@ -100,7 +101,7 @@ public class ReceiptPartyIdentityResolver {
             return null;
         }
         ProjectQuery.ProjectSnapshot project = projectQuery.findActiveById(request.projectId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.PROJECT_NOT_FOUND));
         if (!java.util.Objects.equals(project.customerId(), request.customerId())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不属于所选客户");
         }
@@ -135,7 +136,7 @@ public class ReceiptPartyIdentityResolver {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "结算主体不能为空");
         }
         CompanySetting company = companySettingRepository.findByIdAndDeletedFlagFalse(companyId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "结算主体不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.SETTLEMENT_COMPANY_NOT_FOUND));
         BusinessDocumentValidator.requireSameText(
                 companyName,
                 company.getCompanyName(),

@@ -1,5 +1,6 @@
 package com.leo.erp.master.supplier.service;
 
+import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
@@ -129,7 +130,7 @@ public class SupplierService implements RedisCacheHealthCheck {
             return toResponse(entity, loadBrandNames(id));
         }
         STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
-        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.STATUS_CHANGE_UNSUPPORTED);
     }
 
     @Transactional
@@ -206,7 +207,7 @@ public class SupplierService implements RedisCacheHealthCheck {
 
     private Supplier requireActiveSupplier(Long id) {
         return supplierRepository.findByIdAndDeletedFlagFalse(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "供应商不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, ValidationMessages.SUPPLIER_NOT_FOUND));
     }
 
     private void validateCreate(SupplierRequest request) {

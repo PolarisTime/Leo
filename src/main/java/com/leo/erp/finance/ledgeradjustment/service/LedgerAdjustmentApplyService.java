@@ -1,5 +1,6 @@
 package com.leo.erp.finance.ledgeradjustment.service;
 
+import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -134,7 +135,7 @@ public class LedgerAdjustmentApplyService {
 
     private BigDecimal normalizeAmount(BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "金额必须大于0");
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, ValidationMessages.AMOUNT_POSITIVE);
         }
         return amount.setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
     }
@@ -160,7 +161,7 @@ public class LedgerAdjustmentApplyService {
                             customer.name(),
                             "客户"
                     ))
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.CUSTOMER_NOT_FOUND));
         }
         if ("供应商".equals(counterpartyType)) {
             return supplierQuery.findActiveByCode(normalizedCode)
@@ -170,7 +171,7 @@ public class LedgerAdjustmentApplyService {
                             supplier.name(),
                             "供应商"
                     ))
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.SUPPLIER_NOT_FOUND));
         }
         return carrierQuery.findActiveByCode(normalizedCode)
                 .map(carrier -> resolvedCounterparty(
@@ -191,12 +192,12 @@ public class LedgerAdjustmentApplyService {
             resolved = customerQuery.findActiveById(counterpartyId)
                     .map(customer -> resolvedCounterparty(
                             customer.id(), customer.code(), customer.name(), "客户"))
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.CUSTOMER_NOT_FOUND));
         } else if ("供应商".equals(counterpartyType)) {
             resolved = supplierQuery.findActiveById(counterpartyId)
                     .map(supplier -> resolvedCounterparty(
                             supplier.id(), supplier.code(), supplier.name(), "供应商"))
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.SUPPLIER_NOT_FOUND));
         } else {
             resolved = carrierQuery.findActiveById(counterpartyId)
                     .map(carrier -> resolvedCounterparty(
@@ -245,7 +246,7 @@ public class LedgerAdjustmentApplyService {
                             project.settlementCompanyName()
                     );
                 })
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.PROJECT_NOT_FOUND));
     }
 
     private CompanySetting resolveSettlementCompany(Long requestedId,

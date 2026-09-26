@@ -1,5 +1,6 @@
 package com.leo.erp.master.project.web.dto;
 
+import com.leo.erp.common.support.ValidationMessages;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -21,7 +22,7 @@ public record ProjectRequest(
         @Positive(message = "结算主体ID必须为正整数")
         Long settlementCompanyId,
         String settlementCompanyName,
-        @NotBlank(message = "状态不能为空")
+        @NotBlank(message = ValidationMessages.STATUS_REQUIRED)
         String status,
         /** 网价浮动方向: ADD加价/SUBTRACT减价; 空表示不浮动。 */
         String priceFloatMode,

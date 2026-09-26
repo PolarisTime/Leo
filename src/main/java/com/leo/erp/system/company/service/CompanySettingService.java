@@ -1,5 +1,6 @@
 package com.leo.erp.system.company.service;
 
+import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
@@ -229,7 +230,7 @@ public class CompanySettingService implements RedisCacheHealthCheck {
             return toResponse(entity);
         }
         STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
-        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.STATUS_CHANGE_UNSUPPORTED);
     }
 
     @Transactional
@@ -252,7 +253,7 @@ public class CompanySettingService implements RedisCacheHealthCheck {
 
     private CompanySetting requireActiveCompanySetting(Long id) {
         return companySettingRepository.findByIdAndDeletedFlagFalse(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "结算主体不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, ValidationMessages.SETTLEMENT_COMPANY_NOT_FOUND));
     }
 
     private void validateCreate(CompanySettingRequest request) {

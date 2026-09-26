@@ -1,5 +1,6 @@
 package com.leo.erp.sales.contract.service;
 
+import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -190,12 +191,12 @@ public class SalesContractService {
 
     private CustomerQuery.CustomerSnapshot requireCustomer(Long customerId) {
         return customerQuery.findActiveById(customerId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR, "客户不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR, ValidationMessages.CUSTOMER_NOT_FOUND));
     }
 
     private ProjectQuery.ProjectSnapshot requireProject(Long projectId) {
         return projectQuery.findActiveById(projectId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR, "项目不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR, ValidationMessages.PROJECT_NOT_FOUND));
     }
 
     private SalesContract requireEntity(Long id) {

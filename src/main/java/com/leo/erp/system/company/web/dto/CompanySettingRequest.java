@@ -1,5 +1,6 @@
 package com.leo.erp.system.company.web.dto;
 
+import com.leo.erp.common.support.ValidationMessages;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 
@@ -12,7 +13,7 @@ public record CompanySettingRequest(
         String taxNo,
         @Valid
         List<CompanySettlementAccountRequest> settlementAccounts,
-        @NotBlank(message = "状态不能为空")
+        @NotBlank(message = ValidationMessages.STATUS_REQUIRED)
         String status,
         String remark
 ) {

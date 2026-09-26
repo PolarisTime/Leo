@@ -1,5 +1,6 @@
 package com.leo.erp.finance.payment.web.dto;
 
+import com.leo.erp.common.support.ValidationMessages;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -32,10 +33,10 @@ public record PaymentRequest(
         @jakarta.validation.constraints.NotBlank(message = "付款方式不能为空")
         String payType,
         @NotNull(message = "金额不能为空")
-        @DecimalMin(value = "0.00", inclusive = false, message = "金额必须大于0")
-        @Digits(integer = 12, fraction = 2, message = "金额整数位不能超过12位，小数位不能超过2位")
+        @DecimalMin(value = "0.00", inclusive = false, message = ValidationMessages.AMOUNT_POSITIVE)
+        @Digits(integer = 12, fraction = 2, message = ValidationMessages.AMOUNT_PRECISION)
         BigDecimal amount,
-        @jakarta.validation.constraints.NotBlank(message = "状态不能为空")
+        @jakarta.validation.constraints.NotBlank(message = ValidationMessages.STATUS_REQUIRED)
         String status,
         @jakarta.validation.constraints.NotBlank(message = "经办人不能为空")
         String operatorName,

@@ -1,5 +1,6 @@
 package com.leo.erp.master.warehouse.web.dto;
 
+import com.leo.erp.common.support.ValidationMessages;
 import jakarta.validation.constraints.NotBlank;
 
 public record WarehouseRequest(
@@ -12,7 +13,7 @@ public record WarehouseRequest(
         String contactName,
         String contactPhone,
         String address,
-        @NotBlank(message = "状态不能为空")
+        @NotBlank(message = ValidationMessages.STATUS_REQUIRED)
         String status,
         String remark
 ) {

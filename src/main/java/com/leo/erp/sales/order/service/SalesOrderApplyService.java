@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessStatusValidator;
@@ -288,7 +289,7 @@ public class SalesOrderApplyService {
             );
         } else {
             customer = customerQuery.findActiveById(requestedId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.CUSTOMER_NOT_FOUND));
         }
         if (requestedId != null
                 && customerCode != null
@@ -336,7 +337,7 @@ public class SalesOrderApplyService {
             project = matchingProjects
                     .stream()
                     .findFirst()
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不存在"));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.PROJECT_NOT_FOUND));
             log.warn(
                     "identity fallback used: module=sales-order, field=projectId, "
                             + "reason=legacy-customer-code-project-name, resolvedId={}",
@@ -344,7 +345,7 @@ public class SalesOrderApplyService {
             );
         } else {
             project = projectQuery.findActiveById(requestedId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不存在"));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.PROJECT_NOT_FOUND));
         }
         if (customer != null) {
             boolean belongsToAnotherCustomer = project.customerId() != null

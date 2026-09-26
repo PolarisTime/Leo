@@ -1,5 +1,6 @@
 package com.leo.erp.finance.payment.service;
 
+import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessDocumentValidator;
@@ -121,7 +122,7 @@ public class PaymentApplyService {
         CounterpartySnapshot counterparty = resolveCounterparty(request);
         CompanySetting company = companySettingRepository
                 .findByIdAndDeletedFlagFalse(request.settlementCompanyId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "结算主体不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.SETTLEMENT_COMPANY_NOT_FOUND));
         BusinessDocumentValidator.requireSameText(
                 request.settlementCompanyName(), company.getCompanyName(), "结算主体名称与ID不一致"
         );
@@ -147,7 +148,7 @@ public class PaymentApplyService {
     private CounterpartySnapshot resolveCounterparty(PaymentRequest request) {
         if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.businessType())) {
             SupplierQuery.SupplierSnapshot supplier = supplierQuery.findActiveById(request.counterpartyId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.SUPPLIER_NOT_FOUND));
             BusinessDocumentValidator.requireSameText(
                     request.counterpartyName(), supplier.name(), "供应商名称与ID不一致"
             );
