@@ -2,6 +2,7 @@ package com.leo.erp.attachment.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.attachment.support.AttachmentMediaTypes;
 import com.leo.erp.common.support.PrecisionConstants;
 import org.springframework.stereotype.Component;
 
@@ -32,7 +33,7 @@ public class AttachmentFilenameResolver {
     }
 
     public String preview(String renamePattern, String originalFilename) {
-        return renderFileName(renamePattern, originalFilename, "application/pdf", LocalDateTime.of(2026, 4, 24, 12, 30, 45), "1777005045000", "preview1");
+        return renderFileName(renamePattern, originalFilename, AttachmentMediaTypes.PDF, LocalDateTime.of(2026, 4, 24, 12, 30, 45), "1777005045000", "preview1");
     }
 
     private String renderFileName(String renamePattern,
@@ -128,19 +129,7 @@ public class AttachmentFilenameResolver {
         if (contentType == null || contentType.isBlank()) {
             return "bin";
         }
-        return switch (contentType.toLowerCase(Locale.ROOT)) {
-            case "image/png" -> "png";
-            case "image/jpeg" -> "jpg";
-            case "image/gif" -> "gif";
-            case "image/webp" -> "webp";
-            case "application/pdf" -> "pdf";
-            case "text/plain" -> "txt";
-            case "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> "docx";
-            case "application/msword" -> "doc";
-            case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> "xlsx";
-            case "application/vnd.ms-excel" -> "xls";
-            default -> "bin";
-        };
+        return AttachmentMediaTypes.extensionOfContentType(contentType);
     }
 
     public record FilenameParts(String baseName, String extension) {

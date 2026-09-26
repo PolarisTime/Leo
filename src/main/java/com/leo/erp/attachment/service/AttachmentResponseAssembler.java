@@ -2,6 +2,7 @@ package com.leo.erp.attachment.service;
 
 import com.leo.erp.attachment.api.AttachmentView;
 import com.leo.erp.attachment.domain.entity.AttachmentFile;
+import com.leo.erp.attachment.support.AttachmentMediaTypes;
 import org.springframework.stereotype.Service;
 
 import java.net.URLEncoder;
@@ -78,16 +79,10 @@ public class AttachmentResponseAssembler {
 
     public String resolveResponseContentType(AttachmentFile entity, String previewType) {
         return switch (previewType) {
-            case "pdf" -> "application/pdf";
-            case "image" -> switch (normalizedExtension(entity)) {
-                case "png" -> "image/png";
-                case "jpg", "jpeg" -> "image/jpeg";
-                case "gif" -> "image/gif";
-                case "webp" -> "image/webp";
-                case "bmp" -> "image/bmp";
-                default -> "application/octet-stream";
-            };
-                default -> "application/octet-stream";
+            case "pdf" -> AttachmentMediaTypes.PDF;
+            case "image" -> AttachmentMediaTypes.contentTypeOfExtension(
+                    normalizedExtension(entity));
+            default -> AttachmentMediaTypes.OCTET_STREAM;
         };
     }
 

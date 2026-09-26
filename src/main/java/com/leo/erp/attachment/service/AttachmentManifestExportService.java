@@ -1,5 +1,6 @@
 package com.leo.erp.attachment.service;
 
+import com.leo.erp.attachment.support.AttachmentMediaTypes;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.leo.erp.attachment.api.AttachmentManifestArchive;
@@ -34,7 +35,7 @@ import java.util.zip.GZIPOutputStream;
 public class AttachmentManifestExportService implements AttachmentManifestExporter {
 
     private static final int MANIFEST_VERSION = 2;
-    private static final String CONTENT_TYPE_GZIP = "application/gzip";
+    private static final String CONTENT_TYPE_GZIP = AttachmentMediaTypes.GZIP;
     private static final DateTimeFormatter PATH_DATE = DateTimeFormatter.ofPattern("yyyy/MM/dd")
             .withZone(ZoneOffset.UTC);
     private static final DateTimeFormatter FILE_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
