@@ -77,12 +77,23 @@ public class AttachmentProperties {
 
         private String path = "/tmp/leo/uploads";
 
+        /** 本地存储是否使用系统数据密钥加密附件内容。 */
+        private boolean encryptedStorage = false;
+
         public String getPath() {
             return path;
         }
 
         public void setPath(String path) {
             this.path = path;
+        }
+
+        public boolean isEncryptedStorage() {
+            return encryptedStorage;
+        }
+
+        public void setEncryptedStorage(boolean encryptedStorage) {
+            this.encryptedStorage = encryptedStorage;
         }
     }
 

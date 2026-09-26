@@ -96,7 +96,7 @@ public class LocalAttachmentStorage implements AttachmentStorage {
     }
 
     private boolean isEncryptedStorageEnabled() {
-        return properties.getStorage().getS3().isEncryptedStorage();
+        return properties.getStorage().getLocal().isEncryptedStorage();
     }
 
     private AttachmentContentCryptor requireCryptor() {

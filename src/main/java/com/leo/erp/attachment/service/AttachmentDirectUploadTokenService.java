@@ -1,5 +1,6 @@
 package com.leo.erp.attachment.service;
 
+import com.leo.erp.attachment.support.AttachmentCryptoConstants;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.jwt.JwtProperties;
@@ -16,7 +17,7 @@ import java.util.Base64;
 @Service
 public class AttachmentDirectUploadTokenService {
 
-    private static final String HMAC_ALGORITHM = "HmacSHA256";
+    private static final String HMAC_ALGORITHM = AttachmentCryptoConstants.HMAC_ALGORITHM;
     private static final String TOKEN_SEPARATOR = ".";
 
     private final JwtProperties jwtProperties;

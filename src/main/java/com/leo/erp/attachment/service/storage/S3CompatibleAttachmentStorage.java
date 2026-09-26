@@ -2,6 +2,7 @@ package com.leo.erp.attachment.service.storage;
 
 import com.leo.erp.attachment.config.AttachmentProperties;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.attachment.support.AttachmentCryptoConstants;
 import com.leo.erp.common.error.ErrorCode;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
@@ -267,11 +268,11 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
     }
 
     private Duration uploadTtl(AttachmentProperties.S3 s3) {
-        return s3.getPresignUploadTtl() == null ? Duration.ofMinutes(10) : s3.getPresignUploadTtl();
+        return s3.getPresignUploadTtl();
     }
 
     private Duration previewTtl(AttachmentProperties.S3 s3) {
-        return s3.getPresignPreviewTtl() == null ? Duration.ofMinutes(5) : s3.getPresignPreviewTtl();
+        return s3.getPresignPreviewTtl();
     }
 
     private Map<String, String> signedHeaders(Map<String, java.util.List<String>> headers) {
@@ -313,7 +314,7 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
                 .bucket(s3.getBucket())
                 .key(objectKey)
                 .build())) {
-            byte[] buffer = new byte[8192];
+            byte[] buffer = new byte[AttachmentCryptoConstants.STREAM_BUFFER_SIZE];
             int read;
             while ((read = response.read(buffer)) != -1) {
                 digest.update(buffer, 0, read);
@@ -324,7 +325,7 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
 
     private MessageDigest sha256Digest() {
         try {
-            return MessageDigest.getInstance("SHA-256");
+            return MessageDigest.getInstance(AttachmentCryptoConstants.DIGEST_ALGORITHM);
         } catch (NoSuchAlgorithmException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "S3 直传校验失败");
         }

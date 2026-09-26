@@ -1,5 +1,6 @@
 package com.leo.erp.attachment.service;
 
+import com.leo.erp.attachment.support.AttachmentCryptoConstants;
 import com.leo.erp.attachment.support.AttachmentMediaTypes;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -218,7 +219,7 @@ public class AttachmentManifestExportService implements AttachmentManifestExport
             return "";
         }
         try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            byte[] digest = MessageDigest.getInstance(AttachmentCryptoConstants.DIGEST_ALGORITHM).digest(value.getBytes(StandardCharsets.UTF_8));
             StringBuilder builder = new StringBuilder(digest.length * 2);
             for (byte item : digest) {
                 builder.append(String.format("%02x", item));

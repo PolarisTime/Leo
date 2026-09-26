@@ -1,6 +1,7 @@
 package com.leo.erp.attachment.service.storage;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.attachment.support.AttachmentCryptoConstants;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.system.securitykey.service.SecurityKeyService;
 import org.springframework.stereotype.Component;
@@ -35,7 +36,7 @@ public class AttachmentContentCryptor {
         try {
             byte[] iv = new byte[GCM_IV_LENGTH];
             secureRandom.nextBytes(iv);
-            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            Cipher cipher = Cipher.getInstance(AttachmentCryptoConstants.CONTENT_CIPHER);
             cipher.init(Cipher.ENCRYPT_MODE, key(), new GCMParameterSpec(GCM_TAG_LENGTH, iv));
             byte[] encrypted = cipher.doFinal(plainContent);
             return ByteBuffer.allocate(MAGIC.length + iv.length + encrypted.length)
@@ -55,7 +56,7 @@ public class AttachmentContentCryptor {
         try {
             byte[] iv = Arrays.copyOfRange(encryptedContent, MAGIC.length, MAGIC.length + GCM_IV_LENGTH);
             byte[] cipherText = Arrays.copyOfRange(encryptedContent, MAGIC.length + GCM_IV_LENGTH, encryptedContent.length);
-            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            Cipher cipher = Cipher.getInstance(AttachmentCryptoConstants.CONTENT_CIPHER);
             cipher.init(Cipher.DECRYPT_MODE, key(), new GCMParameterSpec(GCM_TAG_LENGTH, iv));
             return cipher.doFinal(cipherText);
         } catch (Exception ex) {
@@ -65,7 +66,7 @@ public class AttachmentContentCryptor {
 
     public byte[] readAll(InputStream inputStream) throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        byte[] buffer = new byte[8192];
+        byte[] buffer = new byte[AttachmentCryptoConstants.STREAM_BUFFER_SIZE];
         int read;
         while ((read = inputStream.read(buffer)) != -1) {
             output.write(buffer, 0, read);
@@ -91,9 +92,9 @@ public class AttachmentContentCryptor {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "附件加密主密钥未配置");
         }
         try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(("attachment-content:" + material).getBytes(StandardCharsets.UTF_8));
-            return new SecretKeySpec(digest, "AES");
+            byte[] digest = MessageDigest.getInstance(AttachmentCryptoConstants.DIGEST_ALGORITHM)
+                    .digest((AttachmentCryptoConstants.KEY_DERIVATION_PREFIX + material).getBytes(StandardCharsets.UTF_8));
+            return new SecretKeySpec(digest, AttachmentCryptoConstants.KEY_ALGORITHM);
         } catch (Exception ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "附件加密主密钥初始化失败");
         }

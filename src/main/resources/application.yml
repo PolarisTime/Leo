@@ -213,6 +213,8 @@ leo:
       local:
         # 本地存储目录
         path: ${LEO_ATTACHMENT_LOCAL_PATH:/tmp/leo/uploads}
+        # 是否使用系统数据密钥加密附件内容
+        encrypted-storage: ${LEO_ATTACHMENT_LOCAL_ENCRYPTED_STORAGE:false}
       s3:
         # S3 兼容存储接入点
         endpoint: ${LEO_ATTACHMENT_S3_ENDPOINT:}
