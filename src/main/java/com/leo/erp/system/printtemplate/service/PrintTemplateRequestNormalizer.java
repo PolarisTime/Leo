@@ -221,7 +221,10 @@ public class PrintTemplateRequestNormalizer {
             return null;
         }
         String normalized = assetRef.trim();
-        if (normalized.contains("..") || normalized.startsWith("/") || !normalized.toLowerCase().endsWith(".pdf")) {
+        if (normalized.contains("..")
+                || normalized.startsWith("/")
+                || normalized.contains("\\")
+                || !normalized.toLowerCase().endsWith(".pdf")) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF 底版资源路径不合法");
         }
         return normalized;

@@ -263,6 +263,18 @@ class PrintTemplateRequestNormalizerTest {
     }
 
     @Test
+    void apply_shouldRejectAssetRefWithBackslash() {
+        allowModule("sales-order");
+        PrintTemplateRequest backslash = new PrintTemplateRequest(
+                "sales-order", "模板", "T1", "{}", "PDF_FORM", "PDF_FORM",
+                "..\\evil.pdf", null, null, null, null);
+
+        assertThatThrownBy(() -> normalizer.apply(new PrintTemplate(), backslash))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("PDF 底版资源路径不合法");
+    }
+
+    @Test
     void apply_shouldIgnoreAssetRefForCoord() {
         allowModule("sales-order");
         PrintTemplateRequest coordWithAsset = new PrintTemplateRequest(
