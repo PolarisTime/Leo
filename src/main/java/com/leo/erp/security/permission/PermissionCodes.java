@@ -143,7 +143,6 @@ public final class PermissionCodes {
     public static final String SALES_ORDERS_UNAUDIT = Resources.SALES_ORDERS + ":" + Actions.UNAUDIT;
     public static final String SALES_ORDERS_CONFIRM = Resources.SALES_ORDERS + ":" + Actions.CONFIRM;
     public static final String SALES_ORDERS_COMPLETE = Resources.SALES_ORDERS + ":" + Actions.COMPLETE;
-    public static final String SALES_ORDERS_PRINT = Resources.SALES_ORDERS + ":" + Actions.PRINT;
     public static final String SALES_ORDERS_EXPORT = Resources.SALES_ORDERS + ":" + Actions.EXPORT;
 
     // 销售合同
@@ -159,8 +158,6 @@ public final class PermissionCodes {
     public static final String SALES_RETURNS_DELETE = Resources.SALES_RETURNS + ":" + Actions.DELETE;
     public static final String SALES_RETURNS_AUDIT = Resources.SALES_RETURNS + ":" + Actions.AUDIT;
     public static final String SALES_RETURNS_UNAUDIT = Resources.SALES_RETURNS + ":" + Actions.UNAUDIT;
-    public static final String SALES_RETURNS_PRINT = Resources.SALES_RETURNS + ":" + Actions.PRINT;
-    public static final String SALES_RETURNS_EXPORT = Resources.SALES_RETURNS + ":" + Actions.EXPORT;
 
     // 销售出库单
     public static final String SALES_OUTBOUNDS_READ = Resources.SALES_OUTBOUNDS + ":" + Actions.READ;
@@ -169,8 +166,6 @@ public final class PermissionCodes {
     public static final String SALES_OUTBOUNDS_DELETE = Resources.SALES_OUTBOUNDS + ":" + Actions.DELETE;
     public static final String SALES_OUTBOUNDS_AUDIT = Resources.SALES_OUTBOUNDS + ":" + Actions.AUDIT;
     public static final String SALES_OUTBOUNDS_UNAUDIT = Resources.SALES_OUTBOUNDS + ":" + Actions.UNAUDIT;
-    public static final String SALES_OUTBOUNDS_PRINT = Resources.SALES_OUTBOUNDS + ":" + Actions.PRINT;
-    public static final String SALES_OUTBOUNDS_EXPORT = Resources.SALES_OUTBOUNDS + ":" + Actions.EXPORT;
 
     // 商品资料
     public static final String MATERIALS_READ = Resources.MATERIALS + ":" + Actions.READ;
@@ -188,31 +183,22 @@ public final class PermissionCodes {
     public static final String MATERIAL_EXPORTS_EXPORT = Resources.MATERIAL_EXPORTS + ":" + Actions.EXPORT;
 
     // 商品资料导入
-    public static final String MATERIAL_IMPORTS_READ = Resources.MATERIAL_IMPORTS + ":" + Actions.READ;
     public static final String MATERIAL_IMPORTS_IMPORT = Resources.MATERIAL_IMPORTS + ":" + Actions.IMPORT;
     public static final String MATERIAL_IMPORTS_PREVIEW = Resources.MATERIAL_IMPORTS + ":" + Actions.PREVIEW;
 
     // 商品资料导入批次
-    public static final String IMPORT_BATCHES_READ = Resources.IMPORT_BATCHES + ":" + Actions.READ;
     public static final String IMPORT_BATCHES_ROLLBACK = Resources.IMPORT_BATCHES + ":" + Actions.ROLLBACK;
 
     // 库存
     public static final String INVENTORY_READ = Resources.INVENTORY + ":" + Actions.READ;
-    public static final String INVENTORY_CREATE = Resources.INVENTORY + ":" + Actions.CREATE;
-    public static final String INVENTORY_UPDATE = Resources.INVENTORY + ":" + Actions.UPDATE;
-    public static final String INVENTORY_DELETE = Resources.INVENTORY + ":" + Actions.DELETE;
     public static final String INVENTORY_BACKFILL = Resources.INVENTORY + ":" + Actions.BACKFILL;
-    public static final String INVENTORY_REBUILD = Resources.INVENTORY + ":" + Actions.REBUILD;
 
     // 客户对账单
     public static final String CUSTOMER_STATEMENTS_READ = Resources.CUSTOMER_STATEMENTS + ":" + Actions.READ;
     public static final String CUSTOMER_STATEMENTS_CREATE = Resources.CUSTOMER_STATEMENTS + ":" + Actions.CREATE;
     public static final String CUSTOMER_STATEMENTS_UPDATE = Resources.CUSTOMER_STATEMENTS + ":" + Actions.UPDATE;
     public static final String CUSTOMER_STATEMENTS_DELETE = Resources.CUSTOMER_STATEMENTS + ":" + Actions.DELETE;
-    public static final String CUSTOMER_STATEMENTS_AUDIT = Resources.CUSTOMER_STATEMENTS + ":" + Actions.AUDIT;
     public static final String CUSTOMER_STATEMENTS_CONFIRM = Resources.CUSTOMER_STATEMENTS + ":" + Actions.CONFIRM;
-    public static final String CUSTOMER_STATEMENTS_PRINT = Resources.CUSTOMER_STATEMENTS + ":" + Actions.PRINT;
-    public static final String CUSTOMER_STATEMENTS_EXPORT = Resources.CUSTOMER_STATEMENTS + ":" + Actions.EXPORT;
 
     // 客户
     public static final String CUSTOMERS_READ = Resources.CUSTOMERS + ":" + Actions.READ;
@@ -249,16 +235,9 @@ public final class PermissionCodes {
     public static final String QUOTE_SHEETS_CREATE = Resources.QUOTE_SHEETS + ":" + Actions.CREATE;
     public static final String QUOTE_SHEETS_UPDATE = Resources.QUOTE_SHEETS + ":" + Actions.UPDATE;
     public static final String QUOTE_SHEETS_DELETE = Resources.QUOTE_SHEETS + ":" + Actions.DELETE;
-    public static final String QUOTE_SHEETS_PRINT = Resources.QUOTE_SHEETS + ":" + Actions.PRINT;
-    public static final String QUOTE_SHEETS_EXPORT = Resources.QUOTE_SHEETS + ":" + Actions.EXPORT;
 
     // 钢材报价
     public static final String STEEL_QUOTES_READ = Resources.STEEL_QUOTES + ":" + Actions.READ;
-    public static final String STEEL_QUOTES_CREATE = Resources.STEEL_QUOTES + ":" + Actions.CREATE;
-    public static final String STEEL_QUOTES_UPDATE = Resources.STEEL_QUOTES + ":" + Actions.UPDATE;
-    public static final String STEEL_QUOTES_DELETE = Resources.STEEL_QUOTES + ":" + Actions.DELETE;
-    public static final String STEEL_QUOTES_PRINT = Resources.STEEL_QUOTES + ":" + Actions.PRINT;
-    public static final String STEEL_QUOTES_EXPORT = Resources.STEEL_QUOTES + ":" + Actions.EXPORT;
 
     // 采购订单
     public static final String PURCHASE_ORDERS_READ = Resources.PURCHASE_ORDERS + ":" + Actions.READ;
@@ -267,8 +246,6 @@ public final class PermissionCodes {
     public static final String PURCHASE_ORDERS_DELETE = Resources.PURCHASE_ORDERS + ":" + Actions.DELETE;
     public static final String PURCHASE_ORDERS_AUDIT = Resources.PURCHASE_ORDERS + ":" + Actions.AUDIT;
     public static final String PURCHASE_ORDERS_UNAUDIT = Resources.PURCHASE_ORDERS + ":" + Actions.UNAUDIT;
-    public static final String PURCHASE_ORDERS_PRINT = Resources.PURCHASE_ORDERS + ":" + Actions.PRINT;
-    public static final String PURCHASE_ORDERS_EXPORT = Resources.PURCHASE_ORDERS + ":" + Actions.EXPORT;
 
     // 采购入库
     public static final String PURCHASE_INBOUNDS_READ = Resources.PURCHASE_INBOUNDS + ":" + Actions.READ;
@@ -277,8 +254,6 @@ public final class PermissionCodes {
     public static final String PURCHASE_INBOUNDS_DELETE = Resources.PURCHASE_INBOUNDS + ":" + Actions.DELETE;
     public static final String PURCHASE_INBOUNDS_AUDIT = Resources.PURCHASE_INBOUNDS + ":" + Actions.AUDIT;
     public static final String PURCHASE_INBOUNDS_UNAUDIT = Resources.PURCHASE_INBOUNDS + ":" + Actions.UNAUDIT;
-    public static final String PURCHASE_INBOUNDS_PRINT = Resources.PURCHASE_INBOUNDS + ":" + Actions.PRINT;
-    public static final String PURCHASE_INBOUNDS_EXPORT = Resources.PURCHASE_INBOUNDS + ":" + Actions.EXPORT;
 
     // 运费单
     public static final String FREIGHT_BILLS_READ = Resources.FREIGHT_BILLS + ":" + Actions.READ;
@@ -286,7 +261,6 @@ public final class PermissionCodes {
     public static final String FREIGHT_BILLS_UPDATE = Resources.FREIGHT_BILLS + ":" + Actions.UPDATE;
     public static final String FREIGHT_BILLS_DELETE = Resources.FREIGHT_BILLS + ":" + Actions.DELETE;
     public static final String FREIGHT_BILLS_AUDIT = Resources.FREIGHT_BILLS + ":" + Actions.AUDIT;
-    public static final String FREIGHT_BILLS_PRINT = Resources.FREIGHT_BILLS + ":" + Actions.PRINT;
 
     // 物流对账单
     public static final String FREIGHT_STATEMENTS_READ = Resources.FREIGHT_STATEMENTS + ":" + Actions.READ;
@@ -297,11 +271,6 @@ public final class PermissionCodes {
 
     // 财务
     public static final String FINANCE_READ = Resources.FINANCE + ":" + Actions.READ;
-    public static final String FINANCE_CREATE = Resources.FINANCE + ":" + Actions.CREATE;
-    public static final String FINANCE_UPDATE = Resources.FINANCE + ":" + Actions.UPDATE;
-    public static final String FINANCE_DELETE = Resources.FINANCE + ":" + Actions.DELETE;
-    public static final String FINANCE_COMPLETE = Resources.FINANCE + ":" + Actions.COMPLETE;
-    public static final String FINANCE_REBUILD = Resources.FINANCE + ":" + Actions.REBUILD;
 
     // 收款
     public static final String RECEIPTS_READ = Resources.RECEIPTS + ":" + Actions.READ;
@@ -309,7 +278,6 @@ public final class PermissionCodes {
     public static final String RECEIPTS_UPDATE = Resources.RECEIPTS + ":" + Actions.UPDATE;
     public static final String RECEIPTS_DELETE = Resources.RECEIPTS + ":" + Actions.DELETE;
     public static final String RECEIPTS_AUDIT = Resources.RECEIPTS + ":" + Actions.AUDIT;
-    public static final String RECEIPTS_PRINT = Resources.RECEIPTS + ":" + Actions.PRINT;
 
     // 付款
     public static final String PAYMENTS_READ = Resources.PAYMENTS + ":" + Actions.READ;
@@ -317,7 +285,6 @@ public final class PermissionCodes {
     public static final String PAYMENTS_UPDATE = Resources.PAYMENTS + ":" + Actions.UPDATE;
     public static final String PAYMENTS_DELETE = Resources.PAYMENTS + ":" + Actions.DELETE;
     public static final String PAYMENTS_AUDIT = Resources.PAYMENTS + ":" + Actions.AUDIT;
-    public static final String PAYMENTS_PRINT = Resources.PAYMENTS + ":" + Actions.PRINT;
 
     // 台账调整
     public static final String LEDGER_ADJUSTMENTS_READ = Resources.LEDGER_ADJUSTMENTS + ":" + Actions.READ;
@@ -330,8 +297,6 @@ public final class PermissionCodes {
     public static final String ATTACHMENTS_READ = Resources.ATTACHMENTS + ":" + Actions.READ;
     public static final String ATTACHMENTS_CREATE = Resources.ATTACHMENTS + ":" + Actions.CREATE;
     public static final String ATTACHMENTS_UPDATE = Resources.ATTACHMENTS + ":" + Actions.UPDATE;
-    public static final String ATTACHMENTS_DELETE = Resources.ATTACHMENTS + ":" + Actions.DELETE;
-    public static final String ATTACHMENTS_PREVIEW = Resources.ATTACHMENTS + ":" + Actions.PREVIEW;
 
     // 附件直传会话
     public static final String ATTACHMENT_UPLOAD_SESSIONS_CREATE =
@@ -413,10 +378,6 @@ public final class PermissionCodes {
     // 系统
     /** 系统管理总权限（非标准动作，作为系统级伞形权限保留）。 */
     public static final String SYSTEM_ADMIN = "system:admin";
-    public static final String SYSTEM_READ = Resources.SYSTEM + ":" + Actions.READ;
-    public static final String SYSTEM_CREATE = Resources.SYSTEM + ":" + Actions.CREATE;
-    public static final String SYSTEM_DELETE = Resources.SYSTEM + ":" + Actions.DELETE;
-    public static final String SYSTEM_REBUILD = Resources.SYSTEM + ":" + Actions.REBUILD;
 
     // 字段级示例（本轮仅登记，不强制校验）
     public static final String SALES_ORDERS_READ_AMOUNT =
@@ -430,47 +391,31 @@ public final class PermissionCodes {
             WILDCARD,
             SALES_ORDERS_READ, SALES_ORDERS_CREATE, SALES_ORDERS_UPDATE, SALES_ORDERS_DELETE,
             SALES_ORDERS_AUDIT, SALES_ORDERS_UNAUDIT, SALES_ORDERS_CONFIRM, SALES_ORDERS_COMPLETE,
-            SALES_ORDERS_PRINT, SALES_ORDERS_EXPORT,
+            SALES_ORDERS_EXPORT,
             SALES_CONTRACTS_READ, SALES_CONTRACTS_CREATE, SALES_CONTRACTS_UPDATE, SALES_CONTRACTS_DELETE,
             SALES_RETURNS_READ, SALES_RETURNS_CREATE, SALES_RETURNS_UPDATE, SALES_RETURNS_DELETE,
-            SALES_RETURNS_AUDIT, SALES_RETURNS_UNAUDIT, SALES_RETURNS_PRINT, SALES_RETURNS_EXPORT,
-            SALES_OUTBOUNDS_READ, SALES_OUTBOUNDS_CREATE, SALES_OUTBOUNDS_UPDATE, SALES_OUTBOUNDS_DELETE,
-            SALES_OUTBOUNDS_AUDIT, SALES_OUTBOUNDS_UNAUDIT, SALES_OUTBOUNDS_PRINT, SALES_OUTBOUNDS_EXPORT,
-            MATERIALS_READ, MATERIALS_CREATE, MATERIALS_UPDATE, MATERIALS_DELETE,
+            SALES_RETURNS_AUDIT, SALES_RETURNS_UNAUDIT, SALES_OUTBOUNDS_READ, SALES_OUTBOUNDS_CREATE, SALES_OUTBOUNDS_UPDATE, SALES_OUTBOUNDS_DELETE,
+            SALES_OUTBOUNDS_AUDIT, SALES_OUTBOUNDS_UNAUDIT, MATERIALS_READ, MATERIALS_CREATE, MATERIALS_UPDATE, MATERIALS_DELETE,
             MATERIAL_CATEGORIES_READ, MATERIAL_CATEGORIES_CREATE, MATERIAL_CATEGORIES_UPDATE,
             MATERIAL_CATEGORIES_DELETE, MATERIAL_EXPORTS_EXPORT,
-            MATERIAL_IMPORTS_READ, MATERIAL_IMPORTS_IMPORT, MATERIAL_IMPORTS_PREVIEW,
-            IMPORT_BATCHES_READ, IMPORT_BATCHES_ROLLBACK,
-            INVENTORY_READ, INVENTORY_CREATE, INVENTORY_UPDATE, INVENTORY_DELETE,
-            INVENTORY_BACKFILL, INVENTORY_REBUILD,
-            CUSTOMER_STATEMENTS_READ, CUSTOMER_STATEMENTS_CREATE, CUSTOMER_STATEMENTS_UPDATE,
-            CUSTOMER_STATEMENTS_DELETE, CUSTOMER_STATEMENTS_AUDIT, CUSTOMER_STATEMENTS_CONFIRM,
-            CUSTOMER_STATEMENTS_PRINT, CUSTOMER_STATEMENTS_EXPORT,
+            MATERIAL_IMPORTS_IMPORT, MATERIAL_IMPORTS_PREVIEW,
+            IMPORT_BATCHES_ROLLBACK,
+            INVENTORY_READ, INVENTORY_BACKFILL, CUSTOMER_STATEMENTS_READ, CUSTOMER_STATEMENTS_CREATE, CUSTOMER_STATEMENTS_UPDATE,
+            CUSTOMER_STATEMENTS_DELETE, CUSTOMER_STATEMENTS_CONFIRM,
             CUSTOMERS_READ, CUSTOMERS_CREATE, CUSTOMERS_UPDATE, CUSTOMERS_DELETE,
             SUPPLIERS_READ, SUPPLIERS_CREATE, SUPPLIERS_UPDATE, SUPPLIERS_DELETE,
             WAREHOUSES_READ, WAREHOUSES_CREATE, WAREHOUSES_UPDATE, WAREHOUSES_DELETE,
             CARRIERS_READ, CARRIERS_CREATE, CARRIERS_UPDATE, CARRIERS_DELETE,
             PROJECTS_READ, PROJECTS_CREATE, PROJECTS_UPDATE, PROJECTS_DELETE,
             QUOTE_SHEETS_READ, QUOTE_SHEETS_CREATE, QUOTE_SHEETS_UPDATE, QUOTE_SHEETS_DELETE,
-            QUOTE_SHEETS_PRINT, QUOTE_SHEETS_EXPORT,
-            STEEL_QUOTES_READ, STEEL_QUOTES_CREATE, STEEL_QUOTES_UPDATE, STEEL_QUOTES_DELETE,
-            STEEL_QUOTES_PRINT, STEEL_QUOTES_EXPORT,
-            PURCHASE_ORDERS_READ, PURCHASE_ORDERS_CREATE, PURCHASE_ORDERS_UPDATE, PURCHASE_ORDERS_DELETE,
-            PURCHASE_ORDERS_AUDIT, PURCHASE_ORDERS_UNAUDIT, PURCHASE_ORDERS_PRINT, PURCHASE_ORDERS_EXPORT,
-            PURCHASE_INBOUNDS_READ, PURCHASE_INBOUNDS_CREATE, PURCHASE_INBOUNDS_UPDATE, PURCHASE_INBOUNDS_DELETE,
-            PURCHASE_INBOUNDS_AUDIT, PURCHASE_INBOUNDS_UNAUDIT, PURCHASE_INBOUNDS_PRINT, PURCHASE_INBOUNDS_EXPORT,
-            FREIGHT_BILLS_READ, FREIGHT_BILLS_CREATE, FREIGHT_BILLS_UPDATE, FREIGHT_BILLS_DELETE,
-            FREIGHT_BILLS_AUDIT, FREIGHT_BILLS_PRINT,
-            FREIGHT_STATEMENTS_READ, FREIGHT_STATEMENTS_CREATE, FREIGHT_STATEMENTS_UPDATE,
+            STEEL_QUOTES_READ, PURCHASE_ORDERS_READ, PURCHASE_ORDERS_CREATE, PURCHASE_ORDERS_UPDATE, PURCHASE_ORDERS_DELETE,
+            PURCHASE_ORDERS_AUDIT, PURCHASE_ORDERS_UNAUDIT, PURCHASE_INBOUNDS_READ, PURCHASE_INBOUNDS_CREATE, PURCHASE_INBOUNDS_UPDATE, PURCHASE_INBOUNDS_DELETE,
+            PURCHASE_INBOUNDS_AUDIT, PURCHASE_INBOUNDS_UNAUDIT, FREIGHT_BILLS_READ, FREIGHT_BILLS_CREATE, FREIGHT_BILLS_UPDATE, FREIGHT_BILLS_DELETE,
+            FREIGHT_BILLS_AUDIT, FREIGHT_STATEMENTS_READ, FREIGHT_STATEMENTS_CREATE, FREIGHT_STATEMENTS_UPDATE,
             FREIGHT_STATEMENTS_DELETE, FREIGHT_STATEMENTS_AUDIT,
-            FINANCE_READ, FINANCE_CREATE, FINANCE_UPDATE, FINANCE_DELETE,
-            FINANCE_COMPLETE, FINANCE_REBUILD,
-            RECEIPTS_READ, RECEIPTS_CREATE, RECEIPTS_UPDATE, RECEIPTS_DELETE, RECEIPTS_AUDIT, RECEIPTS_PRINT,
-            PAYMENTS_READ, PAYMENTS_CREATE, PAYMENTS_UPDATE, PAYMENTS_DELETE, PAYMENTS_AUDIT, PAYMENTS_PRINT,
-            LEDGER_ADJUSTMENTS_READ, LEDGER_ADJUSTMENTS_CREATE, LEDGER_ADJUSTMENTS_UPDATE,
+            FINANCE_READ, RECEIPTS_READ, RECEIPTS_CREATE, RECEIPTS_UPDATE, RECEIPTS_DELETE, RECEIPTS_AUDIT, PAYMENTS_READ, PAYMENTS_CREATE, PAYMENTS_UPDATE, PAYMENTS_DELETE, PAYMENTS_AUDIT, LEDGER_ADJUSTMENTS_READ, LEDGER_ADJUSTMENTS_CREATE, LEDGER_ADJUSTMENTS_UPDATE,
             LEDGER_ADJUSTMENTS_DELETE, LEDGER_ADJUSTMENTS_AUDIT,
-            ATTACHMENTS_READ, ATTACHMENTS_CREATE, ATTACHMENTS_UPDATE, ATTACHMENTS_DELETE, ATTACHMENTS_PREVIEW,
-            ATTACHMENT_UPLOAD_SESSIONS_CREATE, ATTACHMENT_UPLOAD_SESSIONS_COMPLETE,
+            ATTACHMENTS_READ, ATTACHMENTS_CREATE, ATTACHMENTS_UPDATE, ATTACHMENT_UPLOAD_SESSIONS_CREATE, ATTACHMENT_UPLOAD_SESSIONS_COMPLETE,
             ATTACHMENT_MANIFEST_EXPORTS_EXPORT,
             CASH_LEDGER_READ, CASH_LEDGER_EXPORT,
             STEEL_QUOTE_SYNCS_READ, STEEL_QUOTE_SYNCS_SYNC,
@@ -483,8 +428,7 @@ public final class PermissionCodes {
             CODE_ISSUANCES_READ, CODE_ISSUANCES_CREATE,
             USER_ACCOUNTS_READ, USER_ACCOUNTS_UPDATE, USER_ACCOUNTS_WRITE,
             ROLES_READ, ROLES_WRITE, PERMISSIONS_READ,
-            SYSTEM_ADMIN, SYSTEM_READ, SYSTEM_CREATE, SYSTEM_DELETE, SYSTEM_REBUILD,
-            SALES_ORDERS_READ_AMOUNT, SALES_ORDERS_UPDATE_UNIT_PRICE, INVENTORY_READ_COST
+            SYSTEM_ADMIN, SALES_ORDERS_READ_AMOUNT, SALES_ORDERS_UPDATE_UNIT_PRICE, INVENTORY_READ_COST
     );
 
     private PermissionCodes() {
