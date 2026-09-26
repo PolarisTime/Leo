@@ -18,8 +18,6 @@ public final class PrecisionConstants {
     /** 金额精度（元），2 位小数 */
     public static final int AMOUNT_SCALE = 2;
 
-    /** 税率精度，4 位小数 */
-
     /** 默认舍入模式 */
     public static final RoundingMode DEFAULT_ROUNDING = RoundingMode.HALF_UP;
 

@@ -1,5 +1,6 @@
 package com.leo.erp.finance.ledgeradjustment.service;
 
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessStatusValidator;
@@ -135,7 +136,7 @@ public class LedgerAdjustmentApplyService {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "金额必须大于0");
         }
-        return amount.setScale(2, java.math.RoundingMode.HALF_UP);
+        return amount.setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
     }
 
     private ResolvedCounterparty resolveCounterparty(String counterpartyType,

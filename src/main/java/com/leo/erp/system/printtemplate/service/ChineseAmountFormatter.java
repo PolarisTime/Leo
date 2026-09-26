@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.leo.erp.common.support.PrecisionConstants;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -22,7 +23,7 @@ final class ChineseAmountFormatter {
     static String toWords(BigDecimal amount) {
         BigDecimal value = amount == null ? BigDecimal.ZERO : amount;
         boolean negative = value.signum() < 0;
-        value = value.abs().setScale(2, RoundingMode.HALF_UP);
+        value = value.abs().setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
 
         long yuan = value.setScale(0, RoundingMode.DOWN).longValue();
         int cents = value.subtract(BigDecimal.valueOf(yuan)).movePointRight(2).intValue();
@@ -51,7 +52,8 @@ final class ChineseAmountFormatter {
 
     /** 去掉无意义的小数位：1000.00 → 「1000」，250.50 → 「250.50」。 */
     static String plain(BigDecimal amount) {
-        BigDecimal scaled = (amount == null ? BigDecimal.ZERO : amount).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal scaled = (amount == null ? BigDecimal.ZERO : amount)
+                .setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
         String text = scaled.toPlainString();
         return text.endsWith(".00") ? text.substring(0, text.length() - 3) : text;
     }

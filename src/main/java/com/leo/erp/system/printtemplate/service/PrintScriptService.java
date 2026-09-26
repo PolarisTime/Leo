@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.attachment.api.AttachmentRecordAccess;
 import com.leo.erp.common.api.PageQuery;
@@ -181,7 +182,11 @@ public class PrintScriptService {
         BigDecimal totalWeight = sumDecimal(groupItems, "weightTon");
         BigDecimal totalFreight = firstPositiveDecimal(groupItems, "amount");
         BigDecimal unitPrice = totalWeight.signum() > 0
-                ? totalFreight.divide(totalWeight, 2, RoundingMode.HALF_UP)
+                ? totalFreight.divide(
+                        totalWeight,
+                        PrecisionConstants.AMOUNT_SCALE,
+                        PrecisionConstants.DEFAULT_ROUNDING
+                )
                 : BigDecimal.ZERO;
         Map<String, String> header = new LinkedHashMap<>();
         header.put("isGroupHeader", GROUP_HEADER_SOURCE);
@@ -247,7 +252,14 @@ public class PrintScriptService {
     }
 
     private String plainAmount(BigDecimal value) {
-        return value == null ? "0.00" : value.setScale(2, RoundingMode.HALF_UP).toPlainString();
+        return value == null
+                ? "0.00"
+                : value
+                      .setScale(
+                          PrecisionConstants.AMOUNT_SCALE,
+                          PrecisionConstants.DEFAULT_ROUNDING
+                      )
+                      .toPlainString();
     }
 
     private String plainNumber(BigDecimal value) {
