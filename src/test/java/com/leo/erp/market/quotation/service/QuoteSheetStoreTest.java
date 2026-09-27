@@ -1977,4 +1977,117 @@ class QuoteSheetStoreTest {
         assertThat(write.item().purchaseOrderId()).isNull();
         assertThat(write.item().purchaseOrderNo()).isNull();
     }
+
+    /** 含三行(商品行/隔断行/商品行, line_no 1..3)的单据, 供顺序调整用例复用。 */
+    private QuoteSheet sheetWithSeparator(Long id) {
+        QuoteSheet sheet = sheetWithItem(id);
+        QuoteSheetItem first = sheet.getItems().get(0);
+        QuoteSheetItem separator = new QuoteSheetItem();
+        separator.setId(302L);
+        separator.setSheet(sheet);
+        separator.setLineNo(2);
+        separator.setRowType(QuoteRowType.SEPARATOR);
+        QuoteSheetItem last = new QuoteSheetItem();
+        last.setId(303L);
+        last.setSheet(sheet);
+        last.setLineNo(3);
+        last.setRowType(QuoteRowType.PRODUCT);
+        last.setCategory("盘螺");
+        last.setMaterial("HRB400E");
+        last.setSpec(8);
+        last.setLength("9米");
+        first.setRowType(QuoteRowType.PRODUCT);
+        sheet.getItems().add(separator);
+        sheet.getItems().add(last);
+        return sheet;
+    }
+
+    /** 顺序调整: 商品行可越过隔断行, 行号归一化为 1..N 且两阶段写避免唯一键瞬时冲突。 */
+    @Test
+    void reorderItems_movesProductRowAcrossSeparatorAndRenumbers() {
+        QuoteSheet sheet = sheetWithSeparator(9L);
+        sheet.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = store().reorderItems(9L, List.of(303L, 301L, 302L), 1L);
+
+        // 响应按新顺序返回, 行号 1..N
+        assertThat(response.items()).extracting(QuoteSheetResponse.ItemResponse::id)
+                .containsExactly(303L, 301L, 302L);
+        assertThat(response.items()).extracting(QuoteSheetResponse.ItemResponse::lineNo)
+                .containsExactly(1, 2, 3);
+        assertThat(sheet.getItems()).extracting(QuoteSheetItem::getLineNo)
+                .containsExactlyInAnyOrder(1, 2, 3);
+        verify(entityManager).lock(sheet, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+        verify(entityManager).flush();
+    }
+
+    /** 顺序调整: 未列出的行保持原有相对顺序追加到末尾(协同场景下不丢他人新增行)。 */
+    @Test
+    void reorderItems_keepsUnmentionedRowsInOriginalRelativeOrderAtEnd() {
+        QuoteSheet sheet = sheetWithSeparator(9L);
+        sheet.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = store().reorderItems(9L, List.of(303L), 1L);
+
+        assertThat(response.items()).extracting(QuoteSheetResponse.ItemResponse::id)
+                .containsExactly(303L, 301L, 302L);
+    }
+
+    /** 顺序未变化时幂等: 不写库、不推进版本。 */
+    @Test
+    void reorderItems_sameOrder_isNoOp() {
+        QuoteSheet sheet = sheetWithSeparator(9L);
+        sheet.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+
+        QuoteSheetResponse response = store().reorderItems(9L, List.of(301L, 302L, 303L), 1L);
+
+        assertThat(response.items()).extracting(QuoteSheetResponse.ItemResponse::id)
+                .containsExactly(301L, 302L, 303L);
+        verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
+        verifyNoInteractions(entityManager);
+    }
+
+    /** 不属于该单据的行 id: 语义校验失败(422), 不写库。 */
+    @Test
+    void reorderItems_unknownItemId_isRejected() {
+        QuoteSheet sheet = sheetWithSeparator(9L);
+        sheet.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+
+        assertThatThrownBy(() -> store().reorderItems(9L, List.of(301L, 999L), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("商品行不存在");
+        verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
+    }
+
+    /** 重复行 id: 语义校验失败(422), 不写库。 */
+    @Test
+    void reorderItems_duplicateItemId_isRejected() {
+        QuoteSheet sheet = sheetWithSeparator(9L);
+        sheet.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+
+        assertThatThrownBy(() -> store().reorderItems(9L, List.of(301L, 301L), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("行 id 重复");
+        verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
+    }
+
+    /** 版本不匹配: 前置条件失败(412), 不写库。 */
+    @Test
+    void reorderItems_versionMismatch_isRejected() {
+        QuoteSheet sheet = sheetWithSeparator(9L);
+        sheet.setVersion(5L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(sheet));
+
+        assertThatThrownBy(() -> store().reorderItems(9L, List.of(303L), 3L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("版本已变更");
+        verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
+    }
 }

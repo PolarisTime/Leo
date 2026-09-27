@@ -253,6 +253,71 @@ public class QuoteSheetStore {
     }
 
     /**
+     * 调整商品行顺序: 按请求顺序重排这些行, 未列出的行保持原有相对顺序追加到末尾。
+     *
+     * <p>用两阶段写行号: 先把全部行写成临时负数行号并 flush, 再写成最终 1..N, 避免
+     * {@code uk_quote_item_line} 在换位(如 1↔2)过程中出现瞬时重复。</p>
+     *
+     * <p>顺序未变化时直接返回: 不写库、不推进版本, 保证 PUT 子资源幂等。</p>
+     */
+    @Transactional
+    public QuoteSheetResponse reorderItems(Long sheetId, List<Long> itemIds, Long expectedVersion) {
+        QuoteSheet sheet = requireSheet(sheetId);
+        checkVersion(sheet.getVersion(), expectedVersion);
+        List<QuoteSheetItem> current = sortedByLineNo(sheet.getItems());
+        List<QuoteSheetItem> ordered = resolveItemOrder(current, itemIds);
+        if (ordered.equals(current)) {
+            return toResponse(sheet);
+        }
+        // 与行级写入口同一处理: 只变子集合时 Hibernate 不会标脏父行, 需显式强制自增版本
+        entityManager.lock(sheet, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+        int tempLineNo = 0;
+        for (QuoteSheetItem item : ordered) {
+            item.setLineNo(--tempLineNo);
+        }
+        entityManager.flush();
+        int lineNo = 0;
+        for (QuoteSheetItem item : ordered) {
+            item.setLineNo(++lineNo);
+        }
+        repository.saveAndFlush(sheet);
+        return toResponse(sheet);
+    }
+
+    /**
+     * 校验请求行 id 并生成目标顺序: 请求中的行按请求顺序在前, 未列出的行按原相对顺序在后。
+     *
+     * @throws BusinessException 行 id 为空/重复/不属于该单据(语义校验失败 422)
+     */
+    private static List<QuoteSheetItem> resolveItemOrder(List<QuoteSheetItem> current, List<Long> itemIds) {
+        Map<Long, QuoteSheetItem> byId = new LinkedHashMap<>();
+        for (QuoteSheetItem item : current) {
+            byId.put(item.getId(), item);
+        }
+        Set<Long> mentioned = new LinkedHashSet<>();
+        List<QuoteSheetItem> ordered = new ArrayList<>(current.size());
+        for (Long itemId : itemIds) {
+            if (itemId == null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "行 id 不能为空");
+            }
+            if (!mentioned.add(itemId)) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "行 id 重复: " + itemId);
+            }
+            QuoteSheetItem item = byId.get(itemId);
+            if (item == null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "商品行不存在: " + itemId);
+            }
+            ordered.add(item);
+        }
+        for (QuoteSheetItem item : current) {
+            if (!mentioned.contains(item.getId())) {
+                ordered.add(item);
+            }
+        }
+        return ordered;
+    }
+
+    /**
      * 行级写入口: 读取父单据、做版本前置校验, 并显式强制自增父版本。
      * <p>
      * {@code QuoteSheet.brands/items} 是 {@code mappedBy} 反向集合, 仅变更子集合时 Hibernate
@@ -935,7 +1000,8 @@ public class QuoteSheetStore {
                 .map(brand -> new QuoteSheetResponse.BrandResponse(
                         brand.getId(), brand.getBrandName(), brand.getFreight(), brand.getSortOrder()))
                 .toList();
-        List<QuoteSheetResponse.ItemResponse> items = entity.getItems().stream()
+        // 按 line_no 排序返回: 事务内刚调整过顺序时, 内存集合顺序可能与行号不一致
+        List<QuoteSheetResponse.ItemResponse> items = sortedByLineNo(entity.getItems()).stream()
                 .map(this::toItemResponse)
                 .toList();
         return new QuoteSheetResponse(entity.getId(), entity.getSheetNo(), entity.getName(), entity.getProjectId(),

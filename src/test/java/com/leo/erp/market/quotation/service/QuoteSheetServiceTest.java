@@ -171,4 +171,28 @@ class QuoteSheetServiceTest {
                 LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30"),
                 false, false, "报价", null, List.of(), List.of(), null, null, 3L);
     }
+    /** 顺序调整: 先校验编辑签出锁, 再委托存储层, 并以提交后的回读版本覆盖响应版本。 */
+    @Test
+    void reorderItems_checksEditLockThenDelegates() {
+        when(store.reorderItems(eq(9L), eq(java.util.List.of(303L, 301L)), eq(3L))).thenReturn(response());
+        when(store.currentVersion(9L)).thenReturn(8L);
+
+        QuoteSheetResponse result = service.reorderItems(9L, java.util.List.of(303L, 301L), 3L, 7L);
+
+        assertThat(result.version()).isEqualTo(8L);
+        verify(editLockService).ensureWritable(9L, 7L);
+        verify(store).reorderItems(9L, java.util.List.of(303L, 301L), 3L);
+    }
+
+    /** 顺序调整: 版本冲突(412)不重试, 直接冒泡。 */
+    @Test
+    void reorderItems_propagatesVersionConflictWithoutRetry() {
+        when(store.reorderItems(eq(9L), any(), eq(2L)))
+                .thenThrow(new BusinessException(ErrorCode.PRECONDITION_FAILED, "版本不匹配"));
+
+        assertThatThrownBy(() -> service.reorderItems(9L, java.util.List.of(303L), 2L, 7L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("版本不匹配");
+        verify(store, times(1)).reorderItems(eq(9L), any(), eq(2L));
+    }
 }

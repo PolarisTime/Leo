@@ -81,6 +81,14 @@ public class QuoteSheetService {
                 () -> withCurrentVersion(store.updateItem(sheetId, itemId, request, expectedVersion), sheetId));
     }
 
+    /** 调整商品行顺序(子资源 item-order): 行号由服务端归一化为 1..N。 */
+    public QuoteSheetResponse reorderItems(Long sheetId, java.util.List<Long> itemIds,
+                                           Long expectedVersion, Long ownerId) {
+        editLockService.ensureWritable(sheetId, ownerId);
+        return withLock(sheetId,
+                () -> withCurrentVersion(store.reorderItems(sheetId, itemIds, expectedVersion), sheetId));
+    }
+
     public Long deleteItem(Long sheetId, Long itemId, Long expectedVersion, Long ownerId) {
         editLockService.ensureWritable(sheetId, ownerId);
         return withLock(sheetId, () -> withCurrentVersion(store.deleteItem(sheetId, itemId, expectedVersion), sheetId));

@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** 报价单 DTO JSON 契约: 雪花 ID 必须输出为字符串。 */
 class QuoteSheetDtoJsonContractTest {
@@ -165,5 +166,32 @@ class QuoteSheetDtoJsonContractTest {
 
         assertThat(json).contains("\"purchaseOrderId\":\"88\"");
         assertThat(json).contains("\"purchaseOrderNo\":\"PO-88\"");
+    }
+    /** 行顺序请求: 雪花 ID 只接受十进制字符串。 */
+    @Test
+    void itemOrderRequest_acceptsDecimalStringIds() throws Exception {
+        QuoteSheetItemOrderRequest request = objectMapper.readValue(
+                "{\"itemIds\":[\"9223372036854775807\",\"301\"]}", QuoteSheetItemOrderRequest.class);
+
+        assertThat(request.itemIds()).containsExactly(9223372036854775807L, 301L);
+    }
+
+    /** 行顺序请求: 数值型雪花 ID 必须被拒绝(JS Number 会丢低位)。 */
+    @Test
+    void itemOrderRequest_rejectsNumericIds() {
+        assertThatThrownBy(() -> objectMapper.readValue(
+                "{\"itemIds\":[9223372036854775807]}", QuoteSheetItemOrderRequest.class))
+                .hasMessageContaining("雪花 ID 必须以十进制字符串传递");
+    }
+
+    /** 行顺序请求: 非正整数/非数字字符串一律拒绝。 */
+    @Test
+    void itemOrderRequest_rejectsInvalidIds() {
+        assertThatThrownBy(() -> objectMapper.readValue(
+                "{\"itemIds\":[\"0\"]}", QuoteSheetItemOrderRequest.class))
+                .hasMessageContaining("雪花 ID 必须为正整数");
+        assertThatThrownBy(() -> objectMapper.readValue(
+                "{\"itemIds\":[\"abc\"]}", QuoteSheetItemOrderRequest.class))
+                .hasMessageContaining("雪花 ID 必须为十进制整数字符串");
     }
 }

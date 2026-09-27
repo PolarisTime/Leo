@@ -10,6 +10,7 @@ import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.market.quotation.QuotationProperties;
 import com.leo.erp.market.quotation.service.QuoteSheetItemWrite;
 import com.leo.erp.market.quotation.service.QuoteSheetService;
+import com.leo.erp.market.quotation.web.dto.QuoteSheetItemOrderRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
 import com.leo.erp.market.quotation.web.dto.PurchaseOrderTonnageResponse;
@@ -117,6 +118,28 @@ public class V2QuoteSheetController {
             @RequestHeader(value = "If-Match", required = false) String ifMatch,
             @Valid @RequestBody QuoteSheetRequest request) {
         QuoteSheetResponse response = quoteSheetService.update(id, request,
+                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()),
+                ownerId(principal));
+        return withVersion(response, response.version());
+    }
+
+    @Operation(summary = "调整商品行顺序",
+            description = "按请求 itemIds 的先后顺序排列这些行, 未列出的行保持原有相对顺序排在末尾; "
+                    + "行号由服务端归一化为 1..N。itemIds 必须是十进制字符串(拒绝 JSON number), "
+                    + "不属于该单据或重复的 id 返回 422。顺序未变化时不写库、不推进版本(PUT 幂等)。"
+                    + "要求 " + VERSION_HEADER + ", " + VERSION_ALIAS_NOTE
+                    + " 缺少版本返回 428, 版本不匹配返回 412; 响应头回传最新版本。")
+    @PutMapping("/{id}/item-order")
+    @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
+    public ResponseEntity<QuoteSheetResponse> reorderItems(
+            @AuthenticationPrincipal SecurityPrincipal principal,
+            @PathVariable Long id,
+            @Parameter(description = "资源版本(强比较), 如 3")
+            @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
+            @Parameter(description = "兼容别名, 非标准弱验证器用法")
+            @RequestHeader(value = "If-Match", required = false) String ifMatch,
+            @Valid @RequestBody QuoteSheetItemOrderRequest request) {
+        QuoteSheetResponse response = quoteSheetService.reorderItems(id, request.itemIds(),
                 ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()),
                 ownerId(principal));
         return withVersion(response, response.version());
