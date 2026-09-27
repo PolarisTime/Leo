@@ -1,3 +1,10 @@
+# [11.17.0](https://github.com/PolarisTime/Leo/compare/v11.16.0...v11.17.0) (2026-09-27)
+
+
+### Features
+
+* **quote-sheets:** 新增商品行顺序子资源, 支持拖动换行后持久化 ([0d9534d](https://github.com/PolarisTime/Leo/commit/0d9534dfaf3a409342b7607a77e403886806a09c))
+
 # [11.16.0](https://github.com/PolarisTime/Leo/compare/v11.15.0...v11.16.0) (2026-09-27)
 
 
