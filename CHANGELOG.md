@@ -1,3 +1,25 @@
+# [11.16.0](https://github.com/PolarisTime/Leo/compare/v11.15.0...v11.16.0) (2026-09-27)
+
+
+### Bug Fixes
+
+* **api:** 修正行锁定语义注释并清理采购订单吨位死代码 ([29e8948](https://github.com/PolarisTime/Leo/commit/29e8948678b441524d31829dd9ae2c55f4dc4900))
+* **attachment:** S3 预签名 Content-Disposition 改用 Spring 安全构造 ([243bf25](https://github.com/PolarisTime/Leo/commit/243bf25a4bcf1af8f2c24ec89e53c5f563fc2892))
+* **attachment:** 本地存储加密开关误用 S3 配置, 并集中加密常量 ([6df38ea](https://github.com/PolarisTime/Leo/commit/6df38eaf7b886e20962aa9d10ec2fbabf6b040dd))
+* **build:** 移除 PrintScriptService 未使用 import, 修复 checkstyle 阻塞 ([c6fe0c1](https://github.com/PolarisTime/Leo/commit/c6fe0c1e36eb11e835051f1f09aa09ac1af57247))
+* **deps:** 回退 javers 至 7.9.0, 修复依赖升级导致的后端无法启动 ([83f4a0a](https://github.com/PolarisTime/Leo/commit/83f4a0a97ed24084a0454dadb80bbfd190835409))
+* **migration:** 还原 V165 已执行内容, 修复 Flyway checksum 不匹配 ([d4223a1](https://github.com/PolarisTime/Leo/commit/d4223a12b21286aae6771c896d4870c3669eb205))
+* **observability:** 完善后端日志(堆栈/MDC/路径/access log/动态级别) ([b92ba01](https://github.com/PolarisTime/Leo/commit/b92ba013312b9ffb685e09758de6f6dd9adf5ca1))
+* **print-template:** 底版资源路径校验补充反斜杠穿越防护 ([f368175](https://github.com/PolarisTime/Leo/commit/f3681756732bb109a561b4c4f4be01de90d974c5))
+* **security:** 状态变更受控动作权限门禁, 修复审核权限可被 update 绕过 ([606686c](https://github.com/PolarisTime/Leo/commit/606686c97cc81d1483f99a58e1a5db6b7e8d9224))
+
+
+### Features
+
+* **api:** 报价明细行级锁定作为采购订单关联门禁 ([914a29b](https://github.com/PolarisTime/Leo/commit/914a29b65c5fed6061092cba742299b44b303116))
+* **print:** 项目级记忆上次打印所选模板 ([84a3004](https://github.com/PolarisTime/Leo/commit/84a3004b63fec2442f6de14c28e5ffee6814b300))
+* **quotation:** 报单比价吨位扣减下沉到采购订单明细行, 支持按规格核对 ([ee44f6f](https://github.com/PolarisTime/Leo/commit/ee44f6f55d4002aac68dc870562ef3172540f793))
+
 # [11.15.0](https://github.com/PolarisTime/Leo/compare/v11.14.0...v11.15.0) (2026-09-24)
 
 
