@@ -4,6 +4,7 @@ import com.leo.erp.common.api.ApiFieldError;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.market.pricelist.domain.entity.SupplierPriceAdjustment;
@@ -60,6 +61,13 @@ public class SupplierPriceListStore {
 
     private static final String VERSION_CONFLICT_MESSAGE = "同一供应商与品牌在该发布时刻已存在生效版本，请调整发布时刻或先归档旧版本";
 
+    /**
+     * 状态写入守卫: 模块边界门禁只允许 ApplyService / CompletionSyncService / CrudStatusGuard
+     * 写入实体状态, 直接调用 {@code entity.setStatus(...)} 会被判为旁路状态写入(CI 架构门禁失败)。
+     */
+    private static final CrudStatusGuard<SupplierPriceList> STATUS_GUARD =
+            CrudStatusGuard.forStatusAwareEntities();
+
     private final SupplierPriceListRepository listRepository;
     private final SupplierPriceItemRepository itemRepository;
     private final SupplierPriceAdjustmentRepository adjustmentRepository;
@@ -105,7 +113,7 @@ public class SupplierPriceListStore {
         entity.setSupplierId(request.supplierId());
         entity.setSupplierName(supplierName);
         entity.setBrandName(brandName);
-        entity.setStatus(SupplierPriceList.STATUS_ACTIVE);
+        STATUS_GUARD.writeStatus(entity, SupplierPriceList.STATUS_ACTIVE);
         applyHeader(entity, request);
         applyItems(entity, items);
         Long archivedListId = archiveEarlierActiveVersions(request.supplierId(), brandName, entity.getReleasedAt());
@@ -481,7 +489,7 @@ public class SupplierPriceListStore {
             }
         }
         for (SupplierPriceList active : toArchive) {
-            active.setStatus(SupplierPriceList.STATUS_ARCHIVED);
+            STATUS_GUARD.writeStatus(active, SupplierPriceList.STATUS_ARCHIVED);
         }
         listRepository.saveAll(toArchive);
         // 先落库归档, 让部分唯一索引不再命中旧的行, 再插入新生效版本

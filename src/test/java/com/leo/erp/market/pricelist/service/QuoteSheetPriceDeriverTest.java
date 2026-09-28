@@ -149,6 +149,105 @@ class QuoteSheetPriceDeriverTest {
                 "螺纹钢", "抗震钢E", 12, "9米").reason()).isEqualTo(SpotReason.NO_LIST_AT_TIME);
     }
 
+    // ---------------------------------------------------------------- 类别别名(直条 ≡ 螺纹钢)
+
+    /** 真实主路径: 价格表条目存 md_material 的 {@code 直条}, 比价单行写 {@code 螺纹钢}。 */
+    @Test
+    void derivesPriceWhenEntryUsesZhitiaoAndQuoteRowUsesLuowengang() {
+        SupplierPriceList list = list(1L, "安徽富鑫", LocalDateTime.of(2026, 9, 28, 8, 0));
+        SupplierPriceItem entry = item(10L, list, "3220.00");
+        entry.setCategory(CategoryNormalizer.MATERIAL_CATEGORY_REBAR);
+        when(listRepository.findActiveAsOf(QUOTE_AS_OF)).thenReturn(List.of(list));
+        when(itemRepository.findByListIdIn(any())).thenReturn(List.of(entry));
+
+        QuoteSheetPriceDeriver.BrandSelection selection =
+                deriver().selectBrands(List.of("安徽富鑫"), List.of(), QUOTE_AS_OF);
+
+        QuoteSheetPriceDeriver.DerivedSpot spot = QuoteSheetPriceDeriver.derive(
+                selection.entryOf("安徽富鑫"), "螺纹钢", "抗震钢E", 12, "9米");
+        assertThat(spot.matched()).isTrue();
+        assertThat(spot.price()).isEqualByComparingTo("3220.00");
+    }
+
+    /** 反向: 价格表条目存 {@code 螺纹钢}, 比价单行写 {@code 直条}。 */
+    @Test
+    void derivesPriceWhenEntryUsesLuowengangAndQuoteRowUsesZhitiao() {
+        SupplierPriceList list = list(1L, "安徽富鑫", LocalDateTime.of(2026, 9, 28, 8, 0));
+        SupplierPriceItem entry = item(10L, list, "3220.00");
+        when(listRepository.findActiveAsOf(QUOTE_AS_OF)).thenReturn(List.of(list));
+        when(itemRepository.findByListIdIn(any())).thenReturn(List.of(entry));
+
+        QuoteSheetPriceDeriver.BrandSelection selection =
+                deriver().selectBrands(List.of("安徽富鑫"), List.of(), QUOTE_AS_OF);
+
+        QuoteSheetPriceDeriver.DerivedSpot spot = QuoteSheetPriceDeriver.derive(
+                selection.entryOf("安徽富鑫"), CategoryNormalizer.MATERIAL_CATEGORY_REBAR, "抗震钢E", 12, "9米");
+        assertThat(spot.matched()).isTrue();
+        assertThat(spot.price()).isEqualByComparingTo("3220.00");
+    }
+
+    /** 同一 (material, spec, length) 下同时有 直条 与 盘螺 时不得串味。 */
+    @Test
+    void normalizedMatchDoesNotBleedAcrossDifferentCategories() {
+        SupplierPriceList list = list(1L, "安徽富鑫", LocalDateTime.of(2026, 9, 28, 8, 0));
+        SupplierPriceItem rebar = item(10L, list, "3220.00");
+        rebar.setCategory(CategoryNormalizer.MATERIAL_CATEGORY_REBAR);
+        SupplierPriceItem wireRod = item(11L, list, "3500.00");
+        wireRod.setCategory("盘螺");
+        when(listRepository.findActiveAsOf(QUOTE_AS_OF)).thenReturn(List.of(list));
+        when(itemRepository.findByListIdIn(any())).thenReturn(List.of(rebar, wireRod));
+
+        QuoteSheetPriceDeriver.BrandSelection selection =
+                deriver().selectBrands(List.of("安徽富鑫"), List.of(), QUOTE_AS_OF);
+
+        // 螺纹钢(规范化后等于 直条)只能拿到直条价
+        assertThat(QuoteSheetPriceDeriver.derive(selection.entryOf("安徽富鑫"),
+                "螺纹钢", "抗震钢E", 12, "9米").price()).isEqualByComparingTo("3220.00");
+        // 盘螺不受别名影响, 走精确命中
+        assertThat(QuoteSheetPriceDeriver.derive(selection.entryOf("安徽富鑫"),
+                "盘螺", "抗震钢E", 12, "9米").price()).isEqualByComparingTo("3500.00");
+    }
+
+    /** 精确命中优先于规范化命中: 同名不同类别不得被别名规则顶掉。 */
+    @Test
+    void exactCategoryMatchWinsOverNormalizedMatch() {
+        SupplierPriceList list = list(1L, "安徽富鑫", LocalDateTime.of(2026, 9, 28, 8, 0));
+        SupplierPriceItem exact = item(10L, list, "1111.00");
+        exact.setCategory(CategoryNormalizer.MATERIAL_CATEGORY_REBAR);
+        SupplierPriceItem aliasTarget = item(11L, list, "9999.00");
+        aliasTarget.setCategory("螺纹钢");
+        when(listRepository.findActiveAsOf(QUOTE_AS_OF)).thenReturn(List.of(list));
+        when(itemRepository.findByListIdIn(any())).thenReturn(List.of(exact, aliasTarget));
+
+        QuoteSheetPriceDeriver.BrandSelection selection =
+                deriver().selectBrands(List.of("安徽富鑫"), List.of(), QUOTE_AS_OF);
+
+        // 单据写 直条: 必须精确命中 直条 那条, 而不是规范化后的 螺纹钢 那条
+        assertThat(QuoteSheetPriceDeriver.derive(selection.entryOf("安徽富鑫"),
+                CategoryNormalizer.MATERIAL_CATEGORY_REBAR, "抗震钢E", 12, "9米").price())
+                .isEqualByComparingTo("1111.00");
+    }
+
+    /** 规范化回退只改类别, 材质/规格/定尺仍须相等。 */
+    @Test
+    void normalizedMatchStillRequiresMaterialSpecAndLength() {
+        SupplierPriceList list = list(1L, "安徽富鑫", LocalDateTime.of(2026, 9, 28, 8, 0));
+        SupplierPriceItem entry = item(10L, list, "3220.00");
+        entry.setCategory(CategoryNormalizer.MATERIAL_CATEGORY_REBAR);
+        when(listRepository.findActiveAsOf(QUOTE_AS_OF)).thenReturn(List.of(list));
+        when(itemRepository.findByListIdIn(any())).thenReturn(List.of(entry));
+
+        QuoteSheetPriceDeriver.BrandSelection selection =
+                deriver().selectBrands(List.of("安徽富鑫"), List.of(), QUOTE_AS_OF);
+
+        assertThat(QuoteSheetPriceDeriver.derive(selection.entryOf("安徽富鑫"),
+                "螺纹钢", "抗震钢E", 16, "9米").reason()).isEqualTo(SpotReason.NO_ITEM);
+        assertThat(QuoteSheetPriceDeriver.derive(selection.entryOf("安徽富鑫"),
+                "螺纹钢", "抗震钢E", 12, "12米").reason()).isEqualTo(SpotReason.NO_ITEM);
+        assertThat(QuoteSheetPriceDeriver.derive(selection.entryOf("安徽富鑫"),
+                "螺纹钢", "HRB400E", 12, "9米").reason()).isEqualTo(SpotReason.NO_ITEM);
+    }
+
     private static SupplierPriceList list(Long id, String brandName, LocalDateTime releasedAt) {
         SupplierPriceList list = new SupplierPriceList();
         list.setId(id);

@@ -204,8 +204,18 @@ class QuoteSheetStoreTest {
                 new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("铜陵富鑫", new BigDecimal("3300"), null))), 1L);
 
+        // 价格格按"该单据品牌列 × 该行"生成(新契约): 每个品牌都有格, 未落库的品牌为 NONE
         assertThat(added.item().prices()).extracting(QuoteSheetResponse.ItemPriceResponse::brandName)
-                .containsExactly("铜陵富鑫");
+                .containsExactly("中天", "铜陵富鑫");
+        assertThat(added.item().prices()).filteredOn(cell -> "铜陵富鑫".equals(cell.brandName()))
+                .singleElement()
+                .satisfies(cell -> {
+                    assertThat(cell.spotPrice()).isEqualByComparingTo("3300");
+                    assertThat(cell.spotSource()).isEqualTo("MANUAL");
+                });
+        assertThat(added.item().prices()).filteredOn(cell -> "中天".equals(cell.brandName()))
+                .singleElement()
+                .satisfies(cell -> assertThat(cell.spotPrice()).isNull());
         assertThat(existing.getBrands()).extracting(QuoteSheetBrand::getBrandName)
                 .containsExactly("中天", "铜陵富鑫");
         verify(quoteProjectConfigRepository, atLeastOnce()).findByProjectIdAndDeletedFlagFalse(77L);
@@ -285,7 +295,7 @@ class QuoteSheetStoreTest {
         QuoteSheetResponse response = store().create(request);
 
         assertThat(response.items().get(0).prices()).extracting(QuoteSheetResponse.ItemPriceResponse::brandName)
-                .containsExactly("铜陵富鑫");
+                .containsExactly("中天", "铜陵富鑫");
         assertThat(response.brands()).extracting(QuoteSheetResponse.BrandResponse::brandName)
                 .containsExactly("中天", "铜陵富鑫");
     }
@@ -415,7 +425,7 @@ class QuoteSheetStoreTest {
                         List.of(new QuoteSheetRequest.ItemPriceRequest("沙钢", new BigDecimal("3300"), null))), 1L);
 
         assertThat(added.item().prices()).extracting(QuoteSheetResponse.ItemPriceResponse::brandName)
-                .containsExactly("沙钢");
+                .containsExactly("中天", "沙钢");
         assertThat(existing.getBrands()).extracting(QuoteSheetBrand::getBrandName)
                 .containsExactly("中天", "沙钢");
     }

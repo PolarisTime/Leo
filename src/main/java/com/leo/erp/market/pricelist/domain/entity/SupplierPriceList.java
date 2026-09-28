@@ -1,6 +1,7 @@
 package com.leo.erp.market.pricelist.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -28,7 +29,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "mk_supplier_price_list")
-public class SupplierPriceList extends AbstractAuditableEntity {
+public class SupplierPriceList extends AbstractAuditableEntity implements StatusAwareEntity {
 
     public static final String STATUS_ACTIVE = "ACTIVE";
     public static final String STATUS_ARCHIVED = "ARCHIVED";
@@ -79,5 +80,20 @@ public class SupplierPriceList extends AbstractAuditableEntity {
 
     public boolean isArchived() {
         return STATUS_ARCHIVED.equals(status);
+    }
+
+    /**
+     * 状态读取(框架 {@code CrudStatusGuard} 契约): 实现 {@link StatusAwareEntity} 后,
+     * 状态写入必须经守卫白名单类(如本包的 {@code SupplierPriceListStore})调用
+     * {@code CrudStatusGuard.writeStatus}, 否则会被模块边界门禁判定为旁路状态写入。
+     */
+    @Override
+    public String getStatus() {
+        return status;
+    }
+
+    @Override
+    public void setStatus(String status) {
+        this.status = status;
     }
 }

@@ -85,13 +85,25 @@ public class QuoteSheetPriceDeriver {
         return new BrandEntry(selected, byKey);
     }
 
-    /** 按选中结果推导单个格子的现货价。 */
+    /**
+     * 按选中结果推导单个格子的现货价。
+     *
+     * <p><b>匹配优先级</b>(见 {@link CategoryNormalizer}):</p>
+     * <ol>
+     *   <li>先按 {@code (category, material, spec, length)} <b>精确</b>命中
+     *       (两边类别写法一致时, 如同为 {@code 盘螺});</li>
+     *   <li>精确未命中时, 再按<b>规范化类别</b>命中(镜像前端 {@code normalizeCategory}:
+     *       {@code 直条} ≡ {@code 螺纹钢}, 解决 md_material 用 {@code 直条} 而
+     *       mk_quote_item 用 {@code 螺纹钢} 的真实主路径);</li>
+     *   <li>仍未命中才是 {@code NO_ITEM}。</li>
+     * </ol>
+     */
     public static DerivedSpot derive(BrandEntry entry, String category, String material,
                                      Integer spec, String length) {
         if (entry == null || entry.list() == null) {
             return DerivedSpot.unmatched(SpotReason.NO_LIST_AT_TIME);
         }
-        SupplierPriceItem item = entry.items().get(SupplierPriceItem.key(category, material, spec, length));
+        SupplierPriceItem item = matchItem(entry, category, material, spec, length);
         if (item == null) {
             return DerivedSpot.unmatched(SpotReason.NO_ITEM);
         }
@@ -102,6 +114,34 @@ public class QuoteSheetPriceDeriver {
         return new DerivedSpot(list.getId(), list.getSupplierId(), list.getSupplierName(),
                 list.getReleasedAt(), item.getPrice(), item.getPriceStatus() == null
                         ? null : item.getPriceStatus().name(), null);
+    }
+
+    /**
+     * 条目匹配: 精确键优先, 未命中时回退到规范化类别。
+     *
+     * <p>规范化回退时按 {@code (material, spec, length)} 过滤后再比较规范化类别,
+     * 并按键升序取第一条以保证确定性; 这样同一 {@code (material, spec, length)} 下
+     * 同时存在 {@code 直条} 与 {@code 盘螺} 两个条目时也不会串味。</p>
+     *
+     * @return 命中的条目; 无命中返回 null
+     */
+    private static SupplierPriceItem matchItem(BrandEntry entry, String category, String material,
+                                               Integer spec, String length) {
+        SupplierPriceItem exact = entry.items().get(SupplierPriceItem.key(category, material, spec, length));
+        if (exact != null) {
+            return exact;
+        }
+        String normalizedCategory = CategoryNormalizer.normalize(category);
+        if (normalizedCategory == null) {
+            return null;
+        }
+        return entry.items().values().stream()
+                .filter(item -> java.util.Objects.equals(item.getMaterial(), material))
+                .filter(item -> java.util.Objects.equals(item.getSpec(), spec))
+                .filter(item -> java.util.Objects.equals(item.getLength(), length))
+                .filter(item -> normalizedCategory.equals(CategoryNormalizer.normalize(item.getCategory())))
+                .min(java.util.Comparator.comparing(SupplierPriceItem::keyOf))
+                .orElse(null);
     }
 
     /** 单个格子的推导结果(未命中时 {@code reason} 非空)。 */

@@ -1009,7 +1009,8 @@ public class QuoteSheetStore {
     }
 
     private QuoteSheetResponse toResponse(QuoteSheet entity) {
-        List<QuoteSheetResponse.BrandResponse> brands = entity.getBrands().stream()
+        List<QuoteSheetBrand> brands = sortedBySortOrder(entity.getBrands());
+        List<QuoteSheetResponse.BrandResponse> brandResponses = brands.stream()
                 .map(brand -> new QuoteSheetResponse.BrandResponse(
                         brand.getId(), brand.getBrandName(), brand.getFreight(), brand.getSortOrder()))
                 .toList();
@@ -1018,38 +1019,131 @@ public class QuoteSheetStore {
                 priceService == null ? Map.of() : priceService.toCells(entity);
         // 按 line_no 排序返回: 事务内刚调整过顺序时, 内存集合顺序可能与行号不一致
         List<QuoteSheetResponse.ItemResponse> items = sortedByLineNo(entity.getItems()).stream()
-                .map(item -> toItemResponse(item, derived.getOrDefault(item.getId(), Map.of())))
+                .map(item -> toItemResponse(item, brands, derived.getOrDefault(item.getId(), Map.of())))
                 .toList();
         return new QuoteSheetResponse(entity.getId(), entity.getSheetNo(), entity.getName(), entity.getProjectId(),
                 entity.getProjectName(), entity.getOrderDate(), entity.getRefDate(), entity.getRefPeriod(),
                 entity.getLengthPremium(), entity.isLocked(), entity.isSpecQuantityLocked(), entity.getStatus(),
-                entity.getRemark(), brands, items, entity.getCreatedAt(), entity.getUpdatedAt(), entity.getVersion());
+                entity.getRemark(), brandResponses, items, entity.getCreatedAt(), entity.getUpdatedAt(),
+                entity.getVersion());
     }
 
+    /**
+     * 构造行响应: 价格格按 <b>该单据品牌列 × 该行</b> 生成, 而不是只遍历已落库的
+     * {@code mk_quote_item_price} 行。
+     *
+     * <p>这一步是"现货价自动带出"的主路径: 用户只填规格与数量、一格手填价都没有时,
+     * 读接口仍必须给出每个品牌的推导价与供应商; 只注解已有行会让整张单据的价格格为空。</p>
+     */
     private QuoteSheetResponse.ItemResponse toItemResponse(QuoteSheetItem item,
-                                                          Map<String, QuoteSheetResponse.ItemPriceResponse> cells) {
+                                                          List<QuoteSheetBrand> brands,
+                                                          Map<String, QuoteSheetResponse.ItemPriceResponse> derived) {
         return new QuoteSheetResponse.ItemResponse(
                 item.getId(), item.getLineNo(), item.getRowType(), item.getCategory(), item.getMaterial(),
                 item.getSpec(), item.getLength(), item.getRemark(), item.getTon(), item.isPurchased(),
                 item.isLocked(),
                 item.getPurchaseOrderId(), item.getPurchaseOrderNo(), item.getPurchaseOrderItemId(),
-                item.getPrices().stream()
-                        .map(price -> {
-                            QuoteSheetResponse.ItemPriceResponse cell = cells.get(price.getBrandName());
-                            return cell != null ? cell : new QuoteSheetResponse.ItemPriceResponse(
-                                    price.getId(), price.getBrandName(), price.getSpotPrice(),
-                                    price.getSupplierId(), price.getSupplierName(),
-                                    price.getSpotPrice(), "MANUAL", null,
-                                    price.getPriceSource(), price.getPriceListId(),
-                                    price.getPriceListReleasedAt(), null);
-                        })
-                        .toList());
+                buildPrices(item, brands, derived));
     }
 
     /** 行级写返回单行: 复用读时推导口径并写回权威来源字段。 */
     private QuoteSheetResponse.ItemResponse toItemResponse(QuoteSheetItem item) {
-        Map<Long, Map<String, QuoteSheetResponse.ItemPriceResponse>> derived =
-                priceService == null ? Map.of() : priceService.toCells(item.getSheet());
-        return toItemResponse(item, derived.getOrDefault(item.getId(), Map.of()));
+        QuoteSheet sheet = item.getSheet();
+        Map<String, QuoteSheetResponse.ItemPriceResponse> derived = priceService == null
+                ? Map.of()
+                : priceService.toCells(sheet).getOrDefault(item.getId(), Map.of());
+        return toItemResponse(item, sortedBySortOrder(sheet.getBrands()), derived);
+    }
+
+    /**
+     * 按品牌列生成价格格(顺序稳定、无重复)。
+     * <p>隔断行不携带价格, 恒为空列表。</p>
+     */
+    private static List<QuoteSheetResponse.ItemPriceResponse> buildPrices(
+            QuoteSheetItem item,
+            List<QuoteSheetBrand> brands,
+            Map<String, QuoteSheetResponse.ItemPriceResponse> derived) {
+        if (item.getRowType() == QuoteRowType.SEPARATOR) {
+            return List.of();
+        }
+        Map<String, QuoteSheetItemPrice> storedByBrand = new LinkedHashMap<>();
+        for (QuoteSheetItemPrice price : item.getPrices()) {
+            storedByBrand.putIfAbsent(price.getBrandName(), price);
+        }
+        List<QuoteSheetResponse.ItemPriceResponse> cells = new ArrayList<>(brands.size());
+        for (QuoteSheetBrand brand : brands) {
+            String brandName = brand.getBrandName();
+            BigDecimal freight = brand.getFreight() == null ? BigDecimal.ZERO : brand.getFreight();
+            QuoteSheetResponse.ItemPriceResponse derivedCell = derived.get(brandName);
+            QuoteSheetItemPrice stored = storedByBrand.get(brandName);
+            cells.add(mergeCell(brandName, stored, derivedCell, freight));
+        }
+        return cells;
+    }
+
+    /**
+     * 合并"落库手填行"与"价格表推导结果"为单个价格格。
+     *
+     * <ul>
+     *   <li>有落库行且为手填({@code MANUAL}) → 展示手填价并标记 {@code MANUAL}, 同时保留推导值;</li>
+     *   <li>无手填但有推导价 → 展示推导价并标记 {@code PRICE_LIST};</li>
+     *   <li>两者皆无 → {@code spotPrice=null} + {@code spotSource=NONE} + {@code spotReason};</li>
+     *   <li>落库行为价格表来源(price-pulls 固化) → 展示落库价并优先使用落库的来源快照。</li>
+     * </ul>
+     */
+    private static QuoteSheetResponse.ItemPriceResponse mergeCell(
+            String brandName,
+            QuoteSheetItemPrice stored,
+            QuoteSheetResponse.ItemPriceResponse derived,
+            BigDecimal freight) {
+        Long derivedPriceListId = derived == null ? null : derived.priceListId();
+        java.time.LocalDateTime derivedReleasedAt = derived == null ? null : derived.priceListReleasedAt();
+        Long supplierId = stored != null && stored.getSupplierId() != null
+                ? stored.getSupplierId()
+                : (derived == null ? null : derived.supplierId());
+        String supplierName = stored != null && stored.getSupplierName() != null
+                ? stored.getSupplierName()
+                : (derived == null ? null : derived.supplierName());
+        BigDecimal derivedPrice = derived == null ? null : derived.derivedSpotPrice();
+
+        boolean manual = stored != null && stored.isManual();
+        if (manual) {
+            return new QuoteSheetResponse.ItemPriceResponse(
+                    stored.getId(), brandName, stored.getSpotPrice(), supplierId, supplierName,
+                    derivedPrice, "MANUAL", null,
+                    stored.getPriceSource(), stored.getPriceListId(), stored.getPriceListReleasedAt(),
+                    freight);
+        }
+        if (stored != null && stored.getSpotPrice() != null) {
+            // 显式固化价(price_source=PRICE_LIST)落库: 展示落库快照, 推导值仅作参考
+            return new QuoteSheetResponse.ItemPriceResponse(
+                    stored.getId(), brandName, stored.getSpotPrice(), supplierId, supplierName,
+                    derivedPrice, "PRICE_LIST", null,
+                    stored.getPriceSource(),
+                    stored.getPriceListId() == null ? derivedPriceListId : stored.getPriceListId(),
+                    stored.getPriceListReleasedAt() == null ? derivedReleasedAt : stored.getPriceListReleasedAt(),
+                    freight);
+        }
+        if (derived != null && derived.spotPrice() != null) {
+            return new QuoteSheetResponse.ItemPriceResponse(
+                    stored == null ? null : stored.getId(), brandName, derived.spotPrice(),
+                    supplierId, supplierName, derivedPrice, "PRICE_LIST", null,
+                    null, derivedPriceListId, derivedReleasedAt, freight);
+        }
+        return new QuoteSheetResponse.ItemPriceResponse(
+                stored == null ? null : stored.getId(), brandName, null, supplierId, supplierName,
+                null, "NONE", derived == null ? null : derived.spotReason(),
+                stored == null ? null : stored.getPriceSource(),
+                stored == null ? null : stored.getPriceListId(),
+                stored == null ? null : stored.getPriceListReleasedAt(),
+                freight);
+    }
+
+    /** 品牌按 sortOrder 升序(null 排末尾), 保证价格格顺序稳定。 */
+    private static List<QuoteSheetBrand> sortedBySortOrder(List<QuoteSheetBrand> brands) {
+        List<QuoteSheetBrand> sorted = new ArrayList<>(brands);
+        sorted.sort(Comparator.comparing(QuoteSheetBrand::getSortOrder,
+                Comparator.nullsLast(Comparator.naturalOrder())));
+        return sorted;
     }
 }
