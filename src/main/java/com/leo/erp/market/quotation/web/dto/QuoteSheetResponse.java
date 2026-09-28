@@ -39,8 +39,29 @@ public record QuoteSheetResponse(
     public record BrandResponse(Long id, String brandName, BigDecimal freight, Integer sortOrder) {
     }
 
+    /**
+     * 行×品牌价格格(读时推导结果, 契约 4.5 R1.2)。
+     *
+     * <ul>
+     *   <li>{@code spotPrice}: 最终现货价 = 手填覆盖值(存在时) 否则价格表推导值;</li>
+     *   <li>{@code derivedSpotPrice}: 价格表推导值(不含手填覆盖), 供"恢复为价格表价"预览;</li>
+     *   <li>{@code spotSource}: {@code MANUAL} / {@code PRICE_LIST} / {@code NONE};</li>
+     *   <li>{@code spotReason}: {@code NO_LIST_AT_TIME} / {@code NO_ITEM} / {@code NO_PRICE}, 有值时为空;</li>
+     *   <li>{@code priceSource}/{@code priceListId}/{@code priceListReleasedAt}: 已落库覆盖行的来源快照
+     *       (雪花 ID 为字符串); 无落库行时为 null。</li>
+     * </ul>
+     */
     public record ItemPriceResponse(Long id, String brandName, BigDecimal spotPrice,
-                                    Long supplierId, String supplierName) {
+                                    Long supplierId, String supplierName,
+                                    BigDecimal derivedSpotPrice, String spotSource, String spotReason,
+                                    String priceSource, Long priceListId, LocalDateTime priceListReleasedAt,
+                                    BigDecimal freight) {
+
+        /** 兼容旧调用方: 未携带推导与来源字段。 */
+        public ItemPriceResponse(Long id, String brandName, BigDecimal spotPrice,
+                                 Long supplierId, String supplierName) {
+            this(id, brandName, spotPrice, supplierId, supplierName, null, null, null, null, null, null, null);
+        }
     }
 
     public record ItemResponse(Long id, Integer lineNo, QuoteRowType rowType, String category, String material,

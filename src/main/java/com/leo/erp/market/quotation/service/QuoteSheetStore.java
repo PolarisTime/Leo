@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.market.pricelist.service.QuoteSheetPriceService;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
@@ -61,6 +62,12 @@ public class QuoteSheetStore {
     private final ProjectQuery projectQuery;
     private final PurchaseOrderOptionQuery purchaseOrderOptionQuery;
     private final EntityManager entityManager;
+    /**
+     * 比价单现货价读时推导(可选依赖): 由 {@code QuoteSheetPriceService} 装配。
+     * <p>用 setter 注入而不是构造参数, 避免 {@code QuoteSheetStore}/{@code QuoteSheetPriceService}
+     * 之间出现构造器循环依赖; 单元测试可省略(此时不做推导, 保持历史行为)。</p>
+     */
+    private QuoteSheetPriceService priceService;
 
     public QuoteSheetStore(QuoteSheetRepository repository,
                            QuoteProjectConfigRepository quoteProjectConfigRepository,
@@ -76,6 +83,12 @@ public class QuoteSheetStore {
         this.projectQuery = projectQuery;
         this.purchaseOrderOptionQuery = purchaseOrderOptionQuery;
         this.entityManager = entityManager;
+    }
+
+    /** 现货价读时推导装配(可选): 未装配时价格格只返回落库值。 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setPriceService(QuoteSheetPriceService priceService) {
+        this.priceService = priceService;
     }
 
     /** 西本模式虚拟品牌名(无品牌, 按规格一个价)。 */
@@ -1000,9 +1013,12 @@ public class QuoteSheetStore {
                 .map(brand -> new QuoteSheetResponse.BrandResponse(
                         brand.getId(), brand.getBrandName(), brand.getFreight(), brand.getSortOrder()))
                 .toList();
+        // 现货价读时推导(只读): 按单据报价时刻取供应商价格表版本; 未装配时退化为落库值
+        Map<Long, Map<String, QuoteSheetResponse.ItemPriceResponse>> derived =
+                priceService == null ? Map.of() : priceService.toCells(entity);
         // 按 line_no 排序返回: 事务内刚调整过顺序时, 内存集合顺序可能与行号不一致
         List<QuoteSheetResponse.ItemResponse> items = sortedByLineNo(entity.getItems()).stream()
-                .map(this::toItemResponse)
+                .map(item -> toItemResponse(item, derived.getOrDefault(item.getId(), Map.of())))
                 .toList();
         return new QuoteSheetResponse(entity.getId(), entity.getSheetNo(), entity.getName(), entity.getProjectId(),
                 entity.getProjectName(), entity.getOrderDate(), entity.getRefDate(), entity.getRefPeriod(),
@@ -1010,16 +1026,30 @@ public class QuoteSheetStore {
                 entity.getRemark(), brands, items, entity.getCreatedAt(), entity.getUpdatedAt(), entity.getVersion());
     }
 
-    private QuoteSheetResponse.ItemResponse toItemResponse(QuoteSheetItem item) {
+    private QuoteSheetResponse.ItemResponse toItemResponse(QuoteSheetItem item,
+                                                          Map<String, QuoteSheetResponse.ItemPriceResponse> cells) {
         return new QuoteSheetResponse.ItemResponse(
                 item.getId(), item.getLineNo(), item.getRowType(), item.getCategory(), item.getMaterial(),
                 item.getSpec(), item.getLength(), item.getRemark(), item.getTon(), item.isPurchased(),
                 item.isLocked(),
                 item.getPurchaseOrderId(), item.getPurchaseOrderNo(), item.getPurchaseOrderItemId(),
                 item.getPrices().stream()
-                        .map(price -> new QuoteSheetResponse.ItemPriceResponse(
-                                price.getId(), price.getBrandName(), price.getSpotPrice(),
-                                price.getSupplierId(), price.getSupplierName()))
+                        .map(price -> {
+                            QuoteSheetResponse.ItemPriceResponse cell = cells.get(price.getBrandName());
+                            return cell != null ? cell : new QuoteSheetResponse.ItemPriceResponse(
+                                    price.getId(), price.getBrandName(), price.getSpotPrice(),
+                                    price.getSupplierId(), price.getSupplierName(),
+                                    price.getSpotPrice(), "MANUAL", null,
+                                    price.getPriceSource(), price.getPriceListId(),
+                                    price.getPriceListReleasedAt(), null);
+                        })
                         .toList());
+    }
+
+    /** 行级写返回单行: 复用读时推导口径并写回权威来源字段。 */
+    private QuoteSheetResponse.ItemResponse toItemResponse(QuoteSheetItem item) {
+        Map<Long, Map<String, QuoteSheetResponse.ItemPriceResponse>> derived =
+                priceService == null ? Map.of() : priceService.toCells(item.getSheet());
+        return toItemResponse(item, derived.getOrDefault(item.getId(), Map.of()));
     }
 }
