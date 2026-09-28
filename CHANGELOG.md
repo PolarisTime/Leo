@@ -1,3 +1,50 @@
+# [12.0.0](https://github.com/PolarisTime/Leo/compare/v11.19.1...v12.0.0) (2026-09-28)
+
+
+* feat(pricelist)!: 取消价格表版本语义并删除手填覆盖, 规格键字典改用商品信息∪比价单行键 ([02c6fd3](https://github.com/PolarisTime/Leo/commit/02c6fd3d50c94a4d81b5d42c4bc39d26ec0fd68b))
+
+
+### Features
+
+* **pricelist:** 价格表新增业务报价日期 quotedOn ([1c31661](https://github.com/PolarisTime/Leo/commit/1c31661e1e39be2783db9fec57ec63a3ca1fdd00))
+* **pricelist:** 价格表缺定尺时按项目定尺加价推算现货价 ([faf5779](https://github.com/PolarisTime/Leo/commit/faf5779dfe20f619f6163b72e335808bd1badca0))
+* **pricelist:** 新增值映射/别名表, 类别/材质/定尺/品牌四维度归一改可维护数据 ([6d42d36](https://github.com/PolarisTime/Leo/commit/6d42d36a87fb8e7ad5da90d3373d311cec165ede))
+
+
+### BREAKING CHANGES
+
+* 供应商价格表取消版本语义(一个供应商+品牌只有一张表, 同键重复创建 409);
+比价单现货价只由当前价格表推导, mk_quote_item_price 不再被读/写;
+PUT/DELETE /quote-sheets/{sheetId}/items/{itemId}/price-overrides/{brandName} 与
+POST /quote-sheets/{sheetId}/price-pulls 已删除(旧前端调用返回 404);
+GET /supplier-price-lists 去掉 status/releasedFrom/releasedTo 筛选, 排序白名单去掉
+releasedAt/effectiveFrom/effectiveTo/status(传旧字段按契约 422), 默认 updatedAt DESC。
+
+迁移 V170: 先按 updated_at(回退 created_at)归并历史多版本(保留最新, 其余置 deleted_flag=true),
+再以 uk_supplier_price_list_supplier_brand(supplier_id, brand_name WHERE deleted_flag=false)
+替换 uk_supplier_price_list_active; effective_from/effective_to 放宽为可空, released_at 保留
+NOT NULL 并补 DEFAULT CURRENT_TIMESTAMP; 不删列、不改 V168/V169, COMMENT 全部标注"已取消版本语义"。
+
+服务层: 删除自动归档旧版、同刻 409、ARCHIVED 不可改、QuoteAsOf 按报价时刻取版与价格固化;
+POST 建表同键 409(唯一索引兜底)、PUT 全量替换条目幂等、列表默认按 updated_at 排序;
+比价读路径只取当前价格表价, spotReason 仅 NO_LIST/NO_ITEM/NO_PRICE, priceListReleasedAt 兼容填
+updated_at; 已落库手填值不再参与读, 也不再有落库入口(单据保存的 prices[] 一律忽略并保留既有 422 校验)。
+历史价格快照能力随之移除: 若日后需要按单据冻结历史价, 需重新引入快照写入点(代码注释已标注)。
+
+规格键字典: 来源改为 商品信息 md_material(deleted_flag=false)去品牌去重 ∪ 比价单 mk_quote_item
+实际行键(仅未软删单据), 每次查询实时投影(商品信息新增物料后字典立即可见, 无需迁移或手工同步);
+归一化三件套只在一处实现(类别 CategoryNormalizer: 直条≡螺纹钢; 规格取数字: Φ12→12;
+定尺: -/空/NULL→空串, 9m/9M/9 米→9米, 再按 varchar(16) 截断), 字典 / 写库 / 比价行键匹配共用;
+排序固定 类别→材质→规格→定尺(数值优先, 非数值末尾); 保存校验以字典为界(字典外 422),
+读取不校验(字典外的历史条目仍可从 GET /{id}/items 读出, 不新增接口)。
+
+测试: 真库守卫(新唯一索引、V170 无重复未删除行、同键 409、PUT 幂等、字典键集合与
+「商品信息去品牌 ∪ 比价单行键」完全一致、不同品牌同键只一行、同事务新增物料即时可见、
+字典外历史条目仍可读、定尺 9m 入库归一为 9米), 排序白名单与旧字段 422,
+别名写库与 spec-catalog 取值一致, 定尺写法归一后仍能命中价格表条目,
+现货价三种 NONE 原因、改价即时跟随、落库手填值不影响读结果、被删端点 404;
+删除全部版本语义与手填覆盖相关用例。
+
 ## [11.19.1](https://github.com/PolarisTime/Leo/compare/v11.19.0...v11.19.1) (2026-09-28)
 
 
