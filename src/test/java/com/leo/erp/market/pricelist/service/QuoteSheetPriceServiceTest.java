@@ -52,8 +52,11 @@ class QuoteSheetPriceServiceTest {
     @Mock
     private QuoteSheetItemPriceRepository itemPriceRepository;
 
+    @Mock
+    private com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository quoteProjectConfigRepository;
+
     private QuoteSheetPriceService service() {
-        return new QuoteSheetPriceService(deriver, quoteSheetRepository);
+        return new QuoteSheetPriceService(deriver, quoteSheetRepository, quoteProjectConfigRepository);
     }
 
     private static QuoteSheet sheet() {
@@ -231,5 +234,118 @@ class QuoteSheetPriceServiceTest {
         assertThatThrownBy(() -> service().deriveCells(1L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("报价单不存在");
+    }
+
+    // ---------------------------------------------------------------- 定尺加价推算(契约 ②)
+
+    /**
+     * 项目配置了定尺加价 + 该定尺缺条目 → 用同(类别,材质,规格)的另一条定尺价 + 加价推算,
+     * 响应必须能区分出推算来源。
+     */
+    @Test
+    void toCells_derivesMissingLengthWithProjectPremium() {
+        QuoteSheet sheet = sheet();
+        sheet.setProjectId(7L);
+        sheet.setLengthPremium(new BigDecimal("30.00"));
+        sheet.getItems().get(0).setLength("12米");
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(config(new BigDecimal("30.00"))));
+        when(deriver.selectBrands(any(), any())).thenReturn(selectionForLength("9米", "3100.00"));
+
+        QuoteSheetResponse.ItemPriceResponse cell = service().toCells(sheet).get(ITEM_ID).get(BRAND);
+
+        assertThat(cell.spotPrice()).isEqualByComparingTo("3130.00");
+        assertThat(cell.spotSource()).isEqualTo(
+                QuoteSheetPriceDeriver.SOURCE_PRICE_LIST_LENGTH_DERIVED);
+        assertThat(cell.derivedFromLength()).isEqualTo("9米");
+        assertThat(cell.lengthPremiumApplied()).isEqualByComparingTo("30.00");
+        assertThat(cell.spotReason()).isNull();
+    }
+
+    /** 项目未配置(无配置行) → 不推算, 缺定尺保持 NO_ITEM(不得用单据上的默认 30 推算)。 */
+    @Test
+    void toCells_doesNotDeriveWhenProjectNotConfigured() {
+        QuoteSheet sheet = sheet();
+        sheet.setProjectId(7L);
+        sheet.setLengthPremium(new BigDecimal("30.00"));
+        sheet.getItems().get(0).setLength("12米");
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.empty());
+        when(deriver.selectBrands(any(), any())).thenReturn(selectionForLength("9米", "3100.00"));
+
+        QuoteSheetResponse.ItemPriceResponse cell = service().toCells(sheet).get(ITEM_ID).get(BRAND);
+
+        assertThat(cell.spotPrice()).isNull();
+        assertThat(cell.spotSource()).isEqualTo("NONE");
+        assertThat(cell.spotReason()).isEqualTo(SpotReason.NO_ITEM.name());
+        assertThat(cell.derivedFromLength()).isNull();
+        assertThat(cell.lengthPremiumApplied()).isNull();
+    }
+
+    /** 项目已配置但加价为 0 → 不推算(不产生"等值推算")。 */
+    @Test
+    void toCells_doesNotDeriveWhenPremiumIsZero() {
+        QuoteSheet sheet = sheet();
+        sheet.setProjectId(7L);
+        sheet.setLengthPremium(BigDecimal.ZERO);
+        sheet.getItems().get(0).setLength("12米");
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(config(BigDecimal.ZERO)));
+        when(deriver.selectBrands(any(), any())).thenReturn(selectionForLength("9米", "3100.00"));
+
+        QuoteSheetResponse.ItemPriceResponse cell = service().toCells(sheet).get(ITEM_ID).get(BRAND);
+
+        assertThat(cell.spotPrice()).isNull();
+        assertThat(cell.spotReason()).isEqualTo(SpotReason.NO_ITEM.name());
+    }
+
+    /** 定尺命中绝对价时来源仍是 PRICE_LIST, 不带推算字段。 */
+    @Test
+    void toCells_keepsAbsolutePriceSourceWhenLengthEntryExists() {
+        QuoteSheet sheet = sheet();
+        sheet.setProjectId(7L);
+        sheet.setLengthPremium(new BigDecimal("30.00"));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(config(new BigDecimal("30.00"))));
+        when(deriver.selectBrands(any(), any())).thenReturn(selectionForLength("9米", "3100.00"));
+
+        QuoteSheetResponse.ItemPriceResponse cell = service().toCells(sheet).get(ITEM_ID).get(BRAND);
+
+        assertThat(cell.spotPrice()).isEqualByComparingTo("3100.00");
+        assertThat(cell.spotSource()).isEqualTo(QuoteSheetPriceDeriver.SOURCE_PRICE_LIST);
+        assertThat(cell.derivedFromLength()).isNull();
+        assertThat(cell.lengthPremiumApplied()).isNull();
+    }
+
+    private static com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig config(BigDecimal premium) {
+        com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig config =
+                new com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig();
+        config.setId(70L);
+        config.setProjectId(7L);
+        config.setLengthPremium(premium);
+        return config;
+    }
+
+    /** 造"价格表里只有某个定尺条目"的选中结果, 供定尺加价推算用例使用。 */
+    private static QuoteSheetPriceDeriver.BrandSelection selectionForLength(String length, String price) {
+        com.leo.erp.market.pricelist.domain.entity.SupplierPriceList list =
+                new com.leo.erp.market.pricelist.domain.entity.SupplierPriceList();
+        list.setId(300L);
+        list.setSupplierId(SUPPLIER_ID);
+        list.setSupplierName("杭州中金钢铁");
+        list.setBrandName(BRAND);
+        list.setUpdatedAt(LocalDateTime.of(2026, 9, 28, 8, 0));
+        list.setStatus(com.leo.erp.market.pricelist.domain.entity.SupplierPriceList.STATUS_ACTIVE);
+        com.leo.erp.market.pricelist.domain.entity.SupplierPriceItem priceItem =
+                new com.leo.erp.market.pricelist.domain.entity.SupplierPriceItem();
+        priceItem.setId(400L);
+        priceItem.setList(list);
+        priceItem.setCategory("螺纹钢");
+        priceItem.setMaterial("抗震钢E");
+        priceItem.setSpec(12);
+        priceItem.setLength(length);
+        priceItem.setPrice(new BigDecimal(price));
+        return new QuoteSheetPriceDeriver.BrandSelection(Map.of(BRAND,
+                new QuoteSheetPriceDeriver.BrandEntry(list, Map.of(priceItem.keyOf(), priceItem))));
     }
 }

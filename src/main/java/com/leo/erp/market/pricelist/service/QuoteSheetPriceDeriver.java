@@ -5,6 +5,7 @@ import com.leo.erp.market.pricelist.domain.entity.SupplierPriceList;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -30,6 +31,12 @@ import java.util.Set;
  */
 @Service
 public class QuoteSheetPriceDeriver {
+
+    /** 现货价来源: 价格表命中该定尺的绝对单价。 */
+    public static final String SOURCE_PRICE_LIST = "PRICE_LIST";
+
+    /** 现货价来源: 价格表缺该定尺, 用另一条定尺的绝对价 + 项目定尺加价推算。 */
+    public static final String SOURCE_PRICE_LIST_LENGTH_DERIVED = "PRICE_LIST_LENGTH_DERIVED";
 
     private final SupplierPriceListQueryService queryService;
     private final ValueAliasQuery valueAliasQuery;
@@ -123,23 +130,120 @@ public class QuoteSheetPriceDeriver {
      *
      * <p>未命中原因: 该品牌无价格表 → {@code NO_LIST}; 有表无此条目 → {@code NO_ITEM};
      * 条目 {@code price IS NULL} → {@code NO_PRICE}。</p>
+     *
+     * <p>兼容签名: 不带项目定尺加价 → 不做定尺加价推算(缺定尺条目仍是 {@code NO_ITEM})。</p>
      */
     public static DerivedSpot derive(BrandEntry entry, String category, String material,
                                      Integer spec, String length) {
+        return derive(entry, category, material, spec, length, null);
+    }
+
+    /**
+     * 按选中结果推导单个格子的现货价, 含<b>定尺加价推算</b>。
+     *
+     * <p><b>取价规则(契约 ②)</b>: 定尺加价规则只存在于项目级配置
+     * ({@code mk_quote_project_config.length_premium}, 单据侧快照 {@code mk_quote_sheet.length_premium}),
+     * 价格表侧不存规则、只存绝对单价:</p>
+     * <ol>
+     *   <li>该定尺在价格表里有条目且 {@code price IS NOT NULL} → 直接用该<b>绝对单价</b>
+     *       ({@code spotSource=PRICE_LIST}), 不加任何加价;</li>
+     *   <li>该定尺条目存在但 {@code price IS NULL} = 显式"不报价" → {@code NO_PRICE},
+     *       <b>不</b>用其它定尺推算(尊重"不报价"的业务意图);</li>
+     *   <li>该 (供应商, 品牌) 的价格表<b>没有该定尺条目</b>时, 用「同类别 + 同材质 + 同规格、
+     *       且有绝对价的另一条定尺」的单价 {@code + lengthPremium} 推一个价
+     *       ({@code spotSource=PRICE_LIST_LENGTH_DERIVED}, 并回填
+     *       {@code derivedFromLength}/{@code lengthPremiumApplied} 供前端标出"按定尺加价推算");
+     *       例: 12 米缺价时用 9 米价 + 加价;</li>
+     *   <li>{@code lengthPremium} 为空或 {@code <= 0}, 或(由调用方判定)项目<b>未配置</b>时
+     *       <b>不推算</b>, 保持 {@code NO_ITEM}。</li>
+     * </ol>
+     *
+     * <p><b>基准定尺的确定性口径</b>: 候选 = 同 (类别, 材质, 规格)、{@code price} 非空、归一后定尺
+     * 不同于请求定尺的条目; 取「定尺数值与请求定尺数值的距离」最小者, 距离相同取较短定尺,
+     * 再按键升序; 无定尺/非数值定尺(距离视为无穷)排在最后。加价方向恒为
+     * {@code 基准价 + lengthPremium}(不做反向减价), 因此只应把该推算理解为"更长定尺缺价时的推价"。</p>
+     */
+    public static DerivedSpot derive(BrandEntry entry, String category, String material,
+                                     Integer spec, String length, BigDecimal lengthPremium) {
         if (entry == null || entry.list() == null) {
             return DerivedSpot.unmatched(SpotReason.NO_LIST);
         }
         SupplierPriceItem item = matchItem(entry, category, material, spec, length);
-        if (item == null) {
+        if (item != null) {
+            if (item.getPrice() == null) {
+                return DerivedSpot.unmatched(SpotReason.NO_PRICE);
+            }
+            return DerivedSpot.of(entry.list(), item, null, null);
+        }
+        if (lengthPremium == null || lengthPremium.compareTo(BigDecimal.ZERO) <= 0) {
             return DerivedSpot.unmatched(SpotReason.NO_ITEM);
         }
-        if (item.getPrice() == null) {
-            return DerivedSpot.unmatched(SpotReason.NO_PRICE);
+        SupplierPriceItem base = pickLengthBase(entry, category, material, spec, length);
+        if (base == null) {
+            return DerivedSpot.unmatched(SpotReason.NO_ITEM);
         }
-        SupplierPriceList list = entry.list();
-        return new DerivedSpot(list.getId(), list.getSupplierId(), list.getSupplierName(),
-                list.getUpdatedAt(), item.getPrice(), item.getPriceStatus() == null
-                        ? null : item.getPriceStatus().name(), null);
+        return DerivedSpot.of(entry.list(), base, base.getLength(), lengthPremium);
+    }
+
+    /** 定尺加价推算的基准条目(见 {@link #derive(BrandEntry, String, String, Integer, String, BigDecimal)})。 */
+    private static SupplierPriceItem pickLengthBase(BrandEntry entry, String category, String material,
+                                                    Integer spec, String length) {
+        ValueAliasQuery.AliasRules rules = entry.rules();
+        String normalizedCategory = rules.normalizeCategory(category);
+        String normalizedMaterial = rules.normalizeMaterial(material);
+        if (normalizedMaterial == null) {
+            return null;
+        }
+        String normalizedLength = rules.normalizeLength(length);
+        Integer requested = lengthValue(normalizedLength);
+        List<SupplierPriceItem> candidates = new ArrayList<>();
+        for (SupplierPriceItem item : entry.items().values()) {
+            if (item.getPrice() == null || !Objects.equals(item.getSpec(), spec)) {
+                continue;
+            }
+            if (!Objects.equals(rules.normalizeMaterial(item.getMaterial()), normalizedMaterial)) {
+                continue;
+            }
+            if (normalizedCategory == null
+                    || !normalizedCategory.equals(rules.normalizeCategory(item.getCategory()))) {
+                continue;
+            }
+            if (Objects.equals(rules.normalizeLength(item.getLength()), normalizedLength)) {
+                continue;
+            }
+            candidates.add(item);
+        }
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        candidates.sort(Comparator
+                .comparingLong((SupplierPriceItem item) -> distance(
+                        lengthValue(rules.normalizeLength(item.getLength())), requested))
+                .thenComparing(item -> lengthValue(rules.normalizeLength(item.getLength())),
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(SupplierPriceItem::keyOf));
+        return candidates.get(0);
+    }
+
+    /** 定尺数值(如 {@code 12米} → 12); 无定尺或非数值返回 null。 */
+    private static Integer lengthValue(String normalizedLength) {
+        String digits = MaterialSpecCatalogQuery.lengthSortKey(normalizedLength);
+        if (digits.isEmpty() || digits.contains(".")) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(digits);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    /** 与请求定尺的数值距离; 任一侧无数值时取 {@link Long#MAX_VALUE}(排到最后)。 */
+    private static long distance(Integer candidate, Integer requested) {
+        if (candidate == null || requested == null) {
+            return Long.MAX_VALUE;
+        }
+        return Math.abs((long) candidate - requested);
     }
 
     /**
@@ -181,17 +285,48 @@ public class QuoteSheetPriceDeriver {
      *
      * @param priceListUpdatedAt 来源价格表的更新时间(取消版本语义后不再有发布时刻;
      *                           调用方把它填入兼容字段 {@code priceListReleasedAt})
+     * @param derivedFromLength  定尺加价推算的基准定尺(如 {@code 9米}); 直接命中绝对价时为 null
+     * @param lengthPremiumApplied 本次推算叠加的项目定尺加价(元/吨); 直接命中绝对价时为 null
      */
     public record DerivedSpot(Long priceListId, Long supplierId, String supplierName,
                               java.time.LocalDateTime priceListUpdatedAt, BigDecimal price,
-                              String priceStatus, SpotReason reason) {
+                              String priceStatus, SpotReason reason,
+                              String derivedFromLength, BigDecimal lengthPremiumApplied) {
 
         static DerivedSpot unmatched(SpotReason reason) {
-            return new DerivedSpot(null, null, null, null, null, null, reason);
+            return new DerivedSpot(null, null, null, null, null, null, reason, null, null);
+        }
+
+        /** 兼容旧调用方: 未携带定尺加价推算来源。 */
+        public DerivedSpot(Long priceListId, Long supplierId, String supplierName,
+                           java.time.LocalDateTime priceListUpdatedAt, BigDecimal price,
+                           String priceStatus, SpotReason reason) {
+            this(priceListId, supplierId, supplierName, priceListUpdatedAt, price, priceStatus, reason,
+                    null, null);
+        }
+
+        /**
+         * 命中条目: {@code lengthPremiumApplied} 非空时按 {@code 基准价 + 加价} 出价并带上推算来源,
+         * 为空时直接用条目绝对单价。
+         */
+        static DerivedSpot of(SupplierPriceList list, SupplierPriceItem item, String derivedFromLength,
+                              BigDecimal lengthPremiumApplied) {
+            BigDecimal price = lengthPremiumApplied == null
+                    ? item.getPrice()
+                    : item.getPrice().add(lengthPremiumApplied);
+            return new DerivedSpot(list.getId(), list.getSupplierId(), list.getSupplierName(),
+                    list.getUpdatedAt(), price, item.getPriceStatus() == null
+                            ? null : item.getPriceStatus().name(), null,
+                    derivedFromLength, lengthPremiumApplied);
         }
 
         public boolean matched() {
             return reason == null && price != null;
+        }
+
+        /** 响应里的 {@code spotSource}: 绝对价 {@code PRICE_LIST}, 定尺加价推算 {@code PRICE_LIST_LENGTH_DERIVED}。 */
+        public String spotSource() {
+            return derivedFromLength == null ? SOURCE_PRICE_LIST : SOURCE_PRICE_LIST_LENGTH_DERIVED;
         }
     }
 

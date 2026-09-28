@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.market.pricelist.service.QuoteSheetPriceDeriver;
 import com.leo.erp.market.pricelist.service.QuoteSheetPriceService;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
@@ -1062,8 +1063,11 @@ public class QuoteSheetStore {
      * 单格现货价: 只认价格表推导值。
      *
      * <ul>
-     *   <li>推导命中 → {@code spotSource=PRICE_LIST}, 价/供应商/价格表ID来自当前价格表
-     *       ({@code priceListReleasedAt} 兼容字段填价格表 {@code updated_at});</li>
+     *   <li>推导命中 → 来源取自推导结果: {@code spotSource=PRICE_LIST}(该定尺绝对单价)或
+     *       {@code PRICE_LIST_LENGTH_DERIVED}(缺定尺, 用另一条定尺价 + 项目定尺加价推算),
+     *       并原样带出 {@code derivedFromLength}/{@code lengthPremiumApplied};
+     *       价/供应商/价格表ID来自当前价格表({@code priceListReleasedAt} 兼容字段填
+     *       价格表 {@code updated_at});</li>
      *   <li>未命中(无价格表/无条目/不报价) → {@code spotPrice=null} + {@code spotSource=NONE} + 原因,
      *       <b>不回退</b>任何落库快照。</li>
      * </ul>
@@ -1073,14 +1077,17 @@ public class QuoteSheetStore {
             QuoteSheetResponse.ItemPriceResponse derived,
             BigDecimal freight) {
         if (derived != null && derived.spotPrice() != null) {
+            String spotSource = derived.spotSource() == null
+                    ? QuoteSheetPriceDeriver.SOURCE_PRICE_LIST : derived.spotSource();
             return new QuoteSheetResponse.ItemPriceResponse(
                     null, brandName, derived.spotPrice(), derived.supplierId(), derived.supplierName(),
-                    derived.derivedSpotPrice(), "PRICE_LIST", null,
-                    null, derived.priceListId(), derived.priceListReleasedAt(), freight);
+                    derived.derivedSpotPrice(), spotSource, null,
+                    null, derived.priceListId(), derived.priceListReleasedAt(), freight,
+                    derived.derivedFromLength(), derived.lengthPremiumApplied());
         }
         return new QuoteSheetResponse.ItemPriceResponse(
                 null, brandName, null, null, null, null, "NONE",
-                derived == null ? null : derived.spotReason(), null, null, null, freight);
+                derived == null ? null : derived.spotReason(), null, null, null, freight, null, null);
     }
 
     /** 品牌按 sortOrder 升序(null 排末尾), 保证价格格顺序稳定。 */

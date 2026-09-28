@@ -69,6 +69,9 @@ class QuoteSheetPriceCellProjectionTest {
     @Mock
     private com.leo.erp.market.pricelist.repository.ValueAliasRepository valueAliasRepository;
 
+    @Mock
+    private com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository quoteProjectConfigRepository;
+
     /**
      * 未装配价格推导服务时读取不得抛异常: 仍按品牌列出格, 但无价格表价可用时
      * {@code NONE}(推导原因不可知, 保持 null)。
@@ -201,7 +204,8 @@ class QuoteSheetPriceCellProjectionTest {
     @Test
     void currentPriceFollowsPriceListChangeImmediately() {
         QuoteSheet sheet = sheetWith(List.of("安徽富鑫"), List.of(item(ITEM_ID, "盘螺", "HRB400", 6, "-")));
-        stubCurrentList("3500.00");
+        when(quoteSheetRepository.findByIdAndDeletedFlagFalse(SHEET_ID)).thenReturn(Optional.of(sheet));
+        stubCurrentList("3500.00", "-");
 
         QuoteSheetStore store = storeWithRealDeriver();
         QuoteSheetResponse.ItemPriceResponse before = store.detail(SHEET_ID).items().get(0).prices().get(0);
@@ -209,11 +213,40 @@ class QuoteSheetPriceCellProjectionTest {
         assertThat(before.spotReason()).isNull();
 
         // 价格表调价: 同一张表改条目价并前移 updated_at
-        stubCurrentList("3600.00");
+        stubCurrentList("3600.00", "-");
 
         QuoteSheetResponse.ItemPriceResponse after = store.detail(SHEET_ID).items().get(0).prices().get(0);
         assertThat(after.spotPrice()).isEqualByComparingTo("3600.00");
         assertThat(after.spotSource()).isEqualTo("PRICE_LIST");
+    }
+
+    /**
+     * 定尺加价推算必须一路透到读接口: 价格表缺该定尺 + 项目配置了加价时,
+     * 价格格带 {@code PRICE_LIST_LENGTH_DERIVED} 与推算基准定尺/加价, 前端才能标「按定尺加价推算」。
+     */
+    @Test
+    void lengthDerivationIsProjectedWithSourceMarker() {
+        QuoteSheet sheet = sheetWith(List.of("安徽富鑫"), List.of(item(ITEM_ID, "盘螺", "HRB400", 6, "12米")));
+        sheet.setProjectId(7L);
+        sheet.setLengthPremium(new BigDecimal("30"));
+        when(quoteSheetRepository.findByIdAndDeletedFlagFalse(SHEET_ID)).thenReturn(Optional.of(sheet));
+        com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig config =
+                new com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig();
+        config.setId(70L);
+        config.setProjectId(7L);
+        config.setLengthPremium(new BigDecimal("30"));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(config));
+        stubCurrentList("3500.00", "9米");
+
+        QuoteSheetResponse.ItemPriceResponse cell = storeWithRealDeriver().detail(SHEET_ID)
+                .items().get(0).prices().get(0);
+
+        assertThat(cell.spotPrice()).isEqualByComparingTo("3530.00");
+        assertThat(cell.spotSource()).isEqualTo(QuoteSheetPriceDeriver.SOURCE_PRICE_LIST_LENGTH_DERIVED);
+        assertThat(cell.derivedFromLength()).isEqualTo("9米");
+        assertThat(cell.lengthPremiumApplied()).isEqualByComparingTo("30");
+        assertThat(cell.spotReason()).isNull();
     }
 
     // ---------------------------------------------------------------- 夹具
@@ -227,14 +260,16 @@ class QuoteSheetPriceCellProjectionTest {
                 new com.leo.erp.market.pricelist.service.QuoteSheetPriceDeriver(
                         new com.leo.erp.market.pricelist.service.SupplierPriceListQueryService(
                                 priceListRepository, priceItemRepository, null, aliases), aliases);
-        QuoteSheetPriceService priceService = new QuoteSheetPriceService(realDeriver, quoteSheetRepository);
+        QuoteSheetPriceService priceService = new QuoteSheetPriceService(realDeriver, quoteSheetRepository,
+                quoteProjectConfigRepository);
         QuoteSheetStore store = new QuoteSheetStore(quoteSheetRepository, null, snowflakeIdGenerator,
                 supplierQuery, null, null, null);
         store.setPriceService(priceService);
         return store;
     }
 
-    private void stubCurrentList(String price) {
+    /** 造"当前价格表里只有某个定尺条目"的选中结果(不含单据 stub)。 */
+    private void stubCurrentList(String price, String length) {
         SupplierPriceList list = new SupplierPriceList();
         list.setId(300L);
         list.setSupplierId(REBAR_SUPPLIER_ID);
@@ -248,16 +283,15 @@ class QuoteSheetPriceCellProjectionTest {
         entry.setCategory("盘螺");
         entry.setMaterial("HRB400");
         entry.setSpec(6);
-        entry.setLength("-");
+        entry.setLength(length);
         entry.setPrice(new BigDecimal(price));
         when(priceListRepository.findCurrentByBrandNames(any())).thenReturn(List.of(list));
         when(priceItemRepository.findByListIdIn(any())).thenReturn(List.of(entry));
-        QuoteSheet sheet = sheetWith(List.of("安徽富鑫"), List.of(item(ITEM_ID, "盘螺", "HRB400", 6, "-")));
-        when(quoteSheetRepository.findByIdAndDeletedFlagFalse(SHEET_ID)).thenReturn(Optional.of(sheet));
     }
 
     private QuoteSheetStore store() {
-        QuoteSheetPriceService priceService = new QuoteSheetPriceService(deriver, quoteSheetRepository);
+        QuoteSheetPriceService priceService = new QuoteSheetPriceService(deriver, quoteSheetRepository,
+                quoteProjectConfigRepository);
         QuoteSheetStore store = new QuoteSheetStore(quoteSheetRepository, null, snowflakeIdGenerator,
                 supplierQuery, null, null, null);
         store.setPriceService(priceService);

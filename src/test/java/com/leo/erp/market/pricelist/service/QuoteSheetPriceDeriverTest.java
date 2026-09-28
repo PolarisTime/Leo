@@ -281,15 +281,140 @@ class QuoteSheetPriceDeriverTest {
     }
 
     private static SupplierPriceItem item(Long id, SupplierPriceList list, String price) {
+        return item(id, list, "9米", price);
+    }
+
+    private static SupplierPriceItem item(Long id, SupplierPriceList list, String length, String price) {
         SupplierPriceItem item = new SupplierPriceItem();
         item.setId(id);
         item.setList(list);
         item.setCategory("螺纹钢");
         item.setMaterial("抗震钢E");
         item.setSpec(12);
-        item.setLength("9米");
+        item.setLength(length);
         item.setPrice(price == null ? null : new BigDecimal(price));
         item.setSortOrder(0);
         return item;
+    }
+
+    // ---------------------------------------------------------------- 定尺加价推算(契约 ②)
+
+    /** 该定尺有绝对价: 必须走绝对价, 不加任何定尺加价。 */
+    @Test
+    void exactLengthAbsolutePriceWinsAndPremiumIsNotApplied() {
+        SupplierPriceList list = list(1L, "安徽富鑫", MORNING);
+        when(listRepository.findCurrentByBrandNames(any())).thenReturn(List.of(list));
+        when(itemRepository.findByListIdIn(any())).thenReturn(List.of(item(10L, list, "9米", "3220.00")));
+
+        QuoteSheetPriceDeriver.BrandSelection selection =
+                deriver().selectBrands(List.of("安徽富鑫"), List.of());
+
+        QuoteSheetPriceDeriver.DerivedSpot spot = QuoteSheetPriceDeriver.derive(
+                selection.entryOf("安徽富鑫"), "螺纹钢", "抗震钢E", 12, "9米", new BigDecimal("30"));
+
+        assertThat(spot.matched()).isTrue();
+        assertThat(spot.price()).isEqualByComparingTo("3220.00");
+        assertThat(spot.derivedFromLength()).isNull();
+        assertThat(spot.lengthPremiumApplied()).isNull();
+        assertThat(spot.spotSource()).isEqualTo(QuoteSheetPriceDeriver.SOURCE_PRICE_LIST);
+    }
+
+    /** 12 米缺条目时用 9 米绝对价 + 项目定尺加价推算, 并标记推算来源。 */
+    @Test
+    void missingLengthIsDerivedFromShorterLengthPlusPremium() {
+        SupplierPriceList list = list(1L, "安徽富鑫", MORNING);
+        when(listRepository.findCurrentByBrandNames(any())).thenReturn(List.of(list));
+        when(itemRepository.findByListIdIn(any())).thenReturn(List.of(item(10L, list, "9米", "3220.00")));
+
+        QuoteSheetPriceDeriver.BrandSelection selection =
+                deriver().selectBrands(List.of("安徽富鑫"), List.of());
+
+        QuoteSheetPriceDeriver.DerivedSpot spot = QuoteSheetPriceDeriver.derive(
+                selection.entryOf("安徽富鑫"), "螺纹钢", "抗震钢E", 12, "12米", new BigDecimal("30.00"));
+
+        assertThat(spot.matched()).isTrue();
+        assertThat(spot.price()).isEqualByComparingTo("3250.00");
+        assertThat(spot.derivedFromLength()).isEqualTo("9米");
+        assertThat(spot.lengthPremiumApplied()).isEqualByComparingTo("30.00");
+        assertThat(spot.spotSource()).isEqualTo(QuoteSheetPriceDeriver.SOURCE_PRICE_LIST_LENGTH_DERIVED);
+        assertThat(spot.priceListId()).isEqualTo(1L);
+        assertThat(spot.supplierName()).isEqualTo("杭州中金钢铁");
+        assertThat(spot.reason()).isNull();
+    }
+
+    /** 多个候选定尺时取「数值最接近请求定尺」的一条作基准(12 米缺价 → 优先 9 米而不是 6 米)。 */
+    @Test
+    void derivationPrefersClosestLengthCandidate() {
+        SupplierPriceList list = list(1L, "安徽富鑫", MORNING);
+        when(listRepository.findCurrentByBrandNames(any())).thenReturn(List.of(list));
+        when(itemRepository.findByListIdIn(any())).thenReturn(List.of(
+                item(10L, list, "6米", "3000.00"),
+                item(11L, list, "9米", "3100.00")));
+
+        QuoteSheetPriceDeriver.BrandSelection selection =
+                deriver().selectBrands(List.of("安徽富鑫"), List.of());
+
+        QuoteSheetPriceDeriver.DerivedSpot spot = QuoteSheetPriceDeriver.derive(
+                selection.entryOf("安徽富鑫"), "螺纹钢", "抗震钢E", 12, "12米", new BigDecimal("30"));
+
+        assertThat(spot.price()).isEqualByComparingTo("3130.00");
+        assertThat(spot.derivedFromLength()).isEqualTo("9米");
+    }
+
+    /** 加价为空或 0 时不推算(保持 NO_ITEM), 也不会退化成"等值推算"。 */
+    @Test
+    void derivationIsSkippedWhenPremiumIsNullOrZero() {
+        SupplierPriceList list = list(1L, "安徽富鑫", MORNING);
+        when(listRepository.findCurrentByBrandNames(any())).thenReturn(List.of(list));
+        when(itemRepository.findByListIdIn(any())).thenReturn(List.of(item(10L, list, "9米", "3220.00")));
+
+        QuoteSheetPriceDeriver.BrandSelection selection =
+                deriver().selectBrands(List.of("安徽富鑫"), List.of());
+
+        assertThat(QuoteSheetPriceDeriver.derive(selection.entryOf("安徽富鑫"),
+                "螺纹钢", "抗震钢E", 12, "12米", null).reason()).isEqualTo(SpotReason.NO_ITEM);
+        assertThat(QuoteSheetPriceDeriver.derive(selection.entryOf("安徽富鑫"),
+                "螺纹钢", "抗震钢E", 12, "12米", BigDecimal.ZERO).reason()).isEqualTo(SpotReason.NO_ITEM);
+    }
+
+    /** 该定尺条目存在但显式不报价(price IS NULL) → 尊重"不报价", 不用其它定尺推算。 */
+    @Test
+    void explicitUnquotedLengthIsNotReplacedByDerivation() {
+        SupplierPriceList list = list(1L, "安徽富鑫", MORNING);
+        when(listRepository.findCurrentByBrandNames(any())).thenReturn(List.of(list));
+        when(itemRepository.findByListIdIn(any())).thenReturn(List.of(
+                item(10L, list, "12米", null),
+                item(11L, list, "9米", "3100.00")));
+
+        QuoteSheetPriceDeriver.BrandSelection selection =
+                deriver().selectBrands(List.of("安徽富鑫"), List.of());
+
+        QuoteSheetPriceDeriver.DerivedSpot spot = QuoteSheetPriceDeriver.derive(
+                selection.entryOf("安徽富鑫"), "螺纹钢", "抗震钢E", 12, "12米", new BigDecimal("30"));
+
+        assertThat(spot.matched()).isFalse();
+        assertThat(spot.reason()).isEqualTo(SpotReason.NO_PRICE);
+    }
+
+    /** 推算不得跨材质/规格/类别: 基准条目必须同类别+同材质+同规格。 */
+    @Test
+    void derivationRequiresSameMaterialSpecAndCategory() {
+        SupplierPriceList list = list(1L, "安徽富鑫", MORNING);
+        SupplierPriceItem otherMaterial = item(10L, list, "9米", "3100.00");
+        otherMaterial.setMaterial("HRB400E");
+        SupplierPriceItem otherSpec = item(11L, list, "9米", "3200.00");
+        otherSpec.setSpec(16);
+        SupplierPriceItem otherCategory = item(12L, list, "9米", "3300.00");
+        otherCategory.setCategory("盘螺");
+        when(listRepository.findCurrentByBrandNames(any())).thenReturn(List.of(list));
+        when(itemRepository.findByListIdIn(any())).thenReturn(List.of(
+                otherMaterial, otherSpec, otherCategory));
+
+        QuoteSheetPriceDeriver.BrandSelection selection =
+                deriver().selectBrands(List.of("安徽富鑫"), List.of());
+
+        assertThat(QuoteSheetPriceDeriver.derive(selection.entryOf("安徽富鑫"),
+                "螺纹钢", "抗震钢E", 12, "12米", new BigDecimal("30")).reason())
+                .isEqualTo(SpotReason.NO_ITEM);
     }
 }

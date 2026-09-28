@@ -274,6 +274,47 @@ class SupplierPriceListPostgresTest {
                 .containsExactly(LocalDate.of(2026, 9, 20), LocalDate.of(2026, 8, 1));
     }
 
+    /** 校验/推导用的真实推导器(与生产同一实现, 值映射为空 = 回退硬编码归一)。 */
+    private QuoteSheetPriceDeriver deriver() {
+        ValueAliasQuery aliases = new ValueAliasQuery(new ValueAliasMappings(valueAliasRepository));
+        return new QuoteSheetPriceDeriver(
+                new SupplierPriceListQueryService(listRepository, itemRepository, specCatalogQuery, aliases),
+                aliases);
+    }
+
+    /**
+     * 定尺加价推算的真库行为: 价格表只报了 9 米, 12 米缺条目且项目加价 30 → 3100 + 30 = 3130,
+     * 并带推算来源; 加价为空/0 时不推算(保持 NO_ITEM)。价格表仍只存绝对单价。
+     */
+    @Test
+    void lengthDerivation_usesOtherLengthPlusProjectPremiumOnRealSchema() {
+        when(idGenerator.nextId()).thenReturn(942000000000000261L, 942000000000000262L);
+        store().create(request(SUPPLIER_ID, BRAND, "9米", "3100.00", MORNING));
+
+        QuoteSheetPriceDeriver.BrandSelection selection = deriver().selectBrands(List.of(BRAND), List.of());
+        QuoteSheetPriceDeriver.DerivedSpot derived = QuoteSheetPriceDeriver.derive(
+                selection.entryOf(BRAND), "螺纹钢", "抗震钢E", 12, "12米", new BigDecimal("30"));
+
+        assertThat(derived.matched()).isTrue();
+        assertThat(derived.price()).isEqualByComparingTo("3130.00");
+        assertThat(derived.derivedFromLength()).isEqualTo("9米");
+        assertThat(derived.lengthPremiumApplied()).isEqualByComparingTo("30");
+        assertThat(derived.spotSource())
+                .isEqualTo(QuoteSheetPriceDeriver.SOURCE_PRICE_LIST_LENGTH_DERIVED);
+
+        // 加价为空或 0: 不推算
+        assertThat(QuoteSheetPriceDeriver.derive(selection.entryOf(BRAND),
+                "螺纹钢", "抗震钢E", 12, "12米", null).reason()).isEqualTo(SpotReason.NO_ITEM);
+        assertThat(QuoteSheetPriceDeriver.derive(selection.entryOf(BRAND),
+                "螺纹钢", "抗震钢E", 12, "12米", BigDecimal.ZERO).reason()).isEqualTo(SpotReason.NO_ITEM);
+
+        // 该定尺有绝对价时走绝对价, 不加价
+        QuoteSheetPriceDeriver.DerivedSpot exact = QuoteSheetPriceDeriver.derive(
+                selection.entryOf(BRAND), "螺纹钢", "抗震钢E", 12, "9米", new BigDecimal("30"));
+        assertThat(exact.price()).isEqualByComparingTo("3100.00");
+        assertThat(exact.spotSource()).isEqualTo(QuoteSheetPriceDeriver.SOURCE_PRICE_LIST);
+    }
+
     /** 归并结果守卫: 全表不存在同 (supplier_id, brand_name) 的多条未删除行。 */
     @Test
     void migration_mergeLeftNoDuplicateActiveRows() {

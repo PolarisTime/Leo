@@ -46,12 +46,16 @@ public record QuoteSheetResponse(
      * {@code mk_quote_item_price} 的历史落库值不再参与读。</p>
      *
      * <ul>
-     *   <li>{@code spotPrice}: 当前价格表价; 未命中为 null;</li>
+     *   <li>{@code spotPrice}: 当前价格表价(或定尺加价推算价); 未命中为 null;</li>
      *   <li>{@code derivedSpotPrice}: 同 {@code spotPrice}(保留字段, 兼容前端"展示推导值"语义);</li>
-     *   <li>{@code spotSource}: {@code PRICE_LIST}(命中价格表) 或 {@code NONE}(未命中);
-     *       兼容枚举 {@code MANUAL} 保留但读路径不再产生;</li>
-     *   <li>{@code spotReason}: {@code NO_LIST}(无价格表) / {@code NO_ITEM}(有表无条目) /
-     *       {@code NO_PRICE}(条目不报价), 命中时为空;</li>
+     *   <li>{@code spotSource}: {@code PRICE_LIST}(命中该定尺的绝对单价) /
+     *       {@code PRICE_LIST_LENGTH_DERIVED}(价格表缺该定尺, 用另一条定尺价 + 项目定尺加价推算) /
+     *       {@code NONE}(未命中); 兼容枚举 {@code MANUAL} 保留但读路径不再产生;</li>
+     *   <li>{@code spotReason}: {@code NO_LIST}(无价格表) / {@code NO_ITEM}(有表无条目, 含"缺定尺且
+     *       项目未配置加价/加价为 0 不推算") / {@code NO_PRICE}(条目不报价), 命中时为空;</li>
+     *   <li>{@code derivedFromLength}/{@code lengthPremiumApplied}: 仅
+     *       {@code PRICE_LIST_LENGTH_DERIVED} 时非空 —— 推算基准定尺(如 {@code 9米})与叠加的
+     *       项目定尺加价(元/吨), 供前端标出「按定尺加价推算」;</li>
      *   <li>{@code priceSource}: 兼容保留, 恒为 null(不再有落库来源快照);</li>
      *   <li>{@code priceListId}/{@code priceListReleasedAt}: 来源价格表ID与 {@code updated_at}
      *       (已取消版本语义, 雪花 ID 为字符串); 未命中时为 null。</li>
@@ -61,12 +65,27 @@ public record QuoteSheetResponse(
                                     Long supplierId, String supplierName,
                                     BigDecimal derivedSpotPrice, String spotSource, String spotReason,
                                     String priceSource, Long priceListId, LocalDateTime priceListReleasedAt,
-                                    BigDecimal freight) {
+                                    BigDecimal freight,
+                                    /** 定尺加价推算的基准定尺(仅 PRICE_LIST_LENGTH_DERIVED 时非空)。 */
+                                    String derivedFromLength,
+                                    /** 本次推算叠加的项目定尺加价(元/吨, 仅推算时非空)。 */
+                                    BigDecimal lengthPremiumApplied) {
 
         /** 兼容旧调用方: 未携带推导与来源字段。 */
         public ItemPriceResponse(Long id, String brandName, BigDecimal spotPrice,
                                  Long supplierId, String supplierName) {
-            this(id, brandName, spotPrice, supplierId, supplierName, null, null, null, null, null, null, null);
+            this(id, brandName, spotPrice, supplierId, supplierName, null, null, null, null, null, null, null,
+                    null, null);
+        }
+
+        /** 兼容旧调用方: 未携带定尺加价推算来源。 */
+        public ItemPriceResponse(Long id, String brandName, BigDecimal spotPrice,
+                                 Long supplierId, String supplierName,
+                                 BigDecimal derivedSpotPrice, String spotSource, String spotReason,
+                                 String priceSource, Long priceListId, LocalDateTime priceListReleasedAt,
+                                 BigDecimal freight) {
+            this(id, brandName, spotPrice, supplierId, supplierName, derivedSpotPrice, spotSource,
+                    spotReason, priceSource, priceListId, priceListReleasedAt, freight, null, null);
         }
     }
 
