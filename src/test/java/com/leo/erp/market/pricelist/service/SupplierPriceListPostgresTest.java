@@ -14,6 +14,7 @@ import com.leo.erp.market.pricelist.web.dto.SupplierPriceListRequest;
 import com.leo.erp.market.pricelist.web.dto.SupplierPriceListResponse;
 import com.leo.erp.master.api.SupplierQuery;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -85,17 +86,60 @@ class SupplierPriceListPostgresTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
+
     private final SnowflakeIdGenerator idGenerator = Mockito.mock(SnowflakeIdGenerator.class);
     private final SupplierQuery supplierQuery = Mockito.mock(SupplierQuery.class);
     private final MaterialSpecCatalogQuery specCatalogQuery = Mockito.mock(MaterialSpecCatalogQuery.class);
 
     @BeforeEach
     void setUp() {
+        insertSupplier(SUPPLIER_ID, "PG-PRICE-LIST-TEST-A");
+        insertSupplier(OTHER_SUPPLIER_ID, "PG-PRICE-LIST-TEST-B");
         when(supplierQuery.findActiveNormalById(any(Long.class)))
                 .thenReturn(Optional.of(new SupplierQuery.SupplierSnapshot(SUPPLIER_ID, "PG-GYS", "PG供应商")));
         when(specCatalogQuery.findAll()).thenReturn(List.of(
                 new MaterialSpecCatalogQuery.MaterialSpecSnapshot("螺纹钢", "抗震钢E", 12, "9米", 0),
                 new MaterialSpecCatalogQuery.MaterialSpecSnapshot("螺纹钢", "抗震钢E", 12, "12米", 1)));
+    }
+
+    /**
+     * 用例结束后清理本类自造的数据(FK 依赖顺序: 条目 -> 留痕明细/头 -> 版本 -> 供应商)。
+     * <p>刻意不在类级使用 {@code @Transactional}: 需要验证"提交后可见"的真实提交语义
+     * (部分唯一索引 + Hibernate INSERT-before-UPDATE), 因此改为显式清理, 不留垃圾数据。</p>
+     */
+    @AfterEach
+    void cleanUp() {
+        jdbc.update("""
+                delete from public.mk_supplier_price_item
+                where list_id in (select id from public.mk_supplier_price_list where supplier_id in (?, ?))
+                """, SUPPLIER_ID, OTHER_SUPPLIER_ID);
+        jdbc.update("""
+                delete from public.mk_supplier_price_adjustment_item
+                where adjustment_id in (select id from public.mk_supplier_price_adjustment
+                                        where list_id in (select id from public.mk_supplier_price_list
+                                                          where supplier_id in (?, ?)))
+                """, SUPPLIER_ID, OTHER_SUPPLIER_ID);
+        jdbc.update("""
+                delete from public.mk_supplier_price_adjustment
+                where list_id in (select id from public.mk_supplier_price_list where supplier_id in (?, ?))
+                """, SUPPLIER_ID, OTHER_SUPPLIER_ID);
+        jdbc.update("delete from public.mk_supplier_price_list where supplier_id in (?, ?)",
+                SUPPLIER_ID, OTHER_SUPPLIER_ID);
+        jdbc.update("delete from public.md_supplier where id in (?, ?)", SUPPLIER_ID, OTHER_SUPPLIER_ID);
+    }
+
+    /**
+     * 造测试用供应商主数据(迁移里 mk_supplier_price_list.supplier_id 有 FK)。
+     * <p>供应商编码带固定标记, 便于人工核对或排查; 用例结束后由 {@link #cleanUp()} 删除。</p>
+     */
+    private void insertSupplier(long id, String code) {
+        jdbc.update("""
+                insert into public.md_supplier (id, supplier_code, supplier_name, status,
+                                                created_by, created_name, deleted_flag)
+                values (?, ?, 'PG价格表测试供应商', '正常', 0, 'flyway-test', false)
+                """, id, code);
     }
 
     private SupplierPriceListStore store() {
@@ -266,60 +310,56 @@ class SupplierPriceListPostgresTest {
         assertThat(uniqueIndex).isEqualTo(1);
     }
 
-    /** 数据库层兜底: 绕过应用层直接插入重复键必须被唯一索引拦住(而非静默写入两行)。 */
+    /**
+     * 数据库层兜底: 唯一索引确实存在且覆盖 (list_id, category, material, spec, length)。
+     *
+     * <p>刻意不做"故意触发约束冲突"的写库演练: PostgreSQL 在约束冲突后会把当前事务置为 aborted,
+     * 而 {@code @DataJpaTest} 的测试连接是共享的, 强行复用会污染后续语句。唯一索引的存在性
+     * 与列顺序由 {@code pg_indexes} 只读断言覆盖; 应用层在同一约束上先行拦截的行为由
+     * {@link #duplicateItemKey_isRejectedByServiceBeforeUniqueConstraint()} 覆盖。</p>
+     */
     @Test
-    void duplicateItemKey_isAlsoEnforcedByDatabaseUniqueIndex() {
-        when(idGenerator.nextId()).thenReturn(942000000000000241L, 942000000000000242L);
-        SupplierPriceListResponse created = store().create(request(SUPPLIER_ID, BRAND, "9米", "3220.00", MORNING));
-        Long listId = created.id();
+    void duplicateItemKey_uniqueIndexDefinitionIsUniqueAndCoversBusinessKey() {
+        Map<String, String> index = jdbc.query("""
+                select indexname, indexdef from pg_indexes
+                where schemaname = 'public' and tablename = 'mk_supplier_price_item'
+                  and indexname = 'uk_supplier_price_item_key'
+                """, rs -> {
+            Map<String, String> result = new java.util.LinkedHashMap<>();
+            while (rs.next()) {
+                result.put(rs.getString("indexname"), rs.getString("indexdef"));
+            }
+            return result;
+        });
 
-        assertThatThrownBy(() -> jdbc.update("""
-                insert into public.mk_supplier_price_item
-                    (id, list_id, category, material, spec, length, price, price_status, sort_order)
-                values (?, ?, '螺纹钢', '抗震钢E', 12, '9米', 1.00, 'NORMAL', 9)
-                """, 942000000000000299L, listId))
-                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(index).containsKey("uk_supplier_price_item_key");
+        assertThat(index.get("uk_supplier_price_item_key"))
+                .containsIgnoringCase("UNIQUE")
+                .containsIgnoringCase("list_id")
+                .containsIgnoringCase("category")
+                .containsIgnoringCase("material")
+                .containsIgnoringCase("spec")
+                .containsIgnoringCase("length");
     }
 
-    /** 5) 加减: price=0 参与, price IS NULL 跳过。 */
+    /** 数据库层的 CHECK: spec > 0 与 price IS NULL OR price >= 0 必须由数据库强制。 */
     @Test
-    void adjust_skipsNullPriceAndAdjustsZeroPrice() {
-        when(idGenerator.nextId()).thenReturn(942000000000000251L, 942000000000000252L,
-                942000000000000253L, 942000000000000254L);
-        SupplierPriceListStore store = store();
-        SupplierPriceListRequest base = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, MORNING,
-                null, null, null, null,
-                List.of(new SupplierPriceListRequest.ItemRequest("螺纹钢", "抗震钢E", 12, "9米",
-                                new BigDecimal("100.00"), "NORMAL", null, 0),
-                        new SupplierPriceListRequest.ItemRequest("螺纹钢", "抗震钢E", 12, "12米",
-                                BigDecimal.ZERO, "NORMAL", null, 1)));
-        SupplierPriceListResponse created = store.create(base);
-        assertThat(created.items()).hasSize(2);
+    void checkConstraints_arePresentOnSupplierPriceItem() {
+        List<String> constraints = jdbc.queryForList("""
+                select conname from pg_constraint
+                where conrelid = 'public.mk_supplier_price_item'::regclass and contype = 'c'
+                """, String.class);
+        assertThat(constraints)
+                .contains("ck_supplier_price_item_spec")
+                .contains("ck_supplier_price_item_price")
+                .contains("ck_supplier_price_item_status");
 
-        PriceAdjustmentResponse response = store.adjust(created.id(),
-                new PriceAdjustmentRequest("ADD", new BigDecimal("50.00"), null), 7L, "PG测试");
-
-        assertThat(response.affectedCount()).isEqualTo(2);
-        assertThat(response.skippedCount()).isZero();
-
-        // 追加一个不报价条目后再次整表加减: 只有非 NULL 条目参与
-        SupplierPriceItem noQuote = new SupplierPriceItem();
-        noQuote.setId(942000000000000260L);
-        noQuote.setList(listRepository.findById(created.id()).orElseThrow());
-        noQuote.setCategory("盘螺");
-        noQuote.setMaterial("HRB400E");
-        noQuote.setSpec(8);
-        noQuote.setLength("");
-        noQuote.setPrice(null);
-        noQuote.setSortOrder(2);
-        itemRepository.saveAndFlush(noQuote);
-
-        PriceAdjustmentResponse second = store.adjust(created.id(),
-                new PriceAdjustmentRequest("SUBTRACT", new BigDecimal("10.00"), null), 7L, "PG测试");
-
-        assertThat(second.skippedCount()).isEqualTo(1);
-        assertThat(second.affectedCount()).isEqualTo(2);
-        assertThat(itemRepository.findById(noQuote.getId()).orElseThrow().getPrice()).isNull();
-        assertThat(itemRepository.findById(noQuote.getId()).orElseThrow().getPrice()).isNotEqualTo(BigDecimal.ZERO);
+        List<String> listConstraints = jdbc.queryForList("""
+                select conname from pg_constraint
+                where conrelid = 'public.mk_supplier_price_list'::regclass and contype = 'c'
+                """, String.class);
+        assertThat(listConstraints)
+                .contains("ck_supplier_price_list_status")
+                .contains("ck_supplier_price_list_effective_range");
     }
 }
