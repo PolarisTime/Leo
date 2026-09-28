@@ -1,3 +1,10 @@
+## [11.19.1](https://github.com/PolarisTime/Leo/compare/v11.19.0...v11.19.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **deploy:** 进程脚本等业务与管理端口都释放, 并回填真实 java PID ([509e1a1](https://github.com/PolarisTime/Leo/commit/509e1a14bf074876178adce57f9da7990003469d))
+
 # [11.19.0](https://github.com/PolarisTime/Leo/compare/v11.18.0...v11.19.0) (2026-09-28)
 
 
