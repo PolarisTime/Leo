@@ -1,3 +1,11 @@
+# [11.18.0](https://github.com/PolarisTime/Leo/compare/v11.17.0...v11.18.0) (2026-09-28)
+
+
+### Features
+
+* **api:** 新增 module-exports 资源端点, 按记录 id 集合导出 xlsx ([3d73c4e](https://github.com/PolarisTime/Leo/commit/3d73c4ea6ec8846d76b95eff8df9d1c8503864a4))
+* **quote-sheets:** 采购订单吨位响应补 brand 品牌字段 ([ca779bf](https://github.com/PolarisTime/Leo/commit/ca779bf2efe7560c97261a667e51d5f505ee2a28))
+
 # [11.17.0](https://github.com/PolarisTime/Leo/compare/v11.16.0...v11.17.0) (2026-09-27)
 
 
