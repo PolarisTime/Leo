@@ -36,7 +36,8 @@ public final class PageSortFieldCatalog {
             Map.entry("quote-sheet", Set.of("id", "sheetNo", "name", "orderDate", "refDate", "refPeriod", "status")),
             // 供应商价格表已取消版本语义: releasedAt/effectiveFrom/effectiveTo/status 不再可排序
             // (传这些旧字段按 PageQuery 契约返回 422, 不再对外承诺其排序语义); 默认按 updatedAt 倒序。
-            Map.entry("supplier-price-list", Set.of("id", "supplierName", "brandName",
+            // quotedOn = 业务报价日期(用户可填, 默认当天), 与系统 updatedAt(最后修改)区分开。
+            Map.entry("supplier-price-list", Set.of("id", "supplierName", "brandName", "quotedOn",
                     "warehouse", "createdAt", "updatedAt")),
             // 值映射/别名: 只允许 id/dimension/sourceValue/targetValue/createdAt/updatedAt
             Map.entry("value-alias", Set.of("id", "dimension", "sourceValue", "targetValue",

@@ -163,6 +163,50 @@ class SupplierPriceListStoreTest {
         assertThat(response.releasedAt()).isNotNull().isAfterOrEqualTo(before);
     }
 
+    /** 业务报价日期缺省 = 当天, 与系统 updatedAt(最后修改)区分。 */
+    @Test
+    void create_defaultsQuotedOnToTodayWhenRequestOmitsIt() {
+        stubSupplierAndCatalog();
+        when(snowflakeIdGenerator.nextId()).thenReturn(900L, 901L);
+        when(listRepository.saveAndFlush(any(SupplierPriceList.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        SupplierPriceListResponse response = store().create(request(12, BigDecimal.TEN));
+
+        assertThat(response.quotedOn()).isEqualTo(LocalDate.now());
+    }
+
+    /** 显式传入的报价日期原样生效, 且与系统字段互不影响(两者可以不同)。 */
+    @Test
+    void create_usesExplicitQuotedOnAndKeepsSystemTimestampIndependent() {
+        stubSupplierAndCatalog();
+        when(snowflakeIdGenerator.nextId()).thenReturn(900L, 901L);
+        when(listRepository.saveAndFlush(any(SupplierPriceList.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        SupplierPriceListRequest explicit = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, RELEASED,
+                null, null, null, null, List.of(item(12, BigDecimal.TEN)), "2026-08-01");
+
+        SupplierPriceListResponse response = store().create(explicit);
+
+        assertThat(response.quotedOn()).isEqualTo(LocalDate.of(2026, 8, 1));
+        assertThat(response.releasedAt()).isEqualTo(RELEASED);
+    }
+
+    /** 格式合法但语义非法(2 月 30 日) → 422(VALIDATION_ERROR), 不得 500, 也不得写库。 */
+    @Test
+    void create_rejectsSemanticallyInvalidQuotedOnWith422() {
+        stubSupplierAndCatalog();
+        SupplierPriceListRequest invalid = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, RELEASED,
+                null, null, null, null, List.of(item(12, BigDecimal.TEN)), "2026-02-30");
+
+        assertThatThrownBy(() -> store().create(invalid))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("报价日期不合法")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(listRepository, never()).saveAndFlush(any());
+    }
+
     /**
      * 写库类别与 spec-catalog 返回的类别必须是同一个值(都经 CategoryNormalizer 归一):
      * 请求写 直条 也能通过全集校验, 落库/响应统一为 螺纹钢, 不会出现同一键两行别名。
@@ -370,6 +414,48 @@ class SupplierPriceListStoreTest {
         assertThat(second.items()).extracting(SupplierPriceListResponse.ItemResponse::price)
                 .containsExactly(new BigDecimal("200.00"), new BigDecimal("300.00"));
         verify(listRepository, times(2)).saveAndFlush(any(SupplierPriceList.class));
+    }
+
+    /**
+     * 业务报价日期可反复改(不是版本): 携带则改写, 未携带则保持原值(改价/改条目不得让它漂移到今天)。
+     */
+    @Test
+    void update_changesQuotedOnWhenProvidedAndKeepsItWhenOmitted() {
+        stubSupplierAndCatalog();
+        SupplierPriceList entity = list(500L, RELEASED);
+        entity.setQuotedOn(LocalDate.of(2026, 8, 1));
+        entity.getItems().addAll(List.of(quotedItem(11L, "9米", "100.00")));
+        when(listRepository.findWithItemsByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(entity));
+        when(listRepository.saveAndFlush(any(SupplierPriceList.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        SupplierPriceListRequest omitted = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, RELEASED,
+                null, null, null, null, List.of(item(12, "9米", new BigDecimal("200.00"))));
+
+        SupplierPriceListResponse kept = store().update(500L, omitted, null);
+        assertThat(kept.quotedOn()).isEqualTo(LocalDate.of(2026, 8, 1));
+
+        SupplierPriceListRequest changed = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, RELEASED,
+                null, null, null, null, List.of(item(12, "9米", new BigDecimal("200.00"))), "2026-09-15");
+        SupplierPriceListResponse updated = store().update(500L, changed, null);
+
+        assertThat(updated.quotedOn()).isEqualTo(LocalDate.of(2026, 9, 15));
+    }
+
+    /** 更新路径的非法报价日期同样 422(与创建同一口径)。 */
+    @Test
+    void update_rejectsInvalidQuotedOnWith422() {
+        stubSupplier();
+        SupplierPriceList entity = list(500L, RELEASED);
+        entity.setQuotedOn(LocalDate.of(2026, 8, 1));
+        when(listRepository.findWithItemsByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(entity));
+        SupplierPriceListRequest invalid = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, RELEASED,
+                null, null, null, null, List.of(item(12, BigDecimal.TEN)), "2026-13-01");
+
+        assertThatThrownBy(() -> store().update(500L, invalid, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(listRepository, never()).saveAndFlush(any());
     }
 
     /** 改键到空闲的 (供应商, 品牌) 允许; 目标被占用 → 409 且不写库。 */

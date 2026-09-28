@@ -76,6 +76,7 @@ class V2SupplierPriceListControllerContractTest {
 
     private static SupplierPriceListResponse response(Long archivedListId) {
         return new SupplierPriceListResponse(LIST_ID, SUPPLIER_ID, "杭州中金钢铁", "安徽富鑫",
+                LocalDate.of(2026, 9, 28),
                 LocalDateTime.of(2026, 9, 28, 14, 35), LocalDate.of(2026, 9, 28), null,
                 "ACTIVE", "钢联新安库", "备注", 1, 3L,
                 LocalDateTime.of(2026, 9, 28, 14, 35), LocalDateTime.of(2026, 9, 28, 14, 35),
@@ -261,11 +262,11 @@ class V2SupplierPriceListControllerContractTest {
                 .andExpect(jsonPath("$.code").value(ErrorCode.VALIDATION_ERROR.getCode()));
     }
 
-    /** 排序白名单只保留现表字段(updated_at 为默认), 版本语义字段必须已移除。 */
+    /** 排序白名单只保留现表字段(updated_at 为默认), 版本语义字段必须已移除; 业务报价日期可排序。 */
     @Test
     void pageSortFieldCatalog_dropsVersionFields() {
         assertThat(com.leo.erp.common.api.PageSortFieldCatalog.fields("supplier-price-list"))
-                .contains("id", "supplierName", "brandName", "warehouse", "createdAt", "updatedAt")
+                .contains("id", "supplierName", "brandName", "quotedOn", "warehouse", "createdAt", "updatedAt")
                 .doesNotContain("releasedAt", "effectiveFrom", "effectiveTo", "status");
     }
 
@@ -279,5 +280,66 @@ class V2SupplierPriceListControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    /** 业务报价日期加入排序白名单后, sortBy=quotedOn 必须被接受(缺省仍是 updatedAt DESC)。 */
+    @Test
+    void page_shouldAcceptQuotedOnAsSortField() throws Exception {
+        when(store.page(any(), isNull(), isNull()))
+                .thenReturn(org.springframework.data.domain.Page.empty());
+
+        mockMvc.perform(get("/v2.0/supplier-price-lists")
+                        .param("sortBy", "quotedOn")
+                        .param("direction", "desc"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<com.leo.erp.common.api.PageQuery> captor =
+                ArgumentCaptor.forClass(com.leo.erp.common.api.PageQuery.class);
+        verify(store).page(captor.capture(), isNull(), isNull());
+        assertThat(captor.getValue().toPageable("updatedAt").getSort().getOrderFor("quotedOn")).isNotNull();
+    }
+
+    /** 响应同时给出「报价日期(quotedOn)」与「最后修改(updatedAt)」两个语义不同的时间。 */
+    @Test
+    void detail_shouldExposeQuotedOnAndUpdatedAtSeparately() throws Exception {
+        when(store.detail(LIST_ID)).thenReturn(response(null));
+
+        mockMvc.perform(get("/v2.0/supplier-price-lists/{id}", LIST_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.quotedOn").value("2026-09-28"))
+                .andExpect(jsonPath("$.updatedAt").value("2026-09-28T14:35:00+08:00"));
+    }
+
+    /** 非法报价日期(格式)按契约 422, 不得落到 400/500, 且不得触达服务层。 */
+    @Test
+    void create_shouldRejectMalformedQuotedOnWith422() throws Exception {
+        mockMvc.perform(post("/v2.0/supplier-price-lists")
+                        .contentType("application/json")
+                        .content("""
+                                {"supplierId":"9007199254740993","brandName":"安徽富鑫",
+                                 "quotedOn":"2026/13/45","items":[]}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value(ErrorCode.VALIDATION_ERROR.getCode()));
+        verify(store, org.mockito.Mockito.never()).create(any());
+    }
+
+    /** 请求可显式携带报价日期, 原样透传到服务层。 */
+    @Test
+    void create_shouldPassQuotedOnThroughToStore() throws Exception {
+        when(store.create(any())).thenReturn(response(null));
+
+        mockMvc.perform(post("/v2.0/supplier-price-lists")
+                        .contentType("application/json")
+                        .content("""
+                                {"supplierId":"9007199254740993","brandName":"安徽富鑫",
+                                 "quotedOn":"2026-08-01","items":[]}
+                                """))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<com.leo.erp.market.pricelist.web.dto.SupplierPriceListRequest> captor =
+                ArgumentCaptor.forClass(com.leo.erp.market.pricelist.web.dto.SupplierPriceListRequest.class);
+        verify(store).create(captor.capture());
+        assertThat(captor.getValue().quotedOn()).isEqualTo("2026-08-01");
     }
 }

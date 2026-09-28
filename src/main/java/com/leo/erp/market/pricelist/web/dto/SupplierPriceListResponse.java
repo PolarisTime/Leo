@@ -11,12 +11,17 @@ import java.util.List;
  * <p>已取消版本语义(契约 4.6 修订 R2): {@code releasedAt} / {@code status} / {@code effectiveFrom} /
  * {@code effectiveTo} 仅为兼容保留(不参与取版/筛选, {@code status} 新行恒为 {@code ACTIVE});
  * 展示"更新时间"请用 {@code updatedAt}。</p>
+ *
+ * <p><b>两个时间必须分开看</b>: {@code quotedOn} = 业务报价日期(用户可填, 默认当天);
+ * {@code updatedAt} = 系统最后修改时刻。维护页展示为「报价日期 / 最后修改」两列。</p>
  */
 public record SupplierPriceListResponse(
         Long id,
         Long supplierId,
         String supplierName,
         String brandName,
+        /** 业务报价日期(用户可填, 默认当天), 与 {@code updatedAt} 严格区分。 */
+        LocalDate quotedOn,
         /** 兼容保留: 不再有版本含义, 展示请用 {@code updatedAt}。 */
         LocalDateTime releasedAt,
         /** 兼容保留(可为空)。 */
@@ -42,6 +47,8 @@ public record SupplierPriceListResponse(
             Long supplierId,
             String supplierName,
             String brandName,
+            /** 业务报价日期(用户可填, 默认当天), 与 {@code updatedAt} 严格区分。 */
+            LocalDate quotedOn,
             /** 兼容保留: 不再有版本含义, 展示请用 {@code updatedAt}。 */
             LocalDateTime releasedAt,
             /** 兼容保留(可为空)。 */

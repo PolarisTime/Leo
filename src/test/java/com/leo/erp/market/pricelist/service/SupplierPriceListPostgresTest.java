@@ -25,6 +25,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -198,6 +199,79 @@ class SupplierPriceListPostgresTest {
         assertThat(columns.get("effective_to")[0]).isEqualTo("YES");
         assertThat(columns.get("released_at")[0]).isEqualTo("NO");
         assertThat(columns.get("released_at")[1]).contains("CURRENT_TIMESTAMP");
+    }
+
+    /** V172 结构断言: quoted_on 为 date、NOT NULL、默认当天, 且历史行已全部回填(无 NULL)。 */
+    @Test
+    void migration_addsQuotedOnAsRequiredDateWithTodayDefault() {
+        Map<String, String[]> columns = jdbc.query("""
+                select column_name, is_nullable, column_default, data_type from information_schema.columns
+                where table_schema = 'public' and table_name = 'mk_supplier_price_list'
+                  and column_name = 'quoted_on'
+                """, rs -> {
+            Map<String, String[]> result = new java.util.LinkedHashMap<>();
+            while (rs.next()) {
+                result.put(rs.getString("column_name"), new String[] {rs.getString("is_nullable"),
+                        String.valueOf(rs.getString("column_default")), rs.getString("data_type")});
+            }
+            return result;
+        });
+
+        assertThat(columns).containsKey("quoted_on");
+        assertThat(columns.get("quoted_on")[0]).isEqualTo("NO");
+        assertThat(columns.get("quoted_on")[1]).contains("CURRENT_DATE");
+        assertThat(columns.get("quoted_on")[2]).isEqualTo("date");
+
+        Integer nullRows = jdbc.queryForObject(
+                "select count(*) from public.mk_supplier_price_list where quoted_on is null", Integer.class);
+        assertThat(nullRows).isZero();
+    }
+
+    /** 业务报价日期: 缺省 = 当天落库; 更新可直接改(不是版本), 与 updated_at 互不影响。 */
+    @Test
+    void quotedOn_defaultsToTodayAndIsChangeableOnRealSchema() {
+        when(idGenerator.nextId()).thenReturn(942000000000000241L, 942000000000000242L);
+        SupplierPriceListStore store = store();
+
+        SupplierPriceListResponse created = store.create(request(SUPPLIER_ID, BRAND, "9米", "3220.00", MORNING));
+
+        assertThat(created.quotedOn()).isEqualTo(LocalDate.now());
+        LocalDate persisted = jdbc.queryForObject(
+                "select quoted_on from public.mk_supplier_price_list where id = ?",
+                LocalDate.class, created.id());
+        assertThat(persisted).isEqualTo(created.quotedOn());
+
+        SupplierPriceListRequest changed = new SupplierPriceListRequest(SUPPLIER_ID, BRAND,
+                MORNING, null, null, "PG库", null,
+                List.of(new SupplierPriceListRequest.ItemRequest("螺纹钢", "抗震钢E", 12, "9米",
+                        new BigDecimal("3220.00"), "NORMAL", null, 0)), "2026-08-01");
+        SupplierPriceListResponse updated = store.update(created.id(), changed, null);
+
+        assertThat(updated.quotedOn()).isEqualTo(LocalDate.of(2026, 8, 1));
+        assertThat(updated.updatedAt()).isNotNull();
+    }
+
+    /** 列表按业务报价日期排序可用(白名单 quotedOn + 真库 order by)。 */
+    @Test
+    void page_sortsByQuotedOnOnRealSchema() {
+        when(idGenerator.nextId()).thenReturn(942000000000000251L, 942000000000000252L,
+                942000000000000253L, 942000000000000254L);
+        SupplierPriceListStore store = store();
+        store.create(new SupplierPriceListRequest(SUPPLIER_ID, BRAND, MORNING, null, null, "PG库", null,
+                List.of(new SupplierPriceListRequest.ItemRequest("螺纹钢", "抗震钢E", 12, "9米",
+                        new BigDecimal("3220.00"), "NORMAL", null, 0)), "2026-09-20"));
+        store.create(new SupplierPriceListRequest(SUPPLIER_ID, OTHER_BRAND, MORNING, null, null, "PG库", null,
+                List.of(new SupplierPriceListRequest.ItemRequest("螺纹钢", "抗震钢E", 12, "9米",
+                        new BigDecimal("3300.00"), "NORMAL", null, 0)), "2026-08-01"));
+
+        List<SupplierPriceListResponse.SummaryResponse> rows = store.page(
+                        com.leo.erp.common.api.PageQuery.of(0, 20, "quotedOn", "desc",
+                                com.leo.erp.common.api.PageSortFieldCatalog.fields("supplier-price-list")),
+                        SUPPLIER_ID, null)
+                .getContent();
+
+        assertThat(rows).extracting(SupplierPriceListResponse.SummaryResponse::quotedOn)
+                .containsExactly(LocalDate.of(2026, 9, 20), LocalDate.of(2026, 8, 1));
     }
 
     /** 归并结果守卫: 全表不存在同 (supplier_id, brand_name) 的多条未删除行。 */

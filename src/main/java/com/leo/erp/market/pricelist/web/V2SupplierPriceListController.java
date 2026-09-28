@@ -73,9 +73,10 @@ public class V2SupplierPriceListController {
     @Operation(summary = "分页查询供应商价格表",
             description = "每行一个 (供应商, 品牌) 当前价格表; 返回摘要(不含条目)。"
                     + "筛选仅支持 supplierId/brandName(已取消 status/releasedFrom/releasedTo)。"
-                    + "排序 sortBy 仅支持 id/supplierName/brandName/warehouse/createdAt/updatedAt, "
+                    + "排序 sortBy 仅支持 id/supplierName/brandName/quotedOn/warehouse/createdAt/updatedAt, "
                     + "缺省 updatedAt DESC(已取消版本语义的 releasedAt/effectiveFrom/effectiveTo/status "
-                    + "不再可排序, 传入按契约返回 422)。")
+                    + "不再可排序, 传入按契约返回 422)。"
+                    + "quotedOn = 业务报价日期, updatedAt = 系统最后修改时刻, 维护页分别展示「报价日期/最后修改」。")
     @GetMapping
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_READ)
     public PageResponse<SupplierPriceListResponse.SummaryResponse> page(
@@ -127,7 +128,8 @@ public class V2SupplierPriceListController {
 
     @Operation(summary = "创建价格表",
             description = "为 (supplierId, brandName) 建表; 同键已存在未删除价格表 → 409(不再自动归档旧版); "
-                    + "releasedAt 仅为兼容保留, 缺省 = 当前时刻。")
+                    + "releasedAt 仅为兼容保留, 缺省 = 当前时刻。"
+                    + "quotedOn = 业务报价日期(yyyy-MM-dd), 缺省 = 当天; 非法日期 422。")
     @PostMapping
     @V2Created
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_CREATE)
@@ -138,7 +140,8 @@ public class V2SupplierPriceListController {
 
     @Operation(summary = "全量替换价格表",
             description = "全量替换表头与条目(幂等: 同请求重复执行结果一致); 目标键被其他价格表占用 → 409; "
-                    + "可选携带 " + VERSION_HEADER + " 做乐观并发校验(不匹配 412)。")
+                    + "可选携带 " + VERSION_HEADER + " 做乐观并发校验(不匹配 412)。"
+                    + "quotedOn = 业务报价日期(yyyy-MM-dd), 未携带则保持原值(改价不让报价日期漂移到今天), 非法日期 422。")
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_UPDATE)
     public ResponseEntity<SupplierPriceListResponse> update(

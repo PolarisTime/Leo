@@ -54,6 +54,16 @@ public class SupplierPriceList extends AbstractAuditableEntity implements Status
     @Column(name = "brand_name", nullable = false, length = 64)
     private String brandName;
 
+    /**
+     * 业务「报价日期」(用户可填, 缺省当天)。
+     *
+     * <p>与系统审计列 {@link #getUpdatedAt()}(最后修改时刻) 严格区分: 改条目/改价只会动
+     * {@code updated_at}, 不会漂移 {@code quotedOn}; 同一 (供应商, 品牌) 可直接改报价日期,
+     * 不产生任何版本。</p>
+     */
+    @Column(name = "quoted_on", nullable = false)
+    private LocalDate quotedOn;
+
     /** 已取消版本语义, 仅为兼容保留; 不参与取版/筛选, 展示请用 {@link #getUpdatedAt()}。 */
     @Column(name = "released_at", nullable = false)
     private LocalDateTime releasedAt;

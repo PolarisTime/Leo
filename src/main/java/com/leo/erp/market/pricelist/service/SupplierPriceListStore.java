@@ -31,7 +31,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -318,6 +320,10 @@ public class SupplierPriceListStore {
      * <p>已取消版本语义: {@code releasedAt}/{@code effectiveFrom}/{@code effectiveTo} 仅为兼容保留,
      * 不参与任何取版与筛选。创建时 {@code releasedAt} 缺省 = 当前时刻(数据库列 NOT NULL);
      * 更新时仅在请求显式携带时改写, 避免静默清空历史值。</p>
+     *
+     * <p><b>业务报价日期</b> {@code quotedOn}: 创建时缺省 = 当天; 更新时未携带则保持原值
+     * (改条目/改价不得让业务报价日期漂移到今天), 携带则直接改写 —— 同一 (供应商, 品牌) 允许
+     * 反复调整该日期, 不产生任何版本。非法日期 → 422。</p>
      */
     private void applyHeader(SupplierPriceList entity, SupplierPriceListRequest request, boolean creating) {
         if (creating) {
@@ -325,6 +331,7 @@ public class SupplierPriceListStore {
         } else if (request.releasedAt() != null) {
             entity.setReleasedAt(request.releasedAt());
         }
+        entity.setQuotedOn(resolveQuotedOn(request.quotedOn(), creating, entity.getQuotedOn()));
         if (request.effectiveFrom() != null && request.effectiveTo() != null
                 && request.effectiveTo().isBefore(request.effectiveFrom())) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "生效截止日期不能早于生效起始日期");
@@ -333,6 +340,31 @@ public class SupplierPriceListStore {
         entity.setEffectiveTo(request.effectiveTo());
         entity.setWarehouse(blankToNull(request.warehouse()));
         entity.setRemark(blankToNull(request.remark()));
+    }
+
+    /**
+     * 解析业务报价日期。
+     *
+     * <p>请求里刻意按 ISO 文本({@code yyyy-MM-dd})接收: Jackson 直接反序列化 {@code LocalDate} 失败会被
+     * 全局映射为 400, 而契约要求"非法日期 422"; 这里做二次兜底解析, 非法值统一
+     * {@link ErrorCode#VALIDATION_ERROR}(422)。</p>
+     *
+     * @param raw      请求值(可空 = 未携带)
+     * @param creating true = 新建, 缺省当天; false = 更新, 缺省保持原值
+     * @param current  当前库内值(更新时缺省回退)
+     */
+    private static LocalDate resolveQuotedOn(String raw, boolean creating, LocalDate current) {
+        if (raw == null || raw.isBlank()) {
+            if (!creating && current != null) {
+                return current;
+            }
+            return LocalDate.now();
+        }
+        try {
+            return LocalDate.parse(raw.trim());
+        } catch (DateTimeParseException ex) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "报价日期不合法(需 yyyy-MM-dd): " + raw);
+        }
     }
 
     /**
@@ -524,6 +556,7 @@ public class SupplierPriceListStore {
     private static SupplierPriceListResponse toResponse(SupplierPriceList entity) {
         return new SupplierPriceListResponse(
                 entity.getId(), entity.getSupplierId(), entity.getSupplierName(), entity.getBrandName(),
+                entity.getQuotedOn(),
                 entity.getReleasedAt(), entity.getEffectiveFrom(), entity.getEffectiveTo(), entity.getStatus(),
                 entity.getWarehouse(), entity.getRemark(), entity.getItems().size(), entity.getVersion(),
                 entity.getCreatedAt(), entity.getUpdatedAt(), null,
@@ -533,6 +566,7 @@ public class SupplierPriceListStore {
     private static SupplierPriceListResponse.SummaryResponse toSummary(SupplierPriceList entity, Long itemCount) {
         return new SupplierPriceListResponse.SummaryResponse(
                 entity.getId(), entity.getSupplierId(), entity.getSupplierName(), entity.getBrandName(),
+                entity.getQuotedOn(),
                 entity.getReleasedAt(), entity.getEffectiveFrom(), entity.getEffectiveTo(), entity.getStatus(),
                 entity.getWarehouse(), entity.getRemark(), itemCount.intValue(), entity.getVersion(),
                 entity.getCreatedAt(), entity.getUpdatedAt());
