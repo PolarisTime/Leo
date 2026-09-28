@@ -99,7 +99,10 @@ public class QuoteSheetItem {
         return purchaseOrderId != null;
     }
 
-    /** LAZY 反向集合: 不参与 fetch join(避免与 items 双 bag), 按 50 一批懒加载避免 N+1。 */
+    /**
+     * LAZY 反向集合: 不参与 fetch join(避免与 items 双 bag), 按 50 一批懒加载避免 N+1。
+     * <p>现货价已不再落库/读库(完全由供应商价格表推导), 该集合仅保留历史数据。</p>
+     */
     @OneToMany(mappedBy = "item", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @BatchSize(size = 50)
     @OrderBy("brandName ASC")

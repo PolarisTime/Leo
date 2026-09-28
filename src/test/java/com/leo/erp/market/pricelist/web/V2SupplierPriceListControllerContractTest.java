@@ -152,19 +152,35 @@ class V2SupplierPriceListControllerContractTest {
                 .andExpect(header().string("X-Resource-Version", "3"));
     }
 
+    /** 同键重复建表 → 409(不再自动归档旧版)。 */
     @Test
-    void update_shouldReturnConflictWhenArchived() throws Exception {
-        when(store.update(eq(LIST_ID), any(), isNull()))
-                .thenThrow(new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "该价格表版本已归档，不可修改"));
+    void create_shouldReturnConflictWhenKeyAlreadyExists() throws Exception {
+        when(store.create(any()))
+                .thenThrow(new BusinessException(ErrorCode.CONCURRENT_MODIFICATION,
+                        "该供应商与品牌已存在价格表，请直接编辑原价格表或先删除后重建"));
 
-        mockMvc.perform(put("/v2.0/supplier-price-lists/{id}", LIST_ID)
+        mockMvc.perform(post("/v2.0/supplier-price-lists")
                         .contentType("application/json")
                         .content("""
-                                {"supplierId":"9007199254740993","brandName":"安徽富鑫",
-                                 "releasedAt":"2026-09-28T14:35:00","items":[]}
+                                {"supplierId":"9007199254740993","brandName":"安徽富鑫","items":[]}
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(ErrorCode.CONCURRENT_MODIFICATION.getCode()));
+    }
+
+    /** releasedAt 已取消版本语义: 请求省略也必须创建成功(releasedAt 缺省 = 当前时刻)。 */
+    @Test
+    void create_shouldAcceptRequestWithoutReleasedAt() throws Exception {
+        when(store.create(any())).thenReturn(response(null));
+
+        mockMvc.perform(post("/v2.0/supplier-price-lists")
+                        .contentType("application/json")
+                        .content("""
+                                {"supplierId":"9007199254740993","brandName":"安徽富鑫"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location",
+                        "http://localhost/v2.0/supplier-price-lists/" + LIST_ID));
     }
 
     @Test
@@ -237,10 +253,26 @@ class V2SupplierPriceListControllerContractTest {
                 .andExpect(jsonPath("$.columns[0].supplierId").value("9007199254740993"));
     }
 
+    /** 已取消版本语义的字段不再对外承诺可排序: 传旧 sortBy 按契约 422。 */
+    @Test
+    void page_shouldRejectRemovedVersionSortFields() throws Exception {
+        mockMvc.perform(get("/v2.0/supplier-price-lists").param("sortBy", "releasedAt"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value(ErrorCode.VALIDATION_ERROR.getCode()));
+    }
+
+    /** 排序白名单只保留现表字段(updated_at 为默认), 版本语义字段必须已移除。 */
+    @Test
+    void pageSortFieldCatalog_dropsVersionFields() {
+        assertThat(com.leo.erp.common.api.PageSortFieldCatalog.fields("supplier-price-list"))
+                .contains("id", "supplierName", "brandName", "warehouse", "createdAt", "updatedAt")
+                .doesNotContain("releasedAt", "effectiveFrom", "effectiveTo", "status");
+    }
+
     /** 集合端点必须用既有分页契约, 不返回裸数组。 */
     @Test
     void page_shouldReturnPageResponseEnvelope() throws Exception {
-        when(store.page(any(), isNull(), isNull(), isNull(), isNull(), isNull()))
+        when(store.page(any(), isNull(), isNull()))
                 .thenReturn(org.springframework.data.domain.Page.empty());
 
         mockMvc.perform(get("/v2.0/supplier-price-lists"))

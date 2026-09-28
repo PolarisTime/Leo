@@ -9,11 +9,17 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * {@code mk_quote_item_price} 历史数据仓储。
+ *
+ * <p>现货价已不再落库/读库(改为完全由供应商价格表推导), 本仓储仅为保留历史数据映射,
+ * 业务代码不得在取价路径上调用。</p>
+ */
 public interface QuoteSheetItemPriceRepository extends JpaRepository<QuoteSheetItemPrice, Long> {
 
     Optional<QuoteSheetItemPrice> findByItemIdAndBrandName(Long itemId, String brandName);
 
-    /** 批量加载单据全部格子的覆盖记录, 供读时推导判定 MANUAL 覆盖(N+1 防护)。 */
+    /** 批量加载单据全部历史落库行(仅供历史数据核对, 取价路径不再使用)。 */
     @Query("""
             select price from QuoteSheetItemPrice price
             where price.item.sheet.id = :sheetId

@@ -22,7 +22,10 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * 供应商价格表只读查询: 规格全集、对照矩阵投影、按报价时刻取版。
+ * 供应商价格表只读查询: 规格全集、对照矩阵投影、当前价格表加载。
+ *
+ * <p>已取消版本语义(契约 4.6 修订 R2): 不再有"按报价时刻取版", 每个 (供应商, 品牌)
+ * 只有一张未删除价格表。</p>
  *
  * <p><b>本类所有方法都不得写库</b>(RESTful {@code GET} 只读)。</p>
  */
@@ -57,20 +60,20 @@ public class SupplierPriceListQueryService {
      * @param supplierIds 供应商筛选, 空表示不限
      * @param brandNames  品牌筛选, 空表示不限
      * @param category    类别筛选, 空表示不限
-     * @param asOf        取版时刻, 缺省 = 当前时刻
+     * @param asOf        兼容保留(不再参与选版); 缺省 = 当前时刻, 仅回显
      */
     @Transactional(readOnly = true)
     public SupplierPriceMatrixResponse matrix(List<Long> supplierIds, List<String> brandNames,
                                               String category, LocalDateTime asOf) {
-        LocalDateTime effectiveAsOf = asOf == null ? LocalDateTime.now() : asOf;
+        LocalDateTime echoedAsOf = asOf == null ? LocalDateTime.now() : asOf;
         Set<Long> supplierFilter = normalizeIds(supplierIds);
         Set<String> brandFilter = normalizeNames(brandNames);
 
-        List<SupplierPriceList> candidates = activeAsOf(effectiveAsOf).stream()
+        List<SupplierPriceList> candidates = currentLists(brandFilter).stream()
                 .filter(list -> supplierFilter.isEmpty() || supplierFilter.contains(list.getSupplierId()))
                 .filter(list -> brandFilter.isEmpty() || brandFilter.contains(list.getBrandName()))
                 .toList();
-        Map<String, SupplierPriceList> picked = pickLatestPerSupplierBrand(candidates);
+        Map<String, SupplierPriceList> picked = pickCurrentPerSupplierBrand(candidates);
         List<SupplierPriceList> lists = new ArrayList<>(picked.values());
         lists.sort(Comparator
                 .comparing(SupplierPriceList::getSupplierId,
@@ -81,7 +84,7 @@ public class SupplierPriceListQueryService {
         List<SupplierPriceMatrixResponse.MatrixColumn> columns = lists.stream()
                 .map(list -> new SupplierPriceMatrixResponse.MatrixColumn(
                         list.getSupplierId(), list.getSupplierName(), list.getBrandName(),
-                        list.getId(), list.getReleasedAt(), list.getWarehouse()))
+                        list.getId(), list.getUpdatedAt(), list.getWarehouse()))
                 .toList();
 
         Map<Long, List<SupplierPriceItem>> itemsByList = loadItemsByList(lists);
@@ -120,14 +123,16 @@ public class SupplierPriceListQueryService {
                     accumulator.category(), accumulator.material(), accumulator.spec(),
                     accumulator.length(), cells));
         }
-        return new SupplierPriceMatrixResponse(effectiveAsOf, columns, matrixRows);
+        return new SupplierPriceMatrixResponse(echoedAsOf, columns, matrixRows);
     }
 
     /**
-     * 取每个 (供应商, 品牌) 在 {@code asOf} 之前 {@code released_at} 最大的未删除生效版本。
-     * <p>查询已按 {@code released_at DESC, id DESC} 排序, 按键 {@code putIfAbsent} 即为最新一版。</p>
+     * 取每个 (供应商, 品牌) 的当前未删除价格表。
+     * <p>唯一索引 {@code uk_supplier_price_list_supplier_brand} 已保证同键至多一条;
+     * 仍按键 {@code putIfAbsent} 幂等收敛, 历史上未执行迁移的库也不会重复出列。</p>
      */
-    public static Map<String, SupplierPriceList> pickLatestPerSupplierBrand(Collection<SupplierPriceList> candidates) {
+    public static Map<String, SupplierPriceList> pickCurrentPerSupplierBrand(
+            Collection<SupplierPriceList> candidates) {
         Map<String, SupplierPriceList> picked = new LinkedHashMap<>();
         for (SupplierPriceList candidate : candidates) {
             if (candidate.getSupplierId() == null || candidate.getBrandName() == null) {
@@ -139,39 +144,27 @@ public class SupplierPriceListQueryService {
     }
 
     /**
-     * 按品牌取"该报价时刻最新生效版本"(同一品牌多供应商时取 released_at 最新、同刻 id 最大的一版)。
-     *
-     * @param brandName   单据品牌列名
-     * @param supplierIds 供应商白名单, 空表示不限
-     * @param asOf        报价时刻
+     * 比价推导用: 指定品牌的当前未删除价格表(按 {@code updated_at DESC NULLS LAST, id DESC} 排序)。
+     * <p>品牌集合为空时不查库, 直接返回空列表(避免空 {@code IN} 列表)。</p>
      */
     @Transactional(readOnly = true)
-    public LatestListSelection selectLatestForBrand(String brandName, Collection<Long> supplierIds,
-                                                    LocalDateTime asOf) {
-        if (brandName == null || brandName.isBlank() || asOf == null) {
-            return LatestListSelection.none();
+    public List<SupplierPriceList> currentByBrandNames(Collection<String> brandNames) {
+        Set<String> names = normalizeNames(brandNames == null ? List.of() : new ArrayList<>(brandNames));
+        if (names.isEmpty()) {
+            return List.of();
         }
-        Set<Long> supplierFilter = normalizeIds(supplierIds == null ? List.of() : new ArrayList<>(supplierIds));
-        String normalizedBrand = brandName.trim();
-        for (SupplierPriceList candidate : activeAsOf(asOf)) {
-            if (!normalizedBrand.equals(candidate.getBrandName())) {
-                continue;
-            }
-            if (!supplierFilter.isEmpty() && !supplierFilter.contains(candidate.getSupplierId())) {
-                continue;
-            }
-            return new LatestListSelection(true, candidate);
-        }
-        return LatestListSelection.none();
+        return listRepository.findCurrentByBrandNames(names);
     }
 
-    /** 该时刻的全部未删除生效版本, 按 {@code released_at DESC, id DESC}。 */
-    @Transactional(readOnly = true)
-    public List<SupplierPriceList> activeAsOf(LocalDateTime asOf) {
-        return listRepository.findActiveAsOf(asOf);
+    /** 矩阵投影用: 指定品牌的当前价格表; 品牌筛选为空时退化为全部当前价格表。 */
+    private List<SupplierPriceList> currentLists(Set<String> brandFilter) {
+        if (!brandFilter.isEmpty()) {
+            return listRepository.findCurrentByBrandNames(brandFilter);
+        }
+        return listRepository.findAllCurrent();
     }
 
-    /** 批量加载多个版本的条目, 按版本ID分组。 */
+    /** 批量加载多张价格表的条目, 按价格表ID分组。 */
     @Transactional(readOnly = true)
     public Map<Long, List<SupplierPriceItem>> loadItemsByList(Collection<SupplierPriceList> lists) {
         List<Long> ids = lists.stream().map(SupplierPriceList::getId).filter(Objects::nonNull).toList();
@@ -217,13 +210,5 @@ public class SupplierPriceListQueryService {
     }
 
     private record MatrixCellValue(BigDecimal price, String priceStatus, Long listId) {
-    }
-
-    /** 按品牌取版结果: {@code listExists=false} 表示该时刻无生效版本(原因 NO_LIST_AT_TIME)。 */
-    public record LatestListSelection(boolean listExists, SupplierPriceList list) {
-
-        static LatestListSelection none() {
-            return new LatestListSelection(false, null);
-        }
     }
 }

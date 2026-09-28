@@ -23,8 +23,6 @@ import com.leo.erp.market.pricelist.web.dto.PriceAdjustmentResponse;
 import com.leo.erp.market.pricelist.web.dto.SupplierPriceListRequest;
 import com.leo.erp.market.pricelist.web.dto.SupplierPriceListResponse;
 import com.leo.erp.master.api.SupplierQuery;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -33,7 +31,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -49,17 +46,19 @@ import java.util.Set;
 /**
  * 供应商价格表读写(独立事务)。
  *
+ * <p><b>已取消版本语义</b>(契约 4.6 修订 R2): 一个 (供应商, 品牌) 只有一张未删除价格表,
+ * 重复创建 → 409(唯一索引 {@code uk_supplier_price_list_supplier_brand} 兜底);
+ * 不存在"自动归档旧版/同一发布时刻冲突/ARCHIVED 不可改/按时刻取版"。</p>
+ *
  * <p>核心约束:</p>
  * <ul>
  *   <li>{@code price IS NULL} 表示不报价, 与 0 元严格区分; 加减运算跳过不报价条目;</li>
- *   <li>同一 (供应商, 品牌) 同一时刻仅一个生效版本: 新建时旧版自动归档, 同刻冲突 409;</li>
- *   <li>条目键必须在规格全集内, 请求内重复键 422 并返回 errors 明细。</li>
+ *   <li>条目键必须在规格全集内, 请求内重复键 422 并返回 errors 明细;</li>
+ *   <li>{@code PUT} 全量替换条目且幂等(同键复用既有行, 仅更新单价等字段)。</li>
  * </ul>
  */
 @Service
 public class SupplierPriceListStore {
-
-    private static final String VERSION_CONFLICT_MESSAGE = "同一供应商与品牌在该发布时刻已存在生效版本，请调整发布时刻或先归档旧版本";
 
     /**
      * 状态写入守卫: 模块边界门禁只允许 ApplyService / CompletionSyncService / CrudStatusGuard
@@ -75,7 +74,6 @@ public class SupplierPriceListStore {
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final SupplierQuery supplierQuery;
     private final MaterialSpecCatalogQuery specCatalogQuery;
-    private final EntityManager entityManager;
 
     public SupplierPriceListStore(SupplierPriceListRepository listRepository,
                                   SupplierPriceItemRepository itemRepository,
@@ -83,8 +81,7 @@ public class SupplierPriceListStore {
                                   SupplierPriceAdjustmentItemRepository adjustmentItemRepository,
                                   SnowflakeIdGenerator snowflakeIdGenerator,
                                   SupplierQuery supplierQuery,
-                                  MaterialSpecCatalogQuery specCatalogQuery,
-                                  EntityManager entityManager) {
+                                  MaterialSpecCatalogQuery specCatalogQuery) {
         this.listRepository = listRepository;
         this.itemRepository = itemRepository;
         this.adjustmentRepository = adjustmentRepository;
@@ -92,20 +89,24 @@ public class SupplierPriceListStore {
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.supplierQuery = supplierQuery;
         this.specCatalogQuery = specCatalogQuery;
-        this.entityManager = entityManager;
     }
 
     // ------------------------------------------------------------------ 创建
 
-    /** 创建新版本; 同 (供应商, 品牌) 旧版按发布时间自动归档, 同刻冲突 409。 */
+    /**
+     * 为 (供应商, 品牌) 建表; 同键已存在未删除价格表 → 409。
+     * <p>并发下由部分唯一索引兜底, 冲突统一映射为 409(见 {@code GlobalExceptionHandler})。</p>
+     */
     @Transactional
     public SupplierPriceListResponse create(SupplierPriceListRequest request) {
         String supplierName = resolveSupplierName(request.supplierId());
         String brandName = requireText(request.brandName(), "品牌不能为空");
         List<NormalizedItem> items = normalizeItems(request.items());
 
-        // 按 (供应商, 品牌) 串行化, 避免并发创建时"归档 + 插入"交错绕过部分唯一索引
-        lockExistingVersions(request.supplierId(), brandName);
+        if (!listRepository.findCurrentByKey(request.supplierId(), brandName).isEmpty()) {
+            throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION,
+                    "该供应商与品牌已存在价格表，请直接编辑原价格表或先删除后重建");
+        }
 
         SupplierPriceList entity = new SupplierPriceList();
         long id = snowflakeIdGenerator.nextId();
@@ -114,49 +115,54 @@ public class SupplierPriceListStore {
         entity.setSupplierName(supplierName);
         entity.setBrandName(brandName);
         STATUS_GUARD.writeStatus(entity, SupplierPriceList.STATUS_ACTIVE);
-        applyHeader(entity, request);
+        applyHeader(entity, request, true);
         applyItems(entity, items);
-        Long archivedListId = archiveEarlierActiveVersions(request.supplierId(), brandName, entity.getReleasedAt());
         SupplierPriceList saved = listRepository.saveAndFlush(entity);
-        return toResponse(saved, archivedListId);
+        return toResponse(saved);
     }
 
     /**
-     * 全量替换版本(表头 + 条目)。
+     * 全量替换(表头 + 条目), 幂等: 同一请求重复执行结果一致。
      *
-     * @throws BusinessException 归档版本不可改 409; 版本不匹配 412; 校验失败 422
+     * @throws BusinessException 目标键已被其他价格表占用 409; 版本不匹配 412; 校验失败 422
      */
     @Transactional
     public SupplierPriceListResponse update(Long id, SupplierPriceListRequest request, Long expectedVersion) {
         SupplierPriceList entity = requireWithItems(id);
         checkOptimisticVersion(entity.getVersion(), expectedVersion);
-        if (entity.isArchived()) {
-            throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, "该价格表版本已归档，不可修改");
+        String brandName = requireText(request.brandName(), "品牌不能为空");
+        String supplierName = resolveSupplierName(request.supplierId());
+        if (!Objects.equals(entity.getSupplierId(), request.supplierId())
+                || !Objects.equals(entity.getBrandName(), brandName)) {
+            listRepository.findCurrentByKey(request.supplierId(), brandName).stream()
+                    .filter(other -> !other.getId().equals(id))
+                    .findFirst()
+                    .ifPresent(other -> {
+                        throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION,
+                                "目标供应商与品牌已存在另一张价格表，无法改键");
+                    });
         }
-        entity.setSupplierName(resolveSupplierName(request.supplierId()));
-        entity.setBrandName(requireText(request.brandName(), "品牌不能为空"));
+        entity.setSupplierName(supplierName);
+        entity.setBrandName(brandName);
         entity.setSupplierId(request.supplierId());
-        applyHeader(entity, request);
+        applyHeader(entity, request, false);
         applyItems(entity, normalizeItems(request.items()));
         SupplierPriceList saved = listRepository.saveAndFlush(entity);
-        return toResponse(saved, null);
+        return toResponse(saved);
     }
 
     // ------------------------------------------------------------------ 读取
 
     @Transactional(readOnly = true)
     public SupplierPriceListResponse detail(Long id) {
-        return toResponse(requireWithItems(id), null);
+        return toResponse(requireWithItems(id));
     }
 
     @Transactional(readOnly = true)
     public Page<SupplierPriceListResponse.SummaryResponse> page(PageQuery query,
                                                                 Long supplierId,
-                                                                String brandName,
-                                                                String status,
-                                                                LocalDateTime releasedFrom,
-                                                                LocalDateTime releasedTo) {
-        Pageable pageable = query.toPageable("releasedAt");
+                                                                String brandName) {
+        Pageable pageable = query.toPageable("updatedAt");
         Specification<SupplierPriceList> specification = (root, criteriaQuery, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(Specs.notDeletedPredicate(root, builder));
@@ -165,15 +171,6 @@ public class SupplierPriceListStore {
             }
             if (brandName != null && !brandName.isBlank()) {
                 predicates.add(builder.equal(root.get("brandName"), brandName.trim()));
-            }
-            if (status != null && !status.isBlank()) {
-                predicates.add(builder.equal(root.get("status"), status.trim().toUpperCase()));
-            }
-            if (releasedFrom != null) {
-                predicates.add(builder.greaterThanOrEqualTo(root.get("releasedAt"), releasedFrom));
-            }
-            if (releasedTo != null) {
-                predicates.add(builder.lessThanOrEqualTo(root.get("releasedAt"), releasedTo));
             }
             return builder.and(predicates.toArray(new Predicate[0]));
         };
@@ -190,7 +187,7 @@ public class SupplierPriceListStore {
                 .toList();
     }
 
-    /** 软删除版本; 不影响其他版本。 */
+    /** 软删除整张价格表(幂等); 删除后同 (供应商, 品牌) 可重新建表。 */
     @Transactional
     public void delete(Long id) {
         SupplierPriceList entity = requireHeader(id);
@@ -282,7 +279,7 @@ public class SupplierPriceListStore {
 
     // ------------------------------------------------------------------ 校验/装配
 
-    /** 解析加减目标: 显式 itemIds 必须属于该版本; 整表时按条目自然顺序。 */
+    /** 解析加减目标: 显式 itemIds 必须属于该价格表; 整表时按条目自然顺序。 */
     private List<SupplierPriceItem> resolveAdjustmentTargets(SupplierPriceList list, List<Long> itemIds) {
         List<SupplierPriceItem> items = new ArrayList<>(list.getItems());
         items.sort(Comparator.comparing(SupplierPriceItem::getSortOrder,
@@ -305,24 +302,31 @@ public class SupplierPriceListStore {
             }
             SupplierPriceItem item = byId.get(itemId);
             if (item == null) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "条目不属于该价格表版本: " + itemId);
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "条目不属于该价格表: " + itemId);
             }
             targets.add(item);
         }
         return targets;
     }
 
-    private void applyHeader(SupplierPriceList entity, SupplierPriceListRequest request) {
-        LocalDateTime releasedAt = request.releasedAt();
-        if (releasedAt == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "发布时刻不能为空");
+    /**
+     * 装配表头。
+     *
+     * <p>已取消版本语义: {@code releasedAt}/{@code effectiveFrom}/{@code effectiveTo} 仅为兼容保留,
+     * 不参与任何取版与筛选。创建时 {@code releasedAt} 缺省 = 当前时刻(数据库列 NOT NULL);
+     * 更新时仅在请求显式携带时改写, 避免静默清空历史值。</p>
+     */
+    private void applyHeader(SupplierPriceList entity, SupplierPriceListRequest request, boolean creating) {
+        if (creating) {
+            entity.setReleasedAt(request.releasedAt() == null ? LocalDateTime.now() : request.releasedAt());
+        } else if (request.releasedAt() != null) {
+            entity.setReleasedAt(request.releasedAt());
         }
-        entity.setReleasedAt(releasedAt);
-        LocalDate effectiveFrom = request.effectiveFrom() == null ? releasedAt.toLocalDate() : request.effectiveFrom();
-        if (request.effectiveTo() != null && request.effectiveTo().isBefore(effectiveFrom)) {
+        if (request.effectiveFrom() != null && request.effectiveTo() != null
+                && request.effectiveTo().isBefore(request.effectiveFrom())) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "生效截止日期不能早于生效起始日期");
         }
-        entity.setEffectiveFrom(effectiveFrom);
+        entity.setEffectiveFrom(request.effectiveFrom());
         entity.setEffectiveTo(request.effectiveTo());
         entity.setWarehouse(blankToNull(request.warehouse()));
         entity.setRemark(blankToNull(request.remark()));
@@ -377,7 +381,9 @@ public class SupplierPriceListStore {
             if (request == null) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "价格条目不能为空");
             }
-            String category = requireText(request.category(), "条目[" + index + "]类别不能为空");
+            // 类别归一到同一写法(直条 ≡ 螺纹钢): 请求内别名判重与 uk_supplier_price_item_key 同口径
+            String category = CategoryNormalizer.normalize(
+                    requireText(request.category(), "条目[" + index + "]类别不能为空"));
             String material = requireText(request.material(), "条目[" + index + "]材质不能为空");
             Integer spec = request.spec();
             if (spec == null) {
@@ -386,13 +392,14 @@ public class SupplierPriceListStore {
             if (spec <= 0) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "条目[" + index + "]规格必须大于 0");
             }
-            String length = request.length() == null ? "" : request.length().trim();
+            // 定尺归一(- / 空 / NULL → 空串; 9m / 9 米 → 9米)并按条目列宽截断, 与规格键字典同一实现
+            String length = MaterialSpecCatalogQuery.normalizeLength(request.length());
             BigDecimal price = request.price();
             if (price != null && price.compareTo(BigDecimal.ZERO) < 0) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "条目[" + index + "]单价不能为负");
             }
             PriceStatus priceStatus = parsePriceStatus(request.priceStatus(), index);
-            String key = MaterialSpecCatalogQuery.key(category, material, spec, length);
+            String key = catalogKey(category, material, spec, length);
             if (!catalogKeys.contains(key)) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR,
                         "条目[" + index + "]不在规格全集内: " + key);
@@ -415,13 +422,22 @@ public class SupplierPriceListStore {
         return normalized;
     }
 
+    /**
+     * 规格全集键集合(来源 = 项目级可选商品键 ∪ 比价单实际行键, 见
+     * {@link MaterialSpecCatalogQuery})。
+     * <p>类别按 {@link CategoryNormalizer} 归一后建键, 使 {@code 直条}/{@code 螺纹钢} 两种写法等价。</p>
+     */
     private Set<String> loadCatalogKeys() {
         Set<String> keys = new HashSet<>();
         for (MaterialSpecCatalogQuery.MaterialSpecSnapshot snapshot : specCatalogQuery.findAll()) {
-            keys.add(MaterialSpecCatalogQuery.key(snapshot.category(), snapshot.material(),
-                    snapshot.spec(), snapshot.length()));
+            keys.add(catalogKey(snapshot.category(), snapshot.material(), snapshot.spec(), snapshot.length()));
         }
         return keys;
+    }
+
+    /** 校验用全集键: 类别归一到同一写法。 */
+    private static String catalogKey(String category, String material, Integer spec, String length) {
+        return MaterialSpecCatalogQuery.key(CategoryNormalizer.normalize(category), material, spec, length);
     }
 
     private static PriceStatus parsePriceStatus(String raw, int index) {
@@ -450,67 +466,20 @@ public class SupplierPriceListStore {
                 .displayName();
     }
 
-    private void lockExistingVersions(Long supplierId, String brandName) {
-        // 对既有版本行加排他锁(不存在的行锁不住, 但部分唯一索引仍是最终兜底)
-        for (SupplierPriceList version : listRepository.findVersions(supplierId, brandName)) {
-            entityManager.lock(version, LockModeType.PESSIMISTIC_WRITE);
-        }
-    }
-
-    /**
-     * 把该 (供应商, 品牌) 下 {@code released_at} 早于新版本的生效版本全部归档, 返回本次归档的最大版本ID。
-     * <p>必须 flush 后才能插入新 ACTIVE 行, 否则会撞 {@code uk_supplier_price_list_active}。</p>
-     */
-    private Long archiveEarlierActiveVersions(Long supplierId, String brandName, LocalDateTime releasedAt) {
-        List<SupplierPriceList> actives = listRepository.findActiveVersions(supplierId, brandName);
-        if (actives.isEmpty()) {
-            return null;
-        }
-        Long maxEarlierId = null;
-        LocalDateTime maxEarlierReleasedAt = null;
-        List<SupplierPriceList> toArchive = new ArrayList<>();
-        for (SupplierPriceList active : actives) {
-            int comparison = active.getReleasedAt().compareTo(releasedAt);
-            if (comparison == 0) {
-                throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION, VERSION_CONFLICT_MESSAGE);
-            }
-            if (comparison > 0) {
-                // 既有版本比新版本更新: 新版本按历史版本入库(保持 ARCHIVED 语义由旧版继续生效)
-                throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION,
-                        "已存在更晚发布时刻的生效版本，请基于最新版本创建");
-            }
-            toArchive.add(active);
-            if (maxEarlierReleasedAt == null
-                    || active.getReleasedAt().isAfter(maxEarlierReleasedAt)
-                    || (active.getReleasedAt().isEqual(maxEarlierReleasedAt)
-                        && (maxEarlierId == null || active.getId() > maxEarlierId))) {
-                maxEarlierReleasedAt = active.getReleasedAt();
-                maxEarlierId = active.getId();
-            }
-        }
-        for (SupplierPriceList active : toArchive) {
-            STATUS_GUARD.writeStatus(active, SupplierPriceList.STATUS_ARCHIVED);
-        }
-        listRepository.saveAll(toArchive);
-        // 先落库归档, 让部分唯一索引不再命中旧的行, 再插入新生效版本
-        listRepository.flush();
-        return maxEarlierId;
-    }
-
     private SupplierPriceList requireHeader(Long id) {
         return listRepository.findByIdAndDeletedFlagFalse(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "价格表版本不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "价格表不存在"));
     }
 
     private SupplierPriceList requireWithItems(Long id) {
         return listRepository.findWithItemsByIdAndDeletedFlagFalse(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "价格表版本不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "价格表不存在"));
     }
 
-    /** 乐观并发校验: 版本不匹配 412(PRECONDITION_FAILED); expectedVersion 为空表示不校验。 */
+    /** 乐观并发校验: 乐观锁版本不匹配 412(PRECONDITION_FAILED); expectedVersion 为空表示不校验。 */
     private void checkOptimisticVersion(Long currentVersion, Long expectedVersion) {
         if (expectedVersion != null && !expectedVersion.equals(currentVersion)) {
-            throw new BusinessException(ErrorCode.PRECONDITION_FAILED, "价格表版本已变更，请刷新后重试");
+            throw new BusinessException(ErrorCode.PRECONDITION_FAILED, "价格表已被他人修改，请刷新后重试");
         }
     }
 
@@ -542,12 +511,12 @@ public class SupplierPriceListStore {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    private static SupplierPriceListResponse toResponse(SupplierPriceList entity, Long archivedListId) {
+    private static SupplierPriceListResponse toResponse(SupplierPriceList entity) {
         return new SupplierPriceListResponse(
                 entity.getId(), entity.getSupplierId(), entity.getSupplierName(), entity.getBrandName(),
                 entity.getReleasedAt(), entity.getEffectiveFrom(), entity.getEffectiveTo(), entity.getStatus(),
                 entity.getWarehouse(), entity.getRemark(), entity.getItems().size(), entity.getVersion(),
-                entity.getCreatedAt(), entity.getUpdatedAt(), archivedListId,
+                entity.getCreatedAt(), entity.getUpdatedAt(), null,
                 entity.getItems().stream().map(SupplierPriceListStore::toItemResponse).toList());
     }
 

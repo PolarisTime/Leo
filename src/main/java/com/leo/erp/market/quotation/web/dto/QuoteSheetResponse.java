@@ -40,15 +40,21 @@ public record QuoteSheetResponse(
     }
 
     /**
-     * 行×品牌价格格(读时推导结果, 契约 4.5 R1.2)。
+     * 行×品牌价格格(读时推导结果)。
+     *
+     * <p>现货价<b>只</b>来自当前供应商价格表: 手填覆盖已彻底删除,
+     * {@code mk_quote_item_price} 的历史落库值不再参与读。</p>
      *
      * <ul>
-     *   <li>{@code spotPrice}: 最终现货价 = 手填覆盖值(存在时) 否则价格表推导值;</li>
-     *   <li>{@code derivedSpotPrice}: 价格表推导值(不含手填覆盖), 供"恢复为价格表价"预览;</li>
-     *   <li>{@code spotSource}: {@code MANUAL} / {@code PRICE_LIST} / {@code NONE};</li>
-     *   <li>{@code spotReason}: {@code NO_LIST_AT_TIME} / {@code NO_ITEM} / {@code NO_PRICE}, 有值时为空;</li>
-     *   <li>{@code priceSource}/{@code priceListId}/{@code priceListReleasedAt}: 已落库覆盖行的来源快照
-     *       (雪花 ID 为字符串); 无落库行时为 null。</li>
+     *   <li>{@code spotPrice}: 当前价格表价; 未命中为 null;</li>
+     *   <li>{@code derivedSpotPrice}: 同 {@code spotPrice}(保留字段, 兼容前端"展示推导值"语义);</li>
+     *   <li>{@code spotSource}: {@code PRICE_LIST}(命中价格表) 或 {@code NONE}(未命中);
+     *       兼容枚举 {@code MANUAL} 保留但读路径不再产生;</li>
+     *   <li>{@code spotReason}: {@code NO_LIST}(无价格表) / {@code NO_ITEM}(有表无条目) /
+     *       {@code NO_PRICE}(条目不报价), 命中时为空;</li>
+     *   <li>{@code priceSource}: 兼容保留, 恒为 null(不再有落库来源快照);</li>
+     *   <li>{@code priceListId}/{@code priceListReleasedAt}: 来源价格表ID与 {@code updated_at}
+     *       (已取消版本语义, 雪花 ID 为字符串); 未命中时为 null。</li>
      * </ul>
      */
     public record ItemPriceResponse(Long id, String brandName, BigDecimal spotPrice,

@@ -34,8 +34,10 @@ public final class PageSortFieldCatalog {
             Map.entry("inventory-transaction", Set.of("id", "transactionNo", "transactionType", "materialCode", "warehouseName", "batchNo", "quantity", "unitCost", "amount", "occurredAt")),
             Map.entry("steel-quote", Set.of("id", "quoteDate", "period", "breed", "spec", "material", "factory", "price", "scrapedAt")),
             Map.entry("quote-sheet", Set.of("id", "sheetNo", "name", "orderDate", "refDate", "refPeriod", "status")),
-            Map.entry("supplier-price-list", Set.of("id", "supplierName", "brandName", "releasedAt",
-                    "effectiveFrom", "effectiveTo", "status", "warehouse", "createdAt", "updatedAt")),
+            // 供应商价格表已取消版本语义: releasedAt/effectiveFrom/effectiveTo/status 不再可排序
+            // (传这些旧字段按 PageQuery 契约返回 422, 不再对外承诺其排序语义); 默认按 updatedAt 倒序。
+            Map.entry("supplier-price-list", Set.of("id", "supplierName", "brandName",
+                    "warehouse", "createdAt", "updatedAt")),
             Map.entry("role", Set.of("id", "code", "name", "status", "builtin", "createdAt", "updatedAt")),
             Map.entry("user", Set.of("id", "loginName", "userName", "mobile", "status", "lastLoginDate", "createdAt", "updatedAt"))
     );

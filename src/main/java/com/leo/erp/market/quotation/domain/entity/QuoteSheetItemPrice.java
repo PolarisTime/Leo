@@ -13,15 +13,25 @@ import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * 比价单行×品牌现货价的历史落库行。
+ *
+ * <p><b>已不再被读/写</b>(契约修订: 删除手填覆盖): 现货价完全由供应商价格表在读取时推导,
+ * 本表仅保留历史数据与 {@code mk_quote_item_price} 的既有列, 不参与任何取价逻辑。</p>
+ *
+ * <p><b>历史价格快照能力随之移除</b>(原 {@code POST /quote-sheets/{id}/price-pulls} 固化入口已删除):
+ * 若日后需要按单据冻结历史价, 必须重新引入快照写入点(而不是恢复本表读路径), 否则会把"当前价"
+ * 误当"成交快照"使用。</p>
+ */
 @Getter
 @Setter
 @Entity
 @Table(name = "mk_quote_item_price")
 public class QuoteSheetItemPrice {
 
-    /** 价格来源: 单据手填/覆盖(含全部历史数据)。 */
+    /** 价格来源历史值: 单据手填/覆盖(仅历史数据, 不再写入)。 */
     public static final String SOURCE_MANUAL = "MANUAL";
-    /** 价格来源: 由供应商价格表推导或显式固化。 */
+    /** 价格来源历史值: 由供应商价格表推导或固化(仅历史数据, 不再写入)。 */
     public static final String SOURCE_PRICE_LIST = "PRICE_LIST";
 
     @Id
@@ -49,11 +59,11 @@ public class QuoteSheetItemPrice {
     @Column(name = "price_source", nullable = false, length = 16)
     private String priceSource = SOURCE_MANUAL;
 
-    /** 来源价格表版本ID(快照, 不建外键)。 */
+    /** 来源价格表ID快照(历史值, 不建外键)。 */
     @Column(name = "price_list_id")
     private Long priceListId;
 
-    /** 来源价格表版本的发布时刻快照。 */
+    /** 来源价格表时间快照(历史值; 已取消版本语义, 现为价格表 updated_at)。 */
     @Column(name = "price_list_released_at")
     private LocalDateTime priceListReleasedAt;
 

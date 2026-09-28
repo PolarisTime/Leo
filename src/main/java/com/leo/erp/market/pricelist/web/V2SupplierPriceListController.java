@@ -44,7 +44,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 供应商价格表: 版本 CRUD、固定规格全集、对照矩阵、整表加减。
+ * 供应商价格表: 当前表 CRUD、固定规格全集、对照矩阵、整表加减。
+ *
+ * <p><b>已取消版本语义</b>(契约 4.6 修订 R2): 一个 (供应商, 品牌) 只有一张未删除价格表;
+ * {@code POST} 重复建表 409, {@code PUT} 全量替换条目且幂等；{@code releasedAt}/{@code status}
+ * 仅为兼容保留, 展示更新时间请用 {@code updatedAt}。</p>
  *
  * <p>所有雪花 ID 通过 {@code JacksonConfig} 统一序列化为十进制字符串;
  * 读接口(规格全集/矩阵/详情)一律不写库。</p>
@@ -66,25 +70,26 @@ public class V2SupplierPriceListController {
         this.queryService = queryService;
     }
 
-    @Operation(summary = "分页查询供应商价格表版本",
-            description = "默认排序 released_at DESC, id DESC; 返回摘要(不含条目)。")
+    @Operation(summary = "分页查询供应商价格表",
+            description = "每行一个 (供应商, 品牌) 当前价格表; 返回摘要(不含条目)。"
+                    + "筛选仅支持 supplierId/brandName(已取消 status/releasedFrom/releasedTo)。"
+                    + "排序 sortBy 仅支持 id/supplierName/brandName/warehouse/createdAt/updatedAt, "
+                    + "缺省 updatedAt DESC(已取消版本语义的 releasedAt/effectiveFrom/effectiveTo/status "
+                    + "不再可排序, 传入按契约返回 422)。")
     @GetMapping
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_READ)
     public PageResponse<SupplierPriceListResponse.SummaryResponse> page(
             @BindPageQuery(sortFieldKey = "supplier-price-list") PageQuery query,
             @RequestParam(required = false) Long supplierId,
-            @RequestParam(required = false) String brandName,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime releasedFrom,
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime releasedTo) {
-        return PageResponse.from(store.page(query, supplierId, brandName, status, releasedFrom, releasedTo));
+            @RequestParam(required = false) String brandName) {
+        return PageResponse.from(store.page(query, supplierId, brandName));
     }
 
-    @Operation(summary = "固定规格全集",
-            description = "来源 md_material(deleted_flag=false)去重, 规格归一化为整数; "
-                    + "不含数字的规格(如 无/其他)整行跳过; 排序固定 category, material, spec_sort, length_sort。")
+    @Operation(summary = "固定规格全集(规格键字典)",
+            description = "字典 = 商品信息 md_material(deleted_flag=false)去品牌去重后的规格键 "
+                    + "∪ 比价单 mk_quote_item 实际行键(仅未软删单据), 实时投影(新增物料后立即可见); "
+                    + "类别归一(直条≡螺纹钢)、规格取数值(Φ12→12)、定尺归一(-/空/9m/9 米)并按 varchar(16) 截断; "
+                    + "排序固定 类别 → 材质 → 规格 → 定尺(数值优先)。")
     @GetMapping("/spec-catalog")
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_READ)
     public List<MaterialSpecResponse> specCatalog(@RequestParam(required = false) String category,
@@ -93,8 +98,8 @@ public class V2SupplierPriceListController {
     }
 
     @Operation(summary = "对照矩阵投影(只读)",
-            description = "每个 (供应商, 品牌) 取 asOf 之前 released_at 最大的未删除生效版本; "
-                    + "asOf 缺省 = 当前时刻; GET 不写库。")
+            description = "每个 (供应商, 品牌) 取当前未删除价格表(同键至多一张); asOf 兼容保留且仅回显, "
+                    + "不再参与选版; 列的 releasedAt 兼容保留并填 updated_at; GET 不写库。")
     @GetMapping("/matrix")
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_READ)
     public SupplierPriceMatrixResponse matrix(
@@ -106,7 +111,7 @@ public class V2SupplierPriceListController {
         return queryService.matrix(supplierIds, brandNames, category, asOf);
     }
 
-    @Operation(summary = "价格表版本详情")
+    @Operation(summary = "价格表详情")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_READ)
     public SupplierPriceListResponse detail(@PathVariable Long id) {
@@ -120,9 +125,9 @@ public class V2SupplierPriceListController {
         return store.items(id);
     }
 
-    @Operation(summary = "创建价格表版本",
-            description = "同 (supplierId, brandName) 已存在 released_at 更早的生效版本时自动归档旧版, "
-                    + "响应返回 archivedListId; released_at 相同时 409。")
+    @Operation(summary = "创建价格表",
+            description = "为 (supplierId, brandName) 建表; 同键已存在未删除价格表 → 409(不再自动归档旧版); "
+                    + "releasedAt 仅为兼容保留, 缺省 = 当前时刻。")
     @PostMapping
     @V2Created
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_CREATE)
@@ -131,8 +136,8 @@ public class V2SupplierPriceListController {
         return V2ResponseSupport.created("/supplier-price-lists", store.create(request));
     }
 
-    @Operation(summary = "全量替换价格表版本",
-            description = "全量替换表头与条目(幂等); ARCHIVED 版本不可改 → 409; "
+    @Operation(summary = "全量替换价格表",
+            description = "全量替换表头与条目(幂等: 同请求重复执行结果一致); 目标键被其他价格表占用 → 409; "
                     + "可选携带 " + VERSION_HEADER + " 做乐观并发校验(不匹配 412)。")
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_UPDATE)
@@ -146,7 +151,7 @@ public class V2SupplierPriceListController {
         return withVersion(response, response.version());
     }
 
-    @Operation(summary = "删除价格表版本", description = "软删除, 幂等返回 204。")
+    @Operation(summary = "删除价格表", description = "软删除, 幂等返回 204; 删除后同 (供应商, 品牌) 可重新建表。")
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_DELETE)

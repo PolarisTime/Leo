@@ -156,8 +156,11 @@ class QuoteSheetValidationExtremeTest {
 
         assertThat(response.items()).extracting(QuoteSheetResponse.ItemResponse::lineNo).containsExactly(1, 2);
         assertThat(response.items()).extracting(QuoteSheetResponse.ItemResponse::id).containsExactly(301L, 303L);
-        assertThat(response.items().get(0).prices().get(0).spotPrice()).isEqualByComparingTo("3600");
-        assertThat(response.items().get(1).prices().get(0).spotPrice()).isEqualByComparingTo("3700");
+        // 现货价不再落库: 请求里的 prices[] 被忽略, 价格格一律 NONE(未装配价格表服务)
+        assertThat(response.items()).allSatisfy(item -> assertThat(item.prices()).allSatisfy(cell -> {
+            assertThat(cell.spotSource()).isEqualTo("NONE");
+            assertThat(cell.spotPrice()).isNull();
+        }));
     }
 
     /**

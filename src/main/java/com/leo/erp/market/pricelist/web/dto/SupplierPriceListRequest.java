@@ -11,23 +11,33 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 价格表版本创建/更新请求。
+ * 价格表创建/更新请求。
+ *
+ * <p>已取消版本语义(契约 4.6 修订 R2): {@code releasedAt} / {@code effectiveFrom} / {@code effectiveTo}
+ * 仅为兼容保留, 不参与取版与筛选; {@code releasedAt} 缺省 = 当前时刻。</p>
+ *
  * <p>业务校验(规格必须为正、单价不得为负、报价状态枚举、条目键必须在规格全集内、条目键重复)
- * 统一由服务层按 422 语义处理; {@code itemIds} 里的雪花 ID 必须为十进制字符串,
+ * 统一由服务层按 422 语义处理; {@code supplierId} 里的雪花 ID 必须为十进制字符串,
  * JSON number 只接受安全整数(见 {@code JacksonConfig.SnowflakeSafeLongDeserializer})。</p>
  */
 public record SupplierPriceListRequest(
         @NotNull(message = "供应商不能为空") Long supplierId,
         @NotBlank(message = "品牌不能为空") @Size(max = 64, message = "品牌过长") String brandName,
-        @NotNull(message = "发布时刻不能为空") LocalDateTime releasedAt,
+        /** 兼容保留: 缺省 = 当前时刻, 不再参与取版。 */
+        LocalDateTime releasedAt,
+        /** 兼容保留(允许为空), 不参与取版与筛选。 */
         LocalDate effectiveFrom,
+        /** 兼容保留(允许为空), 不参与取版与筛选。 */
         LocalDate effectiveTo,
         @Size(max = 64, message = "仓库过长") String warehouse,
         @Size(max = 255, message = "备注过长") String remark,
         @Valid List<ItemRequest> items
 ) {
 
-    /** 价格条目: 单价留空(null) = 不报价, 不得写 0。 */
+    /**
+     * 价格条目: 单价留空(null) = 不报价, 不得写 0。
+     * <p>{@code priceStatus}/{@code remark} 数据层保留(兼容历史数据), 维护页不再展示与编辑。</p>
+     */
     public record ItemRequest(
             @Size(max = 16, message = "类别过长") String category,
             @Size(max = 16, message = "材质过长") String material,

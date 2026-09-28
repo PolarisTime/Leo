@@ -14,11 +14,13 @@ import java.util.Map;
 /**
  * 比价单现货价的<b>读时自动推导</b>。
  *
- * <p>口径(契约 4.5 R1.2): 单据品牌列 {@code brandName} → 该品牌在
- * {@code quoteAsOf}(单据报价时刻)之前 {@code released_at} 最大的未删除生效版本 →
- * 命中条目 {@code (category, material, spec, length)} 的 {@code price}。</p>
+ * <p>口径(契约 4.6 修订 R2, 覆盖 R1.2): 单据品牌列 {@code brandName} → 该品牌的<b>当前</b>
+ * 未删除价格表(一个 (供应商, 品牌) 至多一张) → 命中条目
+ * {@code (category, material, spec, length)} 的 {@code price}。</p>
  *
- * <p>必须用 {@code quoteAsOf} 而不是当前时间, 否则历史单据的现货价会随新版本发布漂移。</p>
+ * <p><b>不再按报价时刻取版</b>: 已取消版本语义, 历史单据的现货价会跟随价格表当前值变化
+ * (没有历史快照; 要钉住某单据的价就用手填覆盖)。同一品牌有多个供应商的价格表时,
+ * 取 {@code updated_at} 最新的一张(见 {@link SupplierPriceListQueryService#currentByBrandNames})。</p>
  *
  * <p>本类只读; {@code mk_quote_item_price} 的手填覆盖由调用方传入并优先于推导值。</p>
  */
@@ -32,15 +34,13 @@ public class QuoteSheetPriceDeriver {
     }
 
     /**
-     * 选中每个品牌的生效版本并加载其条目。
+     * 选中每个品牌的当前价格表并加载其条目。
      *
      * @param brandNames  单据品牌列集合
      * @param supplierIds 供应商白名单, 空表示不限
-     * @param quoteAsOf   报价时刻
      */
-    public BrandSelection selectBrands(Collection<String> brandNames, Collection<Long> supplierIds,
-                                       java.time.LocalDateTime quoteAsOf) {
-        List<SupplierPriceList> candidates = queryService.activeAsOf(quoteAsOf);
+    public BrandSelection selectBrands(Collection<String> brandNames, Collection<Long> supplierIds) {
+        List<SupplierPriceList> candidates = queryService.currentByBrandNames(brandNames);
         Map<Long, SupplierPriceList> listById = new LinkedHashMap<>();
         for (SupplierPriceList candidate : candidates) {
             listById.put(candidate.getId(), candidate);
@@ -65,6 +65,7 @@ public class QuoteSheetPriceDeriver {
                         && !supplierIds.contains(candidate.getSupplierId())) {
                     continue;
                 }
+                // 查询已按 updated_at DESC NULLS LAST, id DESC 排序: 第一条即最近更新的一张
                 selected = candidate;
                 break;
             }
@@ -97,13 +98,17 @@ public class QuoteSheetPriceDeriver {
      *       mk_quote_item 用 {@code 螺纹钢} 的真实主路径);</li>
      *   <li>仍未命中才是 {@code NO_ITEM}。</li>
      * </ol>
+     *
+     * <p>未命中原因: 该品牌无价格表 → {@code NO_LIST}; 有表无此条目 → {@code NO_ITEM};
+     * 条目 {@code price IS NULL} → {@code NO_PRICE}。</p>
      */
     public static DerivedSpot derive(BrandEntry entry, String category, String material,
                                      Integer spec, String length) {
         if (entry == null || entry.list() == null) {
-            return DerivedSpot.unmatched(SpotReason.NO_LIST_AT_TIME);
+            return DerivedSpot.unmatched(SpotReason.NO_LIST);
         }
-        SupplierPriceItem item = matchItem(entry, category, material, spec, length);
+        SupplierPriceItem item = matchItem(entry, category, material, spec,
+                MaterialSpecCatalogQuery.normalizeLength(length));
         if (item == null) {
             return DerivedSpot.unmatched(SpotReason.NO_ITEM);
         }
@@ -112,7 +117,7 @@ public class QuoteSheetPriceDeriver {
         }
         SupplierPriceList list = entry.list();
         return new DerivedSpot(list.getId(), list.getSupplierId(), list.getSupplierName(),
-                list.getReleasedAt(), item.getPrice(), item.getPriceStatus() == null
+                list.getUpdatedAt(), item.getPrice(), item.getPriceStatus() == null
                         ? null : item.getPriceStatus().name(), null);
     }
 
@@ -138,15 +143,21 @@ public class QuoteSheetPriceDeriver {
         return entry.items().values().stream()
                 .filter(item -> java.util.Objects.equals(item.getMaterial(), material))
                 .filter(item -> java.util.Objects.equals(item.getSpec(), spec))
-                .filter(item -> java.util.Objects.equals(item.getLength(), length))
+                .filter(item -> java.util.Objects.equals(
+                        MaterialSpecCatalogQuery.normalizeLength(item.getLength()), length))
                 .filter(item -> normalizedCategory.equals(CategoryNormalizer.normalize(item.getCategory())))
                 .min(java.util.Comparator.comparing(SupplierPriceItem::keyOf))
                 .orElse(null);
     }
 
-    /** 单个格子的推导结果(未命中时 {@code reason} 非空)。 */
+    /**
+     * 单个格子的推导结果(未命中时 {@code reason} 非空)。
+     *
+     * @param priceListUpdatedAt 来源价格表的更新时间(取消版本语义后不再有发布时刻;
+     *                           调用方把它填入兼容字段 {@code priceListReleasedAt})
+     */
     public record DerivedSpot(Long priceListId, Long supplierId, String supplierName,
-                              java.time.LocalDateTime priceListReleasedAt, BigDecimal price,
+                              java.time.LocalDateTime priceListUpdatedAt, BigDecimal price,
                               String priceStatus, SpotReason reason) {
 
         static DerivedSpot unmatched(SpotReason reason) {
@@ -158,7 +169,7 @@ public class QuoteSheetPriceDeriver {
         }
     }
 
-    /** 某品牌的选中版本与其条目索引。 */
+    /** 某品牌的选中价格表与其条目索引。 */
     public record BrandEntry(SupplierPriceList list, Map<String, SupplierPriceItem> items) {
     }
 

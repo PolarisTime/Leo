@@ -15,7 +15,6 @@ import com.leo.erp.market.pricelist.web.dto.PriceAdjustmentResponse;
 import com.leo.erp.market.pricelist.web.dto.SupplierPriceListRequest;
 import com.leo.erp.market.pricelist.web.dto.SupplierPriceListResponse;
 import com.leo.erp.master.api.SupplierQuery;
-import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -33,18 +32,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 供应商价格表存储层极端情况测试(版本冲突/自动归档/条目校验/整表加减)。
+ * 供应商价格表存储层极端情况测试(重复建表 409/条目校验/PUT 幂等/整表加减)。
+ *
+ * <p>已取消版本语义: 不再断言自动归档、同刻 409、ARCHIVED 不可改。</p>
  */
 @ExtendWith(MockitoExtension.class)
 class SupplierPriceListStoreTest {
 
     private static final long SUPPLIER_ID = 700000000000000001L;
+    private static final long OTHER_SUPPLIER_ID = 700000000000000002L;
+    private static final String BRAND = "安徽富鑫";
     private static final LocalDateTime RELEASED = LocalDateTime.of(2026, 9, 28, 14, 35);
     private static final String CATALOG_KEY = "螺纹钢|抗震钢E|12|9米";
 
@@ -69,12 +73,9 @@ class SupplierPriceListStoreTest {
     @Mock
     private MaterialSpecCatalogQuery specCatalogQuery;
 
-    @Mock
-    private EntityManager entityManager;
-
     private SupplierPriceListStore store() {
         return new SupplierPriceListStore(listRepository, itemRepository, adjustmentRepository,
-                adjustmentItemRepository, snowflakeIdGenerator, supplierQuery, specCatalogQuery, entityManager);
+                adjustmentItemRepository, snowflakeIdGenerator, supplierQuery, specCatalogQuery);
     }
 
     private void stubSupplier() {
@@ -85,17 +86,28 @@ class SupplierPriceListStoreTest {
     private void stubSupplierAndCatalog() {
         stubSupplier();
         when(specCatalogQuery.findAll()).thenReturn(List.of(
-                new MaterialSpecCatalogQuery.MaterialSpecSnapshot("螺纹钢", "抗震钢E", 12, "9米", 0)));
+                new MaterialSpecCatalogQuery.MaterialSpecSnapshot("螺纹钢", "抗震钢E", 12, "9米", 0),
+                new MaterialSpecCatalogQuery.MaterialSpecSnapshot("螺纹钢", "抗震钢E", 12, "12米", 1)));
     }
 
     private static SupplierPriceListRequest.ItemRequest item(Integer spec, BigDecimal price) {
         return new SupplierPriceListRequest.ItemRequest("螺纹钢", "抗震钢E", spec, "9米", price, "NORMAL", null, 0);
     }
 
+    private static SupplierPriceListRequest.ItemRequest item(Integer spec, String length, BigDecimal price) {
+        return new SupplierPriceListRequest.ItemRequest("螺纹钢", "抗震钢E", spec, length, price, "NORMAL", null, 0);
+    }
+
+    private static SupplierPriceListRequest request(Integer spec, BigDecimal price) {
+        return request(spec, price, RELEASED);
+    }
+
     private static SupplierPriceListRequest request(Integer spec, BigDecimal price, LocalDateTime releasedAt) {
-        return new SupplierPriceListRequest(SUPPLIER_ID, "安徽富鑫", releasedAt, null, null, "钢联新安库", null,
+        return new SupplierPriceListRequest(SUPPLIER_ID, BRAND, releasedAt, null, null, "钢联新安库", null,
                 List.of(item(spec, price)));
     }
+
+    // ---------------------------------------------------------------- 创建
 
     @Test
     void create_assignsSnowflakeIdAndSupplierNameSnapshot() {
@@ -104,15 +116,102 @@ class SupplierPriceListStoreTest {
         when(listRepository.saveAndFlush(any(SupplierPriceList.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        SupplierPriceListResponse response = store().create(request(12, new BigDecimal("3220.00"), RELEASED));
+        SupplierPriceListResponse response = store().create(request(12, new BigDecimal("3220.00")));
 
         assertThat(response.id()).isEqualTo(900L);
         assertThat(response.supplierName()).isEqualTo("杭州中金钢铁");
-        assertThat(response.effectiveFrom()).isEqualTo(LocalDate.of(2026, 9, 28));
         assertThat(response.status()).isEqualTo(SupplierPriceList.STATUS_ACTIVE);
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).priceStatus()).isEqualTo("NORMAL");
+        // 已取消版本语义: 不再自动归档旧版
         assertThat(response.archivedListId()).isNull();
+        // effectiveFrom 兼容保留且允许为空(不再由 releasedAt 推导)
+        assertThat(response.effectiveFrom()).isNull();
+    }
+
+    @Test
+    void create_echoesCompatibilityHeaderFieldsWhenProvided() {
+        stubSupplierAndCatalog();
+        when(snowflakeIdGenerator.nextId()).thenReturn(900L, 901L);
+        when(listRepository.saveAndFlush(any(SupplierPriceList.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        SupplierPriceListRequest withRange = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, RELEASED,
+                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), null, "备注",
+                List.of(item(12, BigDecimal.TEN)));
+
+        SupplierPriceListResponse response = store().create(withRange);
+
+        assertThat(response.effectiveFrom()).isEqualTo(LocalDate.of(2026, 9, 1));
+        assertThat(response.effectiveTo()).isEqualTo(LocalDate.of(2026, 9, 30));
+    }
+
+    /** releasedAt 仅为兼容保留: 请求不带时必须回落到当前时刻, 不得 422(NOT NULL 列)。 */
+    @Test
+    void create_defaultsReleasedAtWhenRequestOmitsIt() {
+        stubSupplierAndCatalog();
+        when(snowflakeIdGenerator.nextId()).thenReturn(900L, 901L);
+        when(listRepository.saveAndFlush(any(SupplierPriceList.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        LocalDateTime before = LocalDateTime.now();
+
+        SupplierPriceListResponse response = store().create(request(12, BigDecimal.TEN, null));
+
+        assertThat(response.releasedAt()).isNotNull().isAfterOrEqualTo(before);
+    }
+
+    /**
+     * 写库类别与 spec-catalog 返回的类别必须是同一个值(都经 CategoryNormalizer 归一):
+     * 请求写 直条 也能通过全集校验, 落库/响应统一为 螺纹钢, 不会出现同一键两行别名。
+     */
+    @Test
+    void create_normalizesAliasCategoryToSameValueAsSpecCatalog() {
+        stubSupplier();
+        when(specCatalogQuery.findAll()).thenReturn(List.of(
+                new MaterialSpecCatalogQuery.MaterialSpecSnapshot(
+                        CategoryNormalizer.QUOTE_CATEGORY_REBAR, "抗震钢E", 12, "9米", 0)));
+        when(snowflakeIdGenerator.nextId()).thenReturn(900L, 901L);
+        when(listRepository.saveAndFlush(any(SupplierPriceList.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        SupplierPriceListRequest alias = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, RELEASED,
+                null, null, null, null,
+                List.of(new SupplierPriceListRequest.ItemRequest(
+                        CategoryNormalizer.MATERIAL_CATEGORY_REBAR, "抗震钢E", 12, "9米",
+                        BigDecimal.TEN, "NORMAL", null, 0)));
+
+        SupplierPriceListResponse response = store().create(alias);
+
+        assertThat(response.items()).singleElement()
+                .satisfies(item -> assertThat(item.category())
+                        .isEqualTo(CategoryNormalizer.QUOTE_CATEGORY_REBAR));
+    }
+
+    /** 写库定尺归一: {@code 9m} / {@code 9 米} / {@code 9米} 落库为同一个键。 */
+    @Test
+    void create_normalizesLengthSpellingsToSingleKey() {
+        stubSupplierAndCatalog();
+        when(snowflakeIdGenerator.nextId()).thenReturn(900L, 901L);
+        when(listRepository.saveAndFlush(any(SupplierPriceList.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        SupplierPriceListResponse response = store().create(new SupplierPriceListRequest(SUPPLIER_ID, BRAND,
+                RELEASED, null, null, null, null, List.of(item(12, "9 m", BigDecimal.TEN))));
+
+        assertThat(response.items()).singleElement()
+                .satisfies(item -> assertThat(item.length()).isEqualTo("9米"));
+    }
+
+    /** 请求内定尺写法不同但归一后同键({@code 9m} 与 {@code 9 米})必须判重 422, 不得落两行。 */
+    @Test
+    void create_rejectsDuplicateKeysDifferingOnlyByLengthSpelling() {
+        stubSupplierAndCatalog();
+        SupplierPriceListRequest duplicated = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, RELEASED,
+                null, null, null, null,
+                List.of(item(12, "9m", BigDecimal.TEN), item(12, "9 米", BigDecimal.ONE)));
+
+        assertThatThrownBy(() -> store().create(duplicated))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("价格条目键重复");
+        verify(listRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -122,56 +221,52 @@ class SupplierPriceListStoreTest {
         when(listRepository.saveAndFlush(any(SupplierPriceList.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        SupplierPriceListRequest empty = new SupplierPriceListRequest(SUPPLIER_ID, "安徽富鑫", RELEASED,
+        SupplierPriceListRequest empty = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, RELEASED,
                 null, null, null, null, List.of());
         SupplierPriceListResponse response = store().create(empty);
 
         assertThat(response.items()).isEmpty();
     }
 
-    /** 同 (供应商, 品牌) 已存在 ACTIVE 且 released_at 相同时必须 409, 不得静默覆盖。 */
+    /** 同 (供应商, 品牌) 已存在未删除价格表 → 409, 不得静默覆盖或自动归档旧版。 */
     @Test
-    void create_rejectsSameReleasedAtConflict() {
+    void create_rejectsDuplicateSupplierBrandWithConflict() {
         stubSupplierAndCatalog();
-        when(listRepository.findVersions(SUPPLIER_ID, "安徽富鑫")).thenReturn(List.of(active(500L, RELEASED)));
-        when(listRepository.findActiveVersions(SUPPLIER_ID, "安徽富鑫"))
-                .thenReturn(List.of(active(500L, RELEASED)));
+        when(listRepository.findCurrentByKey(SUPPLIER_ID, BRAND)).thenReturn(List.of(list(500L, RELEASED)));
 
-        assertThatThrownBy(() -> store().create(request(12, new BigDecimal("3220.00"), RELEASED)))
+        assertThatThrownBy(() -> store().create(request(12, new BigDecimal("3220.00"))))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.CONCURRENT_MODIFICATION);
         verify(listRepository, never()).saveAndFlush(any());
     }
 
-    /** 已存在更早的 ACTIVE 版本: 自动归档并返回 archivedListId, 归档必须先落库再插入新版本。 */
+    /** 同品牌不同供应商不受影响: 唯一性只在 (供应商, 品牌) 组合上。 */
     @Test
-    void create_archivesEarlierActiveVersionAndReturnsArchivedListId() {
+    void create_allowsSameBrandForDifferentSupplier() {
         stubSupplierAndCatalog();
-        SupplierPriceList older = active(500L, RELEASED.minusHours(1));
-        when(listRepository.findVersions(SUPPLIER_ID, "安徽富鑫")).thenReturn(List.of(older));
-        when(listRepository.findActiveVersions(SUPPLIER_ID, "安徽富鑫")).thenReturn(List.of(older));
+        SupplierPriceList otherSupplierList = list(600L, RELEASED);
+        otherSupplierList.setSupplierId(OTHER_SUPPLIER_ID);
+        when(listRepository.findCurrentByKey(SUPPLIER_ID, BRAND)).thenReturn(List.of());
         when(snowflakeIdGenerator.nextId()).thenReturn(900L, 901L);
         when(listRepository.saveAndFlush(any(SupplierPriceList.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        SupplierPriceListResponse response = store().create(request(12, new BigDecimal("3220.00"), RELEASED));
+        SupplierPriceListResponse response = store().create(request(12, BigDecimal.TEN));
 
-        assertThat(response.archivedListId()).isEqualTo(500L);
-        assertThat(older.getStatus()).isEqualTo(SupplierPriceList.STATUS_ARCHIVED);
-        // 归档必须先 flush, 否则部分唯一索引仍被旧 ACTIVE 行占用
-        verify(listRepository).flush();
+        assertThat(response.id()).isEqualTo(900L);
+        assertThat(otherSupplierList.getId()).isEqualTo(600L);
     }
 
     @Test
     void create_rejectsSpecNotPositive() {
         stubSupplierAndCatalog();
-        assertThatThrownBy(() -> store().create(request(0, BigDecimal.TEN, RELEASED)))
+        assertThatThrownBy(() -> store().create(request(0, BigDecimal.TEN)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("规格必须大于 0")
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.VALIDATION_ERROR);
-        assertThatThrownBy(() -> store().create(request(-1, BigDecimal.TEN, RELEASED)))
+        assertThatThrownBy(() -> store().create(request(-1, BigDecimal.TEN)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("规格必须大于 0");
         verify(listRepository, never()).saveAndFlush(any());
@@ -180,7 +275,7 @@ class SupplierPriceListStoreTest {
     @Test
     void create_rejectsNegativePrice() {
         stubSupplierAndCatalog();
-        assertThatThrownBy(() -> store().create(request(12, new BigDecimal("-0.01"), RELEASED)))
+        assertThatThrownBy(() -> store().create(request(12, new BigDecimal("-0.01"))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("单价不能为负");
     }
@@ -193,7 +288,7 @@ class SupplierPriceListStoreTest {
         when(listRepository.saveAndFlush(any(SupplierPriceList.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        SupplierPriceListResponse response = store().create(request(12, null, RELEASED));
+        SupplierPriceListResponse response = store().create(request(12, null));
 
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).price()).isNull();
@@ -202,7 +297,7 @@ class SupplierPriceListStoreTest {
     @Test
     void create_rejectsInvalidPriceStatus() {
         stubSupplierAndCatalog();
-        SupplierPriceListRequest invalid = new SupplierPriceListRequest(SUPPLIER_ID, "安徽富鑫", RELEASED,
+        SupplierPriceListRequest invalid = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, RELEASED,
                 null, null, null, null,
                 List.of(new SupplierPriceListRequest.ItemRequest("螺纹钢", "抗震钢E", 12, "9米",
                         BigDecimal.TEN, "WHATEVER", null, 0)));
@@ -216,7 +311,7 @@ class SupplierPriceListStoreTest {
     @Test
     void create_rejectsDuplicateItemKeysWithFieldErrors() {
         stubSupplierAndCatalog();
-        SupplierPriceListRequest duplicated = new SupplierPriceListRequest(SUPPLIER_ID, "安徽富鑫", RELEASED,
+        SupplierPriceListRequest duplicated = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, RELEASED,
                 null, null, null, null,
                 List.of(item(12, BigDecimal.TEN), item(12, BigDecimal.ONE)));
 
@@ -225,14 +320,14 @@ class SupplierPriceListStoreTest {
                 .hasMessageContaining("价格条目键重复")
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrors())
                         .hasSize(1)
-                        .allSatisfy(error -> assertThat(error.message()).contains("螺纹钢|抗震钢E|12|9米")));
+                        .allSatisfy(error -> assertThat(error.message()).contains(CATALOG_KEY)));
         verify(listRepository, never()).saveAndFlush(any());
     }
 
     @Test
     void create_rejectsItemKeyOutsideSpecCatalog() {
         stubSupplierAndCatalog();
-        SupplierPriceListRequest outside = new SupplierPriceListRequest(SUPPLIER_ID, "安徽富鑫", RELEASED,
+        SupplierPriceListRequest outside = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, RELEASED,
                 null, null, null, null,
                 List.of(new SupplierPriceListRequest.ItemRequest("螺纹钢", "抗震钢E", 11, "9米",
                         BigDecimal.TEN, "NORMAL", null, 0)));
@@ -242,30 +337,117 @@ class SupplierPriceListStoreTest {
                 .hasMessageContaining("不在规格全集内");
     }
 
-    /** ARCHIVED 版本不可改 → 409。 */
-    @Test
-    void update_rejectsArchivedVersion() {
-        SupplierPriceList archived = active(500L, RELEASED);
-        archived.setStatus(SupplierPriceList.STATUS_ARCHIVED);
-        when(listRepository.findWithItemsByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(archived));
+    // ---------------------------------------------------------------- 更新(全量替换, 幂等)
 
-        assertThatThrownBy(() -> store().update(500L, request(12, BigDecimal.TEN, RELEASED), null))
+    /** PUT 全量替换条目且幂等: 同请求重复执行, 条目ID复用、无重复行、取值一致。 */
+    @Test
+    void update_replacesItemsAndIsIdempotent() {
+        stubSupplierAndCatalog();
+        SupplierPriceList entity = list(500L, RELEASED);
+        entity.getItems().addAll(List.of(quotedItem(11L, "9米", "100.00")));
+        when(listRepository.findWithItemsByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(entity));
+        when(snowflakeIdGenerator.nextId()).thenReturn(12L);
+        when(listRepository.saveAndFlush(any(SupplierPriceList.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        SupplierPriceListRequest replace = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, RELEASED,
+                null, null, null, null,
+                List.of(item(12, "9米", new BigDecimal("200.00")),
+                        item(12, "12米", new BigDecimal("300.00"))));
+
+        SupplierPriceListResponse first = store().update(500L, replace, null);
+        SupplierPriceListResponse second = store().update(500L, replace, null);
+
+        assertThat(first.items()).hasSize(2);
+        assertThat(second.items()).hasSize(2);
+        assertThat(second.items().get(0).id()).isEqualTo(first.items().get(0).id());
+        assertThat(second.items().get(1).id()).isEqualTo(first.items().get(1).id());
+        assertThat(second.items().get(0).id()).isEqualTo(11L);
+        assertThat(second.items().get(1).id()).isEqualTo(12L);
+        assertThat(second.items()).extracting(SupplierPriceListResponse.ItemResponse::price)
+                .containsExactly(new BigDecimal("200.00"), new BigDecimal("300.00"));
+        verify(listRepository, times(2)).saveAndFlush(any(SupplierPriceList.class));
+    }
+
+    /** 改键到空闲的 (供应商, 品牌) 允许; 目标被占用 → 409 且不写库。 */
+    @Test
+    void update_rejectsKeyConflictWithConflict() {
+        stubSupplier();
+        SupplierPriceList entity = list(500L, RELEASED);
+        when(listRepository.findWithItemsByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(entity));
+        SupplierPriceList occupied = list(600L, RELEASED);
+        when(listRepository.findCurrentByKey(SUPPLIER_ID, "武钢汉钢")).thenReturn(List.of(occupied));
+        SupplierPriceListRequest move = new SupplierPriceListRequest(SUPPLIER_ID, "武钢汉钢", RELEASED,
+                null, null, null, null, List.of(item(12, BigDecimal.TEN)));
+
+        assertThatThrownBy(() -> store().update(500L, move, null))
                 .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已存在另一张价格表")
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.CONCURRENT_MODIFICATION);
         verify(listRepository, never()).saveAndFlush(any());
     }
 
     @Test
+    void update_allowsKeyChangeWhenTargetIsFree() {
+        stubSupplierAndCatalog();
+        SupplierPriceList entity = list(500L, RELEASED);
+        when(listRepository.findWithItemsByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(entity));
+        when(listRepository.findCurrentByKey(SUPPLIER_ID, "武钢汉钢")).thenReturn(List.of());
+        when(snowflakeIdGenerator.nextId()).thenReturn(11L);
+        when(listRepository.saveAndFlush(any(SupplierPriceList.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        SupplierPriceListRequest move = new SupplierPriceListRequest(SUPPLIER_ID, "武钢汉钢", RELEASED,
+                null, null, null, null, List.of(item(12, BigDecimal.TEN)));
+
+        SupplierPriceListResponse response = store().update(500L, move, null);
+
+        assertThat(response.brandName()).isEqualTo("武钢汉钢");
+    }
+
+    @Test
     void update_rejectsStaleVersionWithPreconditionFailed() {
-        SupplierPriceList list = active(500L, RELEASED);
+        SupplierPriceList list = list(500L, RELEASED);
         list.setVersion(4L);
         when(listRepository.findWithItemsByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(list));
 
-        assertThatThrownBy(() -> store().update(500L, request(12, BigDecimal.TEN, RELEASED), 3L))
+        assertThatThrownBy(() -> store().update(500L, request(12, BigDecimal.TEN), 3L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.PRECONDITION_FAILED);
+    }
+
+    @Test
+    void update_rejectsEndDateBeforeStartDate() {
+        stubSupplier();
+        SupplierPriceList entity = list(500L, RELEASED);
+        when(listRepository.findWithItemsByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(entity));
+        SupplierPriceListRequest invalid = new SupplierPriceListRequest(SUPPLIER_ID, BRAND, RELEASED,
+                LocalDate.of(2026, 9, 30), LocalDate.of(2026, 9, 1), null, null,
+                List.of(item(12, BigDecimal.TEN)));
+
+        assertThatThrownBy(() -> store().update(500L, invalid, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("生效截止日期不能早于生效起始日期");
+        verify(listRepository, never()).saveAndFlush(any());
+    }
+
+    /**
+     * 已存条目即使后来不在规格全集内(项目可选商品键被改/比价单被删)也必须能正常读出:
+     * 读取只按需匹配, 不做全集校验。
+     */
+    @Test
+    void items_returnsStoredEntriesEvenWhenKeyLeftTheSpecCatalog() {
+        SupplierPriceList list = list(500L, RELEASED);
+        list.getItems().add(quotedItem(11L, "9米", "3220.00"));
+        when(listRepository.findByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(list));
+        when(itemRepository.findByListIdOrderBySortOrderAscIdAsc(500L))
+                .thenReturn(List.of(list.getItems().get(0)));
+        List<SupplierPriceListResponse.ItemResponse> items = store().items(500L);
+
+        assertThat(items).hasSize(1);
+        assertThat(items.get(0).price()).isEqualByComparingTo("3220.00");
+        // 读取路径根本不查规格全集(不做全集校验)
+        verifyNoInteractions(specCatalogQuery);
     }
 
     @Test
@@ -282,8 +464,8 @@ class SupplierPriceListStoreTest {
 
     @Test
     void adjust_addsAmountToQuotedItemsOnlyAndSkipsNullPrices() {
-        SupplierPriceList list = active(500L, RELEASED);
-        list.getItems().addAll(List.of(quotedItem(11L, "3220.00"), nullPricedItem(12L)));
+        SupplierPriceList list = list(500L, RELEASED);
+        list.getItems().addAll(List.of(quotedItem(11L, "9米", "3220.00"), nullPricedItem(12L)));
         when(listRepository.findWithItemsByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(list));
         when(snowflakeIdGenerator.nextId()).thenReturn(1000L, 1001L);
         when(adjustmentRepository.saveAndFlush(any(SupplierPriceAdjustment.class)))
@@ -309,8 +491,8 @@ class SupplierPriceListStoreTest {
 
     @Test
     void adjust_subtractToNegativePriceIsRejectedWithoutTruncation() {
-        SupplierPriceList list = active(500L, RELEASED);
-        list.getItems().add(quotedItem(11L, "30.00"));
+        SupplierPriceList list = list(500L, RELEASED);
+        list.getItems().add(quotedItem(11L, "9米", "30.00"));
         when(listRepository.findWithItemsByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(list));
 
         assertThatThrownBy(() -> store().adjust(500L,
@@ -326,8 +508,8 @@ class SupplierPriceListStoreTest {
 
     @Test
     void adjust_rejectsNonPositiveAmountAndInvalidMode() {
-        SupplierPriceList list = active(500L, RELEASED);
-        list.getItems().add(quotedItem(11L, "30.00"));
+        SupplierPriceList list = list(500L, RELEASED);
+        list.getItems().add(quotedItem(11L, "9米", "30.00"));
         when(listRepository.findWithItemsByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(list));
 
         assertThatThrownBy(() -> store().adjust(500L,
@@ -343,8 +525,9 @@ class SupplierPriceListStoreTest {
     /** 显式指定 itemIds 时, 其中的 NULL 条目计入 skippedCount, 未指定的条目不受影响。 */
     @Test
     void adjust_explicitNullItemCountsAsSkippedAndLeavesOtherItemsUntouched() {
-        SupplierPriceList list = active(500L, RELEASED);
-        list.getItems().addAll(List.of(quotedItem(11L, "100.00"), nullPricedItem(12L), quotedItem(13L, "200.00")));
+        SupplierPriceList list = list(500L, RELEASED);
+        list.getItems().addAll(List.of(quotedItem(11L, "9米", "100.00"), nullPricedItem(12L),
+                quotedItem(13L, "12米", "200.00")));
         when(listRepository.findWithItemsByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(list));
         when(snowflakeIdGenerator.nextId()).thenReturn(1000L, 1001L);
         when(adjustmentRepository.saveAndFlush(any(SupplierPriceAdjustment.class)))
@@ -362,19 +545,19 @@ class SupplierPriceListStoreTest {
 
     @Test
     void adjust_rejectsItemIdNotBelongingToList() {
-        SupplierPriceList list = active(500L, RELEASED);
-        list.getItems().add(quotedItem(11L, "100.00"));
+        SupplierPriceList list = list(500L, RELEASED);
+        list.getItems().add(quotedItem(11L, "9米", "100.00"));
         when(listRepository.findWithItemsByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(list));
 
         assertThatThrownBy(() -> store().adjust(500L,
                 new PriceAdjustmentRequest("ADD", new BigDecimal("10.00"), List.of(999L)), 7L, "张三"))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("条目不属于该价格表版本");
+                .hasMessageContaining("条目不属于该价格表");
     }
 
     @Test
     void adjust_rejectsWhenAllTargetsAreUnquoted() {
-        SupplierPriceList list = active(500L, RELEASED);
+        SupplierPriceList list = list(500L, RELEASED);
         list.getItems().add(nullPricedItem(12L));
         when(listRepository.findWithItemsByIdAndDeletedFlagFalse(500L)).thenReturn(Optional.of(list));
 
@@ -387,39 +570,39 @@ class SupplierPriceListStoreTest {
 
     // ---------------------------------------------------------------- 构造工具
 
-    private static SupplierPriceList active(Long id, LocalDateTime releasedAt) {
+    private static SupplierPriceList list(Long id, LocalDateTime releasedAt) {
         SupplierPriceList list = new SupplierPriceList();
         list.setId(id);
         list.setSupplierId(SUPPLIER_ID);
         list.setSupplierName("杭州中金钢铁");
-        list.setBrandName("安徽富鑫");
+        list.setBrandName(BRAND);
         list.setReleasedAt(releasedAt);
-        list.setEffectiveFrom(releasedAt.toLocalDate());
+        list.setUpdatedAt(releasedAt);
         list.setStatus(SupplierPriceList.STATUS_ACTIVE);
         list.setVersion(0L);
         list.setItems(new ArrayList<>());
         return list;
     }
 
-    private static SupplierPriceItem quotedItem(Long id, String price) {
-        SupplierPriceItem item = baseItem(id);
+    private static SupplierPriceItem quotedItem(Long id, String length, String price) {
+        SupplierPriceItem item = baseItem(id, length);
         item.setPrice(new BigDecimal(price));
         return item;
     }
 
     private static SupplierPriceItem nullPricedItem(Long id) {
-        SupplierPriceItem item = baseItem(id);
+        SupplierPriceItem item = baseItem(id, "9米");
         item.setPrice(null);
         return item;
     }
 
-    private static SupplierPriceItem baseItem(Long id) {
+    private static SupplierPriceItem baseItem(Long id, String length) {
         SupplierPriceItem item = new SupplierPriceItem();
         item.setId(id);
         item.setCategory("螺纹钢");
         item.setMaterial("抗震钢E");
         item.setSpec(12);
-        item.setLength("9米");
+        item.setLength(length);
         item.setSortOrder(0);
         return item;
     }

@@ -11,7 +11,6 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -22,14 +21,14 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 规格全集的真实 PostgreSQL 回归(默认跳过, 设置 {@code LEO_TEST_POSTGRES=true} 才执行)。
+ * 规格键字典的真实 PostgreSQL 回归(默认跳过, 设置 {@code LEO_TEST_POSTGRES=true} 才执行)。
  *
- * <p>为什么必须有真库用例: {@code MaterialSpecCatalogQuery} 的 SQL 里 {@code ? is null}
- * 这类无类型绑定参数只有 PostgreSQL 才会报
- * {@code could not determine data type of parameter $1};
- * 单元测试 mock 了 {@code JdbcTemplate}, 结构上抓不到这类错误。</p>
+ * <p>字典 = 商品信息 {@code md_material}(去品牌) ∪ 比价单 {@code mk_quote_item} 实际行键,
+ * 每次查询实时投影。真库用例覆盖单元测试抓不到的部分: 真实数据分布下的去品牌/去重口径、
+ * 归一化(类别别名、定尺写法)结果、以及"同一事务内新增商品信息后字典立即可见"。</p>
  *
- * <p>只读断言(不造数据、不写库), 依赖开发库既有 {@code md_material} 商品资料。</p>
+ * <p>多数用例只读; 新增商品信息与"字典外历史条目可读"两条会写入带标记的测试数据并在
+ * {@link #cleanUp()} 中清理。</p>
  */
 @DataJpaTest(properties = {
         "spring.jpa.hibernate.ddl-auto=none",
@@ -52,6 +51,27 @@ class MaterialSpecCatalogPostgresTest {
 
     @Autowired
     private SupplierPriceItemRepository itemRepository;
+
+    /** 测试自造商品信息物料(固定编码前缀, 便于清理与排查)。 */
+    private static final String MATERIAL_CODE = "PG-SPEC-DICT-TEST-901";
+    private static final String MATERIAL_CODE_SECOND = "PG-SPEC-DICT-TEST-902";
+    private static final String MATERIAL_BRAND = "PG字典测试品牌";
+    private static final String MATERIAL_BRAND_SECOND = "PG字典测试品牌B";
+
+    @org.junit.jupiter.api.BeforeEach
+    void clearTestMaterialsBefore() {
+        clearTestMaterials();
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void cleanUp() {
+        clearTestMaterials();
+    }
+
+    /** 清理本类自造的商品信息物料(固定编码前缀), 保证用例可重复执行。 */
+    private void clearTestMaterials() {
+        jdbc.update("delete from public.md_material where material_code like 'PG-SPEC-DICT-TEST-%'");
+    }
 
     /** 无筛选调用必须能执行(此前报 could not determine data type of parameter $1)。 */
     @Test
@@ -124,23 +144,37 @@ class MaterialSpecCatalogPostgresTest {
         assertThat(keys).hasSameSizeAs(result);
     }
 
-    /** 规格不含数字的行(spec_sort 为 null)必须整行跳过, 不得当成 0。 */
+    /**
+     * 新来源守卫(真库): 比价单 {@code mk_quote_item} 实际出现过的每个商品行键
+     * (类别归一后 + 定尺 16 截断)都必须在规格全集里出现, 否则维护页会漏行。
+     */
     @Test
-    void findAll_skipsRowsWithoutNumericSpec() {
-        Integer skippedRows = jdbc.queryForObject("""
-                select count(*) from public.md_material
-                where deleted_flag = false and spec_sort is null
-                """, Integer.class);
-        List<MaterialSpecCatalogQuery.MaterialSpecSnapshot> result = query.find(null, null);
+    void findAll_coversEveryRealQuoteItemProductKey() {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                select distinct i.category, i.material, i.spec, i.length
+                from public.mk_quote_item i
+                join public.mk_quote_sheet s on s.id = i.sheet_id
+                where s.deleted_flag = false
+                  and i.row_type = 'PRODUCT'
+                  and i.category is not null and i.material is not null and i.spec is not null
+                """);
 
-        assertThat(result).noneMatch(snapshot -> snapshot.spec() == null || snapshot.spec() <= 0);
-        if (skippedRows != null && skippedRows > 0) {
-            Integer numericRows = jdbc.queryForObject("""
-                    select count(distinct (category, material, spec_sort, length)) from public.md_material
-                    where deleted_flag = false and spec_sort is not null
-                    """, Integer.class);
-            // 截断后的定尺可能再合并若干行, 因此只断言"不超过数字规格的去重键数"
-            assertThat(result.size()).isLessThanOrEqualTo(numericRows == null ? 0 : numericRows);
+        Set<String> catalogKeys = new LinkedHashSet<>();
+        for (MaterialSpecCatalogQuery.MaterialSpecSnapshot snapshot : query.find(null, null)) {
+            catalogKeys.add(MaterialSpecCatalogQuery.key(snapshot.category(), snapshot.material(),
+                    snapshot.spec(), snapshot.length()));
+        }
+        assertThat(catalogKeys).isNotEmpty();
+
+        for (Map<String, Object> row : rows) {
+            String category = CategoryNormalizer.normalize(String.valueOf(row.get("category")));
+            String material = String.valueOf(row.get("material")).trim();
+            Integer spec = ((Number) row.get("spec")).intValue();
+            String length = MaterialSpecCatalogQuery.normalizeLength(
+                    row.get("length") == null ? null : String.valueOf(row.get("length")));
+            assertThat(catalogKeys)
+                    .as("比价单行键 %s|%s|%s|%s 必须在字典内", category, material, spec, length)
+                    .contains(MaterialSpecCatalogQuery.key(category, material, spec, length));
         }
     }
 
@@ -178,58 +212,118 @@ class MaterialSpecCatalogPostgresTest {
     }
 
     /**
-     * 别名规则存在性守卫(真库): 比价单行 {@code mk_quote_item.category='螺纹钢'} 的键,
-     * 必须在只按 {@code (material, spec, length)} + 类别别名规范化后能匹配到
-     * {@code md_material} 的 {@code 直条} 行。
+     * 去品牌与双来源守卫(真库): 字典键集合必须正好等于
+     * 「商品信息去品牌去重后的键」∪「比价单实际行键」, 不多不少。
      *
-     * <p>真实库里两者写法不同(比对价单行 {@code 螺纹钢} vs 商品资料 {@code 直条}),
-     * 这条用例一旦失败说明两端别名规则又漂移了。</p>
+     * <p>这条覆盖三件事: 同一 (类别,材质,规格,定尺) 因品牌不同在商品信息里有多行时字典只有一行;
+     * 比价单用过而商品信息没有的键仍在字典内; 商品信息有而比价单没用过的键也在字典内(可提前录价)。</p>
      */
     @Test
-    void quoteSheetRebarRows_matchMaterialCatalogViaCategoryAlias() {
-        // 取一个真实的 螺纹钢 比价行键
-        List<Map<String, Object>> rows = jdbc.queryForList("""
-                select i.material, i.spec, i.length
+    void findAll_equalsMaterialWithoutBrandUnionQuoteItemKeys() {
+        Set<String> expected = new LinkedHashSet<>();
+        for (Map<String, Object> row : jdbc.queryForList("""
+                select distinct m.category, m.material, m.spec_sort as spec, m.length
+                from public.md_material m
+                where m.deleted_flag = false and m.spec_sort is not null
+                """)) {
+            addKey(expected, String.valueOf(row.get("category")), String.valueOf(row.get("material")),
+                    ((Number) row.get("spec")).intValue(), row.get("length"));
+        }
+        for (Map<String, Object> row : jdbc.queryForList("""
+                select distinct i.category, i.material, i.spec, i.length
                 from public.mk_quote_item i
-                where i.category = ? and i.spec is not null
-                limit 5
-                """, CategoryNormalizer.QUOTE_CATEGORY_REBAR);
-        if (rows.isEmpty()) {
-            // 开发库无比价单行时无法做存在性守卫; 但必须证明别名两侧确实存在差异数据
-            assertThat(query.find(null, null))
-                    .anySatisfy(snapshot -> assertThat(snapshot.category()).isNotBlank());
-            return;
+                join public.mk_quote_sheet s on s.id = i.sheet_id
+                where s.deleted_flag = false
+                  and i.row_type = 'PRODUCT'
+                  and i.category is not null and i.material is not null and i.spec is not null
+                """)) {
+            addKey(expected, String.valueOf(row.get("category")), String.valueOf(row.get("material")),
+                    ((Number) row.get("spec")).intValue(), row.get("length"));
         }
 
-        for (Map<String, Object> row : rows) {
-            String material = String.valueOf(row.get("material"));
-            Integer spec = ((Number) row.get("spec")).intValue();
-            String length = row.get("length") == null ? "" : String.valueOf(row.get("length"));
-
-            Integer matched = jdbc.queryForObject("""
-                    select count(*) from public.md_material m
-                    where m.deleted_flag = false
-                      and m.material = ?
-                      and m.spec_sort = ?
-                      and left(coalesce(m.length, ''), ?) = ?
-                    """, Integer.class, material, spec, MaterialSpecCatalogQuery.LENGTH_MAX, length);
-
-            assertThat(CategoryNormalizer.sameCategory(
-                    CategoryNormalizer.QUOTE_CATEGORY_REBAR, CategoryNormalizer.MATERIAL_CATEGORY_REBAR))
-                    .as("别名规则必须把 螺纹钢 与 直条 视为同一类别")
-                    .isTrue();
-            assertThat(matched)
-                    .as("比价行 %s|%s|%s 应能在 md_material 中按 (material,spec,length) 找到对应行"
-                            + "(这正是别名规则要解决的差异: 单据写 螺纹钢, 商品资料写 直条)",
-                            material, spec, length)
-                    .isNotNull()
-                    .isPositive();
+        Set<String> actual = new LinkedHashSet<>();
+        for (MaterialSpecCatalogQuery.MaterialSpecSnapshot snapshot : query.find(null, null)) {
+            actual.add(MaterialSpecCatalogQuery.key(snapshot.category(), snapshot.material(),
+                    snapshot.spec(), snapshot.length()));
         }
+
+        assertThat(expected).isNotEmpty();
+        assertThat(actual).containsExactlyInAnyOrderElementsOf(expected);
     }
 
-    /** 真库中确实存在 螺纹钢 的比价行与 直条 的商品资料, 证明别名规则不是空转。 */
+    /**
+     * 商品信息新增物料后字典立即可见(同一事务内新增 + 查询), 无需迁移或手工同步。
+     * <p>同时覆盖"商品信息是常规来源": 该键既不在比价单里, 也不是任何兜底路径的产物。</p>
+     */
     @Test
-    void realDataContainsBothCategorySpellings() {
+    void findAll_includesMaterialInsertedInSameTransaction() {
+        assertThat(dictionaryKeys()).doesNotContain(
+                MaterialSpecCatalogQuery.key(CategoryNormalizer.MATERIAL_CATEGORY_REBAR,
+                        "PG字典测试材质", 33, "3米"));
+
+        insertMaterial(942000000000000911L, MATERIAL_CODE, MATERIAL_BRAND, 33,
+                CategoryNormalizer.MATERIAL_CATEGORY_REBAR, "3 m");
+
+        assertThat(dictionaryKeys())
+                .as("新增商品信息物料后字典必须立即包含归一化后的键(直条→螺纹钢, 3 m→3米)")
+                .contains(MaterialSpecCatalogQuery.key(CategoryNormalizer.QUOTE_CATEGORY_REBAR,
+                        "PG字典测试材质", 33, "3米"));
+    }
+
+    /** 同一规格键在商品信息里因不同品牌存在多行时, 字典只有一行。 */
+    @Test
+    void findAll_deduplicatesMaterialRowsDifferingOnlyByBrand() {
+        insertMaterial(942000000000000921L, MATERIAL_CODE, MATERIAL_BRAND, 44,
+                CategoryNormalizer.MATERIAL_CATEGORY_REBAR, "4米");
+        insertMaterial(942000000000000922L, MATERIAL_CODE_SECOND, MATERIAL_BRAND_SECOND, 44,
+                CategoryNormalizer.MATERIAL_CATEGORY_REBAR, "4米");
+
+        List<MaterialSpecCatalogQuery.MaterialSpecSnapshot> matched = query.find(null, null).stream()
+                .filter(row -> "PG字典测试材质".equals(row.material()))
+                .filter(row -> Integer.valueOf(44).equals(row.spec()))
+                .toList();
+
+        assertThat(matched)
+                .as("不同品牌同一规格键只能有一行")
+                .hasSize(1);
+        assertThat(matched.get(0).category()).isEqualTo(CategoryNormalizer.QUOTE_CATEGORY_REBAR);
+        assertThat(matched.get(0).length()).isEqualTo("4米");
+    }
+
+    private Set<String> dictionaryKeys() {
+        Set<String> keys = new LinkedHashSet<>();
+        for (MaterialSpecCatalogQuery.MaterialSpecSnapshot snapshot : query.find(null, null)) {
+            keys.add(MaterialSpecCatalogQuery.key(snapshot.category(), snapshot.material(),
+                    snapshot.spec(), snapshot.length()));
+        }
+        return keys;
+    }
+
+    private static void addKey(Set<String> keys, String category, String material, Integer spec, Object rawLength) {
+        keys.add(MaterialSpecCatalogQuery.key(
+                CategoryNormalizer.normalize(category),
+                material == null ? null : material.trim(),
+                spec,
+                MaterialSpecCatalogQuery.normalizeLength(rawLength == null ? null : String.valueOf(rawLength))));
+    }
+
+    /** 造一条商品信息物料(md_material 的非空列必须齐全, 长度字样用于验证归一化)。 */
+    private void insertMaterial(long id, String materialCode, String brand, int spec,
+                                String category, String length) {
+        // 清理可能残留的历史测试数据(唯一索引: material_code 与 品牌+材质+规格+定尺 各自唯一)
+        jdbc.update("delete from public.md_material where material_code = ?", materialCode);
+        jdbc.update("delete from public.md_material where id = ?", id);
+        jdbc.update("""
+                insert into public.md_material (id, material_code, brand, material, category, spec, length,
+                                                unit, piece_weight_ton, pieces_per_bundle, unit_price,
+                                                created_by, created_name, deleted_flag)
+                values (?, ?, ?, 'PG字典测试材质', ?, ?, ?, '吨', 1.5, 100, 3000, 0, 'flyway-test', false)
+                """, id, materialCode, brand, category, String.valueOf(spec), length);
+    }
+
+    /** 真库数据分布 + 别名规则守卫: 两端类别写法不同也不会在字典里分裂成两行。 */
+    @Test
+    void realDataAliasRuleIsStable() {
         Integer quoteRebarRows = jdbc.queryForObject("""
                 select count(*) from public.mk_quote_item where category = ?
                 """, Integer.class, CategoryNormalizer.QUOTE_CATEGORY_REBAR);
@@ -248,15 +342,13 @@ class MaterialSpecCatalogPostgresTest {
                 .isEqualTo(CategoryNormalizer.normalize(CategoryNormalizer.QUOTE_CATEGORY_REBAR));
     }
 
-    /** 矩阵无筛选必须在真库上可执行(取版 JPQL 与条目批量加载)。 */
+    /** 矩阵/推导当前价查询必须在真库上可执行(取消版本语义后的 JPQL 与条目批量加载)。 */
     @Test
-    void matrixProjection_queriesRunOnRealSchema() {
-        LocalDateTime asOf = LocalDateTime.now().plusDays(1);
-
-        // 无生效版本时返回空结果也不得报 SQL 错误
-        assertThat(listRepository.findActiveAsOf(asOf)).isNotNull();
-        assertThat(listRepository.findVersions(942000000000000101L, "不存在的品牌")).isEmpty();
-        assertThat(listRepository.findActiveVersions(942000000000000101L, "不存在的品牌")).isEmpty();
+    void currentPriceListQueries_runOnRealSchema() {
+        // 不存在的品牌/供应商返回空结果也不得报 SQL 错误
+        assertThat(listRepository.findAllCurrent()).isNotNull();
+        assertThat(listRepository.findCurrentByBrandNames(List.of("不存在的品牌"))).isEmpty();
+        assertThat(listRepository.findCurrentByKey(942000000000000101L, "不存在的品牌")).isEmpty();
         assertThat(itemRepository.findByListIdIn(List.of(-1L))).isEmpty();
     }
 }
