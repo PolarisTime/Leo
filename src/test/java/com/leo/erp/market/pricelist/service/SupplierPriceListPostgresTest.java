@@ -85,6 +85,10 @@ class SupplierPriceListPostgresTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    /** 真库的值映射仓储(含 V171 的 CATEGORY 种子行), 归一化口径与生产一致。 */
+    @Autowired
+    private com.leo.erp.market.pricelist.repository.ValueAliasRepository valueAliasRepository;
+
     private final SnowflakeIdGenerator idGenerator = Mockito.mock(SnowflakeIdGenerator.class);
     private final SupplierQuery supplierQuery = Mockito.mock(SupplierQuery.class);
     private final MaterialSpecCatalogQuery specCatalogQuery = Mockito.mock(MaterialSpecCatalogQuery.class);
@@ -140,7 +144,8 @@ class SupplierPriceListPostgresTest {
 
     private SupplierPriceListStore store() {
         return new SupplierPriceListStore(listRepository, itemRepository, adjustmentRepository,
-                adjustmentItemRepository, idGenerator, supplierQuery, specCatalogQuery);
+                adjustmentItemRepository, idGenerator, supplierQuery, specCatalogQuery,
+                new ValueAliasQuery(new ValueAliasMappings(valueAliasRepository)));
     }
 
     private static SupplierPriceListRequest request(long supplierId, String brandName, String length,

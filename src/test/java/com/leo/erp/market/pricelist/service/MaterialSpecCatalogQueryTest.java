@@ -31,6 +31,14 @@ class MaterialSpecCatalogQueryTest {
     @Mock
     private JdbcTemplate jdbcTemplate;
 
+    /** 未配置任何值映射的空映射仓储: 归一化走 CategoryNormalizer 兜底(改造前行为)。 */
+    @Mock
+    private com.leo.erp.market.pricelist.repository.ValueAliasRepository valueAliasRepository;
+
+    private ValueAliasQuery valueAliasQuery() {
+        return new ValueAliasQuery(new ValueAliasMappings(valueAliasRepository));
+    }
+
     /** 商品信息(去品牌)与比价单行键合并后: 品牌差异只一行、比价单独有键保留、定尺写法归一。 */
     @Test
     @SuppressWarnings("unchecked")
@@ -54,7 +62,7 @@ class MaterialSpecCatalogQueryTest {
                         row("盘螺", "HRB400E", 6, "-")));
 
         List<MaterialSpecCatalogQuery.MaterialSpecSnapshot> result =
-                new MaterialSpecCatalogQuery(jdbcTemplate).find(null, null);
+                new MaterialSpecCatalogQuery(jdbcTemplate, valueAliasQuery()).find(null, null);
 
         // 去重 + 归一: 直条/螺纹钢 合成一行; 9米/9 m/9M 合成一行; -/NULL 合成一行(空串)
         assertThat(result).noneSatisfy(row -> assertThat(row.category()).isEqualTo("直条"));
@@ -110,7 +118,7 @@ class MaterialSpecCatalogQueryTest {
                 });
         when(jdbcTemplate.query(contains("mk_quote_item"), any(RowMapper.class)))
                 .thenReturn(List.of());
-        MaterialSpecCatalogQuery query = new MaterialSpecCatalogQuery(jdbcTemplate);
+        MaterialSpecCatalogQuery query = new MaterialSpecCatalogQuery(jdbcTemplate, valueAliasQuery());
 
         assertThat(query.findAll()).hasSize(1);
         assertThat(query.findAll())
@@ -130,7 +138,7 @@ class MaterialSpecCatalogQueryTest {
                 .thenReturn(List.of());
 
         List<MaterialSpecCatalogQuery.MaterialSpecSnapshot> result =
-                new MaterialSpecCatalogQuery(jdbcTemplate).find("螺纹钢", " ");
+                new MaterialSpecCatalogQuery(jdbcTemplate, valueAliasQuery()).find("螺纹钢", " ");
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).category()).isEqualTo("螺纹钢");

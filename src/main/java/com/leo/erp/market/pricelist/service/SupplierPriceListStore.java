@@ -74,6 +74,7 @@ public class SupplierPriceListStore {
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final SupplierQuery supplierQuery;
     private final MaterialSpecCatalogQuery specCatalogQuery;
+    private final ValueAliasQuery valueAliasQuery;
 
     public SupplierPriceListStore(SupplierPriceListRepository listRepository,
                                   SupplierPriceItemRepository itemRepository,
@@ -81,7 +82,8 @@ public class SupplierPriceListStore {
                                   SupplierPriceAdjustmentItemRepository adjustmentItemRepository,
                                   SnowflakeIdGenerator snowflakeIdGenerator,
                                   SupplierQuery supplierQuery,
-                                  MaterialSpecCatalogQuery specCatalogQuery) {
+                                  MaterialSpecCatalogQuery specCatalogQuery,
+                                  ValueAliasQuery valueAliasQuery) {
         this.listRepository = listRepository;
         this.itemRepository = itemRepository;
         this.adjustmentRepository = adjustmentRepository;
@@ -89,6 +91,7 @@ public class SupplierPriceListStore {
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.supplierQuery = supplierQuery;
         this.specCatalogQuery = specCatalogQuery;
+        this.valueAliasQuery = valueAliasQuery;
     }
 
     // ------------------------------------------------------------------ 创建
@@ -373,7 +376,9 @@ public class SupplierPriceListStore {
             // 允许整版不报价/空版本(前端新建时可先建头再补条目)
             return List.of();
         }
-        Set<String> catalogKeys = loadCatalogKeys();
+        // 值映射四个维度一次取全, 本次校验内复用(类别/材质/定尺归一与字典投影、比价匹配同口径)
+        ValueAliasQuery.AliasRules rules = valueAliasQuery.rules();
+        Set<String> catalogKeys = loadCatalogKeys(rules);
         List<NormalizedItem> normalized = new ArrayList<>(requests.size());
         Map<String, List<String>> duplicates = new LinkedHashMap<>();
         for (int index = 0; index < requests.size(); index++) {
@@ -381,10 +386,12 @@ public class SupplierPriceListStore {
             if (request == null) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "价格条目不能为空");
             }
-            // 类别归一到同一写法(直条 ≡ 螺纹钢): 请求内别名判重与 uk_supplier_price_item_key 同口径
-            String category = CategoryNormalizer.normalize(
+            // 类别归一(CATEGORY 映射优先, 未命中回退 直条 ≡ 螺纹钢): 请求内判重与
+            // uk_supplier_price_item_key 同口径
+            String category = rules.normalizeCategory(
                     requireText(request.category(), "条目[" + index + "]类别不能为空"));
-            String material = requireText(request.material(), "条目[" + index + "]材质不能为空");
+            String material = rules.normalizeMaterial(
+                    requireText(request.material(), "条目[" + index + "]材质不能为空"));
             Integer spec = request.spec();
             if (spec == null) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "条目[" + index + "]规格不能为空");
@@ -392,8 +399,8 @@ public class SupplierPriceListStore {
             if (spec <= 0) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "条目[" + index + "]规格必须大于 0");
             }
-            // 定尺归一(- / 空 / NULL → 空串; 9m / 9 米 → 9米)并按条目列宽截断, 与规格键字典同一实现
-            String length = MaterialSpecCatalogQuery.normalizeLength(request.length());
+            // 定尺归一(- / 空 / NULL → 空串; 9m / 9 米 → 9米)再叠加 LENGTH 映射, 与字典同一实现
+            String length = rules.normalizeLength(request.length());
             BigDecimal price = request.price();
             if (price != null && price.compareTo(BigDecimal.ZERO) < 0) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "条目[" + index + "]单价不能为负");
@@ -425,19 +432,22 @@ public class SupplierPriceListStore {
     /**
      * 规格全集键集合(来源 = 项目级可选商品键 ∪ 比价单实际行键, 见
      * {@link MaterialSpecCatalogQuery})。
-     * <p>类别按 {@link CategoryNormalizer} 归一后建键, 使 {@code 直条}/{@code 螺纹钢} 两种写法等价。</p>
+     * <p>字典投影侧已按 {@link ValueAliasQuery} 归一, 这里对齐地只做 trim 拼接,
+     * 使 {@code 直条}/{@code 螺纹钢} 等别名写法与字典键完全同一口径。</p>
      */
-    private Set<String> loadCatalogKeys() {
+    private Set<String> loadCatalogKeys(ValueAliasQuery.AliasRules rules) {
         Set<String> keys = new HashSet<>();
         for (MaterialSpecCatalogQuery.MaterialSpecSnapshot snapshot : specCatalogQuery.findAll()) {
-            keys.add(catalogKey(snapshot.category(), snapshot.material(), snapshot.spec(), snapshot.length()));
+            keys.add(catalogKey(rules.normalizeCategory(snapshot.category()),
+                    rules.normalizeMaterial(snapshot.material()), snapshot.spec(),
+                    rules.normalizeLength(snapshot.length())));
         }
         return keys;
     }
 
-    /** 校验用全集键: 类别归一到同一写法。 */
+    /** 校验用全集键(与比价行键同口径: 四段归一后拼接)。 */
     private static String catalogKey(String category, String material, Integer spec, String length) {
-        return MaterialSpecCatalogQuery.key(CategoryNormalizer.normalize(category), material, spec, length);
+        return MaterialSpecCatalogQuery.key(category, material, spec, length);
     }
 
     private static PriceStatus parsePriceStatus(String raw, int index) {

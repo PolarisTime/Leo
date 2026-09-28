@@ -61,6 +61,7 @@ public final class PermissionCodes {
         public static final String PROJECTS = "projects";
         public static final String QUOTE_SHEETS = "quote-sheets";
         public static final String SUPPLIER_PRICE_LISTS = "supplier-price-lists";
+        public static final String VALUE_ALIASES = "value-aliases";
         public static final String STEEL_QUOTES = "steel-quotes";
         public static final String PURCHASE_ORDERS = "purchase-orders";
         public static final String PURCHASE_INBOUNDS = "purchase-inbounds";
@@ -244,6 +245,12 @@ public final class PermissionCodes {
     public static final String SUPPLIER_PRICE_LISTS_UPDATE = Resources.SUPPLIER_PRICE_LISTS + ":" + Actions.UPDATE;
     public static final String SUPPLIER_PRICE_LISTS_DELETE = Resources.SUPPLIER_PRICE_LISTS + ":" + Actions.DELETE;
 
+    // 值映射/别名(类别/材质/定尺/品牌四个维度的同义写法归一, 原硬编码规则改为可维护数据)
+    public static final String VALUE_ALIASES_READ = Resources.VALUE_ALIASES + ":" + Actions.READ;
+    public static final String VALUE_ALIASES_CREATE = Resources.VALUE_ALIASES + ":" + Actions.CREATE;
+    public static final String VALUE_ALIASES_UPDATE = Resources.VALUE_ALIASES + ":" + Actions.UPDATE;
+    public static final String VALUE_ALIASES_DELETE = Resources.VALUE_ALIASES + ":" + Actions.DELETE;
+
     // 钢材报价
     public static final String STEEL_QUOTES_READ = Resources.STEEL_QUOTES + ":" + Actions.READ;
 
@@ -421,6 +428,7 @@ public final class PermissionCodes {
             QUOTE_SHEETS_READ, QUOTE_SHEETS_CREATE, QUOTE_SHEETS_UPDATE, QUOTE_SHEETS_DELETE,
             SUPPLIER_PRICE_LISTS_READ, SUPPLIER_PRICE_LISTS_CREATE,
             SUPPLIER_PRICE_LISTS_UPDATE, SUPPLIER_PRICE_LISTS_DELETE,
+            VALUE_ALIASES_READ, VALUE_ALIASES_CREATE, VALUE_ALIASES_UPDATE, VALUE_ALIASES_DELETE,
             STEEL_QUOTES_READ, PURCHASE_ORDERS_READ, PURCHASE_ORDERS_CREATE, PURCHASE_ORDERS_UPDATE, PURCHASE_ORDERS_DELETE,
             PURCHASE_ORDERS_AUDIT, PURCHASE_ORDERS_UNAUDIT, PURCHASE_INBOUNDS_READ, PURCHASE_INBOUNDS_CREATE, PURCHASE_INBOUNDS_UPDATE, PURCHASE_INBOUNDS_DELETE,
             PURCHASE_INBOUNDS_AUDIT, PURCHASE_INBOUNDS_UNAUDIT, FREIGHT_BILLS_READ, FREIGHT_BILLS_CREATE, FREIGHT_BILLS_UPDATE, FREIGHT_BILLS_DELETE,

@@ -6,10 +6,14 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * 比价单现货价的<b>读时自动推导</b>。
@@ -28,37 +32,54 @@ import java.util.Map;
 public class QuoteSheetPriceDeriver {
 
     private final SupplierPriceListQueryService queryService;
+    private final ValueAliasQuery valueAliasQuery;
 
-    public QuoteSheetPriceDeriver(SupplierPriceListQueryService queryService) {
+    public QuoteSheetPriceDeriver(SupplierPriceListQueryService queryService,
+                                  ValueAliasQuery valueAliasQuery) {
         this.queryService = queryService;
+        this.valueAliasQuery = valueAliasQuery;
     }
 
     /**
      * 选中每个品牌的当前价格表并加载其条目。
      *
+     * <p><b>品牌匹配走值映射</b>({@code md_value_alias} 的 BRAND 维度): 单据品牌列与价格表
+     * {@code brand_name} 两边都按 BRAND 映射归一后比较 —— 单据用 {@code 富鑫}、价格表存
+     * {@code 安徽富鑫} 时, 只要配置了该映射即可命中; 未配置映射时等价于原来的 trim 后精确比较。
+     * 查询按"原写法 ∪ 归一后写法"取候选, 因此两种写法存哪边都能找到。</p>
+     *
      * @param brandNames  单据品牌列集合
      * @param supplierIds 供应商白名单, 空表示不限
      */
     public BrandSelection selectBrands(Collection<String> brandNames, Collection<Long> supplierIds) {
-        List<SupplierPriceList> candidates = queryService.currentByBrandNames(brandNames);
-        Map<Long, SupplierPriceList> listById = new LinkedHashMap<>();
-        for (SupplierPriceList candidate : candidates) {
-            listById.put(candidate.getId(), candidate);
+        ValueAliasQuery.AliasRules rules = valueAliasQuery.rules();
+        Map<String, String> targetByBrand = new LinkedHashMap<>();
+        Set<String> lookupNames = new LinkedHashSet<>();
+        if (brandNames != null) {
+            for (String brandName : brandNames) {
+                if (brandName == null || brandName.isBlank()) {
+                    continue;
+                }
+                String raw = brandName.trim();
+                String target = rules.normalizeBrand(raw);
+                targetByBrand.putIfAbsent(raw, target);
+                lookupNames.add(raw);
+                if (target != null && !target.isBlank()) {
+                    lookupNames.add(target);
+                }
+            }
         }
+        List<SupplierPriceList> candidates = lookupNames.isEmpty()
+                ? List.of()
+                : queryService.currentByBrandNames(lookupNames);
         Map<Long, List<SupplierPriceItem>> itemsByList = queryService.loadItemsByList(candidates);
 
         Map<String, BrandEntry> byBrand = new LinkedHashMap<>();
-        for (String brandName : brandNames) {
-            if (brandName == null || brandName.isBlank()) {
-                continue;
-            }
-            String normalized = brandName.trim();
-            if (byBrand.containsKey(normalized)) {
-                continue;
-            }
+        for (Map.Entry<String, String> requested : targetByBrand.entrySet()) {
+            String target = requested.getValue();
             SupplierPriceList selected = null;
             for (SupplierPriceList candidate : candidates) {
-                if (!normalized.equals(candidate.getBrandName())) {
+                if (!Objects.equals(rules.normalizeBrand(candidate.getBrandName()), target)) {
                     continue;
                 }
                 if (supplierIds != null && !supplierIds.isEmpty()
@@ -69,33 +90,34 @@ public class QuoteSheetPriceDeriver {
                 selected = candidate;
                 break;
             }
-            byBrand.put(normalized, buildEntry(selected, itemsByList));
+            byBrand.put(requested.getKey(), buildEntry(selected, itemsByList, rules));
         }
         return new BrandSelection(byBrand);
     }
 
     private static BrandEntry buildEntry(SupplierPriceList selected,
-                                         Map<Long, List<SupplierPriceItem>> itemsByList) {
+                                         Map<Long, List<SupplierPriceItem>> itemsByList,
+                                         ValueAliasQuery.AliasRules rules) {
         if (selected == null) {
-            return new BrandEntry(null, Map.of());
+            return new BrandEntry(null, Map.of(), rules);
         }
         Map<String, SupplierPriceItem> byKey = new HashMap<>();
         for (SupplierPriceItem item : itemsByList.getOrDefault(selected.getId(), List.of())) {
             byKey.putIfAbsent(item.keyOf(), item);
         }
-        return new BrandEntry(selected, byKey);
+        return new BrandEntry(selected, byKey, rules);
     }
 
     /**
      * 按选中结果推导单个格子的现货价。
      *
-     * <p><b>匹配优先级</b>(见 {@link CategoryNormalizer}):</p>
+     * <p><b>匹配优先级</b>(归一化单点实现见 {@link ValueAliasQuery}):</p>
      * <ol>
      *   <li>先按 {@code (category, material, spec, length)} <b>精确</b>命中
-     *       (两边类别写法一致时, 如同为 {@code 盘螺});</li>
-     *   <li>精确未命中时, 再按<b>规范化类别</b>命中(镜像前端 {@code normalizeCategory}:
-     *       {@code 直条} ≡ {@code 螺纹钢}, 解决 md_material 用 {@code 直条} 而
-     *       mk_quote_item 用 {@code 螺纹钢} 的真实主路径);</li>
+     *       (两边写法一致时, 如同为 {@code 盘螺});</li>
+     *   <li>精确未命中时, 再按<b>值映射归一后</b>的键命中: 类别/材质/定尺三个维度都查
+     *       {@code md_value_alias}(类别未配置映射时回退硬编码 {@link CategoryNormalizer} 的
+     *       {@code 直条} ≡ {@code 螺纹钢}, 即改造前的行为);</li>
      *   <li>仍未命中才是 {@code NO_ITEM}。</li>
      * </ol>
      *
@@ -107,8 +129,7 @@ public class QuoteSheetPriceDeriver {
         if (entry == null || entry.list() == null) {
             return DerivedSpot.unmatched(SpotReason.NO_LIST);
         }
-        SupplierPriceItem item = matchItem(entry, category, material, spec,
-                MaterialSpecCatalogQuery.normalizeLength(length));
+        SupplierPriceItem item = matchItem(entry, category, material, spec, length);
         if (item == null) {
             return DerivedSpot.unmatched(SpotReason.NO_ITEM);
         }
@@ -122,9 +143,9 @@ public class QuoteSheetPriceDeriver {
     }
 
     /**
-     * 条目匹配: 精确键优先, 未命中时回退到规范化类别。
+     * 条目匹配: 精确键优先, 未命中时回退到"值映射归一后"的键。
      *
-     * <p>规范化回退时按 {@code (material, spec, length)} 过滤后再比较规范化类别,
+     * <p>归一化回退时按 {@code (材质, 规格, 定尺)} 归一无误后再比较归一化类别,
      * 并按键升序取第一条以保证确定性; 这样同一 {@code (material, spec, length)} 下
      * 同时存在 {@code 直条} 与 {@code 盘螺} 两个条目时也不会串味。</p>
      *
@@ -132,21 +153,26 @@ public class QuoteSheetPriceDeriver {
      */
     private static SupplierPriceItem matchItem(BrandEntry entry, String category, String material,
                                                Integer spec, String length) {
-        SupplierPriceItem exact = entry.items().get(SupplierPriceItem.key(category, material, spec, length));
+        // 精确键: 定尺按结构口径归一(与入库口径一致), 类别/材质保持原写法
+        String structuralLength = MaterialSpecCatalogQuery.normalizeLength(length);
+        SupplierPriceItem exact = entry.items().get(SupplierPriceItem.key(category, material, spec,
+                structuralLength));
         if (exact != null) {
             return exact;
         }
-        String normalizedCategory = CategoryNormalizer.normalize(category);
+        ValueAliasQuery.AliasRules rules = entry.rules();
+        String normalizedCategory = rules.normalizeCategory(category);
         if (normalizedCategory == null) {
             return null;
         }
+        String normalizedMaterial = rules.normalizeMaterial(material);
+        String normalizedLength = rules.normalizeLength(length);
         return entry.items().values().stream()
-                .filter(item -> java.util.Objects.equals(item.getMaterial(), material))
-                .filter(item -> java.util.Objects.equals(item.getSpec(), spec))
-                .filter(item -> java.util.Objects.equals(
-                        MaterialSpecCatalogQuery.normalizeLength(item.getLength()), length))
-                .filter(item -> normalizedCategory.equals(CategoryNormalizer.normalize(item.getCategory())))
-                .min(java.util.Comparator.comparing(SupplierPriceItem::keyOf))
+                .filter(item -> Objects.equals(rules.normalizeMaterial(item.getMaterial()), normalizedMaterial))
+                .filter(item -> Objects.equals(item.getSpec(), spec))
+                .filter(item -> Objects.equals(rules.normalizeLength(item.getLength()), normalizedLength))
+                .filter(item -> normalizedCategory.equals(rules.normalizeCategory(item.getCategory())))
+                .min(Comparator.comparing(SupplierPriceItem::keyOf))
                 .orElse(null);
     }
 
@@ -169,8 +195,22 @@ public class QuoteSheetPriceDeriver {
         }
     }
 
-    /** 某品牌的选中价格表与其条目索引。 */
-    public record BrandEntry(SupplierPriceList list, Map<String, SupplierPriceItem> items) {
+    /**
+     * 某品牌的选中价格表与其条目索引, 以及本次推导使用的值映射快照。
+     *
+     * <p>两参数构造(不带映射)等价于"未配置任何映射": 类别仍按 {@link CategoryNormalizer} 兜底,
+     * 也就是改造前的行为。</p>
+     */
+    public record BrandEntry(SupplierPriceList list, Map<String, SupplierPriceItem> items,
+                             ValueAliasQuery.AliasRules rules) {
+
+        public BrandEntry(SupplierPriceList list, Map<String, SupplierPriceItem> items) {
+            this(list, items, ValueAliasQuery.AliasRules.EMPTY);
+        }
+
+        public BrandEntry {
+            rules = rules == null ? ValueAliasQuery.AliasRules.EMPTY : rules;
+        }
     }
 
     /** 全部品牌的选中结果。 */

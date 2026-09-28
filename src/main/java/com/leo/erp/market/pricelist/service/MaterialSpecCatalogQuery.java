@@ -1,5 +1,6 @@
 package com.leo.erp.market.pricelist.service;
 
+import com.leo.erp.market.pricelist.domain.enums.ValueAliasDimension;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,13 +25,16 @@ import java.util.Map;
  * </ol>
  * <p>商品信息新增物料后字典自动多行, 不需要迁移或手工同步(实时投影, 无缓存)。</p>
  *
- * <p><b>归一化三件套(只在本类实现, 字典 / 写库 / 比价行键匹配共用同一口径)</b>:</p>
+ * <p><b>归一化三件套(单点实现在 {@link ValueAliasQuery}, 字典 / 写库 / 比价行键匹配共用同一口径)</b>:</p>
  * <ul>
- *   <li>类别: {@link CategoryNormalizer#normalize}({@code 直条} ≡ {@code 螺纹钢});</li>
+ *   <li>类别: {@link ValueAliasQuery#normalize(ValueAliasDimension, String)}
+ *       ({@code md_value_alias} 的 CATEGORY 映射优先, 如
+ *       {@code 直条} ≡ {@code 螺纹钢}; 未配置映射时回退硬编码 {@link CategoryNormalizer});</li>
  *   <li>规格: 取数字(商品信息侧直接用生成列 {@code spec_sort}, 即 {@code Φ12} → {@code 12};
  *       比价单行的 {@code spec} 本身是整数); 无数字或 {@code <= 0} 的键不可用, 整行跳过;</li>
  *   <li>定尺: {@code -} / 空串 / NULL 视为同一含义(无定尺, 统一空串); {@code 9m}/{@code 9M}/{@code 9 米}
- *       归一为 {@code 9米}; 最后按条目列宽 {@code varchar(16)} 截断, 见 {@link #normalizeLength(String)}。</li>
+ *       归一为 {@code 9米}; 再叠加 LENGTH 维度映射; 最后按条目列宽 {@code varchar(16)} 截断,
+ *       见 {@link #normalizeLength(String)}。</li>
  * </ul>
  *
  * <p>排序固定 类别 → 材质 → 规格(数值) → 定尺(数值优先, 非数值末尾)。</p>
@@ -72,9 +76,11 @@ public class MaterialSpecCatalogQuery {
             """;
 
     private final JdbcTemplate jdbcTemplate;
+    private final ValueAliasQuery valueAliasQuery;
 
-    public MaterialSpecCatalogQuery(JdbcTemplate jdbcTemplate) {
+    public MaterialSpecCatalogQuery(JdbcTemplate jdbcTemplate, ValueAliasQuery valueAliasQuery) {
         this.jdbcTemplate = jdbcTemplate;
+        this.valueAliasQuery = valueAliasQuery;
     }
 
     /** 全量字典(不带筛选)。 */
@@ -86,38 +92,40 @@ public class MaterialSpecCatalogQuery {
     /**
      * 按类别/材质筛选字典。
      *
-     * <p>类别比较走 {@link CategoryNormalizer#sameCategory}({@code 直条} ≡ {@code 螺纹钢});
-     * 材质按 trim 后精确比较。</p>
+     * <p>类别/材质比较走 {@link ValueAliasQuery.AliasRules}(映射优先, 类别未命中回退
+     * {@link CategoryNormalizer} 的 {@code 直条} ≡ {@code 螺纹钢})。</p>
      *
      * @param category 类别, null/空表示不筛选
      * @param material 材质, null/空表示不筛选
      */
     @Transactional(readOnly = true)
     public List<MaterialSpecSnapshot> find(String category, String material) {
-        List<MaterialSpecSnapshot> rows = new ArrayList<>(rowsFromMaterialDictionary());
-        rows.addAll(rowsFromQuoteItems());
-        return ordered(filter(rows, category, material));
+        // 一次取四个维度的映射, 本次查询内复用(不逐值查库)
+        ValueAliasQuery.AliasRules rules = valueAliasQuery.rules();
+        List<MaterialSpecSnapshot> rows = new ArrayList<>(rowsFromMaterialDictionary(rules));
+        rows.addAll(rowsFromQuoteItems(rules));
+        return ordered(filter(rows, category, material, rules));
     }
 
     /** 商品信息(去品牌)规格键。 */
-    private List<MaterialSpecSnapshot> rowsFromMaterialDictionary() {
+    private List<MaterialSpecSnapshot> rowsFromMaterialDictionary(ValueAliasQuery.AliasRules rules) {
         return jdbcTemplate.query(MATERIAL_DICTIONARY_SQL,
                 (rs, rowNum) -> new MaterialSpecSnapshot(
-                        normalizeCategory(rs.getString("category")),
-                        trimToNull(rs.getString("material")),
+                        rules.normalizeCategory(trimToNull(rs.getString("category"))),
+                        rules.normalizeMaterial(trimToNull(rs.getString("material"))),
                         (Integer) rs.getObject("spec"),
-                        normalizeLength(rs.getString("length_raw")),
+                        rules.normalizeLength(rs.getString("length_raw")),
                         0));
     }
 
     /** 比价单实际行键。 */
-    private List<MaterialSpecSnapshot> rowsFromQuoteItems() {
+    private List<MaterialSpecSnapshot> rowsFromQuoteItems(ValueAliasQuery.AliasRules rules) {
         return jdbcTemplate.query(QUOTE_ITEM_SQL,
                 (rs, rowNum) -> new MaterialSpecSnapshot(
-                        normalizeCategory(rs.getString("category")),
-                        trimToNull(rs.getString("material")),
+                        rules.normalizeCategory(trimToNull(rs.getString("category"))),
+                        rules.normalizeMaterial(trimToNull(rs.getString("material"))),
                         (Integer) rs.getObject("spec"),
-                        normalizeLength(rs.getString("length")),
+                        rules.normalizeLength(rs.getString("length")),
                         0));
     }
 
@@ -128,7 +136,8 @@ public class MaterialSpecCatalogQuery {
     }
 
     private static List<MaterialSpecSnapshot> filter(List<MaterialSpecSnapshot> rows,
-                                                     String category, String material) {
+                                                     String category, String material,
+                                                     ValueAliasQuery.AliasRules rules) {
         String materialFilter = blankToNull(material);
         List<MaterialSpecSnapshot> result = new ArrayList<>(rows.size());
         for (MaterialSpecSnapshot row : rows) {
@@ -136,10 +145,11 @@ public class MaterialSpecCatalogQuery {
                 continue;
             }
             if (category != null && !category.isBlank()
-                    && !CategoryNormalizer.sameCategory(row.category(), category)) {
+                    && !rules.sameCategory(row.category(), category)) {
                 continue;
             }
-            if (materialFilter != null && !materialFilter.equals(row.material())) {
+            if (materialFilter != null && !rules.sameValue(
+                    ValueAliasDimension.MATERIAL, row.material(), materialFilter)) {
                 continue;
             }
             result.add(row);
@@ -226,10 +236,6 @@ public class MaterialSpecCatalogQuery {
         } catch (NumberFormatException ex) {
             return BigDecimal.valueOf(-1);
         }
-    }
-
-    private static String normalizeCategory(String raw) {
-        return CategoryNormalizer.normalize(trimToNull(raw));
     }
 
     private static String trimToNull(String value) {

@@ -66,6 +66,9 @@ class QuoteSheetPriceCellProjectionTest {
     @Mock
     private com.leo.erp.market.pricelist.repository.SupplierPriceItemRepository priceItemRepository;
 
+    @Mock
+    private com.leo.erp.market.pricelist.repository.ValueAliasRepository valueAliasRepository;
+
     /**
      * 未装配价格推导服务时读取不得抛异常: 仍按品牌列出格, 但无价格表价可用时
      * {@code NONE}(推导原因不可知, 保持 null)。
@@ -215,12 +218,15 @@ class QuoteSheetPriceCellProjectionTest {
 
     // ---------------------------------------------------------------- 夹具
 
-    /** 用真实 QuoteSheetPriceDeriver(走仓储)装配读路径。 */
+    /** 用真实 QuoteSheetPriceDeriver(走仓储)装配读路径; 值映射为空 = 改造前行为。 */
     private QuoteSheetStore storeWithRealDeriver() {
+        com.leo.erp.market.pricelist.service.ValueAliasQuery aliases =
+                new com.leo.erp.market.pricelist.service.ValueAliasQuery(
+                        new com.leo.erp.market.pricelist.service.ValueAliasMappings(valueAliasRepository));
         com.leo.erp.market.pricelist.service.QuoteSheetPriceDeriver realDeriver =
                 new com.leo.erp.market.pricelist.service.QuoteSheetPriceDeriver(
                         new com.leo.erp.market.pricelist.service.SupplierPriceListQueryService(
-                                priceListRepository, priceItemRepository, null));
+                                priceListRepository, priceItemRepository, null, aliases), aliases);
         QuoteSheetPriceService priceService = new QuoteSheetPriceService(realDeriver, quoteSheetRepository);
         QuoteSheetStore store = new QuoteSheetStore(quoteSheetRepository, null, snowflakeIdGenerator,
                 supplierQuery, null, null, null);

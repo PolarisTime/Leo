@@ -35,13 +35,16 @@ public class SupplierPriceListQueryService {
     private final SupplierPriceListRepository listRepository;
     private final SupplierPriceItemRepository itemRepository;
     private final MaterialSpecCatalogQuery specCatalogQuery;
+    private final ValueAliasQuery valueAliasQuery;
 
     public SupplierPriceListQueryService(SupplierPriceListRepository listRepository,
                                          SupplierPriceItemRepository itemRepository,
-                                         MaterialSpecCatalogQuery specCatalogQuery) {
+                                         MaterialSpecCatalogQuery specCatalogQuery,
+                                         ValueAliasQuery valueAliasQuery) {
         this.listRepository = listRepository;
         this.itemRepository = itemRepository;
         this.specCatalogQuery = specCatalogQuery;
+        this.valueAliasQuery = valueAliasQuery;
     }
 
     /** 规格全集(固定行来源), 支持按类别/材质筛选。 */
@@ -58,7 +61,7 @@ public class SupplierPriceListQueryService {
      * 对照矩阵投影(只读)。
      *
      * @param supplierIds 供应商筛选, 空表示不限
-     * @param brandNames  品牌筛选, 空表示不限
+     * @param brandNames  品牌筛选, 空表示不限(写法按 {@code md_value_alias} 的 BRAND 维度归一后比较)
      * @param category    类别筛选, 空表示不限
      * @param asOf        兼容保留(不再参与选版); 缺省 = 当前时刻, 仅回显
      */
@@ -68,10 +71,20 @@ public class SupplierPriceListQueryService {
         LocalDateTime echoedAsOf = asOf == null ? LocalDateTime.now() : asOf;
         Set<Long> supplierFilter = normalizeIds(supplierIds);
         Set<String> brandFilter = normalizeNames(brandNames);
+        // 品牌匹配走值映射: 原写法与归一后写法都参与召回, 比较时统一归一到 BRAND 目标写法
+        ValueAliasQuery.AliasRules rules = valueAliasQuery.rules();
+        Set<String> resolvedBrandFilter = new LinkedHashSet<>();
+        for (String brandName : brandFilter) {
+            String resolved = rules.normalizeBrand(brandName);
+            if (resolved != null && !resolved.isBlank()) {
+                resolvedBrandFilter.add(resolved);
+            }
+        }
 
-        List<SupplierPriceList> candidates = currentLists(brandFilter).stream()
+        List<SupplierPriceList> candidates = currentLists(brandFilter, resolvedBrandFilter).stream()
                 .filter(list -> supplierFilter.isEmpty() || supplierFilter.contains(list.getSupplierId()))
-                .filter(list -> brandFilter.isEmpty() || brandFilter.contains(list.getBrandName()))
+                .filter(list -> resolvedBrandFilter.isEmpty()
+                        || resolvedBrandFilter.contains(rules.normalizeBrand(list.getBrandName())))
                 .toList();
         Map<String, SupplierPriceList> picked = pickCurrentPerSupplierBrand(candidates);
         List<SupplierPriceList> lists = new ArrayList<>(picked.values());
@@ -91,7 +104,7 @@ public class SupplierPriceListQueryService {
         Map<String, RowAccumulator> rows = new LinkedHashMap<>();
         for (SupplierPriceList list : lists) {
             for (SupplierPriceItem item : itemsByList.getOrDefault(list.getId(), List.of())) {
-                if (category != null && !category.isBlank() && !category.trim().equals(item.getCategory())) {
+                if (category != null && !category.isBlank() && !rules.sameCategory(item.getCategory(), category)) {
                     continue;
                 }
                 RowAccumulator accumulator = rows.computeIfAbsent(item.keyOf(),
@@ -156,10 +169,15 @@ public class SupplierPriceListQueryService {
         return listRepository.findCurrentByBrandNames(names);
     }
 
-    /** 矩阵投影用: 指定品牌的当前价格表; 品牌筛选为空时退化为全部当前价格表。 */
-    private List<SupplierPriceList> currentLists(Set<String> brandFilter) {
-        if (!brandFilter.isEmpty()) {
-            return listRepository.findCurrentByBrandNames(brandFilter);
+    /**
+     * 矩阵投影用: 指定品牌的当前价格表; 品牌筛选为空时退化为全部当前价格表。
+     * <p>召回按"筛选原写法 ∪ BRAND 归一后写法"查库, 因此价格表里存的是哪一种写法都能取到。</p>
+     */
+    private List<SupplierPriceList> currentLists(Set<String> brandFilter, Set<String> resolvedBrandFilter) {
+        Set<String> lookupNames = new LinkedHashSet<>(brandFilter);
+        lookupNames.addAll(resolvedBrandFilter);
+        if (!lookupNames.isEmpty()) {
+            return listRepository.findCurrentByBrandNames(lookupNames);
         }
         return listRepository.findAllCurrent();
     }

@@ -33,9 +33,18 @@ class QuoteSheetPriceDeriverTest {
     @Mock
     private SupplierPriceItemRepository itemRepository;
 
+    /** 未配置任何值映射的映射仓储: 归一化走 CategoryNormalizer 兜底(即改造前行为)。 */
+    @Mock
+    private com.leo.erp.market.pricelist.repository.ValueAliasRepository valueAliasRepository;
+
+    private ValueAliasQuery valueAliasQuery() {
+        return new ValueAliasQuery(new ValueAliasMappings(valueAliasRepository));
+    }
+
     private QuoteSheetPriceDeriver deriver() {
+        ValueAliasQuery aliases = valueAliasQuery();
         return new QuoteSheetPriceDeriver(
-                new SupplierPriceListQueryService(listRepository, itemRepository, null));
+                new SupplierPriceListQueryService(listRepository, itemRepository, null, aliases), aliases);
     }
 
     /** 主路径: 取该品牌当前价格表的条目价。 */

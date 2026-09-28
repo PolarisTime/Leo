@@ -73,9 +73,13 @@ class SupplierPriceListStoreTest {
     @Mock
     private MaterialSpecCatalogQuery specCatalogQuery;
 
+    @Mock
+    private com.leo.erp.market.pricelist.repository.ValueAliasRepository valueAliasRepository;
+
     private SupplierPriceListStore store() {
         return new SupplierPriceListStore(listRepository, itemRepository, adjustmentRepository,
-                adjustmentItemRepository, snowflakeIdGenerator, supplierQuery, specCatalogQuery);
+                adjustmentItemRepository, snowflakeIdGenerator, supplierQuery, specCatalogQuery,
+                new ValueAliasQuery(new ValueAliasMappings(valueAliasRepository)));
     }
 
     private void stubSupplier() {

@@ -38,6 +38,9 @@ public final class PageSortFieldCatalog {
             // (传这些旧字段按 PageQuery 契约返回 422, 不再对外承诺其排序语义); 默认按 updatedAt 倒序。
             Map.entry("supplier-price-list", Set.of("id", "supplierName", "brandName",
                     "warehouse", "createdAt", "updatedAt")),
+            // 值映射/别名: 只允许 id/dimension/sourceValue/targetValue/createdAt/updatedAt
+            Map.entry("value-alias", Set.of("id", "dimension", "sourceValue", "targetValue",
+                    "createdAt", "updatedAt")),
             Map.entry("role", Set.of("id", "code", "name", "status", "builtin", "createdAt", "updatedAt")),
             Map.entry("user", Set.of("id", "loginName", "userName", "mobile", "status", "lastLoginDate", "createdAt", "updatedAt"))
     );

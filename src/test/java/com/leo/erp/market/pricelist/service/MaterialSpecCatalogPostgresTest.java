@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.jpa.show-sql=false"
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import(MaterialSpecCatalogQuery.class)
+@Import({MaterialSpecCatalogQuery.class, ValueAliasQuery.class, ValueAliasMappings.class})
 @EnabledIfEnvironmentVariable(named = "LEO_TEST_POSTGRES", matches = "true")
 class MaterialSpecCatalogPostgresTest {
 
