@@ -82,6 +82,7 @@ public final class PermissionCodes {
         public static final String PRINT_TEMPLATES = "print-templates";
         public static final String PRINT_EXPORTS = "print-exports";
         public static final String PRINT_PREVIEWS = "print-previews";
+        public static final String MODULE_EXPORTS = "module-exports";
         public static final String COMPANY_SETTINGS = "company-settings";
         public static final String DASHBOARD = "dashboard";
         public static final String OPERATION_LOGS = "operation-logs";
@@ -339,6 +340,9 @@ public final class PermissionCodes {
     // 打印预览
     public static final String PRINT_PREVIEWS_READ = Resources.PRINT_PREVIEWS + ":" + Actions.READ;
 
+    // 业务单据通用导出（按记录 id 集合生成 XLSX 表示）
+    public static final String MODULE_EXPORTS_EXPORT = Resources.MODULE_EXPORTS + ":" + Actions.EXPORT;
+
     // 结算主体
     public static final String COMPANY_SETTINGS_READ = Resources.COMPANY_SETTINGS + ":" + Actions.READ;
     public static final String COMPANY_SETTINGS_CREATE = Resources.COMPANY_SETTINGS + ":" + Actions.CREATE;
@@ -423,6 +427,7 @@ public final class PermissionCodes {
             STEEL_QUOTE_CALENDARS_READ, MATERIAL_PRICE_MATCHES_READ,
             PRINT_TEMPLATES_READ, PRINT_TEMPLATES_CREATE, PRINT_TEMPLATES_UPDATE, PRINT_TEMPLATES_DELETE,
             PRINT_EXPORTS_PRINT, PRINT_PREVIEWS_READ,
+            MODULE_EXPORTS_EXPORT,
             COMPANY_SETTINGS_READ, COMPANY_SETTINGS_CREATE, COMPANY_SETTINGS_UPDATE, COMPANY_SETTINGS_DELETE,
             DASHBOARD_READ, OPERATION_LOGS_READ, GLOBAL_SEARCH_READ, META_READ,
             CODE_ISSUANCES_READ, CODE_ISSUANCES_CREATE,
