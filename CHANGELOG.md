@@ -1,3 +1,17 @@
+# [11.19.0](https://github.com/PolarisTime/Leo/compare/v11.18.0...v11.19.0) (2026-09-28)
+
+
+### Bug Fixes
+
+* **pricelist:** 修复现货价未按品牌输出价格格与类别别名不匹配 ([a98e232](https://github.com/PolarisTime/Leo/commit/a98e232d280597dfa93198eb8cb108b7a513851f))
+* **pricelist:** 修复规格全集无筛选查询的真库 500 ([edcdeae](https://github.com/PolarisTime/Leo/commit/edcdeae0cb8cc40e28440342f18edccde8ba46a5))
+* **pricelist:** 批量保存推断自动带出的价格来源避免冻结为手填覆盖 ([d1a66a2](https://github.com/PolarisTime/Leo/commit/d1a66a22af96e3ad9e2260202b17af05f4416968))
+
+
+### Features
+
+* **pricelist:** 新增供应商价格表与比价现货价读时推导 ([77de39c](https://github.com/PolarisTime/Leo/commit/77de39c15cece14c1d42c06a89ddfbac94ccba0e))
+
 # [11.18.0](https://github.com/PolarisTime/Leo/compare/v11.17.0...v11.18.0) (2026-09-28)
 
 
