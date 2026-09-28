@@ -29,6 +29,14 @@ public class MaterialSpecCatalogQuery {
     /** 价格条目定尺列长度上限(varchar(16)), 与 mk_supplier_price_item.length 一致。 */
     static final int LENGTH_MAX = 16;
 
+    /**
+     * 全量/按类别材质筛选的规格全集查询。
+     *
+     * <p>{@code cast(? as varchar)} 是必需的: PostgreSQL 无法从
+     * {@code ? is null} 推断无类型参数, 不加显式转型会报
+     * {@code could not determine data type of parameter $1}(真库才会暴露, mock 测不到)。
+     * 值仍走绑定占位符, 不做字符串拼接。</p>
+     */
     private static final String SQL = """
             select m.category as category,
                    m.material as material,
@@ -38,8 +46,8 @@ public class MaterialSpecCatalogQuery {
             from public.md_material m
             where m.deleted_flag = false
               and m.spec_sort is not null
-              and (? is null or m.category = ?)
-              and (? is null or m.material = ?)
+              and (cast(? as varchar) is null or m.category = ?)
+              and (cast(? as varchar) is null or m.material = ?)
             order by m.category asc, m.material asc, m.spec_sort asc, m.length_sort asc, m.spec asc, m.length asc
             """;
 
