@@ -13,6 +13,7 @@ import java.math.BigDecimal;
  * @param material            材质
  * @param spec                规格(订单明细为字符串)
  * @param length              长度
+ * @param brand               品牌(订单明细自带字段, 供比价展示"已开的品牌")
  * @param orderedWeight       该明细行订货吨数
  * @param issuedWeight        已开吨位(全部未删除报价单中关联该明细行的 ton 之和)
  * @param remainingWeight     剩余可开吨 = 订货吨数 - 已开吨位
@@ -27,6 +28,7 @@ public record PurchaseOrderTonnageResponse(
         String material,
         String spec,
         String length,
+        String brand,
         BigDecimal orderedWeight,
         BigDecimal issuedWeight,
         BigDecimal remainingWeight,

@@ -125,6 +125,7 @@ public class PurchaseOrderOptionService implements PurchaseOrderOptionQuery {
                 item.getMaterial(),
                 item.getSpec(),
                 item.getLength(),
+                item.getBrand(),
                 item.getWeightTon(),
                 order.getStatus());
     }

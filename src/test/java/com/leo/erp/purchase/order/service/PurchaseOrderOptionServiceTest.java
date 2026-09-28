@@ -100,6 +100,7 @@ class PurchaseOrderOptionServiceTest {
         item.setMaterial("HRB400E");
         item.setSpec("12");
         item.setLength("9米");
+        item.setBrand("中天");
         item.setWeightTon(new BigDecimal("6.0"));
         when(purchaseOrderItemRepository.findActiveItemOptions(any(), any(), any(), any()))
                 .thenReturn(List.of(item));
@@ -114,6 +115,7 @@ class PurchaseOrderOptionServiceTest {
         assertThat(snapshot.orderNo()).isEqualTo("PO-88");
         assertThat(snapshot.material()).isEqualTo("HRB400E");
         assertThat(snapshot.spec()).isEqualTo("12");
+        assertThat(snapshot.brand()).isEqualTo("中天");
         assertThat(snapshot.orderedWeight()).isEqualByComparingTo("6.0");
     }
 

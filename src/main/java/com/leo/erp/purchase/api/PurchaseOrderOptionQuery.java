@@ -49,6 +49,7 @@ public interface PurchaseOrderOptionQuery {
      * @param material            材质
      * @param spec                规格(订单明细为字符串, 保持原样)
      * @param length              长度
+     * @param brand               品牌(订单明细自带字段, 供比价按规格展示"开了哪个品牌")
      * @param orderedWeight       该明细行订货吨数
      * @param status              订单状态
      */
@@ -61,6 +62,7 @@ public interface PurchaseOrderOptionQuery {
             String material,
             String spec,
             String length,
+            String brand,
             BigDecimal orderedWeight,
             String status
     ) {

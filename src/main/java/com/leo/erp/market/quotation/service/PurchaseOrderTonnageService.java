@@ -105,6 +105,7 @@ public class PurchaseOrderTonnageService {
                 item.material(),
                 item.spec(),
                 item.length(),
+                item.brand(),
                 orderedWeight,
                 issued,
                 orderedWeight.subtract(issued),

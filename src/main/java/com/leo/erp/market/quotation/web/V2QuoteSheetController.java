@@ -79,7 +79,7 @@ public class V2QuoteSheetController {
     }
 
     @Operation(summary = "采购订单明细行已开吨位汇总",
-            description = "列出采购订单明细行(按规格)及其订货吨数、报单已开吨位与剩余可开吨(订货 - 已开), "
+            description = "列出采购订单明细行(按规格)及其品牌、订货吨数、报单已开吨位与剩余可开吨(订货 - 已开), "
                     + "供吨位列按规格关联时选择与展示。传 purchaseOrderItemIds 按 id 汇总, "
                     + "否则按 keyword/status/purchaseOrderId 列出选项; "
                     + "可选 excludeSheetId 排除当前报价单自身已保存吨位。")

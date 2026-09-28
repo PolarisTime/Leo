@@ -37,8 +37,21 @@ class PurchaseOrderTonnageServiceTest {
     private static PurchaseOrderItemOptionSnapshot item(long orderId, long itemId, String orderNo,
                                                          String spec, String orderedWeight) {
         return new PurchaseOrderItemOptionSnapshot(
-                orderId, itemId, orderNo, "沙钢", "螺纹钢", "HRB400E", spec, "9米",
+                orderId, itemId, orderNo, "沙钢", "螺纹钢", "HRB400E", spec, "9米", "中天",
                 new BigDecimal(orderedWeight), "正常");
+    }
+
+    @Test
+    void summarize_carriesItemBrandForIssuedBrandDisplay() {
+        when(purchaseOrderOptionQuery.listActiveItemsByIds(any()))
+                .thenReturn(List.of(item(1L, 11L, "PO-1", "12", "40.5")));
+        when(quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(any(), any()))
+                .thenReturn(List.of());
+
+        List<PurchaseOrderTonnageResponse> result = service().summarize(List.of(11L), null);
+
+        // 品牌沿用订单明细自带字段, 前端据此展示"已开的品牌"
+        assertThat(result.get(0).brand()).isEqualTo("中天");
     }
 
     @Test
