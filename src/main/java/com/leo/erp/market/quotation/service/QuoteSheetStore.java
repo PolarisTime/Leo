@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.market.pricelist.service.QuoteSheetPriceDeriver;
 import com.leo.erp.market.pricelist.service.QuoteSheetPriceService;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
@@ -159,7 +160,7 @@ public class QuoteSheetStore {
             }
             syncBrandSnapshot(entity, config);
             replaceItems(entity, request.items(), resolveSupplierNames(request.items()),
-                    resolvePurchaseOrderLinks(request.items()));
+                    resolvePurchaseOrderLinks(request.items()), priceSelection(entity));
             if (!headerChanged) {
                 entityManager.lock(entity, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
             }
@@ -229,7 +230,8 @@ public class QuoteSheetStore {
                 .orElse(0) + 1;
         Map<Long, String> supplierNames = resolveSupplierNames(List.of(request));
         Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks = resolvePurchaseOrderLinks(List.of(request));
-        QuoteSheetItem item = buildItem(sheet, request, nextLineNo, supplierNames, purchaseOrderLinks);
+        QuoteSheetItem item = buildItem(sheet, request, nextLineNo, supplierNames, purchaseOrderLinks,
+                priceSelection(sheet));
         sheet.getItems().add(item);
         repository.saveAndFlush(sheet);
         return new QuoteSheetItemWrite(toItemResponse(item), sheet.getVersion());
@@ -248,7 +250,7 @@ public class QuoteSheetStore {
         checkSpecQuantityLockedForItemUpdate(sheet, item, request);
         Map<Long, String> supplierNames = resolveSupplierNames(List.of(request));
         Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks = resolvePurchaseOrderLinks(List.of(request));
-        applyItem(item, request, supplierNames, purchaseOrderLinks);
+        applyItem(item, request, supplierNames, purchaseOrderLinks, priceSelection(sheet));
         repository.saveAndFlush(sheet);
         return new QuoteSheetItemWrite(toItemResponse(item), sheet.getVersion());
     }
@@ -697,7 +699,7 @@ public class QuoteSheetStore {
         applyHeader(entity, request, false);
         replaceBrands(entity, request.brands());
         replaceItems(entity, request.items(), resolveSupplierNames(request.items()),
-                resolvePurchaseOrderLinks(request.items()));
+                resolvePurchaseOrderLinks(request.items()), priceSelection(entity));
     }
 
     /**
@@ -819,7 +821,8 @@ public class QuoteSheetStore {
      */
     private void replaceItems(QuoteSheet entity, List<QuoteSheetRequest.ItemRequest> requests,
                               Map<Long, String> supplierNames,
-                              Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
+                              Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks,
+                              QuoteSheetPriceDeriver.BrandSelection priceSelection) {
         List<QuoteSheetItem> existing = sortedByLineNo(entity.getItems());
         List<QuoteSheetItem> reconciled = new ArrayList<>();
         int lineNo = 0;
@@ -832,7 +835,7 @@ public class QuoteSheetStore {
                 item.setSheet(entity);
             }
             item.setLineNo(lineNo);
-            applyItem(item, request, supplierNames, purchaseOrderLinks);
+            applyItem(item, request, supplierNames, purchaseOrderLinks, priceSelection);
             reconciled.add(item);
         }
         entity.getItems().clear();
@@ -849,12 +852,13 @@ public class QuoteSheetStore {
 
     private QuoteSheetItem buildItem(QuoteSheet sheet, QuoteSheetRequest.ItemRequest request, int lineNo,
                                      Map<Long, String> supplierNames,
-                                     Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
+                                     Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks,
+                                     QuoteSheetPriceDeriver.BrandSelection priceSelection) {
         QuoteSheetItem item = new QuoteSheetItem();
         item.setId(snowflakeIdGenerator.nextId());
         item.setSheet(sheet);
         item.setLineNo(lineNo);
-        applyItem(item, request, supplierNames, purchaseOrderLinks);
+        applyItem(item, request, supplierNames, purchaseOrderLinks, priceSelection);
         return item;
     }
 
@@ -865,7 +869,8 @@ public class QuoteSheetStore {
      */
     private void applyItem(QuoteSheetItem item, QuoteSheetRequest.ItemRequest request,
                            Map<Long, String> supplierNames,
-                           Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
+                           Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks,
+                           QuoteSheetPriceDeriver.BrandSelection priceSelection) {
         QuoteRowType rowType = resolveRowType(request);
         item.setRowType(rowType);
         if (rowType == QuoteRowType.SEPARATOR) {
@@ -911,6 +916,7 @@ public class QuoteSheetStore {
             for (QuoteSheetRequest.ItemPriceRequest priceRequest : request.prices()) {
                 String brandName = normalizeBrandName(priceRequest.brandName());
                 QuoteSheetItemPrice price = existingByBrandName.remove(brandName);
+                BigDecimal currentValue = price == null ? null : price.getSpotPrice();
                 if (price == null) {
                     price = new QuoteSheetItemPrice();
                     price.setId(snowflakeIdGenerator.nextId());
@@ -921,6 +927,14 @@ public class QuoteSheetStore {
                 price.setSupplierId(priceRequest.supplierId());
                 price.setSupplierName(priceRequest.supplierId() == null
                         ? null : supplierNames.get(priceRequest.supplierId()));
+                // 值未变化时不动来源(避免把已钉住的 MANUAL 行无意义改写)
+                if (differs(currentValue, priceRequest.spotPrice())) {
+                    // 用本次请求的行键现场推导(行键可能正在被本次保存修改)
+                    QuoteSheetPriceDeriver.DerivedSpot derived = QuoteSheetPriceDeriver.derive(
+                            priceSelection.entryOf(brandName), request.category(), request.material(),
+                            request.spec(), request.length());
+                    applyInferredPriceSource(price, priceRequest.spotPrice(), derived);
+                }
                 reconciled.add(price);
             }
         }
@@ -1008,6 +1022,46 @@ public class QuoteSheetStore {
         return resolved;
     }
 
+    /** 批量保存路径的价格表取版基准(未装配 priceService 时为空, 全部按 MANUAL 处理)。 */
+    private QuoteSheetPriceDeriver.BrandSelection priceSelection(QuoteSheet entity) {
+        return priceService == null
+                ? new QuoteSheetPriceDeriver.BrandSelection(Map.of())
+                : priceService.brandSelection(entity);
+    }
+
+    /**
+     * 批量保存路径的价格来源推断(与单格覆盖端点的口径不同, 见下)。
+     *
+     * <p>背景: 前端"只把手填覆盖放进 {@code prices[]}"的改动可能晚于后端上线。若把自动带出的
+     * 推导价一律按 {@code MANUAL} 落库, 用户任意一次保存就会把当天推导价静默冻结成人工覆盖,
+     * 之后价格表调价不再生效。因此批量路径做"容忍推断":</p>
+     *
+     * <ul>
+     *   <li>提交价 == 当前报价时刻按价格表推导的价 → 落库 {@code PRICE_LIST}
+     *       (并记录 {@code price_list_id}/{@code price_list_released_at}), 读时继续跟随价格表调价;</li>
+     *   <li>提交价与推导价不同, 或无可比推导价 → 落库 {@code MANUAL}(视为人工填写)。</li>
+     * </ul>
+     *
+     * <p><b>分工</b>: {@code PUT /quote-sheets/{id}/items/{itemId}/price-overrides/{brandName}}
+     * 是用户<b>显式</b>要覆盖的动作, 一律写 {@code MANUAL}; 本方法只用于批量保存路径
+     * (单据 PUT 的 {@code prices[]} 与行级写), 且仅在提交值相对当前落库值确有变化时调用
+     * (值未变化不动既有来源, 避免把已钉住的 MANUAL 行无意义改写)。</p>
+     */
+    private static void applyInferredPriceSource(QuoteSheetItemPrice price, BigDecimal submittedPrice,
+                                                 QuoteSheetPriceDeriver.DerivedSpot derived) {
+        boolean equalsDerived = submittedPrice != null && derived != null && derived.matched()
+                && submittedPrice.compareTo(derived.price()) == 0;
+        if (equalsDerived) {
+            price.setPriceSource(QuoteSheetItemPrice.SOURCE_PRICE_LIST);
+            price.setPriceListId(derived.priceListId());
+            price.setPriceListReleasedAt(derived.priceListReleasedAt());
+            return;
+        }
+        price.setPriceSource(QuoteSheetItemPrice.SOURCE_MANUAL);
+        price.setPriceListId(null);
+        price.setPriceListReleasedAt(null);
+    }
+
     private QuoteSheetResponse toResponse(QuoteSheet entity) {
         List<QuoteSheetBrand> brands = sortedBySortOrder(entity.getBrands());
         List<QuoteSheetResponse.BrandResponse> brandResponses = brands.stream()
@@ -1088,7 +1142,8 @@ public class QuoteSheetStore {
      *   <li>有落库行且为手填({@code MANUAL}) → 展示手填价并标记 {@code MANUAL}, 同时保留推导值;</li>
      *   <li>无手填但有推导价 → 展示推导价并标记 {@code PRICE_LIST};</li>
      *   <li>两者皆无 → {@code spotPrice=null} + {@code spotSource=NONE} + {@code spotReason};</li>
-     *   <li>落库行为价格表来源(price-pulls 固化) → 展示落库价并优先使用落库的来源快照。</li>
+     *   <li>价格表来源(批量保存推断或 price-pulls 固化) → 展示<b>当前</b>推导价, 使价格表调价后
+     *       单据现货价同步变化; 仅当无从推导(版本归档/删除、条目缺失)时才用落库快照兜底。</li>
      * </ul>
      */
     private static QuoteSheetResponse.ItemPriceResponse mergeCell(
@@ -1114,21 +1169,27 @@ public class QuoteSheetStore {
                     stored.getPriceSource(), stored.getPriceListId(), stored.getPriceListReleasedAt(),
                     freight);
         }
-        if (stored != null && stored.getSpotPrice() != null) {
-            // 显式固化价(price_source=PRICE_LIST)落库: 展示落库快照, 推导值仅作参考
-            return new QuoteSheetResponse.ItemPriceResponse(
-                    stored.getId(), brandName, stored.getSpotPrice(), supplierId, supplierName,
-                    derivedPrice, "PRICE_LIST", null,
-                    stored.getPriceSource(),
-                    stored.getPriceListId() == null ? derivedPriceListId : stored.getPriceListId(),
-                    stored.getPriceListReleasedAt() == null ? derivedReleasedAt : stored.getPriceListReleasedAt(),
-                    freight);
-        }
         if (derived != null && derived.spotPrice() != null) {
+            // 价格表来源(含批量保存推断出的 PRICE_LIST 行与 price-pulls 固化行): 一律展示<b>当前</b>推导价,
+            // 这样价格表调价后单据现货价会同步变化; 落库的固化快照仅在无从推导时兜底(见下)。
             return new QuoteSheetResponse.ItemPriceResponse(
                     stored == null ? null : stored.getId(), brandName, derived.spotPrice(),
                     supplierId, supplierName, derivedPrice, "PRICE_LIST", null,
-                    null, derivedPriceListId, derivedReleasedAt, freight);
+                    stored == null ? null : stored.getPriceSource(),
+                    derivedPriceListId == null ? (stored == null ? null : stored.getPriceListId())
+                            : derivedPriceListId,
+                    derivedReleasedAt == null
+                            ? (stored == null ? null : stored.getPriceListReleasedAt())
+                            : derivedReleasedAt,
+                    freight);
+        }
+        if (stored != null && stored.getSpotPrice() != null) {
+            // 无从推导(版本已归档/删除或条目缺失)时, 用落库的价格表快照兜底, 避免固化价凭空消失
+            return new QuoteSheetResponse.ItemPriceResponse(
+                    stored.getId(), brandName, stored.getSpotPrice(), supplierId, supplierName,
+                    derivedPrice, "PRICE_LIST", null,
+                    stored.getPriceSource(), stored.getPriceListId(), stored.getPriceListReleasedAt(),
+                    freight);
         }
         return new QuoteSheetResponse.ItemPriceResponse(
                 stored == null ? null : stored.getId(), brandName, null, supplierId, supplierName,

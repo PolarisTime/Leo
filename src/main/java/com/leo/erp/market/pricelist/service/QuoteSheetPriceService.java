@@ -109,6 +109,30 @@ public class QuoteSheetPriceService {
         return result;
     }
 
+    /**
+     * 批量保存路径的推导基准: 该单据在<b>当前报价时刻</b>下每个品牌选中的价格表版本。
+     *
+     * <p>返回按品牌索引的取版结果而不是按行索引的成品价格: 保存请求里的行键
+     * ({@code category/material/spec/length})可能正在被本次请求修改, 只有用请求里的新键
+     * 现场推导, 才能正确判断"提交价是否只是自动带出的结果"。调用方按需用
+     * {@link QuoteSheetPriceDeriver#derive} 取值, 不额外查库。</p>
+     */
+    @Transactional(readOnly = true)
+    public QuoteSheetPriceDeriver.BrandSelection brandSelection(QuoteSheet sheet) {
+        LocalDateTime quoteAsOf = QuoteAsOf.of(sheet.getOrderDate(), sheet.getRefPeriod());
+        LocalDateTime effectiveAsOf = quoteAsOf == null ? LocalDateTime.now() : quoteAsOf;
+        Set<String> brandNames = new LinkedHashSet<>();
+        for (QuoteSheetBrand brand : sheet.getBrands()) {
+            if (brand.getBrandName() != null) {
+                brandNames.add(brand.getBrandName());
+            }
+        }
+        if (brandNames.isEmpty()) {
+            return new QuoteSheetPriceDeriver.BrandSelection(Map.of());
+        }
+        return deriver.selectBrands(brandNames, List.of(), effectiveAsOf);
+    }
+
     private QuoteSheetResponse.ItemPriceResponse toCell(QuoteSheetItem item, String brandName,
                                                         QuoteSheetPriceDeriver.BrandSelection selection,
                                                         Map<String, QuoteSheetItemPrice> stored,
