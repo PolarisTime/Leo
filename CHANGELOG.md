@@ -1,3 +1,11 @@
+## [12.1.1](https://github.com/PolarisTime/Leo/compare/v12.1.0...v12.1.1) (2026-09-29)
+
+
+### Performance Improvements
+
+* **cache:** 权限集合与物料字典接入 Redis 缓存并修复项目缓存误清 ([9a29dc9](https://github.com/PolarisTime/Leo/commit/9a29dc94bb5bb4b586ce5a82c0589cd628ff3221))
+* **finance:** 财务概览单次查询同时取回分页与汇总 ([ec347cf](https://github.com/PolarisTime/Leo/commit/ec347cf8686af9cca4a5077d1eb557936b2d75ae))
+
 # [12.1.0](https://github.com/PolarisTime/Leo/compare/v12.0.0...v12.1.0) (2026-09-29)
 
 
