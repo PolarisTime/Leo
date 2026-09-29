@@ -89,9 +89,24 @@ Hikari 连接池（活跃/空闲/等待/**获取超时**）、JVM 堆与线程�
 
 ## 四、第 3 项：重负载接口覆盖
 
-压测集读接口由 10 个扩展到 **21 个**，补入此前完全未覆盖的路径：库存余额与流水、
-仪表盘、销售出库、采购订单、收款单、财务概览、资金台账、客户对账单、
-物料材质/品牌字典。路径中的 `{companyId}` 由 `endpointPath()` 用统一解析的结算主体 ID 替换。
+压测集读接口由 10 个扩展到 **21 个**。完整清单如下（`＋` 为本项新增，其余为首份报告的原有 10 个），
+可在 `perf/k6/lib/common.js` 的 `READ_ENDPOINTS` 中逐条核对：
+
+| # | 接口 | | # | 接口 |
+|---|---|---|---|---|
+| 1 | `GET /sales-orders` | | ＋12 | `GET /inventory/transactions` |
+| 2 | `GET /sales-orders?size=5` | | ＋13 | `GET /dashboard/summary` |
+| 3 | `GET /customers` | | ＋14 | `GET /sales-outbounds` |
+| 4 | `GET /materials` | | ＋15 | `GET /purchase-orders` |
+| 5 | `GET /suppliers` | | ＋16 | `GET /receipts` |
+| 6 | `GET /global-search` | | ＋17 | `GET /finance/overview` |
+| 7 | `GET /company-settings` | | ＋18 | `GET /cash-ledger` |
+| 8 | `GET /account` | | ＋19 | `GET /customer-statements` |
+| 9 | `GET /users` | | ＋20 | `GET /materials/grades`（字典缓存） |
+| 10 | `GET /health`（匿名） | | ＋21 | `GET /materials/brands`（字典缓存） |
+| | | | ＋11 | `GET /inventory/balances` |
+
+路径中的 `{companyId}` 由 `endpointPath()` 用统一解析的结算主体 ID 替换。
 
 ### 单请求开销（1 VU、dev、数据量很小）
 
