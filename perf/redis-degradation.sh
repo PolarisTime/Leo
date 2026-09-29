@@ -40,6 +40,38 @@ port_in_use() {
   (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null && return 0 || return 1
 }
 
+# 解析 JWT 的剩余有效期（秒）。无法解析时输出空串。
+#
+# 为什么必须校验：本脚本的结论完全依赖「401 是 Redis 故障导致的」这一因果。
+# 若基线 token 在注入故障等待启动期间过期，观察到的 401 其实来自 token 过期，
+# 而结论会被误读成「Redis 不可用导致已登录用户被登出」——本报告初稿正是这样
+# 得出过一个随后被撤回的结论。宁可让脚本失败，也不要产出误导性证据。
+token_remaining_seconds() {
+  local b64 payload exp
+  b64="$(printf '%s' "$1" | cut -d. -f2)"
+  b64="${b64//-/+}"; b64="${b64//_//}"
+  case $(( ${#b64} % 4 )) in
+    2) b64="${b64}==" ;;
+    3) b64="${b64}=" ;;
+  esac
+  payload="$(printf '%s' "$b64" | base64 -d 2>/dev/null)" || return 0
+  exp="$(printf '%s' "$payload" | jq -r '.exp // empty' 2>/dev/null)"
+  [[ -n "$exp" ]] || return 0
+  echo $(( exp - $(date +%s) ))
+}
+
+assert_token_valid() {
+  local label="$1" remaining
+  remaining="$(token_remaining_seconds "$TOKEN")"
+  if [[ -z "$remaining" ]]; then
+    fail "${label}: 无法解析 token 有效期，拒绝在凭据状态不明时继续"
+  fi
+  if (( remaining < 60 )); then
+    fail "${label}: 基线 token 仅剩 ${remaining}s。继续探测将把「token 过期」误判成「Redis 故障」，结论不可用。请缩短注入到探测之间的耗时后重跑。"
+  fi
+  log "${label}: token 剩余 ${remaining}s，足以支撑探测"
+}
+
 probe() { # probe <label> <url> [extra curl args...]
   local label="$1" url="$2"; shift 2
   local body code
@@ -98,6 +130,8 @@ for i in 1 2 3 4 5; do
 done
 [[ -n "$TOKEN" ]] || fail "基线登录失败"
 
+assert_token_valid "基线探测前"
+
 {
   echo "=== Redis 可用（基线）$(date '+%F %T') ==="
   probe "GET /health"                "$BASE_URL/v2.0/health"
@@ -118,6 +152,8 @@ for _ in $(seq 1 72); do
   [[ "$code" == "200" || "$code" == "503" ]] && break
   sleep 5
 done
+
+assert_token_valid "故障探测前"
 
 {
   echo
