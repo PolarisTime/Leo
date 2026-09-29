@@ -210,28 +210,55 @@ p95/p99/5xx 统计与预期逐项吻合，能正确标记异常段。
 ## Redis 故障降级验证（redis-degradation.sh）
 
 ```bash
-bash leo/perf/redis-degradation.sh --yes     # 需要 11211 空闲；脚本自行启停后端并负责恢复
+bash leo/perf/redis-degradation.sh --yes     # 需要 11211 上已有正常后端在跑，且 11212 空闲
 ```
 
-隔离方式：只把 **leo 后端** 指向一个不存在的 Redis 端口，**不触碰共享 Redis 实例**。
+隔离方式：**只在 11212 上另起一个「故障实例」**，把它的 Redis 端口指向一个不存在的端口；
+11211 上的正常实例、以及共享 Redis 实例都**不被触碰**。
 
-实测结论（详见 docs/reports 下的压测报告）：
+### 为什么是「双实例并行 + 同 token 活性对照」
+
+最初的设计是「先起正常后端取 token → 停掉 → 换坏 Redis 端口重启 → 探测」。实测中这段等待
+耗掉约 11 分钟，**超过了 600s 的 access token 有效期**，观察到的 401 其实来自
+`ExpiredJwtException`，与 Redis 无关。报告初稿据此断言「Redis 不可用时已登录用户全部 401」，
+该结论**已撤回**。现设计用三道对照排除混淆因素：
+
+1. **双实例并行**：探测前不需要任何重启等待，token 寿命由 `assert_token_valid` 保证（阈值 120s）。
+2. **同 token 活性对照**：探测故障实例前，立刻用同一 token 再打一次正常实例，两处都必须 200；
+   否则脚本**中止**，不产出可被误读的证据。
+3. **坏签名判别探针**：故障实例上用篡改过签名段的 token 再打一次，用于区分
+   「签名/密钥不一致导致的 401」与「Redis 故障导致的 5xx」。
+4. 故障实例显式 `source scripts/env/dev.sh`，与正常实例从同一份工作区 `.env.local`
+   读取同一个 `LEO_JWT_SECRET`，排除「两实例密钥不同」这一伪因果源。
+
+`token_remaining_seconds`/`assert_token_valid` 已做双向验证：`exp=+300s` 通过、
+`exp=-60s` 被拦、`exp=+30s`（低于阈值）被拦、非 JWT 字符串被拦。
+离线自检（不需要后端与 Redis，随时可跑）：
+
+```bash
+bash leo/perf/test/token-guard-selftest.sh
+```
+
+该自检从 `redis-degradation.sh` 里**现场提取**函数定义再测，避免「测的代码和跑的代码不是同一份」。
+
+实测结论（详见 `reports/` 下的压测报告）：
 
 | 请求 | Redis 正常 | Redis 不可用 |
 |---|---|---|
 | `GET /v2.0/health` | 200 | **503 `DEGRADED`**（优雅） |
 | `GET /v2.0/version` | 200 | 200（不依赖 Redis） |
-| 已登录用户的任何接口 | 200 | **401「登录状态已失效，请重新登录」** |
 | `POST /v2.0/auth/login` | 200 | **503「幂等服务暂不可用」** |
+| 已登录用户的接口 | 200 | 由本脚本复测后填入，不再沿用被撤回的 401 断言 |
 
-即：**Redis 不是可降级的缓存，而是认证链路与幂等过滤器的硬依赖**——一旦不可用，
-全部在线用户被静默登出且无法重新登录。`CacheConfig` 的 `CacheErrorHandler` 优雅降级
-只覆盖 Spring Cache；认证链路用的是裸 `StringRedisTemplate`，
+已确证的部分：**Redis 不是可降级的缓存，而是登录链路的硬依赖**——它不可用时连重新登录都做不到。
+认证链路对 Redis 异常**没有兜底**：`CacheConfig` 的 `CacheErrorHandler` 优雅降级只覆盖
+Spring Cache，而认证链路用的是裸 `StringRedisTemplate`，
 `AuthenticatedUserCacheService.getActivePrincipal` 对 Redis 调用无 try/catch，
-异常直接穿透 `JwtAuthenticationFilter`。
+异常不在 `JwtAuthenticationFilter` 捕获的 `JwtException | IllegalArgumentException` 之内。
+其**实际后果**（401 还是 5xx）以脚本实测为准。
 
 另注意 `scripts/backend/start-dev.sh` 含 Redis 预检，Redis 不可用时**直接拒绝启动**，
-因此本脚本绕过该预检以完成降级验证。
+因此本脚本直接调 `scripts/maven.sh spring-boot:run` 以绕开该预检。
 
 
 ## 编辑 shell 脚本后必须做静态检查
