@@ -223,3 +223,18 @@ bash leo/perf/redis-degradation.sh --yes     # 需要 11211 空闲；脚本自�
 
 另注意 `scripts/backend/start-dev.sh` 含 Redis 预检，Redis 不可用时**直接拒绝启动**，
 因此本脚本绕过该预检以完成降级验证。
+
+
+## 编辑 shell 脚本后必须做静态检查
+
+```bash
+python3 leo/perf/check-undefined-funcs.py leo/perf/*.sh
+```
+
+`bash -n` 只做语法检查，**抓不到「调用了未定义的函数」**——那是运行时错误。
+本套件曾因一次脚本替换把函数定义头 `resolve_shared_token() {` 改写成了裸调用，
+导致 `run.sh` 对所有阶段都不可用，而 `bash -n` 全程无告警。
+
+检测器已做双向验证：合成脚本能检出未定义调用且不误报变量赋值与 case 标签；
+把上述回归还原后能准确报出 `resolve_shared_token`。
+局限（有意为之）：引号内 `$(...)` 的内层命令不检查，宁可漏报不误报。
