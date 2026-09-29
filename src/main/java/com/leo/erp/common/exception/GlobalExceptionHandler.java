@@ -220,7 +220,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<?> handleBusinessException(BusinessException ex, HttpServletRequest request) {
         HttpStatus status = resolveStatus(ex.getErrorCode());
-        return failure(request, status, ex.getErrorCode(), ex.getMessage(), ex.getErrors());
+        return failure(request, status, ex.getErrorCode(), ex.getMessage());
     }
 
     /**

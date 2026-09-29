@@ -204,15 +204,8 @@ class QuoteSheetStoreTest {
                 new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("铜陵富鑫", new BigDecimal("3300"), null))), 1L);
 
-        // 价格格按"该单据品牌列 × 该行"生成: 每个品牌都有格; 现货价只由价格表推导(此处未装配),
-        // 请求里的 prices[] 一律忽略且不落库
         assertThat(added.item().prices()).extracting(QuoteSheetResponse.ItemPriceResponse::brandName)
-                .containsExactly("中天", "铜陵富鑫");
-        assertThat(added.item().prices()).allSatisfy(cell -> {
-            assertThat(cell.spotSource()).isEqualTo("NONE");
-            assertThat(cell.spotPrice()).isNull();
-        });
-        assertThat(existing.getItems().get(1).getPrices()).isEmpty();
+                .containsExactly("铜陵富鑫");
         assertThat(existing.getBrands()).extracting(QuoteSheetBrand::getBrandName)
                 .containsExactly("中天", "铜陵富鑫");
         verify(quoteProjectConfigRepository, atLeastOnce()).findByProjectIdAndDeletedFlagFalse(77L);
@@ -292,7 +285,7 @@ class QuoteSheetStoreTest {
         QuoteSheetResponse response = store().create(request);
 
         assertThat(response.items().get(0).prices()).extracting(QuoteSheetResponse.ItemPriceResponse::brandName)
-                .containsExactly("中天", "铜陵富鑫");
+                .containsExactly("铜陵富鑫");
         assertThat(response.brands()).extracting(QuoteSheetResponse.BrandResponse::brandName)
                 .containsExactly("中天", "铜陵富鑫");
     }
@@ -422,7 +415,7 @@ class QuoteSheetStoreTest {
                         List.of(new QuoteSheetRequest.ItemPriceRequest("沙钢", new BigDecimal("3300"), null))), 1L);
 
         assertThat(added.item().prices()).extracting(QuoteSheetResponse.ItemPriceResponse::brandName)
-                .containsExactly("中天", "沙钢");
+                .containsExactly("沙钢");
         assertThat(existing.getBrands()).extracting(QuoteSheetBrand::getBrandName)
                 .containsExactly("中天", "沙钢");
     }
@@ -720,7 +713,7 @@ class QuoteSheetStoreTest {
     }
 
     @Test
-    void addItem_appendsWithNextLineNoAndIgnoresPrices() {
+    void addItem_appendsWithNextLineNoAndResolvesSupplier() {
         QuoteSheet existing = sheetWithItem(9L);
         existing.setVersion(1L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
@@ -737,10 +730,7 @@ class QuoteSheetStoreTest {
 
         assertThat(added.item().id()).isEqualTo(777L);
         assertThat(added.item().lineNo()).isEqualTo(2);
-        // 现货价不再落库: 价格格仍按品牌列生成, 但没有价格表价 → NONE
-        assertThat(added.item().prices()).singleElement()
-                .satisfies(cell -> assertThat(cell.spotSource()).isEqualTo("NONE"));
-        assertThat(existing.getItems().get(1).getPrices()).isEmpty();
+        assertThat(added.item().prices().get(0).supplierName()).isEqualTo("杭州物资");
         assertThat(added.version()).isEqualTo(1L);
         assertThat(existing.getItems()).hasSize(2);
     }
@@ -887,6 +877,21 @@ class QuoteSheetStoreTest {
     }
 
     @Test
+    void create_resolvesSupplierNameSnapshot() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 202L, 301L);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(supplierQuery.findActiveNormalById(77L))
+                .thenReturn(Optional.of(new SupplierQuery.SupplierSnapshot(
+                        77L, "S001", "杭州物资有限公司", "杭州物资")));
+
+        QuoteSheetResponse response = store().create(requestWithSupplier(77L));
+
+        QuoteSheetResponse.ItemPriceResponse price = response.items().get(0).prices().get(0);
+        assertThat(price.supplierId()).isEqualTo(77L);
+        assertThat(price.supplierName()).isEqualTo("杭州物资");
+    }
+
+    @Test
     void create_rejectsUnknownSupplier() {
         when(supplierQuery.findActiveNormalById(404L)).thenReturn(Optional.empty());
 
@@ -925,15 +930,15 @@ class QuoteSheetStoreTest {
         verify(snowflakeIdGenerator, never()).nextId();
     }
 
-    /** 回归: line_no 命中复用明细实体, 仅新建真正新增的子实体; 请求里的 prices[] 被忽略。 */
+    /** 回归: line_no 命中复用明细实体, 品牌价按 brandName 协调, 仅新建真正新增的子实体。 */
     @Test
-    void update_reconcilesItemsByLineNoAndIgnoresPrices() {
+    void update_reconcilesItemsByLineNoAndPricesByBrand() {
         QuoteSheet existing = sheetWithItem(9L);
         existing.setVersion(1L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
         when(repository.saveAndFlush(any(QuoteSheet.class)))
                 .thenAnswer((invocation) -> invocation.getArgument(0));
-        when(snowflakeIdGenerator.nextId()).thenReturn(555L);
+        when(snowflakeIdGenerator.nextId()).thenReturn(555L, 666L);
 
         QuoteSheetResponse response = store().update(9L, new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
@@ -944,13 +949,8 @@ class QuoteSheetStoreTest {
 
         assertThat(response.items()).hasSize(1);
         assertThat(existing.getItems().get(0).getId()).isEqualTo(301L);
-        // 历史落库价格行原样保留: 既不覆盖也不新增(现货价不再落库)
-        assertThat(existing.getItems().get(0).getPrices()).singleElement()
-                .satisfies(price -> {
-                    assertThat(price.getId()).isEqualTo(401L);
-                    assertThat(price.getBrandName()).isEqualTo("中天");
-                    assertThat(price.getSpotPrice()).isEqualByComparingTo("3280");
-                });
+        assertThat(existing.getItems().get(0).getPrices().get(0).getId()).isEqualTo(666L);
+        assertThat(existing.getItems().get(0).getPrices().get(0).getBrandName()).isEqualTo("沙钢");
         assertThat(existing.getBrands()).extracting(QuoteSheetBrand::getBrandName).containsExactly("沙钢");
         assertThat(existing.getBrands().get(0).getId()).isEqualTo(555L);
     }
@@ -1080,9 +1080,7 @@ class QuoteSheetStoreTest {
         QuoteSheetResponse response = store().update(9L, fullRequest(12, BigDecimal.TEN, "3600"), 5L);
 
         assertThat(response.version()).isEqualTo(6L);
-        // 现货价不再落库: 请求里的 prices[] 被忽略, 历史价格行原样保留
-        assertThat(existing.getItems().get(0).getPrices()).singleElement()
-                .satisfies(price -> assertThat(price.getSpotPrice()).isEqualByComparingTo("3280"));
+        assertThat(response.items().get(0).prices().get(0).spotPrice()).isEqualByComparingTo("3600");
         verify(entityManager).lock(existing, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
     }
 
@@ -1172,9 +1170,9 @@ class QuoteSheetStoreTest {
         verify(repository, never()).saveAndFlush(any());
     }
 
-    /** 行级写: 已锁定时请求只带 prices[](现货价已不再落库)不涉规格数量, 仍必须放行。 */
+    /** 行级写: 已锁定时仅改现货价(不涉规格数量)仍允许。 */
     @Test
-    void updateItem_whenSpecQuantityLocked_ignoresPricesAndSaves() {
+    void updateItem_allowsPriceOnlyChangeWhenSpecQuantityLocked() {
         QuoteSheet existing = sheetWithItem(9L);
         existing.setVersion(1L);
         existing.setSpecQuantityLocked(true);
@@ -1185,8 +1183,7 @@ class QuoteSheetStoreTest {
                 new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3600"), null))), 1L);
 
-        assertThat(updated.item().prices()).singleElement()
-                .satisfies(cell -> assertThat(cell.spotSource()).isEqualTo("NONE"));
+        assertThat(updated.item().prices().get(0).spotPrice()).isEqualByComparingTo("3600");
         verify(repository).saveAndFlush(existing);
     }
 
@@ -1246,9 +1243,9 @@ class QuoteSheetStoreTest {
         verify(repository, never()).saveAndFlush(any());
     }
 
-    /** 整单替换: 已锁定时请求只带 prices[](不再落库)不涉规格数量, 仍必须放行且父版本 +1。 */
+    /** 整单替换: 已锁定时仅改现货价(不涉规格数量)仍允许, 且父版本 +1。 */
     @Test
-    void update_fullReplace_whenSpecQuantityLocked_ignoresPrices() {
+    void update_fullReplace_allowsPriceOnlyChangeWhenSpecQuantityLocked() {
         QuoteSheet existing = sheetWithItemMatchingFullRequestHeader(9L);
         existing.setVersion(7L);
         existing.setSpecQuantityLocked(true);
@@ -1259,10 +1256,7 @@ class QuoteSheetStoreTest {
         QuoteSheetResponse response = store().update(9L, fullRequest(12, BigDecimal.TEN, "3600", true), 7L);
 
         assertThat(response.version()).isEqualTo(8L);
-        assertThat(response.items().get(0).prices()).allSatisfy(cell -> {
-            assertThat(cell.spotSource()).isEqualTo("NONE");
-            assertThat(cell.spotPrice()).isNull();
-        });
+        assertThat(response.items().get(0).prices().get(0).spotPrice()).isEqualByComparingTo("3600");
     }
 
     /**
@@ -1270,7 +1264,7 @@ class QuoteSheetStoreTest {
      * 行匹配按请求顺序而非理想行号 index+1, 不得误拒 422。
      */
     @Test
-    void update_fullReplace_withLineNoHole_ignoresPricesWhenSpecQuantityLocked() {
+    void update_fullReplace_withLineNoHole_allowsPriceOnlyChangeWhenSpecQuantityLocked() {
         QuoteSheet existing = sheetWithHoleItems(9L);
         existing.setVersion(4L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
@@ -1280,11 +1274,9 @@ class QuoteSheetStoreTest {
 
         assertThat(response.items()).hasSize(2);
         assertThat(response.items().get(0).lineNo()).isEqualTo(1);
+        assertThat(response.items().get(0).prices().get(0).spotPrice()).isEqualByComparingTo("3600");
         assertThat(response.items().get(1).lineNo()).isEqualTo(2);
-        assertThat(response.items()).allSatisfy(item -> assertThat(item.prices()).allSatisfy(cell -> {
-            assertThat(cell.spotSource()).isEqualTo("NONE");
-            assertThat(cell.spotPrice()).isNull();
-        }));
+        assertThat(response.items().get(1).prices().get(0).spotPrice()).isEqualByComparingTo("3700");
         verify(repository).saveAndFlush(existing);
     }
 
@@ -1894,12 +1886,9 @@ class QuoteSheetStoreTest {
         QuoteSheetResponse response = store().create(request);
 
         assertThat(response.items()).hasSize(1);
-        assertThat(response.items().get(0).prices()).singleElement().satisfies(cell -> {
-            assertThat(cell.brandName()).isEqualTo("基准价");
-            // 现货价不再落库: 请求里的 3560 被忽略
-            assertThat(cell.spotPrice()).isNull();
-            assertThat(cell.spotSource()).isEqualTo("NONE");
-        });
+        assertThat(response.items().get(0).prices()).hasSize(1);
+        assertThat(response.items().get(0).prices().get(0).brandName()).isEqualTo("基准价");
+        assertThat(response.items().get(0).prices().get(0).spotPrice()).isEqualByComparingTo("3560");
     }
 
     /** 关联采购订单: 订单不存在或已删除时拒绝(422)。 */
