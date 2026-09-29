@@ -279,15 +279,17 @@ class ProjectServiceTest {
         Method delete = ProjectService.class.getMethod("delete", Long.class);
         Method listActiveOptions = ProjectService.class.getMethod("listActiveOptions", Long.class);
 
+        // 项目选项 key 含 customerId，只能整 region 失效；因此必须使用专用 region，
+        // 否则一次项目改动会把供应商/客户/物流商/仓库等全部 options 缓存一并清空。
         for (Method method : List.of(create, update, updateStatus, delete)) {
             CacheEvict cacheEvict = method.getAnnotation(CacheEvict.class);
             assertThat(cacheEvict).as(method.getName()).isNotNull();
-            assertThat(cacheEvict.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+            assertThat(cacheEvict.value()).containsExactly(CacheConfig.CACHE_PROJECT_OPTIONS);
             assertThat(cacheEvict.allEntries()).isTrue();
         }
         Cacheable cacheable = listActiveOptions.getAnnotation(Cacheable.class);
         assertThat(cacheable).isNotNull();
-        assertThat(cacheable.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+        assertThat(cacheable.value()).containsExactly(CacheConfig.CACHE_PROJECT_OPTIONS);
         assertThat(cacheable.key()).isEqualTo("'leo:project:all:' + #customerId");
         assertThat(cacheable.unless()).isEqualTo("#result == null || #result.isEmpty()");
     }

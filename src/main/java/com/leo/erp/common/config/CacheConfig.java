@@ -29,6 +29,15 @@ public class CacheConfig implements CachingConfigurer {
 
     public static final String CACHE_STATIC = "static";
     public static final String CACHE_OPTIONS = "options";
+    /**
+     * 项目下拉选项专用 region。
+     *
+     * <p>其 key 形如 {@code leo:project:all:{customerId}}，无法精确逐条失效，
+     * 因此项目写入需要 {@code allEntries = true}。若与其他主数据共用 {@code options} region，
+     * 一次项目改动就会把供应商/客户/物流商/仓库等全部 options 缓存一并清空，
+     * 造成大面积缓存穿透。单独分 region 后影响面收敛到项目自身。</p>
+     */
+    public static final String CACHE_PROJECT_OPTIONS = "project-options";
     public static final String CACHE_KEY_PREFIX = "leo:cache:v4:";
     private static final String TYPE_HINT_PROPERTY = "@class";
 
@@ -50,6 +59,7 @@ public class CacheConfig implements CachingConfigurer {
         return RedisCacheManager.builder(connectionFactory)
                 .withCacheConfiguration(CACHE_STATIC, staticConfig)
                 .withCacheConfiguration(CACHE_OPTIONS, optionsConfig)
+                .withCacheConfiguration(CACHE_PROJECT_OPTIONS, optionsConfig)
                 .transactionAware()
                 .build();
     }

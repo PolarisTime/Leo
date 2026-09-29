@@ -91,7 +91,7 @@ public class ProjectService {
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, allEntries = true)
+    @CacheEvict(value = CacheConfig.CACHE_PROJECT_OPTIONS, allEntries = true)
     public ProjectResponse create(ProjectRequest request) {
         ProjectRequest normalized = normalizeCreateRequest(request);
         codeIssuanceService.validate(CODE_MODULE_KEY, normalized.projectCode());
@@ -105,7 +105,7 @@ public class ProjectService {
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, allEntries = true)
+    @CacheEvict(value = CacheConfig.CACHE_PROJECT_OPTIONS, allEntries = true)
     public ProjectResponse update(Long id, ProjectRequest request) {
         Project entity = requireActiveProject(id);
         String currentName = entity.getProjectName();
@@ -122,7 +122,7 @@ public class ProjectService {
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, allEntries = true)
+    @CacheEvict(value = CacheConfig.CACHE_PROJECT_OPTIONS, allEntries = true)
     public ProjectResponse updateStatus(Long id, String status) {
         Project entity = requireActiveProject(id);
         String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
@@ -135,7 +135,7 @@ public class ProjectService {
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, allEntries = true)
+    @CacheEvict(value = CacheConfig.CACHE_PROJECT_OPTIONS, allEntries = true)
     public void delete(Long id) {
         Project entity = requireActiveProject(id);
         if (referenceGuard != null) {
@@ -160,7 +160,7 @@ public class ProjectService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = CacheConfig.CACHE_OPTIONS, key = "'" + PROJECT_OPTIONS_CACHE_KEY + ":' + #customerId",
+    @Cacheable(value = CacheConfig.CACHE_PROJECT_OPTIONS, key = "'" + PROJECT_OPTIONS_CACHE_KEY + ":' + #customerId",
             unless = "#result == null || #result.isEmpty()")
     public List<ProjectOptionResponse> listActiveOptions(Long customerId) {
         Customer customer = customerRepository.findByIdAndDeletedFlagFalse(customerId)

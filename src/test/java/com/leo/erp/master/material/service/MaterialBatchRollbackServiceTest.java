@@ -35,13 +35,17 @@ class MaterialBatchRollbackServiceTest {
     private MaterialRepository materialRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    @Mock
+    private MaterialDictionaryCache materialDictionaryCache;
+
     private MaterialBatchRollbackService service;
 
     @BeforeEach
     void setUp() {
         MaterialHistoryRecorder recorder = new MaterialHistoryRecorder(
                 historyRepository, new SnowflakeIdGenerator(1), objectMapper);
-        service = new MaterialBatchRollbackService(historyRepository, materialRepository, recorder);
+        service = new MaterialBatchRollbackService(
+                historyRepository, materialRepository, recorder, materialDictionaryCache);
     }
 
     @Test

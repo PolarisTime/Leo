@@ -12,6 +12,11 @@ public class RedisTuningProperties {
     private static final Duration DEFAULT_OPTIONS_TTL = Duration.ofMinutes(30);
     private static final Duration DEFAULT_INDEX_TTL = Duration.ofDays(1);
     private static final Duration DEFAULT_AUTH_USER_TTL = Duration.ofMinutes(2);
+    /**
+     * 权限集合缓存 TTL。RBAC 写入会主动提升权限版本号使缓存立即失效，
+     * 该 TTL 仅作为兜底，防止漏挂失效点时权限长期不刷新。
+     */
+    private static final Duration DEFAULT_PERMISSION_TTL = Duration.ofMinutes(5);
     private static final Duration DEFAULT_ONLINE_TTL = Duration.ofMinutes(2);
     private static final Duration DEFAULT_ACTIVITY_WRITE_INTERVAL = Duration.ofSeconds(30);
 
@@ -64,6 +69,10 @@ public class RedisTuningProperties {
 
     public Duration authUserIndexTtl() {
         return positiveDuration(authUser.indexTtl, DEFAULT_INDEX_TTL);
+    }
+
+    public Duration permissionTtl() {
+        return positiveDuration(authUser.permissionTtl, DEFAULT_PERMISSION_TTL);
     }
 
     public Duration sessionOnlineTtl() {
@@ -157,6 +166,7 @@ public class RedisTuningProperties {
     public static class AuthUser {
         private Duration ttl = DEFAULT_AUTH_USER_TTL;
         private Duration indexTtl = DEFAULT_INDEX_TTL;
+        private Duration permissionTtl = DEFAULT_PERMISSION_TTL;
 
         public Duration getTtl() {
             return ttl;
@@ -172,6 +182,14 @@ public class RedisTuningProperties {
 
         public void setIndexTtl(Duration indexTtl) {
             this.indexTtl = indexTtl;
+        }
+
+        public Duration getPermissionTtl() {
+            return permissionTtl;
+        }
+
+        public void setPermissionTtl(Duration permissionTtl) {
+            this.permissionTtl = permissionTtl;
         }
     }
 

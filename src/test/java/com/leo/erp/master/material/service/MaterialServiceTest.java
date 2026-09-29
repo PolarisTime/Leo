@@ -46,9 +46,13 @@ class MaterialServiceTest {
     @Mock
     private MaterialHistoryRecorder materialHistoryRecorder;
 
+    @Mock
+    private MaterialDictionaryCache materialDictionaryCache;
+
     private MaterialService service() {
         return new MaterialService(materialRepository, snowflakeIdGenerator, materialMapper,
-                materialReferenceGuard, codeIssuanceService, identityService, materialHistoryRecorder);
+                materialReferenceGuard, codeIssuanceService, identityService, materialHistoryRecorder,
+                materialDictionaryCache);
     }
 
     private MaterialRequest physicalRequest(String brand) {

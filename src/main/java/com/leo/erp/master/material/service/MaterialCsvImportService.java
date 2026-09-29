@@ -18,13 +18,16 @@ public class MaterialCsvImportService {
     private final MaterialCsvFileReader fileReader;
     private final MaterialCsvRowMapper rowMapper;
     private final MaterialImportProcessor importProcessor;
+    private final MaterialDictionaryCache materialDictionaryCache;
 
     public MaterialCsvImportService(MaterialCsvFileReader fileReader,
                                     MaterialCsvRowMapper rowMapper,
-                                    MaterialImportProcessor importProcessor) {
+                                    MaterialImportProcessor importProcessor,
+                                    MaterialDictionaryCache materialDictionaryCache) {
         this.fileReader = fileReader;
         this.rowMapper = rowMapper;
         this.importProcessor = importProcessor;
+        this.materialDictionaryCache = materialDictionaryCache;
     }
 
     @Transactional
@@ -44,6 +47,8 @@ public class MaterialCsvImportService {
             importRow(session, table.headerIndexes(), row, index + 1, counters, failures, rows);
         }
 
+        // 导入会新增/更新物料主数据，字典缓存必须在事务提交后失效
+        materialDictionaryCache.evictAll();
         return counters.toResult(failures, rows);
     }
 

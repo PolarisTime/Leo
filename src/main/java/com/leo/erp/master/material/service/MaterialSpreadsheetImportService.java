@@ -19,9 +19,12 @@ import java.util.List;
 public class MaterialSpreadsheetImportService {
 
     private final MaterialImportProcessor importProcessor;
+    private final MaterialDictionaryCache materialDictionaryCache;
 
-    public MaterialSpreadsheetImportService(MaterialImportProcessor importProcessor) {
+    public MaterialSpreadsheetImportService(MaterialImportProcessor importProcessor,
+                                            MaterialDictionaryCache materialDictionaryCache) {
         this.importProcessor = importProcessor;
+        this.materialDictionaryCache = materialDictionaryCache;
     }
 
     /**
@@ -85,6 +88,7 @@ public class MaterialSpreadsheetImportService {
             }
         }
         int successCount = createdCount + updatedCount;
+        materialDictionaryCache.evictAll();
         return new SpreadsheetImportResult(
                 rows.size(), successCount, createdCount, updatedCount, skippedCount, failCount,
                 List.copyOf(traces)

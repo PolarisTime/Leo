@@ -211,6 +211,9 @@ leo:
     auth-user:
       ttl: ${LEO_REDIS_AUTH_USER_TTL:2m}
       index-ttl: ${LEO_REDIS_AUTH_USER_INDEX_TTL:1d}
+      # 权限集合缓存 TTL。RBAC 写入会在事务提交后主动更换权限版本号使缓存立即失效，
+      # 该 TTL 仅作为漏挂失效点时的兜底，因此不宜设得过长。
+      permission-ttl: ${LEO_REDIS_PERMISSION_TTL:5m}
     session:
       online-ttl: ${LEO_REDIS_SESSION_ONLINE_TTL:2m}
       # 登录态每个请求都会经过过滤器，这里限制会话活跃时间写入频率

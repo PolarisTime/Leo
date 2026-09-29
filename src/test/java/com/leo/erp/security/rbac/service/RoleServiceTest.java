@@ -11,6 +11,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.rbac.PermissionCacheService;
 import com.leo.erp.security.rbac.domain.entity.SysRole;
 import com.leo.erp.security.rbac.domain.entity.SysRolePermission;
 import com.leo.erp.security.rbac.repository.SysRolePermissionRepository;
@@ -48,6 +49,9 @@ class RoleServiceTest {
 
     @Mock
     private SnowflakeIdGenerator snowflakeIdGenerator;
+
+    @Mock
+    private PermissionCacheService permissionCacheService;
 
     @InjectMocks
     private RoleService roleService;
@@ -147,6 +151,8 @@ class RoleServiceTest {
         assertThat(inserted).extracting(SysRolePermission::getPermissionCode)
                 .containsExactlyInAnyOrder(PermissionCodes.ROLES_READ, PermissionCodes.ROLES_WRITE);
         assertThat(response.permissions()).containsExactlyInAnyOrder(PermissionCodes.ROLES_READ, PermissionCodes.ROLES_WRITE);
+        // 权限集合变更必须让所有用户已缓存的权限立即失效
+        verify(permissionCacheService).invalidateAll();
     }
 
     @Test

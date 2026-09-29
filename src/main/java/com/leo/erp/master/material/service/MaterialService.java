@@ -4,6 +4,7 @@ import com.leo.erp.master.material.domain.MaterialTypes;
 import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.service.CrudOperationLogger;
@@ -18,6 +19,7 @@ import com.leo.erp.master.material.mapper.MaterialMapper;
 import com.leo.erp.master.material.repository.MaterialRepository;
 import com.leo.erp.master.material.web.dto.MaterialRequest;
 import com.leo.erp.master.material.web.dto.MaterialResponse;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -44,6 +46,7 @@ public class MaterialService {
     private final MasterDataCodeIssuanceService codeIssuanceService;
     private final MaterialIdentityService identityService;
     private final MaterialHistoryRecorder materialHistoryRecorder;
+    private final MaterialDictionaryCache materialDictionaryCache;
 
     public MaterialService(MaterialRepository materialRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
@@ -51,7 +54,8 @@ public class MaterialService {
                            MaterialReferenceGuard materialReferenceGuard,
                            MasterDataCodeIssuanceService codeIssuanceService,
                            MaterialIdentityService identityService,
-                           MaterialHistoryRecorder materialHistoryRecorder) {
+                           MaterialHistoryRecorder materialHistoryRecorder,
+                           MaterialDictionaryCache materialDictionaryCache) {
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.materialRepository = materialRepository;
         this.materialMapper = materialMapper;
@@ -59,6 +63,7 @@ public class MaterialService {
         this.codeIssuanceService = codeIssuanceService;
         this.identityService = identityService;
         this.materialHistoryRecorder = materialHistoryRecorder;
+        this.materialDictionaryCache = materialDictionaryCache;
     }
 
     @Transactional(readOnly = true)
@@ -77,6 +82,7 @@ public class MaterialService {
         operationLogger.created(entity, entityId);
         materialHistoryRecorder.record(saved.getId(), MaterialHistoryRecorder.SOURCE_MANUAL,
                 MaterialHistoryRecorder.TYPE_CREATED, null, MaterialSnapshot.of(saved), null, null);
+        materialDictionaryCache.evictAll();
         return toResponse(saved);
     }
 
@@ -92,6 +98,7 @@ public class MaterialService {
         // 快照冻结：主数据改名不追溯改写历史单据的名称快照。
         materialHistoryRecorder.record(saved.getId(), MaterialHistoryRecorder.SOURCE_MANUAL,
                 MaterialHistoryRecorder.TYPE_UPDATED, before, MaterialSnapshot.of(saved), null, null);
+        materialDictionaryCache.evictAll();
         return response;
     }
 
@@ -115,6 +122,7 @@ public class MaterialService {
         entity.setDeletedFlag(true);
         saveMaterial(entity);
         operationLogger.deleted(entity, id);
+        materialDictionaryCache.evictAll();
         materialHistoryRecorder.record(entity.getId(), MaterialHistoryRecorder.SOURCE_MANUAL,
                 MaterialHistoryRecorder.TYPE_DELETED, before, null, null, null);
     }
@@ -131,11 +139,17 @@ public class MaterialService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_OPTIONS,
+            key = "'" + MaterialDictionaryCache.GRADES_CACHE_KEY + "'",
+            unless = "#result == null || #result.isEmpty()")
     public List<String> materialGrades() {
         return materialRepository.findDistinctMaterials();
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_OPTIONS,
+            key = "'" + MaterialDictionaryCache.BRANDS_CACHE_KEY + "'",
+            unless = "#result == null || #result.isEmpty()")
     public List<String> materialBrands() {
         return materialRepository.findDistinctActiveProductBrands();
     }

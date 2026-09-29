@@ -31,6 +31,9 @@ class MaterialSpreadsheetImportServiceTest {
     @Mock
     private MaterialHistoryRecorder historyRecorder;
 
+    @Mock
+    private MaterialDictionaryCache materialDictionaryCache;
+
     private MaterialSpreadsheetImportService service;
 
     @BeforeEach
@@ -38,7 +41,7 @@ class MaterialSpreadsheetImportServiceTest {
         MaterialIdentityService identityService = new MaterialIdentityService(materialRepository);
         MaterialImportProcessor processor = new MaterialImportProcessor(
                 materialRepository, new SnowflakeIdGenerator(1), identityService, historyRecorder);
-        service = new MaterialSpreadsheetImportService(processor);
+        service = new MaterialSpreadsheetImportService(processor, materialDictionaryCache);
     }
 
     @Test

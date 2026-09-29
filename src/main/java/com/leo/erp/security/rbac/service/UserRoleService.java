@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.security.rbac.PermissionCacheService;
 import com.leo.erp.security.rbac.domain.entity.SysRole;
 import com.leo.erp.security.rbac.domain.entity.SysUserRole;
 import com.leo.erp.security.rbac.repository.SysRolePermissionRepository;
@@ -23,7 +24,8 @@ import java.util.Optional;
 /**
  * RBAC0 用户-角色服务，支持整体替换用户角色集合。
  *
- * <p>与角色权限一致，授权查询不做缓存，变更在下一请求立即生效。</p>
+ * <p>用户角色变更会影响该用户的权限集合，因此写入方法在事务提交后调用
+ * {@link PermissionCacheService#invalidateAll()} 使权限缓存立即失效，变更在下一请求生效。</p>
  */
 @Service
 public class UserRoleService {
@@ -33,17 +35,20 @@ public class UserRoleService {
     private final SysRolePermissionRepository rolePermissionRepository;
     private final UserAccountRepository userAccountRepository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
+    private final PermissionCacheService permissionCacheService;
 
     public UserRoleService(SysUserRoleRepository userRoleRepository,
                            SysRoleRepository roleRepository,
                            SysRolePermissionRepository rolePermissionRepository,
                            UserAccountRepository userAccountRepository,
-                           SnowflakeIdGenerator snowflakeIdGenerator) {
+                           SnowflakeIdGenerator snowflakeIdGenerator,
+                           PermissionCacheService permissionCacheService) {
         this.userRoleRepository = userRoleRepository;
         this.roleRepository = roleRepository;
         this.rolePermissionRepository = rolePermissionRepository;
         this.userAccountRepository = userAccountRepository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
+        this.permissionCacheService = permissionCacheService;
     }
 
     @Transactional(readOnly = true)
@@ -84,6 +89,7 @@ public class UserRoleService {
             }).toList();
             userRoleRepository.saveAll(links);
         }
+        permissionCacheService.invalidateAll();
         return rolesOf(userId);
     }
 
@@ -110,6 +116,7 @@ public class UserRoleService {
         link.setUserId(userId);
         link.setRoleId(roleId);
         userRoleRepository.save(link);
+        permissionCacheService.invalidateAll();
     }
 
     private void requireActiveUser(Long userId) {

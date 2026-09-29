@@ -14,6 +14,7 @@ import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.security.rbac.PermissionCacheService;
 import com.leo.erp.security.rbac.domain.entity.SysRole;
 import com.leo.erp.security.rbac.domain.entity.SysUserRole;
 import com.leo.erp.security.rbac.repository.SysRolePermissionRepository;
@@ -51,6 +52,9 @@ class UserRoleServiceTest {
 
     @Mock
     private SnowflakeIdGenerator snowflakeIdGenerator;
+
+    @Mock
+    private PermissionCacheService permissionCacheService;
 
     @InjectMocks
     private UserRoleService userRoleService;
@@ -110,6 +114,7 @@ class UserRoleServiceTest {
         captor.getValue().forEach(inserted::add);
         assertThat(inserted).extracting(SysUserRole::getRoleId).containsExactly(10L);
         assertThat(response.roles()).extracting(RoleResponse::code).containsExactly("A");
+        verify(permissionCacheService).invalidateAll();
     }
 
     @Test
@@ -122,6 +127,8 @@ class UserRoleServiceTest {
         verify(userRoleRepository).deleteByUserId(7L);
         verify(userRoleRepository, never()).saveAll(any());
         assertThat(response.roles()).isEmpty();
+        // 清空角色同样改变该用户的有效权限，必须失效
+        verify(permissionCacheService).invalidateAll();
     }
 
     @Test
@@ -134,6 +141,7 @@ class UserRoleServiceTest {
         userRoleService.grantSuperAdmin(7L);
 
         verify(userRoleRepository).save(any(SysUserRole.class));
+        verify(permissionCacheService).invalidateAll();
     }
 
     @Test
@@ -145,6 +153,8 @@ class UserRoleServiceTest {
         userRoleService.grantSuperAdmin(7L);
 
         verify(userRoleRepository, never()).save(any());
+        // 未发生变更时不应无谓地刷新权限缓存
+        verify(permissionCacheService, never()).invalidateAll();
     }
 
     private UserAccount account(Long id) {

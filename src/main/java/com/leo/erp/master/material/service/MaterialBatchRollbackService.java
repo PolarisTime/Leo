@@ -24,13 +24,16 @@ public class MaterialBatchRollbackService {
     private final MaterialHistoryRepository historyRepository;
     private final MaterialRepository materialRepository;
     private final MaterialHistoryRecorder recorder;
+    private final MaterialDictionaryCache materialDictionaryCache;
 
     public MaterialBatchRollbackService(MaterialHistoryRepository historyRepository,
                                         MaterialRepository materialRepository,
-                                        MaterialHistoryRecorder recorder) {
+                                        MaterialHistoryRecorder recorder,
+                                        MaterialDictionaryCache materialDictionaryCache) {
         this.historyRepository = historyRepository;
         this.materialRepository = materialRepository;
         this.recorder = recorder;
+        this.materialDictionaryCache = materialDictionaryCache;
     }
 
     @Transactional
@@ -77,6 +80,8 @@ public class MaterialBatchRollbackService {
                 updatedRestored++;
             }
         }
+        // 回滚会恢复/软删物料主数据，字典缓存必须在事务提交后失效
+        materialDictionaryCache.evictAll();
         return new MaterialBatchRollbackResponse(batch, rows.size(), createdRolledBack, updatedRestored, missing);
     }
 }

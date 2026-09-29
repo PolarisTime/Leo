@@ -8,6 +8,7 @@ import com.leo.erp.common.service.CrudOperationLogger;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.rbac.PermissionCacheService;
 import com.leo.erp.security.rbac.domain.entity.SysRole;
 import com.leo.erp.security.rbac.domain.entity.SysRolePermission;
 import com.leo.erp.security.rbac.domain.entity.SysUserRole;
@@ -31,9 +32,10 @@ import java.util.stream.Collectors;
 /**
  * RBAC0 角色服务。
  *
- * <p><strong>权限缓存策略：</strong>角色/权限变更后不维护内存权限缓存，
- * {@code RoleBasedAuthorityProvider} 每次请求实时查询数据库，因此变更在下一次请求立即生效，
- * 无需额外失效入口。</p>
+ * <p><strong>权限缓存策略：</strong>{@code RoleBasedAuthorityProvider} 的权限集合缓存于 Redis。
+ * 本服务的所有写入方法（角色增删改、状态变更、角色权限替换）都会在<em>事务提交后</em>
+ * 调用 {@link PermissionCacheService#invalidateAll()} 更换权限版本号，使相关缓存立即失效，
+ * 因此角色/权限变更仍在下一个请求即生效。</p>
  */
 @Service
 public class RoleService {
@@ -42,16 +44,19 @@ public class RoleService {
     private final SysRolePermissionRepository rolePermissionRepository;
     private final SysUserRoleRepository userRoleRepository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
+    private final PermissionCacheService permissionCacheService;
     private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(RoleService.class);
 
     public RoleService(SysRoleRepository roleRepository,
                        SysRolePermissionRepository rolePermissionRepository,
                        SysUserRoleRepository userRoleRepository,
-                       SnowflakeIdGenerator snowflakeIdGenerator) {
+                       SnowflakeIdGenerator snowflakeIdGenerator,
+                       PermissionCacheService permissionCacheService) {
         this.roleRepository = roleRepository;
         this.rolePermissionRepository = rolePermissionRepository;
         this.userRoleRepository = userRoleRepository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
+        this.permissionCacheService = permissionCacheService;
     }
 
     @Transactional(readOnly = true)
@@ -97,6 +102,7 @@ public class RoleService {
         role.setStatus(normalizeStatusOrDefault(request.status(), StatusConstants.NORMAL));
         SysRole saved = roleRepository.save(role);
         operationLogger.created(saved, saved.getId());
+        permissionCacheService.invalidateAll();
         return toResponse(saved);
     }
 
@@ -117,6 +123,7 @@ public class RoleService {
         role.setStatus(normalizeStatusOrDefault(request.status(), role.getStatus()));
         SysRole saved = roleRepository.save(role);
         operationLogger.updated(saved, id);
+        permissionCacheService.invalidateAll();
         return toResponse(saved);
     }
 
@@ -131,6 +138,8 @@ public class RoleService {
         if (!nextStatus.equals(role.getStatus())) {
             role.setStatus(nextStatus);
             role = roleRepository.save(role);
+            // 角色启用状态直接决定该角色权限是否生效，必须失效
+            permissionCacheService.invalidateAll();
         }
         return toResponse(role);
     }
@@ -144,6 +153,7 @@ public class RoleService {
         role.setDeletedFlag(true);
         roleRepository.save(role);
         operationLogger.deleted(role, id);
+        permissionCacheService.invalidateAll();
     }
 
     @Transactional
@@ -164,6 +174,8 @@ public class RoleService {
         }).toList();
         rolePermissionRepository.saveAll(links);
         operationLogger.updated(role, id);
+        // 权限集合变更，必须让所有用户已缓存的权限立即失效
+        permissionCacheService.invalidateAll();
         return toDetail(role);
     }
 
