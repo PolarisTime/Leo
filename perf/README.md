@@ -188,10 +188,19 @@ k6 run leo/perf/k6/03-read-mixed.js         # setup() 复用该 token，不再�
 ## Soak 长时稳定性（09-soak.js）
 
 ```bash
-export LEO_PERF_TOKEN=<共享 token>
-bash leo/perf/collect-metrics.sh watch tmp/soak.csv 7300 30 &
-LEO_PERF_SOAK_VUS=40 LEO_PERF_SOAK_DURATION=2h k6 run leo/perf/k6/09-soak.js
+# 分段运行（推荐）：token 有效期 600s 不可配置，2 小时必须分段
+bash leo/perf/soak-runner.sh 120 8      # 总 120 分钟，每段 8 分钟
+
+# 分析与聚合
+python3 leo/perf/soak-aggregate.py tmp/perf              # 跨段总览
+bash leo/perf/collect-metrics.sh trend tmp/perf/metrics-soak-all.csv   # 泄漏趋势
 ```
+
+`09-soak.js` 单次运行会在 setup 里**校验 token 是否覆盖计划时长**，不足即失败——
+这正是为了防止「跑了几小时才发现 auth 早已失效」。段长默认受 9 分钟安全边界保护。
+
+`soak-aggregate.py` 已用合成分段数据验证：累计请求/失败率/吞吐 min-中位-max/
+p95/p99/5xx 统计与预期逐项吻合，能正确标记异常段。
 
 只读、不产生业务数据。40 VU 是该实例接近饱和但不自我压垮的档位
 （实测 40 VU 约 1,010 req/s，高于 300 VU 的 909 req/s，说明 300 VU 已过饱和点）。
