@@ -14,6 +14,8 @@ export const BASE_URL = (__ENV.LEO_PERF_BASE_URL || 'http://127.0.0.1:11211/api'
 export const LOGIN_NAME = __ENV.LEO_PERF_LOGIN_NAME || '';
 export const PASSWORD = __ENV.LEO_PERF_PASSWORD || '';
 export const RUN_ID = __ENV.LEO_PERF_RUN_ID || `run${Date.now()}`;
+/** 结算主体 ID：由 run.sh 统一解析后注入，用于财务/对账等需该参数的接口。 */
+export const COMPANY_ID = __ENV.LEO_PERF_COMPANY_ID || '';
 
 /** 写接口数据标记；压测产生的数据均可凭此前缀检索与清理。 */
 export const DATA_MARKER = `PERF-LOAD-${RUN_ID}`;
@@ -140,7 +142,13 @@ export function writeParams(token, name, extraHeaders) {
   return { headers, tags: { name, kind: 'write' } };
 }
 
-/** 读接口清单：按真实前端调用特征取样，weight 用于混合压测的流量配比。 */
+/**
+ * 读接口清单：按真实前端调用特征取样，weight 用于混合压测的流量配比。
+ *
+ * 路径中的 {companyId} 占位由 endpointPath() 用 COMPANY_ID 替换。
+ * 重负载接口（库存流水/财务概览/资金台账/对账）已纳入，用于覆盖此前的盲区。
+ */
+
 export const READ_ENDPOINTS = [
   { name: 'GET /v2.0/sales-orders', path: '/v2.0/sales-orders?page=0&size=30', weight: 22 },
   { name: 'GET /v2.0/sales-orders?size=5', path: '/v2.0/sales-orders?page=0&size=5', weight: 8 },
@@ -152,9 +160,26 @@ export const READ_ENDPOINTS = [
   { name: 'GET /v2.0/account', path: '/v2.0/account', weight: 6 },
   { name: 'GET /v2.0/users', path: '/v2.0/users?page=0&size=30', weight: 5 },
   { name: 'GET /v2.0/health', path: '/v2.0/health', weight: 5, anonymous: true },
+  // ---- 重负载业务接口（此前完全未覆盖）----
+  { name: 'GET /v2.0/inventory/balances', path: '/v2.0/inventory/balances?page=0&size=30', weight: 8 },
+  { name: 'GET /v2.0/inventory/transactions', path: '/v2.0/inventory/transactions?page=0&size=30', weight: 8 },
+  { name: 'GET /v2.0/dashboard/summary', path: '/v2.0/dashboard/summary', weight: 5 },
+  { name: 'GET /v2.0/sales-outbounds', path: '/v2.0/sales-outbounds?page=0&size=30', weight: 6 },
+  { name: 'GET /v2.0/purchase-orders', path: '/v2.0/purchase-orders?page=0&size=30', weight: 6 },
+  { name: 'GET /v2.0/receipts', path: '/v2.0/receipts?page=0&size=30', weight: 5 },
+  { name: 'GET /v2.0/finance/overview', path: '/v2.0/finance/overview?settlementCompanyId={companyId}&page=0&size=30', weight: 8 },
+  { name: 'GET /v2.0/cash-ledger', path: '/v2.0/cash-ledger?settlementCompanyId={companyId}&page=0&size=30', weight: 6 },
+  { name: 'GET /v2.0/customer-statements', path: '/v2.0/customer-statements?settlementCompanyId={companyId}&page=0&size=30', weight: 5 },
+  { name: 'GET /v2.0/materials/grades', path: '/v2.0/materials/grades', weight: 5 },
+  { name: 'GET /v2.0/materials/brands', path: '/v2.0/materials/brands', weight: 5 },
 ];
 
 const TOTAL_WEIGHT = READ_ENDPOINTS.reduce((sum, item) => sum + item.weight, 0);
+
+/** 把路径中的 {companyId} 占位替换为真实结算主体 ID。 */
+export function endpointPath(endpoint, companyId) {
+  return endpoint.path.replace('{companyId}', companyId || COMPANY_ID);
+}
 
 /** 按权重随机挑一个读接口。 */
 export function pickReadEndpoint() {

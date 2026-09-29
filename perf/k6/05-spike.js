@@ -13,6 +13,7 @@ import { check } from 'k6';
 import { Counter } from 'k6/metrics';
 import {
   BASE_URL,
+  endpointPath,
   ensureToken,
   setupToken,
   pickReadEndpoint,
@@ -76,7 +77,7 @@ export default function (data) {
 
   const endpoint = pickReadEndpoint();
   const res = http.get(
-    `${BASE_URL}${endpoint.path}`,
+    `${BASE_URL}${endpointPath(endpoint, data && data.companyId)}`,
     readParams(token, endpoint.name, endpoint.anonymous)
   );
   if (res.status >= 500) {

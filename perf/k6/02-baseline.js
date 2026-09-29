@@ -10,6 +10,7 @@ import { check, sleep } from 'k6';
 import { Trend } from 'k6/metrics';
 import {
   BASE_URL,
+  endpointPath,
   ensureToken,
   setupToken,
   READ_ENDPOINTS,
@@ -52,7 +53,7 @@ export default function (data) {
 
   for (const endpoint of READ_ENDPOINTS) {
     const res = http.get(
-      `${BASE_URL}${endpoint.path}`,
+      `${BASE_URL}${endpointPath(endpoint, data && data.companyId)}`,
       readParams(token, endpoint.name, endpoint.anonymous)
     );
     endpointTrends[endpoint.name].add(res.timings.duration);

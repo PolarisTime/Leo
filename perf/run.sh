@@ -51,7 +51,8 @@ log "压测批次 RUN_ID=$LEO_PERF_RUN_ID（写测数据标记前缀 PERF-LOAD-$
 # 服务端对同一账号有会话数上限（SessionManagementService.DEFAULT_MAX_REFRESH_TOKENS = 3），
 # 第 4 次登录会吊销并拉黑最旧会话，使其 access token 立即 401。
 # 因此压测用例、指标采集器、辅助调用必须共用同一个会话，绝不能各自登录。
-resolve_shared_token() {
+resolve_shared_token
+resolve_company_id() {
   if [[ -n "${LEO_PERF_TOKEN:-}" ]]; then
     log "复用外部提供的 LEO_PERF_TOKEN"
     export LEO_PERF_TOKEN
