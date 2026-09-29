@@ -150,21 +150,33 @@ Hikari 连接池（活跃/空闲/等待/**获取超时**）、JVM 堆与线程�
 
 隔离注入：只把 leo 后端指向不存在的 Redis 端口，**不触碰共享 Redis 实例**。
 
-| 请求 | Redis 正常 | Redis 不可用 |
-|---|---|---|
-| `GET /v2.0/health` | 200 | **503 `DEGRADED`** ✅ 优雅 |
-| `GET /v2.0/version` | 200 | 200 ✅（不依赖 Redis） |
-| 已登录用户的**任何**接口 | 200 | **401「登录状态已失效，请重新登录」** ❌ |
-| `POST /v2.0/auth/login` | 200 | **503「幂等服务暂不可用」** ❌ |
+| 请求 | Redis 正常 | Redis 不可用 | 证据强度 |
+|---|---|---|---|
+| `GET /v2.0/health` | 200 | **503 `DEGRADED`** | ✅ 确证 |
+| `GET /v2.0/version` | 200 | 200（不依赖 Redis） | ✅ 确证 |
+| `POST /v2.0/auth/login` | 200 | **503「幂等服务暂不可用」** | ✅ 确证 |
+| 已登录用户的接口 | 200 | **未确证**（见下） | ⚠️ 待复核 |
 
-危害有三层：
+> **本节初稿曾断言「Redis 不可用时已登录用户全部收到 401」，该结论不成立，已撤回。**
+> 复核日志发现那些 401 的真实原因是 `ExpiredJwtException: JWT expired 54443 milliseconds ago`
+> ——我的手工验证里预取 token 后，第一次启动因 Redis 预检失败、改用 `spring-boot:run`
+> 重试，前后耗掉约 11 分钟，**超过了 600s 的 token 有效期**。窗口内的
+> `RedisConnectionFailureException` 全部来自 health 检查（即 503 DEGRADED 的来源），
+> **没有一次导致 401**。因此「Redis 不可用对已登录请求的影响」目前**无有效证据**。
+>
+> 复核计划：`redis-degradation.sh` 的设计是「先起正常后端取基线 token，再注入故障并立即探测」，
+> 两次之间仅数十秒，不会触发 token 过期；待 soak 结束后实跑该脚本以取得有效结论。
 
-1. **返回 401 而非 503**：客户端会误判为「我的登录过期了」，进而触发重新登录。
-2. **重新登录也失败**：幂等过滤器依赖 Redis，登录直接 503。
-3. **无法降级**：`CacheConfig` 的 `CacheErrorHandler` 优雅降级**只覆盖 Spring Cache**；
-   认证链路用的是裸 `StringRedisTemplate`，`AuthenticatedUserCacheService.getActivePrincipal`
-   对 Redis 调用**没有 try/catch**，异常穿透 `JwtAuthenticationFilter`
-   （日志确认：`Connection refused` → `JwtAuthenticationFilter` 失败 → 401）。
+在**已确证**的三条之上，仍然成立的危害有二：
+
+1. **故障期间无法重新登录**：幂等过滤器依赖 Redis，登录直接 503「幂等服务暂不可用」。
+   这意味着一旦 Redis 不可用，已登录会话到期后用户**无法再登录**。
+2. **无法降级**：`CacheConfig` 的 `CacheErrorHandler` 优雅降级**只覆盖 Spring Cache**；
+   认证链路用的是裸 `StringRedisTemplate`，
+   `AuthenticatedUserCacheService.getActivePrincipal` 对 Redis 调用**没有 try/catch**
+   （代码已确认），而 `JwtAuthenticationFilter` 只捕获 `JwtException | IllegalArgumentException`
+   ——`RedisConnectionFailureException` 不属于二者，因此该异常在认证链路上**没有兜底**。
+   **其实际后果（401？500？）尚未实测确证**，需由上面的复核给出。
 
 **Redis 在本项目里不是可降级的缓存，而是硬依赖。** 另外
 `scripts/backend/start-dev.sh` 含 Redis 预检，Redis 不可用时**直接拒绝启动**——
