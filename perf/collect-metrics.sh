@@ -203,8 +203,14 @@ cmd_trend() {
       else if (perHour > 2) printf "  ⚠ 轻微上升，建议结合 GC 指标复核\n"
       else printf "  ✅ 基本平稳，未见泄漏迹象\n"
       # 连接池与错误累积
-      ho = last_leak = 0
-      printf "连接池获取超时累计: %.0f\n", a[idx["hikari_timeout_total"]]+0
+      # 计数器必须看区间增量：hikaricp_connections_timeout_total 是自进程启动的累计值，
+      # 直接打印绝对值会把「本窗口开始前就存在」的历史残留误读成本次窗口的问题
+      # （实测一次：窗口内各区段增量均为 0，但累计值 452 来自此前测试，极易误判）。
+      split(row[1], rowFirst, ",")
+      split(row[n], rowLast, ",")
+      toi = idx["hikari_timeout_total"]
+      printf "连接池获取超时（本窗口增量）: %.0f\n", rowLast[toi]-rowFirst[toi]
+      printf "  窗口起始时已存在的累计值: %.0f（不属本窗口）\n", rowFirst[toi]
       printf "样本跨度: %.1f 分钟\n", total/60
     }' "$csv"
 }
