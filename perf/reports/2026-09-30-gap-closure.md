@@ -96,13 +96,16 @@ Hikari 连接池（活跃/空闲/等待/**获取超时**）、JVM 堆与线程�
 
 | 接口 | 耗时 | 判定 |
 |---|---:|---|
-| `POST /sales-orders/{id}/xlsx-exports` | **47–65 ms** | 最重，约普通接口的 **8 倍** |
+| `POST /material-imports/previews` | **315 ms** | **最重**（dry-run 预览，2 行 CSV） |
+| `POST /sales-orders/{id}/xlsx-exports` | **47–65 ms** | 约普通接口的 **8 倍** |
 | `GET /inventory/transactions` | 8.7 ms | 较重 |
 | `GET /sales-orders` | 7.6 ms | — |
 | `GET /materials/grades` | 7.1 → 4.6 ms | 字典缓存生效 |
 | 其余分页/字典接口 | 4–8 ms | — |
 
-导出走 Apache POI 生成 XLSX，是 CPU 与堆内存大户。
+导出走 Apache POI 生成 XLSX，是 CPU 与堆内存大户。导入预览（`material-imports/previews`）
+是 dry-run——**实测物料总数前后均为 368，确认不落库**，因此可安全作为压测靶子；
+它逐行解析 CSV 并跑完整校验，是目前最重的接口。
 
 ### 并发下的表现（30 VU，含 25% 导出）
 
@@ -248,7 +251,11 @@ private static final int DEFAULT_MAX_REFRESH_TOKENS = 3;   // 硬编码，不可
 3. **仅一个测试账号**：权限缓存只有 1 个 key，多用户雪崩、多用户会话竞争无法模拟。
 4. **沙箱无法观测宿主进程**：拿不到后端进程级 CPU/内存明细，只能用
    `/proc` 与 Prometheus 间接推断。
-5. **导入/附件未压测**：CSV/Excel 导入与 S3 附件上传下载仍未覆盖。
+5. **附件路径未能压测（环境所限，非方法取舍）**：上传实测直接失败
+   —— `S3 上传失败: HTTP 403 The Access Key Id you provided does not exist in our records`，
+   即 `.env.local` 中的 COS/S3 凭据已失效。另外附件**没有删除接口**
+   （只有 upload / access-url / content），即使能上传也无法清理，
+   因此本环境下不对附件施加载荷。导入预览已覆盖（见第四节）。
 6. **导出压测用的是单行单据**，生产多明细单据的开销未测。
 7. 缓存前后对比为**各一次运行**，n=1，因果强度有限。
 
@@ -262,7 +269,8 @@ private static final int DEFAULT_MAX_REFRESH_TOKENS = 3;   // 硬编码，不可
 | **P1** | 幂等重放失败者应重放首个响应而非 422 | 调用方会误判为自己提交的数据有问题 |
 | **P2** | 导出接口增加并发上限或异步化 | 单请求 47–65 ms，是普通接口 8 倍 |
 | **P2** | 权限并发写加服务端重试，减少 77.6% 的 409 | 客户端被迫处理大量冲突 |
-| **P3** | 补测导入/附件，用生产量级数据复测导出 | 覆盖与数据真实性的剩余缺口 |
+| **P3** | 修复 dev 的 S3 凭据并补测附件上传/下载 | 附件路径当前完全未验证；另建议补删除接口以便清理 |
+| **P3** | 用生产量级数据复测导出与导入预览 | dev 仅 87 张销售订单，重接口开销被严重低估 |
 
 ## 十一、附：原始数据
 

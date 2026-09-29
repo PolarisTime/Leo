@@ -3,7 +3,8 @@
  *
  * 背景：此前的压测集只有分页查询，单请求 4–9ms，从未触碰真正昂贵的路径。
  * 实测单请求耗时（dev、1 VU、数据量很小）：
- *   POST /sales-orders/{id}/xlsx-exports   47–65ms  ← 约普通接口的 8 倍
+ *   POST /material-imports/previews        315ms    ← 实测最重（dry-run，不落库）
+ *   POST /sales-orders/{id}/xlsx-exports   47–65ms
  *   GET  /inventory/transactions           8.7ms
  *   GET  /sales-orders                     7.6ms
  * 导出走 Apache POI 生成 XLSX，是 CPU 与堆内存大户。dev 数据量很小，
@@ -24,6 +25,7 @@ import {
   COMPANY_ID,
   ensureToken,
   endpointPath,
+  idempotencyKey,
   READ_ENDPOINTS,
   readParams,
   setupToken,
@@ -43,6 +45,8 @@ const HEAVY_READS = READ_ENDPOINTS.filter((e) =>
 const exportTrend = new Trend('heavy_export_duration', true);
 const exportFailures = new Counter('heavy_export_failures');
 const readTrend = new Trend('heavy_read_duration', true);
+const importTrend = new Trend('heavy_import_preview_duration', true);
+const importFailures = new Counter('heavy_import_preview_failures');
 
 export const options = {
   scenarios: {
@@ -81,12 +85,46 @@ export function setup() {
   if (!salesOrderId) {
     throw new Error('setup 未能取得销售订单 ID，无法压测导出接口');
   }
-  return { token: base.token, issuedAt: base.issuedAt, salesOrderId };
+  // 取商品导入模板作为预览负载：预览是 dry-run（实测物料总数前后不变），
+  // 因此可以安全地作为压测靶子；它是目前发现最重的接口（单次约 315ms）。
+  let importCsv = '';
+  const tpl = http.get(
+    `${BASE_URL}/v2.0/materials/template/csv`,
+    readParams(base.token, 'setup:GET /v2.0/materials/template/csv', false)
+  );
+  if (tpl.status === 200 && tpl.body) {
+    importCsv = `${tpl.body.replace(/\r?\n$/, '')}\nPTEST-PERF-001,压测品牌,压测材质,实体商品,规格A,12米,吨,件,0,0,0,压测预览行\n`;
+  }
+
+  return { token: base.token, issuedAt: base.issuedAt, salesOrderId, importCsv };
 }
 
 export default function (data) {
   const token = ensureToken(data);
   if (!token) {
+    return;
+  }
+
+  // 每 8 次迭代打一次导入预览（最重），每次多一轮
+  if (__ITER % 8 === 3 && data.importCsv) {
+    const res = http.post(
+      `${BASE_URL}/v2.0/material-imports/previews`,
+      {
+        file: http.file(data.importCsv, 'mat-preview.csv', 'text/csv'),
+        format: 'csv',
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Idempotency-Key': idempotencyKey('import-preview'),
+        },
+        tags: { name: 'POST /v2.0/material-imports/previews', kind: 'write' },
+      }
+    );
+    importTrend.add(res.timings.duration);
+    if (!check(res, { '导入预览返回 201': (r) => r.status === 201 })) {
+      importFailures.add(1);
+    }
     return;
   }
 
