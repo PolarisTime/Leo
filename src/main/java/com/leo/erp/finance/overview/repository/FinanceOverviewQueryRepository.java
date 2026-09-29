@@ -6,6 +6,7 @@ import com.leo.erp.finance.overview.web.dto.FinanceOverviewSummaryResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.sql.Types;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -240,6 +242,30 @@ public class FinanceOverviewQueryRepository {
             "advanceAmount", "advance_amount"
     );
 
+    /**
+     * 分页查询的 SELECT 片段：在返回当前页明细的同时，用窗口函数一并算出总数与全量汇总。
+     *
+     * <p>原先 summary / COUNT / 分页各执行一次 {@link #BALANCE_CTE}，同一份 9 分支聚合
+     * 在单次请求内被完整重算 3 遍。窗口函数（无 PARTITION BY）在 LIMIT/OFFSET <em>之前</em>
+     * 对整个过滤结果集求值，因此一次执行即可同时拿到「当前页 + 总数 + 汇总」。</p>
+     *
+     * <p>汇总表达式与原 {@code querySummary} 逐字对应，保证数值语义与类型完全一致；
+     * 列名统一加 {@code query_} 前缀以免与 calculated 的列冲突。</p>
+     */
+    private static final String BALANCE_PAGE_SELECT = """
+            SELECT *,
+                COUNT(1) OVER () AS query_total_count,
+                COALESCE(SUM(recognized_amount) FILTER (WHERE direction = 'RECEIVABLE') OVER (), 0) AS query_receivable_amount,
+                COALESCE(SUM(settled_amount) FILTER (WHERE direction = 'RECEIVABLE') OVER (), 0) AS query_received_amount,
+                COALESCE(SUM(outstanding_amount) FILTER (WHERE direction = 'RECEIVABLE') OVER (), 0) AS query_unreceived_amount,
+                COALESCE(SUM(advance_amount) FILTER (WHERE direction = 'RECEIVABLE') OVER (), 0) AS query_advance_receipt_amount,
+                COALESCE(SUM(recognized_amount) FILTER (WHERE direction = 'PAYABLE') OVER (), 0) AS query_payable_amount,
+                COALESCE(SUM(settled_amount) FILTER (WHERE direction = 'PAYABLE') OVER (), 0) AS query_paid_amount,
+                COALESCE(SUM(outstanding_amount) FILTER (WHERE direction = 'PAYABLE') OVER (), 0) AS query_unpaid_amount,
+                COALESCE(SUM(advance_amount) FILTER (WHERE direction = 'PAYABLE') OVER (), 0) AS query_advance_payment_amount
+            FROM calculated
+            """;
+
     private static final RowMapper<FinanceBalanceResponse> BALANCE_ROW_MAPPER = (resultSet, rowNum) ->
             new FinanceBalanceResponse(
                     resultSet.getString("direction"),
@@ -264,6 +290,28 @@ public class FinanceOverviewQueryRepository {
     public OverviewResult overview(FinanceOverviewFilter filter, PageQuery query) {
         MapSqlParameterSource parameters = parameters(filter);
         String whereClause = whereClause(filter);
+        parameters.addValue("limit", query.size());
+        parameters.addValue("offset", (long) query.page() * query.size());
+
+        // 常规路径：一次执行同时取回当前页、总数与汇总（原本需要 3 次执行同一份 CTE）
+        OverviewPageRow pageRow = jdbcTemplate.query(
+                BALANCE_CTE
+                        + BALANCE_PAGE_SELECT
+                        + whereClause
+                        + orderBy(query)
+                        + " LIMIT :limit OFFSET :offset",
+                parameters,
+                overviewPageExtractor()
+        );
+
+        Page<FinanceBalanceResponse> page;
+        if (pageRow != null) {
+            page = new PageImpl<>(pageRow.balances(), PageRequest.of(query.page(), query.size()), pageRow.total());
+            return new OverviewResult(pageRow.summary(), page);
+        }
+
+        // 结果集为空有两种可能：过滤后确实无数据，或请求页码越界（窗口汇总列随之取不到）。
+        // 两种情况都必须返回与原实现一致的汇总与总数，因此退回独立的统计查询。
         FinanceOverviewSummaryResponse summary = querySummary(parameters, whereClause);
         Number totalNumber = jdbcTemplate.queryForObject(
                 BALANCE_CTE + "SELECT COUNT(1) FROM calculated\n" + whereClause,
@@ -271,24 +319,45 @@ public class FinanceOverviewQueryRepository {
                 Number.class
         );
         long total = totalNumber == null ? 0L : totalNumber.longValue();
-        Page<FinanceBalanceResponse> page;
-        if (total == 0L) {
-            page = new PageImpl<>(List.of(), PageRequest.of(query.page(), query.size()), 0L);
-        } else {
-            parameters.addValue("limit", query.size());
-            parameters.addValue("offset", (long) query.page() * query.size());
-            List<FinanceBalanceResponse> rows = jdbcTemplate.query(
-                    BALANCE_CTE
-                            + "SELECT * FROM calculated\n"
-                            + whereClause
-                            + orderBy(query)
-                            + " LIMIT :limit OFFSET :offset",
-                    parameters,
-                    BALANCE_ROW_MAPPER
-            );
-            page = new PageImpl<>(rows, PageRequest.of(query.page(), query.size()), total);
-        }
+        page = new PageImpl<>(List.of(), PageRequest.of(query.page(), query.size()), total);
         return new OverviewResult(summary, page);
+    }
+
+    /**
+     * 逐行消费查询结果：首行携带整个结果集的窗口汇总值，所有行构成当前页明细。
+     *
+     * <p>无数据时返回 {@code null}，由调用方走统计回退路径。</p>
+     */
+    private ResultSetExtractor<OverviewPageRow> overviewPageExtractor() {
+        return resultSet -> {
+            List<FinanceBalanceResponse> balances = new ArrayList<>();
+            long total = 0L;
+            FinanceOverviewSummaryResponse summary = null;
+            while (resultSet.next()) {
+                if (summary == null) {
+                    total = resultSet.getLong("query_total_count");
+                    summary = new FinanceOverviewSummaryResponse(
+                            amount(resultSet.getBigDecimal("query_receivable_amount")),
+                            amount(resultSet.getBigDecimal("query_received_amount")),
+                            amount(resultSet.getBigDecimal("query_unreceived_amount")),
+                            amount(resultSet.getBigDecimal("query_advance_receipt_amount")),
+                            amount(resultSet.getBigDecimal("query_payable_amount")),
+                            amount(resultSet.getBigDecimal("query_paid_amount")),
+                            amount(resultSet.getBigDecimal("query_unpaid_amount")),
+                            amount(resultSet.getBigDecimal("query_advance_payment_amount"))
+                    );
+                }
+                balances.add(BALANCE_ROW_MAPPER.mapRow(resultSet, balances.size()));
+            }
+            return summary == null ? null : new OverviewPageRow(summary, total, balances);
+        };
+    }
+
+    private record OverviewPageRow(
+            FinanceOverviewSummaryResponse summary,
+            long total,
+            List<FinanceBalanceResponse> balances
+    ) {
     }
 
     private FinanceOverviewSummaryResponse querySummary(MapSqlParameterSource parameters, String whereClause) {
