@@ -17,7 +17,11 @@ leo/perf/
 │   ├── 03-read-mixed.js       读混合阶梯爬坡（默认至 300 VU）
 │   ├── 04-write-mixed.js      写压测：签发编码 -> 创建客户（默认自清理）
 │   ├── 05-spike.js            激进冲击：默认拉到 800 VU 并保持
-│   └── 06-login.js            登录专项：量化同账号/多账号并发登录行为
+│   ├── 06-login.js            登录专项：量化同账号/多账号并发登录行为
+│   ├── 07-heavy.js            重负载专项：xlsx 导出与计算密集接口
+│   ├── 08-concurrency.js      并发正确性：同一行并发写 + 幂等重放
+│   └── 09-soak.js             Soak 长时稳定性：恒定负载找出泄漏类问题
+├── collect-metrics.sh         采集服务端 Prometheus 指标（连接池/JVM/缓存）
 └── results/                   运行输出（本地生成，已 gitignore）
 ```
 
@@ -115,3 +119,68 @@ bash leo/perf/cleanup-perf-data.sh --yes PERF-LOAD-20260929-215438
 - 后端进程跑在宿主上，沙箱内 `ps` 看不到，无法直接采集后端 CPU/内存；只能用 `/proc/loadavg`、`free` 与 HTTP 指标间接推断。
 - access token 有效期 10 分钟。公共库在 `setup()` 登录一次并对各 VU 共享，TTL 内无感；单次压测时长应控制在 8 分钟以内，超过后 VU 会兜底重登并可能撞上并发登录争用。
 - k6 与被压服务同机运行，高并发档（500+ VU）下 k6 自身也占用 CPU/内存，测得的吞吐是「同机竞争」后的结果，会低估独立压测机下的真实上限。
+
+
+## 服务端指标采集（collect-metrics.sh）
+
+前端视角的延迟看不到连接池耗尽、GC 与堆压力，必须同时采集服务端指标。
+
+前置：后端需暴露 prometheus 端点
+
+```bash
+LEO_MANAGEMENT_ENDPOINTS=health,prometheus,loggers bash leo/scripts/backend/start-dev.sh
+```
+
+用法（与压测共用同一个 token，见下方「会话唯一性」）：
+
+```bash
+export LEO_PERF_TOKEN=<共享 token>
+bash leo/perf/collect-metrics.sh watch <输出.csv> <秒数> [采样间隔秒] &
+bash leo/perf/collect-metrics.sh summary <输出.csv>
+```
+
+采集内容：Hikari 活跃/空闲/等待/获取超时、JVM 堆与存活线程、Tomcat 忙碌线程、
+进程与系统 CPU、Spring Cache 命中率、服务端请求计数与最大耗时。
+
+注意：
+- `cache_*` 只覆盖 Spring Cache region（options/static/project-options）。
+  权限缓存走 RedisJsonCacheSupport 的裸 Redis 写入，不产生 micrometer 缓存指标。
+- Tomcat 线程/连接指标需额外设置 `SERVER_TOMCAT_MBEANREGISTRY_ENABLED=true`，
+  未开启时 `tomcat_*` 列恒为 0。
+
+## 会话唯一性（重要，否则压测结果完全失真）
+
+服务端对同一账号存在**会话数上限**（`SessionManagementService.DEFAULT_MAX_REFRESH_TOKENS = 3`，
+硬编码不可配置）。第 4 次登录会吊销并拉黑最旧会话，该会话的 access token 立即返回 401。
+
+因此**压测用例、指标采集器与任何辅助调用必须共用同一个会话**，绝不能各自登录：
+
+```bash
+export LEO_PERF_TOKEN=<只登录一次得到>     # run.sh 会自动导出
+k6 run leo/perf/k6/03-read-mixed.js         # setup() 复用该 token，不再登录
+```
+
+历史上因为各自登录，曾出现 86.77% 与 92.52% 的失败率（18,254 请求中有 3,615 次
+登录、11,248 个 401、7,902 次连接池获取超时），吞吐与延迟数据全部不可用。
+
+## 并发正确性专项结论（08-concurrency.js）
+
+| 场景 | 结果 | 判定 |
+|---|---|---|
+| 同一角色权限并发替换（10 并发） | 200×1811 / 409×6293（77.6% 冲突） | 最终权限集正确无重复；`SysRolePermission` 无 `@Version`，冲突源自 `deleteByRoleId`+`saveAll` 撞唯一索引，失败事务整体回滚 |
+| 幂等键并发重放（10 并发同键） | 201×1 / 422×9 | exactly-once 成立（只创建 1 条）；但落败请求返回 422「编码已失效」而非重放原始响应 |
+| 同一客户编码并发创建（10 并发） | 201×1 / 409×9 | 唯一性正确，其余请求得到明确的冲突信号 |
+
+导入/导出类接口未覆盖并发写；导出（07-heavy）实测单请求 47–65ms，是普通接口的约 8 倍。
+
+## Soak 长时稳定性（09-soak.js）
+
+```bash
+export LEO_PERF_TOKEN=<共享 token>
+bash leo/perf/collect-metrics.sh watch tmp/soak.csv 7300 30 &
+LEO_PERF_SOAK_VUS=40 LEO_PERF_SOAK_DURATION=2h k6 run leo/perf/k6/09-soak.js
+```
+
+只读、不产生业务数据。40 VU 是该实例接近饱和但不自我压垮的档位
+（实测 40 VU 约 1,010 req/s，高于 300 VU 的 909 req/s，说明 300 VU 已过饱和点）。
+用 `summary` 看 JVM 堆与连接池的**趋势**而非绝对值——泄漏表现为单调上升。
