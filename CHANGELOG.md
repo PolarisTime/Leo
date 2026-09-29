@@ -1,3 +1,15 @@
+# [12.1.0](https://github.com/PolarisTime/Leo/compare/v12.0.0...v12.1.0) (2026-09-29)
+
+
+### Features
+
+* **inventory:** 出库可用量不足即拒绝并收敛守恒校验口径 ([51daaa5](https://github.com/PolarisTime/Leo/commit/51daaa5431878a011cd5e5be09295b41223bd15e))
+
+
+### Reverts
+
+* **pricelist:** 回退供应商价格表改造, 恢复手填比价 ([b80df5c](https://github.com/PolarisTime/Leo/commit/b80df5c13191fb3af2f06ea7a4da017edc9ce7e5))
+
 # [12.0.0](https://github.com/PolarisTime/Leo/compare/v11.19.1...v12.0.0) (2026-09-28)
 
 
