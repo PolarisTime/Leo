@@ -11,7 +11,7 @@
 |---|---|---|
 | 1 并发写与幂等重放 | ✅ 完成 | 冲突率随写入对象而变：角色权限行 74.9% 409、**同一单据 90.0% 409**，但**最终数据都正确、无丢失更新**；幂等 exactly-once 成立 |
 | 2 服务端指标 + 缓存收益 | ✅ 完成 | 缓存使吞吐 **+11.8%**、p99 **−20%**（推翻此前「不会抬高天花板」的判断） |
-| 3 重负载接口覆盖 | ✅ 完成 | 读接口 10 → **21**；导出并发下 100 ms、导入预览 33.5 ms，30 VU 混合负载 **0 失败** |
+| 3 重负载接口覆盖 | ✅ 完成 | 读接口 10 → **21**；导出并发下 100 ms、导入预览 33.5 ms，30 VU 混合负载 **0 失败**；附件上传/下载路径也已覆盖（本地存储口径） |
 | 4 Redis 降级 + 缓存雪崩 | ✅ 完成 | Redis 不可用：登录 503、health 503、**已登录请求 500**（初稿的「401」结论已撤回，原因与表现都错了） |
 | 5 Soak 长时稳定性 | ✅ 完成 | 2 小时 **717 万请求、0 失败**，吞吐 989–999 req/s 无退化，**无内存泄漏** |
 
@@ -163,8 +163,9 @@ Hikari 连接池（活跃/空闲/等待/**获取超时**）、JVM 堆与线程�
 | | | | ＋11 | `GET /inventory/balances` |
 
 路径中的 `{companyId}` 由 `endpointPath()` 用统一解析的结算主体 ID 替换。
-写路径覆盖：销售订单导出、物料导入预览（dry-run）、同一单据/同一行并发写（第 1 项）。
-**附件路径本环境无法压测**，原因见第九节（S3 凭据失效且无删除接口）。
+写路径覆盖：销售订单导出、物料导入预览（dry-run）、**附件上传**、同一单据/同一行并发写（第 1 项）。
+对账（`GET /customer-statements`、`GET /cash-ledger`）、库存（`GET /inventory/balances`、
+`GET /inventory/transactions`）、财务（`GET /finance/overview`）均已纳入读混合集。
 
 ### 单请求开销（1 客户端顺序请求、预热后取稳态）
 
@@ -198,6 +199,32 @@ Hikari 连接池（活跃/空闲/等待/**获取超时**）、JVM 堆与线程�
 这才是重负载接口的真实画像：**导出从稳态 4.5 ms 放大到 100 ms（22 倍）**，
 因为 Apache POI 生成 XLSX 是 CPU 密集操作，并发下 CPU 被打满（客户端与服务端同机，8 核共享）。
 导入预览在并发下反而只有 33.5 ms——它是 dry-run，但 **实测物料总数前后不变，确认不落库**。
+
+### 附件上传/下载（此前完全未覆盖，本轮补齐）
+
+附件原本连一次都跑不起来：`.env.local` 的 COS/S3 凭据已失效
+（`S3 上传失败: HTTP 403 The Access Key Id you provided does not exist in our records`），
+且附件**没有删除接口**，传上去也清理不掉。
+
+本轮改为以 `leo.attachment.storage.type=local` 启动后端（用 `SPRING_APPLICATION_JSON` 覆盖——
+`scripts/env/dev.sh` 会把 `.env.local` 的值**再导出一次**，OS 环境变量压不住它，这一点踩过一次），
+从而把上传/下载接口本身压了起来：
+
+| 路径 | 结果 |
+|---|---|
+| `POST /v2.0/attachments/upload`（multipart，64 KB，10 VU 并发、200 次） | avg **62.91 ms**、p90 97.01 ms、p95 119.88 ms、p99 209.59 ms、max 254.32 ms；200/200 成功 |
+| `GET /v2.0/attachments/{id}/content`（10 VU、30 s） | **21,327 次**、avg **13.8 ms**、p95 19.54 ms、p99 24.86 ms、max 44.17 ms（≈634 req/s） |
+| 合计 | 21,547 请求、**0 失败**、checks 100%、非预期状态码 **0** |
+| 服务端窗口 | 连接池获取超时 **0**、活跃峰值 6/20、堆峰值 526.2 MB |
+
+**口径必须一并说明**：这里测的是 **local 存储**下的附件接口（multipart 解析、落库、落盘、内容流式返回），
+**S3 客户端、签名 URL 与网络往返不在测量范围内**；生产走 S3 时这部分开销只会更高。
+下载接口需要认证（无 token 返回 401），`accessKey` 只是补充凭据。
+
+清理：`sourceType` 是服务端白名单（只允许 `PAGE_UPLOAD` / `CLIPBOARD`），不能当标记用，
+因此附件文件名带运行标记（`perf-attach-<RUN_ID>.txt`），
+`cleanup-perf-data.sh --attachments --yes` 可按标记删除记录与本地文件（已实测删净 221 条 + 220 个目录）。
+脚本对删除路径做了越界与 id 一致性校验——附件没有回收站，删错不可逆。
 
 ## 五、第 4 项：Redis 降级与缓存雪崩
 
@@ -414,10 +441,11 @@ private static final int DEFAULT_MAX_REFRESH_TOKENS = 3;   // 硬编码，不可
    导出在并发下从 4.5 ms 放大到 100 ms 是**同机 CPU 争用**的结果，生产量级（多明细行）会更高。
 3. **仅一个测试账号**：权限缓存只有 1 个 key，多用户雪崩、多用户会话竞争无法模拟。
 4. **沙箱无法观测宿主进程**：拿不到后端进程级 CPU/内存明细，只能用 `/proc` 与 Prometheus 间接推断。
-5. **附件路径未能压测（环境所限，非方法取舍）**：上传实测直接失败
-   —— `S3 上传失败: HTTP 403 The Access Key Id you provided does not exist in our records`，
-   即 `.env.local` 中的 COS/S3 凭据已失效。另外附件**没有删除接口**
-   （只有 upload / access-url / content），即使能上传也无法清理。导入预览已覆盖（见第四节）。
+5. **附件只覆盖了 local 存储口径**：S3/COS 路径仍未验证——`.env.local` 里的凭据已失效
+   （`S3 上传失败: HTTP 403 The Access Key Id you provided does not exist in our records`）。
+   第四节的上传/下载数字来自 `leo.attachment.storage.type=local`，
+   **不含 S3 客户端、签名 URL 与对象存储网络往返**。另外附件**没有删除接口**
+   （只有 upload / access-url / content），压测数据只能靠 `cleanup-perf-data.sh --attachments` 走 SQL 清理。
 6. **同一单据并发写只有 1 张可写草稿单**（其余草稿为 E2E 软删残留，PUT 返回 404），
    因此 D 场景只能针对单张单据、且会推进其 `version`（测试后 remark 已还原）。
    新建一张可写单据在 dev 库不可行：**采购来源明细已全部被占用**（`source-candidates` 返回 0 条），

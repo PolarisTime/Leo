@@ -19,8 +19,9 @@ leo/perf/
 │   ├── 05-spike.js            激进冲击：默认拉到 800 VU 并保持
 │   ├── 06-login.js            登录专项：量化同账号/多账号并发登录行为
 │   ├── 07-heavy.js            重负载专项：xlsx 导出与计算密集接口
-│   ├── 08-concurrency.js      并发正确性：同一行并发写 + 幂等重放
-│   └── 09-soak.js             Soak 长时稳定性：恒定负载找出泄漏类问题
+│   ├── 08-concurrency.js      并发正确性：同一行/同一单据并发写 + 幂等重放
+│   ├── 09-soak.js             Soak 长时稳定性：恒定负载找出泄漏类问题
+│   └── 10-attachments.js      附件专项：上传/下载（需后端以 local 附件存储启动）
 ├── collect-metrics.sh         采集服务端 Prometheus 指标（连接池/JVM/缓存）
 ├── soak-runner.sh             分段运行 2 小时 soak 并逐段校验失败率
 ├── soak-aggregate.py          聚合分段 soak 结果
@@ -355,6 +356,33 @@ Spring Cache，而认证链路用的是裸 `StringRedisTemplate`，
 另注意 `scripts/backend/start-dev.sh` 含 Redis 预检，Redis 不可用时**直接拒绝启动**，
 因此本脚本直接调 `scripts/maven.sh spring-boot:run` 以绕开该预检。
 
+
+## 附件专项（10-attachments.js）
+
+```bash
+# 必须让后端以本地附件存储启动：S3 凭据已失效，而且上传失败时连一次都跑不起来。
+# 注意 SPRING_APPLICATION_JSON 的优先级高于 OS 环境变量——scripts/env/dev.sh 会把
+# .env.local 里的 LEO_ATTACHMENT_STORAGE_TYPE=s3 再导出一次，普通 env 覆盖会被它盖住。
+SPRING_APPLICATION_JSON='{"leo":{"attachment":{"storage":{"type":"local","local":{"path":"/abs/path/uploads"}}}}}' \
+  LEO_MANAGEMENT_ENDPOINTS=health,prometheus,loggers bash leo/scripts/backend/start-dev.sh
+
+LEO_PERF_ENV_FILE=tmp/perf/creds.env bash leo/perf/run.sh attachments
+```
+
+实测（local 存储口径）：上传 64 KB multipart、10 VU 并发 200 次 → p95 119.88 ms；
+下载 10 VU、30 s → 21,327 次、p95 19.54 ms，**0 失败**。
+口径限制：**不含 S3 客户端、签名 URL 与对象存储网络往返**。
+
+清理（附件没有删除接口，只能走 SQL；脚本会校验路径不越界且与 id 一致）：
+
+```bash
+source leo/scripts/env/dev.sh
+LEO_ATTACHMENT_LOCAL_PATH=/abs/path/uploads bash leo/perf/cleanup-perf-data.sh --attachments        # 预演
+LEO_ATTACHMENT_LOCAL_PATH=/abs/path/uploads bash leo/perf/cleanup-perf-data.sh --attachments --yes    # 执行
+```
+
+`sourceType` 是服务端白名单（只允许 `PAGE_UPLOAD` / `CLIPBOARD`），不能当清理标记；
+因此附件**文件名**带运行标记 `perf-attach-<RUN_ID>.txt`。
 
 ## 编辑 shell 脚本后必须做静态检查
 
