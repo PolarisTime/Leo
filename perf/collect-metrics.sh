@@ -38,24 +38,43 @@ login_once() {
     | jq -r '.accessToken // empty'
 }
 
+LOGIN_COUNT=0
+
 # 只登录一次并复用 token。
-# 每采样一次就登录一次会与被压测用例的 setup 登录竞争同一账号（sys_user 乐观锁 409），
-# 一旦把 setup 打成 409，被测用例会退化为「每个 VU 每次迭代重登」的登录风暴，
-# 从而把系统压垮并彻底污染测量结果。因此这里绝不能在采样循环里反复登录。
-fetch_prometheus() {
-  [[ -n "$TOKEN" ]] || TOKEN="$(login_once)"
+#
+# 为什么必须如此：服务端同账号会话上限硬编码为 3（SessionManagementService），
+# 第 4 次登录会吊销并拉黑最旧会话。若采集器每次采样都登录，就会把**正在被压测的
+# 那个会话**逐步顶掉，表现为被测用例大面积 401。
+#
+# 这个坑真实发生过：`fetch_prometheus` 被 `body="$(fetch_prometheus)"` 以**命令替换**
+# 调用，函数内部的 `TOKEN=...` 赋值只存在于子 shell，永远传不回父 shell，
+# 于是 TOKEN 一直为空、每采样一次登录一次。实测一次 07-heavy：采集器每 ~6 秒登录一次，
+# 346,686 个请求里 99.3% 变成 401，而业务日志里看不到任何异常，极易被误读成接口故障。
+# 现改为「写文件 + 计数」，并对多余登录告警。
+ensure_token() {
+  [[ -n "$TOKEN" ]] && return 0
+  TOKEN="$(login_once)"
+  LOGIN_COUNT=$(( LOGIN_COUNT + 1 ))
   [[ -n "$TOKEN" ]] || fail "登录失败，无法读取 /actuator/prometheus"
-  local tmp code
-  tmp="$(mktemp)"
-  code="$(curl -s --max-time 20 -o "$tmp" -w '%{http_code}' \
+  return 0
+}
+
+# 采集一次指标写入文件 $1。
+# ⚠ 必须直接调用，不要在 `$( )` 里调用本函数，否则 TOKEN/LOGIN_COUNT 的赋值会丢在子 shell。
+fetch_prometheus_to() {
+  local out="$1" code
+  ensure_token
+  code="$(curl -s --max-time 20 -o "$out" -w '%{http_code}' \
     -H "Authorization: Bearer $TOKEN" "$BASE_URL/actuator/prometheus")"
   if [[ "$code" != "200" ]]; then
-    TOKEN="$(login_once)"
-    code="$(curl -s --max-time 20 -o "$tmp" -w '%{http_code}' \
+    log "⚠ /actuator/prometheus 返回 $code，重新登录一次后重试"
+    TOKEN=""
+    ensure_token
+    code="$(curl -s --max-time 20 -o "$out" -w '%{http_code}' \
       -H "Authorization: Bearer $TOKEN" "$BASE_URL/actuator/prometheus")"
   fi
-  cat "$tmp"
-  rm -f "$tmp"
+  [[ "$code" == "200" ]] || { log "⚠ 本轮采样失败（HTTP $code），跳过"; return 1; }
+  return 0
 }
 
 # 指标求和（忽略标签）；$1=prometheus文本 $2=指标名 $3=可选标签筛选
@@ -100,9 +119,14 @@ cmd_watch() {
   } > "$out"
   log "开始采样 ${seconds}s，间隔 ${interval}s -> $out"
   local end=$(( $(date +%s) + seconds ))
+  local tmp; tmp="$(mktemp)"
   while (( $(date +%s) < end )); do
     local body
-    body="$(fetch_prometheus)" || { sleep "$interval"; continue; }
+    if ! fetch_prometheus_to "$tmp"; then
+      sleep "$interval"
+      continue
+    fi
+    body="$(cat "$tmp")"
     {
       printf '%s' "$(date +%H:%M:%S)"
       for c in "${COLUMNS[@]}"; do
@@ -115,7 +139,14 @@ cmd_watch() {
     } >> "$out"
     sleep "$interval"
   done
-  log "采样结束，共 $(( $(wc -l < "$out") - 1 )) 个数据点"
+  rm -f "$tmp"
+  log "采样结束，共 $(( $(wc -l < "$out") - 1 )) 个数据点，采集期间登录 $LOGIN_COUNT 次"
+  # 多于一次登录就是危险信号：多余会话会顶掉正在被压测的会话。
+  # 这里只告警不失败——采集本身仍然有效，但被测用例的失败率可能因此失真。
+  if (( LOGIN_COUNT > 1 )); then
+    log "⚠⚠ 采集期间登录了 $LOGIN_COUNT 次：同账号会话上限为 3，多余登录会吊销既有会话，"
+    log "    若同时有压测在跑，其 401 可能由本采集器造成。请通过 LEO_PERF_TOKEN 复用共享会话。"
+  fi
 }
 
 cmd_summary() {
@@ -198,10 +229,73 @@ cmd_trend() {
         printf "→ 请延长观测窗口后重跑 trend\n"
         exit
       }
-      printf "堆内存增长斜率: %+.2f MB/小时", perHour
-      if (perHour > 8) printf "  ⚠ 持续增长明显，疑似内存泄漏\n"
-      else if (perHour > 2) printf "  ⚠ 轻微上升，建议结合 GC 指标复核\n"
-      else printf "  ✅ 基本平稳，未见泄漏迹象\n"
+      # ---- 锯齿诊断 + 存活水位斜率 ----
+      # heap_used 在持续压力下是锯齿波：每轮 GC 把堆拉回低水位，再逐步涨回去。
+      # 此时**均值**的最小二乘斜率会被 GC 相位主导，正负都可能翻——同一份稳态负载
+      # 在 71.8 分钟窗口算出 -65.13 MB/h、在 119.9 分钟窗口算出 +18.92 MB/h，
+      # 两者互相矛盾，都不能当作泄漏证据。
+      # 泄漏的真实特征不是均值升高，而是 **GC 后的存活水位单调抬高**（对象回收不掉）。
+      # 因此判定改用「分桶最小值」的斜率：桶内 GC 次数足够时，最小值≈存活水位。
+      # 并且必须做显著性检验：真实数据的水位本身就有 ±35 MB 的抖动，
+      # 只看斜率会给出一条毫无意义的「+7 MB/h」并误报为「轻微上升」。
+      buckets = (n >= 24) ? 12 : 0
+      bsize = (buckets > 0) ? int(n/buckets) : n
+      if (bsize < 2) bsize = 2
+      for (r=1; r<=n; r++) {
+        split(row[r], a, ","); v=a[hi]+0
+        if (v > gmax) gmax=v
+        if (r==1 || v < gmin) gmin=v
+        if (r > 1 && pv - v > 10*1048576) {
+          gcCount++; gcReclaimed += (pv - v); gcb[int((r-2)/bsize)]++
+        }
+        pv = v
+      }
+      printf "锯齿诊断: 峰谷幅度 %.1f MB，GC 回收(单次 >10MB) %d 次，共回收 %.0f MB\n", \
+        (gmax-gmin)/1048576, gcCount, gcReclaimed/1048576
+      if (buckets == 0) {
+        printf "堆内存存活水位斜率: 样本仅 %d 个，不足以做分桶水位分析，只能参考均值斜率\n", n
+      } else {
+        nb = 0
+        for (r=1; r<=n; r++) {
+          split(row[r], a, ","); v=a[hi]+0
+          b = int((r-1)/bsize)
+          if (!(b in bmin) || v < bmin[b]) bmin[b]=v
+          if (b+1 > nb) nb = b+1
+        }
+        for (k=0; k<nb; k++) { x=k+1; y=bmin[k]/1048576; sx2+=x; sy2+=y; sxx2+=x*x; sxy2+=x*y
+          if (!(k in gcb)) emptyGC++ }
+        den2 = nb*sxx2 - sx2*sx2
+        slope2 = (den2 != 0) ? (nb*sxy2 - sx2*sy2)/den2 : 0
+        mx2 = sx2/nb; my2 = sy2/nb
+        inter2 = my2 - slope2*mx2
+        for (k=0; k<nb; k++) { x=k+1; e=(bmin[k]/1048576)-(inter2+slope2*x); sse2 += e*e }
+        residVar = (nb > 2) ? sse2/(nb-2) : 0   # 注意不能叫 s2：上面 s1/s2 已是数组
+        se = (sxx2 > sx2*sx2/nb) ? sqrt(residVar/(sxx2 - sx2*sx2/nb)) : 0
+        perHour2 = slope2 * 3600 / (bsize*interval)   # 每桶跨 bsize*interval 秒
+        seHour = se * 3600 / (bsize*interval)
+        tStat = (seHour > 0) ? (perHour2/seHour) : 0
+        printf "堆内存存活水位斜率(GC 后最小值, %d 桶): %+.2f ± %.2f MB/小时（t=%.2f）\n", \
+          nb, perHour2, seHour, tStat
+        printf "  首桶水位 %.1f MB → 末桶水位 %.1f MB\n", bmin[0]/1048576, bmin[nb-1]/1048576
+        if (emptyGC > 0) printf "  注意: %d 个桶内未观察到 >10MB 的回收，其最小值可能不是真实存活水位\n", emptyGC
+        printf "  （对比）均值斜率: %+.2f MB/小时（受 GC 相位影响，仅供参考）\n", perHour
+        perHour = perHour2
+        # 显著性门槛：|t| < 2 时把斜率判为噪声。合成数据双向验证：
+        # 注入 +60 MB/h → t=56、注入 +20 MB/h → t=14.7（均判为泄漏）；
+        # 无泄漏 → t=0；带 ±25MB 水位噪声的无泄漏 → t=0.13（均判为未见泄漏）。
+        if (tStat < 2 && tStat > -2) noiseOnly = 1
+      }
+
+      if (noiseOnly) {
+        printf "堆内存增长判定: %+.2f MB/小时，但 t=%.2f < 2（漂移在噪声范围内）  ✅ 未见泄漏迹象\n", \
+          perHour, tStat
+      } else if (perHour > 8) {
+        printf "堆内存增长判定: %+.2f MB/小时，t=%.2f  ⚠ 持续增长明显，疑似内存泄漏\n", perHour, tStat
+      } else if (perHour > 2) {
+        printf "堆内存增长判定: %+.2f MB/小时，t=%.2f  ⚠ 轻微上升，建议结合 GC 指标复核\n", perHour, tStat
+      } else {
+        printf "堆内存增长判定: %+.2f MB/小时，t=%.2f  ✅ 基本平稳，未见泄漏迹象\n", perHour, tStat
+      }
       # 连接池与错误累积
       # 计数器必须看区间增量：hikaricp_connections_timeout_total 是自进程启动的累计值，
       # 直接打印绝对值会把「本窗口开始前就存在」的历史残留误读成本次窗口的问题

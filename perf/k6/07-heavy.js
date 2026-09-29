@@ -47,6 +47,12 @@ const exportFailures = new Counter('heavy_export_failures');
 const readTrend = new Trend('heavy_read_duration', true);
 const importTrend = new Trend('heavy_import_preview_duration', true);
 const importFailures = new Counter('heavy_import_preview_failures');
+// 按 HTTP 状态码分桶计数。
+// 为什么要它：重度失败时 k6 的 check 只给出「1% 通过」，看不出失败原因——实测一次
+// 98% 失败（346,686 请求）时，business 日志里几乎无异常，无法区分 401（会话失效）、
+// 400（参数/结算主体缺失）、403（权限）与 5xx。没有状态码分布就只能靠猜。
+const statusCount = new Counter('heavy_status');
+const recordStatus = (res) => statusCount.add(1, { status: String(res.status) });
 
 export const options = {
   scenarios: {
@@ -66,6 +72,14 @@ export const options = {
     },
   },
   summaryTrendStats: SUMMARY_TREND_STATS,
+  thresholds: {
+    // 没有阈值的后果不是「少一层检查」，而是**假通过**：k6 在 98.05% 请求失败时
+    // 仍返回 0，run.sh 照旧打印「07-heavy 通过」。按读写分别设限，
+    // 因为导入预览/导出是写路径，失败原因往往与读路径不同。
+    'http_req_failed{kind:read}': ['rate<0.01'],
+    'http_req_failed{kind:write}': ['rate<0.01'],
+    checks: ['rate>0.99'],
+  },
 };
 
 export function setup() {
@@ -96,7 +110,9 @@ export function setup() {
     importCsv = `${tpl.body.replace(/\r?\n$/, '')}\nPTEST-PERF-001,压测品牌,压测材质,实体商品,规格A,12米,吨,件,0,0,0,压测预览行\n`;
   }
 
-  return { token: base.token, issuedAt: base.issuedAt, salesOrderId, importCsv };
+  // 必须整体展开 base：漏传 expiresAt 会让 ensureToken 认为共享 token 恒失效，
+  // 每个 VU 各自重登 → 触发服务端会话上限（3）的吊销级联 → 大面积 401。
+  return Object.assign({}, base, { salesOrderId, importCsv });
 }
 
 export default function (data) {
@@ -122,6 +138,7 @@ export default function (data) {
       }
     );
     importTrend.add(res.timings.duration);
+    recordStatus(res);
     if (!check(res, { '导入预览返回 201': (r) => r.status === 201 })) {
       importFailures.add(1);
     }
@@ -136,6 +153,7 @@ export default function (data) {
       writeParams(token, 'POST /v2.0/sales-orders/{id}/xlsx-exports')
     );
     exportTrend.add(res.timings.duration);
+    recordStatus(res);
     const ok = check(res, { '导出返回 200': (r) => r.status === 200 });
     if (!ok) {
       exportFailures.add(1);
@@ -149,5 +167,6 @@ export default function (data) {
     readParams(token, endpoint.name, endpoint.anonymous)
   );
   readTrend.add(res.timings.duration);
+  recordStatus(res);
   check(res, { '重负载读返回 200': (r) => r.status === 200 });
 }

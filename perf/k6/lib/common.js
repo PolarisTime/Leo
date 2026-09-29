@@ -155,8 +155,18 @@ export function setupToken() {
  */
 export function ensureToken(shared) {
   const now = Date.now();
-  // 以 JWT 真实 exp 判断有效性（留安全边界），而非硬编码期限
-  if (shared && shared.token && now < (shared.expiresAt || 0) - TOKEN_SAFETY_MARGIN_MS) {
+  // 以 JWT 真实 exp 判断有效性（留安全边界），而非硬编码期限。
+  //
+  // shared.expiresAt 缺失时必须回退为**直接解析 token 的 exp**，不能当成 0：
+  // 07-heavy / 08-concurrency 的 setup() 曾只回传 {token, issuedAt} 而漏掉 expiresAt，
+  // 于是 `now < (undefined||0) - 60000` 恒为假 → 每个 VU 都各自重登一次。
+  // 服务端同账号会话上限硬编码为 3，多余登录会吊销并拉黑既有会话，
+  // 实测因此产生 86.77% 的 401（346,686 请求里 339,955 失败），而 business 日志里
+  // 几乎看不到异常，极易被误读成「接口本身故障」。这里做双保险，避免再次踩坑。
+  const sharedExpiresAt = shared && shared.token
+    ? (shared.expiresAt || jwtExpiryMs(shared.token))
+    : 0;
+  if (shared && shared.token && now < sharedExpiresAt - TOKEN_SAFETY_MARGIN_MS) {
     return shared.token;
   }
   if (cachedToken && now < cachedExpiresAt - TOKEN_SAFETY_MARGIN_MS) {

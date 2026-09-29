@@ -1,0 +1,22 @@
+=== Redis 可用（正常实例 11211）2026-09-30 05:19:06 ===
+GET /health                              -> HTTP 200  {"status":"UP","timestamp":"2026-09-30 05:19:06"}
+GET /version                             -> HTTP 200  {"app":"leo","version":"12.1.0","gitCommit":"35464b8","buildTime":"2026-09-29T17:55:43.042Z"}
+GET /account (有效 token)              -> HTTP 200  {"id":"332601640831950848","loginName":"admin_prod","userName":"系统管理员","mobile":"","lastLoginDate":"2026-09-30T05:19:06.574752+08:00","remark":"网页
+GET /sales-orders (有效 token)         -> HTTP 200  {"content":[{"id":"358756731158790144","orderNo":"358756731158790144","purchaseInboundNo":"358756485246746624","purchaseOrderNo":"358756223224381440","customerC
+GET /account (坏签名 token)           -> HTTP 401  {"type":"urn:leo:problem:unauthorized","title":"未登录或登录已失效","status":401,"detail":"登录状态已失效，请重新登录","instance":"/api/v2
+POST /auth/login                         -> HTTP 200  {"accessToken":"eyJraWQiOiIwIiwiYWxnIjoiSFM1MTIifQ.eyJpc3MiOiJsZW8tZXJwIiwic3ViIjoiYWRtaW5fcHJvZCIsInVpZCI6MzMyNjAxNjQwODMxOTUwODQ4LCJzaWQiOiIyMDZkNzY2Yi0yNTBlL
+
+=== Redis 不可用（故障实例 11212，Redis 端口 16380）2026-09-30 05:19:07 ===
+--- 以下 4 条为有效 token，且同一 token 刚刚在 11211 上确认 200 ---
+GET /health                              -> HTTP 503  {"status":"DEGRADED","timestamp":"2026-09-30 05:19:07"}
+GET /version                             -> HTTP 200  {"app":"leo","version":"12.1.0","gitCommit":"30ed5c5","buildTime":"2026-09-29T21:18:41.776Z"}
+GET /account (有效 token)              -> HTTP 500  {"timestamp":"2026-09-29T21:19:07.140+00:00","status":500,"error":"Internal Server Error","trace":"org.springframework.data.redis.RedisConnectionFailureExceptio
+GET /sales-orders (有效 token)         -> HTTP 500  {"timestamp":"2026-09-29T21:19:07.172+00:00","status":500,"error":"Internal Server Error","trace":"org.springframework.data.redis.RedisConnectionFailureExceptio
+--- 判别探针：坏签名 token（用于区分 401 与 5xx） ---
+GET /account (坏签名 token)           -> HTTP 401  {"type":"urn:leo:problem:unauthorized","title":"未登录或登录已失效","status":401,"detail":"登录状态已失效，请重新登录","instance":"/api/v2
+POST /auth/login                         -> HTTP 503  {"type":"urn:leo:problem:internal-error","title":"系统内部错误","status":503,"detail":"幂等服务暂不可用，请稍后重试","instance":"/api/v2.0/a
+
+--- 故障实例日志中的异常类型计数 ---
+RedisConnectionFailureException: 4
+ExpiredJwtException:             0
+JwtException:                    0

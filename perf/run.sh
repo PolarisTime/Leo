@@ -98,24 +98,51 @@ resolve_company_id() {
   log "自动解析结算主体 ID: $id"
 }
 
+FAILED=0
+
+# 失败率读数：把 http_req_failed 打出来，避免「通过/失败」只有一个字，看不出量级。
+# 教训：07-heavy 曾以 98.05% 失败跑完（346,686 请求里 339,955 失败），
+# 但当时脚本既无阈值也不是零退出码，run.sh 照样打印「07-heavy 通过」。
+# 现在 k6 脚本自带 thresholds，且这里对读数与退出码双重把关。
+report_failure_rate() {
+  local name="$1" json="$RESULT_DIR/$name.json" rate
+  [[ -f "$json" ]] || { printf '?'; return; }
+  rate="$(jq -r '.metrics.http_req_failed.value // empty' "$json" 2>/dev/null)"
+  if [[ -n "$rate" ]]; then
+    awk -v r="$rate" 'BEGIN { printf "%.3f%%", r*100 }'
+  else
+    printf '?'
+  fi
+}
+
 run_k6() {
   local name="$1"; shift
   log "===== 开始 $name ====="
+  local rc=0
   set +e
   "$K6" run "$@" --summary-export "$RESULT_DIR/$name.json" 2>&1 | tee "$RESULT_DIR/$name.log"
-  local rc=${PIPESTATUS[0]}
+  rc=${PIPESTATUS[0]}
   set -e
+  local rate; rate="$(report_failure_rate "$name")"
+  # 兜底阈值可覆盖：race 阶段以 409 冲突为被测现象（k6 把非 2xx/3xx 计为 failed），
+  # 其「失败率」本就很高，真正的异常由脚本内的 race_unexpected_status 阈值把关。
+  local max_rate="${STAGE_MAX_FAILURE_RATE:-1}"
   if [[ $rc -ne 0 ]]; then
-    log "$name 结束，k6 退出码=$rc（阈值未达标或发生错误，详见 $RESULT_DIR/$name.log）"
+    log "$name 失败：k6 退出码=$rc，http_req_failed=$rate（详见 $RESULT_DIR/$name.log）"
+    FAILED=1
+  elif [[ "$rate" != "?" ]] && awk -v r="${rate%\%}" -v m="$max_rate" 'BEGIN { exit !(r > m) }'; then
+    # k6 阈值若是漏配，这里仍然兜住：失败率超过本阶段上限一律视为失败。
+    log "$name 失败：k6 返回 0，但 http_req_failed=$rate 超过 ${max_rate}% 兜底阈值"
+    FAILED=1
   else
-    log "$name 通过"
+    log "$name 通过（http_req_failed=$rate）"
   fi
   return 0
 }
 
 run_smoke()  { resolve_company_id; run_k6 "01-smoke" "$K6_DIR/01-smoke.js"; }
 run_heavy()  { resolve_company_id; run_k6 "07-heavy" "$K6_DIR/07-heavy.js"; }
-run_race()   { resolve_company_id; run_k6 "08-concurrency" "$K6_DIR/08-concurrency.js"; }
+run_race()   { resolve_company_id; STAGE_MAX_FAILURE_RATE=90 run_k6 "08-concurrency" "$K6_DIR/08-concurrency.js"; }
 run_soak()   { resolve_company_id; run_k6 "09-soak" "$K6_DIR/09-soak.js"; }
 run_metrics() {
   local seconds="${1:-300}" interval="${2:-5}"
@@ -150,3 +177,9 @@ case "$STAGE" in
     ;;
   *) fail "未知阶段: $STAGE（可选 smoke|baseline|read|write|spike|heavy|race|soak|metrics|all）" ;;
 esac
+
+# 阶段失败必须以非零退出码结束：否则 CI/调用方会把「跑完了」当成「跑对了」。
+if [[ $FAILED -ne 0 ]]; then
+  log "存在失败阶段，退出码 1"
+  exit 1
+fi
