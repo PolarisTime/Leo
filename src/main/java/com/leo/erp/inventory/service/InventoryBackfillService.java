@@ -234,11 +234,14 @@ public class InventoryBackfillService {
         salesReturnRepository.findAllByIdIn(page.stream().map(SalesReturn::getId).toList());
     }
 
+    /**
+     * 历史补记统一走 {@link InventoryTransactionCommand#recordBackfill}：
+     * 豁免可用量校验，避免「出库业务日期早于入库」的历史单据让整批回填回滚。
+     */
     private void record(PostedDocument document) {
         switch (document.transactionType()) {
-            case PURCHASE_IN -> inventoryCommand.recordPurchaseIn(document.input());
-            case SALES_OUT -> inventoryCommand.recordSalesOut(document.input());
-            case SALES_RETURN_IN -> inventoryCommand.recordSalesReturnIn(document.input());
+            case PURCHASE_IN, SALES_OUT, SALES_RETURN_IN ->
+                    inventoryCommand.recordBackfill(document.input(), document.transactionType());
             default -> throw new IllegalStateException("不支持的库存回填类型: " + document.transactionType());
         }
     }

@@ -104,20 +104,19 @@ class InventoryBalanceSnapshotRepositoryTest {
     }
 
     @Test
-    void findMismatches_shouldTolerateTinyResidualOnlyWhenQuantityZero() {
+    void findMismatches_shouldIgnoreAmountResidualWhenQuantityIsZero() {
         when(jdbcTemplate.query(anyString(), any(MapSqlParameterSource.class), any(RowMapper.class)))
                 .thenReturn(List.of());
 
         repository.findMismatches();
 
         ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<MapSqlParameterSource> paramsCaptor =
-                ArgumentCaptor.forClass(MapSqlParameterSource.class);
-        verify(jdbcTemplate).query(sqlCaptor.capture(), paramsCaptor.capture(), any(RowMapper.class));
+        verify(jdbcTemplate).query(sqlCaptor.capture(), any(MapSqlParameterSource.class), any(RowMapper.class));
         assertThat(sqlCaptor.getValue())
-                .contains("ABS(COALESCE(l.amount, 0) - COALESCE(b.amount, 0)) > :zeroQtyAmountTolerance")
-                .contains("COALESCE(l.quantity, 0) = 0 AND COALESCE(b.quantity, 0) = 0");
-        assertThat(paramsCaptor.getValue().getValue("zeroQtyAmountTolerance"))
-                .isEqualTo(new BigDecimal("0.05"));
+                // 数量归零维度以快照金额为准：金额差异不再参与不一致判定（历史价差残值）
+                .contains("COALESCE(l.quantity, 0) <> 0")
+                .contains("COALESCE(l.amount, 0)::numeric(14,2) <> COALESCE(b.amount, 0)::numeric(14,2)")
+                .doesNotContain("zeroQtyAmountTolerance")
+                .doesNotContain("ABS(COALESCE(l.amount, 0)");
     }
 }

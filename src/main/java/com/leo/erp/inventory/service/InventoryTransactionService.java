@@ -1,5 +1,7 @@
 package com.leo.erp.inventory.service;
 
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.inventory.api.InventoryTransactionCommand;
 import com.leo.erp.inventory.api.InventoryTransactionInput;
@@ -23,7 +25,10 @@ import java.util.Objects;
  *
  * <p>成本采用移动加权平均：出库/退货入账前读取 (material, warehouse) 当前余额
  * （{@code Σ signed qty} / {@code Σ signed amount}）得到单位成本；
- * 库内存量不足时不拒绝，按当前均价并记录 warn；无存量时用来源单价兜底。
+ * 无存量时用来源单价兜底。
+ *
+ * <p>业务侧不允许负库存：常规出库类事务在持锁内校验可用量，不足即拒绝整单并回滚；
+ * 期初回填补记历史单据时豁免该校验（见 {@link #recordBackfill}）。
  *
  * <p>幂等：同一来源明细同一事务类型在未删除状态下只记一次。反审核/删除软删事务。
  * 记账在同一事务内完成，读取余额前对库存维度加 PostgreSQL 事务级咨询锁防并发。
@@ -55,19 +60,25 @@ public class InventoryTransactionService implements InventoryTransactionCommand 
     @Override
     @Transactional
     public void recordPurchaseIn(InventoryTransactionInput input) {
-        record(input, InventoryTransactionType.PURCHASE_IN);
+        record(input, InventoryTransactionType.PURCHASE_IN, true);
     }
 
     @Override
     @Transactional
     public void recordSalesOut(InventoryTransactionInput input) {
-        record(input, InventoryTransactionType.SALES_OUT);
+        record(input, InventoryTransactionType.SALES_OUT, true);
     }
 
     @Override
     @Transactional
     public void recordSalesReturnIn(InventoryTransactionInput input) {
-        record(input, InventoryTransactionType.SALES_RETURN_IN);
+        record(input, InventoryTransactionType.SALES_RETURN_IN, true);
+    }
+
+    @Override
+    @Transactional
+    public void recordBackfill(InventoryTransactionInput input, InventoryTransactionType type) {
+        record(input, type, false);
     }
 
     @Override
@@ -117,7 +128,9 @@ public class InventoryTransactionService implements InventoryTransactionCommand 
                 transaction.getAmount().negate());
     }
 
-    private void record(InventoryTransactionInput input, InventoryTransactionType type) {
+    private void record(InventoryTransactionInput input,
+                        InventoryTransactionType type,
+                        boolean enforceAvailability) {
         if (input == null || input.lines() == null || input.lines().isEmpty()) {
             return;
         }
@@ -150,6 +163,9 @@ public class InventoryTransactionService implements InventoryTransactionCommand 
             InventoryBalanceTotals balance = type == InventoryTransactionType.PURCHASE_IN
                     ? InventoryBalanceTotals.EMPTY
                     : balanceReader.currentBalance(line.materialId(), warehouseId);
+            if (enforceAvailability) {
+                assertAvailableForOutbound(type, line, warehouseName, balance);
+            }
             BigDecimal unitCost = resolveUnitCost(type, line, warehouseId, balance);
             BigDecimal amount = resolveAmount(type, line, balance, unitCost);
             repository.save(buildTransaction(input, type, line, warehouseId, warehouseName, unitCost, amount));
@@ -164,6 +180,39 @@ public class InventoryTransactionService implements InventoryTransactionCommand 
                     type.direction() * line.quantity(),
                     amount);
         }
+    }
+
+    /**
+     * 出库类事务的可用量校验：业务侧不允许负库存，可用量不足即拒绝整单（事务回滚）。
+     *
+     * <p>必须在持有 (materialId, warehouseId) 咨询锁的事务内调用，且逐行处理、逐行更新快照，
+     * 因此同一单据内同一维度的多行会累计扣减后再校验，不会互相绕过。
+     */
+    private void assertAvailableForOutbound(InventoryTransactionType type,
+                                            InventoryTransactionInput.Line line,
+                                            String warehouseName,
+                                            InventoryBalanceTotals balance) {
+        if (!isOutbound(type)) {
+            return;
+        }
+        long available = balance.quantity();
+        if (available < line.quantity()) {
+            String material = line.materialCode() != null
+                    ? line.materialCode()
+                    : String.valueOf(line.materialId());
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "库存不足，无法出库：物料 " + material
+                            + " 在仓库「" + (warehouseName == null ? "未指定" : warehouseName) + "」当前可用 "
+                            + Math.max(available, 0) + " 件，本次需出库 " + line.quantity() + " 件"
+            );
+        }
+    }
+
+    /** 减少库存的事务类型；TRANSFER/COUNT_ADJUST 方向不固定，不参与可用量校验。 */
+    private static boolean isOutbound(InventoryTransactionType type) {
+        return type == InventoryTransactionType.SALES_OUT
+                || type == InventoryTransactionType.PURCHASE_RETURN_OUT;
     }
 
     private static Long resolveWarehouseId(InventoryTransactionInput.Line line, InventoryTransactionInput input) {

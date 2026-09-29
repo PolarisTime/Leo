@@ -23,12 +23,6 @@ public class InventoryBalanceSnapshotRepository {
     /** 无仓库维度的哨兵值；雪花ID恒为正，0 永不与真实仓库冲突。 */
     public static final long NO_WAREHOUSE = 0L;
 
-    /**
-     * 零数量维度的极小金额容差：吸收历史 2 位移动加权舍入残值，使数量归零的维度判定为一致；
-     * 非零维度仍按 {@code numeric(14,2)} 精确比较。
-     */
-    private static final BigDecimal ZERO_QUANTITY_AMOUNT_TOLERANCE = new BigDecimal("0.05");
-
     private static final String UPSERT_SQL = """
             INSERT INTO inv_balance (
                 material_id, warehouse_id, material_code, warehouse_name, batch_no,
@@ -87,6 +81,14 @@ public class InventoryBalanceSnapshotRepository {
             )
             """;
 
+    /**
+     * 守恒校验：数量必须与账本严格一致；金额仅在数量非零时精确比较。
+     *
+     * <p>数量归零的维度<b>以快照为准、不比较金额</b>：数量归零时 {@link #applyDelta} 会把快照金额
+     * 强制置 0，而账本会如实保留历史「出库移动加权均价 ≠ 对应入库单价」以及「出库业务日期早于入库」
+     * 造成的价差残值（期初回填补记历史单据后必然出现）。该残值不参与任何可用量与后续移动加权成本
+     * 计算（{@code InventoryBalanceReader#currentBalance} 对零数量维度返回 EMPTY），故不视为不一致。
+     */
     private static final String RECONCILE_SQL = """
             SELECT COALESCE(l.material_id, b.material_id) AS material_id,
                    COALESCE(l.warehouse_id, b.warehouse_id) AS warehouse_id,
@@ -106,12 +108,10 @@ public class InventoryBalanceSnapshotRepository {
             FULL OUTER JOIN inv_balance b
                 ON b.material_id = l.material_id AND b.warehouse_id = l.warehouse_id
             WHERE COALESCE(l.quantity, 0) <> COALESCE(b.quantity, 0)
-               OR CASE
-                    WHEN COALESCE(l.quantity, 0) = 0 AND COALESCE(b.quantity, 0) = 0 THEN
-                        ABS(COALESCE(l.amount, 0) - COALESCE(b.amount, 0)) > :zeroQtyAmountTolerance
-                    ELSE
-                        COALESCE(l.amount, 0)::numeric(14,2) <> COALESCE(b.amount, 0)::numeric(14,2)
-                  END
+               OR (
+                    COALESCE(l.quantity, 0) <> 0
+                    AND COALESCE(l.amount, 0)::numeric(14,2) <> COALESCE(b.amount, 0)::numeric(14,2)
+                  )
             """;
 
     private static final RowMapper<BalanceMismatch> MISMATCH_MAPPER = (rs, rowNum) -> new BalanceMismatch(
@@ -164,12 +164,10 @@ public class InventoryBalanceSnapshotRepository {
     }
 
     /**
-     * 守恒校验：返回账本聚合与快照不一致的维度。
+     * 守恒校验：返回账本聚合与快照不一致的维度（数量不一致，或数量非零而金额不一致）。
      */
     public List<BalanceMismatch> findMismatches() {
-        MapSqlParameterSource params = new MapSqlParameterSource(
-                "zeroQtyAmountTolerance", ZERO_QUANTITY_AMOUNT_TOLERANCE);
-        return jdbcTemplate.query(RECONCILE_SQL, params, MISMATCH_MAPPER);
+        return jdbcTemplate.query(RECONCILE_SQL, new MapSqlParameterSource(), MISMATCH_MAPPER);
     }
 
     /**

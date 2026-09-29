@@ -1,8 +1,10 @@
 package com.leo.erp.inventory.service;
 
+import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.inventory.api.InventorySourceDocumentType;
 import com.leo.erp.inventory.api.InventoryTransactionInput;
+import com.leo.erp.inventory.api.InventoryTransactionType;
 import com.leo.erp.inventory.domain.entity.InventoryTransaction;
 import com.leo.erp.inventory.repository.InventoryBalanceSnapshotRepository;
 import com.leo.erp.inventory.repository.InventoryTransactionRepository;
@@ -20,7 +22,9 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -150,15 +154,58 @@ class InventoryTransactionServiceTest {
     }
 
     @Test
-    void recordSalesOut_shouldFallbackToSourcePriceWhenNoStock() {
+    void recordSalesOut_shouldFallbackToSourcePriceWhenNoStockDuringBackfill() {
         when(idGenerator.nextId()).thenReturn(2001L);
         when(balanceReader.currentBalance(100L, 3L)).thenReturn(InventoryBalanceTotals.EMPTY);
 
-        service.recordSalesOut(input(line(11L, 3, "5000")));
+        // 期初回填豁免可用量校验：历史单据存在「出库早于入库」，无存量时按来源单价兜底
+        service.recordBackfill(input(line(11L, 3, "5000")), InventoryTransactionType.SALES_OUT);
 
         InventoryTransaction saved = captureSaved();
         assertThat(saved.getUnitCost()).isEqualByComparingTo("5000.00");
         assertThat(saved.getAmount()).isEqualByComparingTo("-15000.00");
+    }
+
+    @Test
+    void recordSalesOut_shouldRejectWhenAvailableQuantityInsufficient() {
+        when(balanceReader.currentBalance(100L, 3L))
+                .thenReturn(new InventoryBalanceTotals(4L, new BigDecimal("12000.00")));
+
+        assertThatThrownBy(() -> service.recordSalesOut(input(line(11L, 5, "5000"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("库存不足，无法出库")
+                .hasMessageContaining("可用 4 件")
+                .hasMessageContaining("本次需出库 5 件");
+
+        verify(repository, never()).save(any());
+        verify(snapshotRepository, never()).applyDelta(
+                any(), any(), any(), any(), any(), anyInt(), any());
+    }
+
+    @Test
+    void recordSalesOut_shouldAllowClearingDimensionExactly() {
+        when(idGenerator.nextId()).thenReturn(2002L);
+        when(balanceReader.currentBalance(100L, 3L))
+                .thenReturn(new InventoryBalanceTotals(5L, new BigDecimal("15000.00")));
+
+        service.recordSalesOut(input(line(11L, 5, "5000")));
+
+        InventoryTransaction saved = captureSaved();
+        assertThat(saved.getQuantity()).isEqualTo(5);
+        assertThat(saved.getAmount()).isEqualByComparingTo("-15000.00");
+    }
+
+    @Test
+    void recordBackfill_shouldBypassAvailabilityCheck() {
+        when(idGenerator.nextId()).thenReturn(2010L);
+        when(balanceReader.currentBalance(100L, 3L))
+                .thenReturn(new InventoryBalanceTotals(1L, new BigDecimal("3000.00")));
+
+        // 可用仅 1 件仍补记 4 件出库：回填只补历史事实，不做可用量拦截
+        service.recordBackfill(input(line(11L, 4, "5000")), InventoryTransactionType.SALES_OUT);
+
+        InventoryTransaction saved = captureSaved();
+        assertThat(saved.getQuantity()).isEqualTo(4);
     }
 
     @Test

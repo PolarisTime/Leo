@@ -3,6 +3,7 @@ package com.leo.erp.inventory.service;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.inventory.api.InventoryTransactionCommand;
 import com.leo.erp.inventory.api.InventoryTransactionInput;
+import com.leo.erp.inventory.api.InventoryTransactionType;
 import com.leo.erp.inventory.repository.InventoryTransactionRepository;
 import com.leo.erp.inventory.web.dto.InventoryBackfillResponse;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
@@ -84,9 +85,7 @@ class InventoryBackfillServiceTest {
         assertThat(response.salesOutCreated()).isZero();
         assertThat(response.salesReturnCreated()).isZero();
         assertThat(response.skipped()).isEqualTo(1);
-        verify(inventoryCommand, never()).recordPurchaseIn(any());
-        verify(inventoryCommand, never()).recordSalesOut(any());
-        verify(inventoryCommand, never()).recordSalesReturnIn(any());
+        verify(inventoryCommand, never()).recordBackfill(any(), any());
         verify(transactionRepository, never())
                 .existsBySourceDocumentTypeAndSourceItemIdAndTransactionTypeAndDeletedFlagFalse(any(), any(), any());
     }
@@ -130,12 +129,12 @@ class InventoryBackfillServiceTest {
         assertThat(response.skipped()).isZero();
 
         ArgumentCaptor<InventoryTransactionInput> captor = ArgumentCaptor.forClass(InventoryTransactionInput.class);
-        verify(inventoryCommand).recordPurchaseIn(captor.capture());
+        verify(inventoryCommand).recordBackfill(captor.capture(), eq(InventoryTransactionType.PURCHASE_IN));
         assertThat(captor.getValue().sourceDocumentType()).isEqualTo("PURCHASE_INBOUND");
         assertThat(captor.getValue().sourceDocumentId()).isEqualTo(5L);
         assertThat(captor.getValue().lines()).hasSize(1);
-        verify(inventoryCommand).recordSalesOut(any());
-        verify(inventoryCommand).recordSalesReturnIn(any());
+        verify(inventoryCommand).recordBackfill(any(), eq(InventoryTransactionType.SALES_OUT));
+        verify(inventoryCommand).recordBackfill(any(), eq(InventoryTransactionType.SALES_RETURN_IN));
         verify(lockService).lockBackfill();
     }
 
@@ -152,8 +151,8 @@ class InventoryBackfillServiceTest {
         service.backfill();
 
         InOrder order = inOrder(inventoryCommand);
-        order.verify(inventoryCommand).recordSalesOut(any());
-        order.verify(inventoryCommand).recordPurchaseIn(any());
+        order.verify(inventoryCommand).recordBackfill(any(), eq(InventoryTransactionType.SALES_OUT));
+        order.verify(inventoryCommand).recordBackfill(any(), eq(InventoryTransactionType.PURCHASE_IN));
     }
 
     @Test
@@ -167,7 +166,7 @@ class InventoryBackfillServiceTest {
 
         assertThat(response.purchaseInCreated()).isZero();
         assertThat(response.skipped()).isEqualTo(2);
-        verify(inventoryCommand, never()).recordPurchaseIn(any());
+        verify(inventoryCommand, never()).recordBackfill(any(), any());
     }
 
     @Test
@@ -191,7 +190,7 @@ class InventoryBackfillServiceTest {
         InOrder order = inOrder(lockService, inventoryCommand);
         order.verify(lockService).lockBackfill();
         order.verify(lockService).lockAll(any());
-        order.verify(inventoryCommand).recordPurchaseIn(any());
+        order.verify(inventoryCommand).recordBackfill(any(), eq(InventoryTransactionType.PURCHASE_IN));
     }
 
     @Test

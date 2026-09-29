@@ -645,7 +645,7 @@ WHERE deleted_flag = false
        OR abs(amount - direction * quantity * unit_cost) > 0.01);
 ```
 
-**非负余额检查**（按需，返回 0 行；如业务允许负库存需在报告中说明）
+**非负余额检查**（业务侧不允许负库存，必须返回 0 行；出库审核可用量不足会被拒绝，期初回填补记历史单据时豁免该校验）
 
 ```sql
 SELECT material_id, warehouse_id, batch_no, SUM(quantity * direction) AS qty
