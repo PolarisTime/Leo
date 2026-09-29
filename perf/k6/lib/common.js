@@ -8,6 +8,7 @@
  *   LEO_PERF_RUN_ID      本次压测批次标识，用于标记与清理压测数据
  */
 import http from 'k6/http';
+import encoding from 'k6/encoding';
 import { sleep } from 'k6';
 
 export const BASE_URL = (__ENV.LEO_PERF_BASE_URL || 'http://127.0.0.1:11211/api').replace(/\/+$/, '');
@@ -38,11 +39,66 @@ export function authHeaders(token, extra) {
   return Object.assign({ Authorization: `Bearer ${token}` }, extra || {});
 }
 
-/** access token 有效期 600s，提前 120s 主动续期，避免长压测中途 401。 */
-export const TOKEN_TTL_MS = 480 * 1000;
+/**
+ * token 提前失效的安全边界。真实有效期从 JWT 的 exp 声明读取，不再硬编码期限，
+ * 避免「有效期假设」与压测时长不匹配。
+ */
+export const TOKEN_SAFETY_MARGIN_MS = 60 * 1000;
+
+/** 解析 k6 时长字符串（如 2h / 90m / 30s）为毫秒。 */
+export function parseDurationMs(value) {
+  const m = String(value || '').trim().match(/^(\d+)(ms|s|m|h)$/);
+  if (!m) {
+    throw new Error(`无法解析时长: ${value}（支持 30s / 90m / 2h）`);
+  }
+  const n = Number(m[1]);
+  const unit = m[2];
+  const factor = unit === 'ms' ? 1 : unit === 's' ? 1000 : unit === 'm' ? 60000 : 3600000;
+  return n * factor;
+}
+
+/** 解析 JWT 的 exp 声明（毫秒）。解析失败返回 0，调用方据此拒绝继续。 */
+export function jwtExpiryMs(token) {
+  try {
+    const parts = String(token).split('.');
+    if (parts.length < 2) {
+      return 0;
+    }
+    const payload = JSON.parse(encoding.b64decode(parts[1], 'rawurl', 's'));
+    return payload && payload.exp ? payload.exp * 1000 : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+/**
+ * 校验 token 是否足以覆盖本次计划的运行时长。
+ *
+ * 这是补上一个真实事故的防护：access token 有效期为 600s 且不可配置，
+ * 而 soak 计划跑 2 小时。原先按硬编码 480s 判断「是否该续期」，
+ * 导致 8 分钟后全部 VU 转去重登，撞上会话数上限（3）后互相吊销，
+ * 最终形成登录风暴（739 次连接池获取超时），而压测本身已不产生有效负载。
+ * 有了这个校验，同类配置错误会在开跑前直接失败，而不是跑完 2 小时才发现。
+ */
+export function assertTokenCoversRun(token, plannedMs, label) {
+  const exp = jwtExpiryMs(token);
+  if (!exp) {
+    throw new Error(`${label}: 无法解析 token 有效期，拒绝以不确定的凭据启动长时压测`);
+  }
+  const remaining = exp - Date.now();
+  if (remaining < plannedMs + TOKEN_SAFETY_MARGIN_MS) {
+    throw new Error(
+      `${label}: token 剩余有效期仅 ${Math.round(remaining / 1000)}s，`
+      + `不足以覆盖计划的 ${Math.round(plannedMs / 1000)}s（含 ${TOKEN_SAFETY_MARGIN_MS / 1000}s 安全边界）。`
+      + '请缩短分段时长，或改用分段方式（见 perf/soak-runner.sh）。'
+    );
+  }
+  return remaining;
+}
 
 let cachedToken = '';
 let cachedAt = 0;
+let cachedExpiresAt = 0;
 let lastFailedLoginAt = 0;
 
 /**
@@ -78,7 +134,7 @@ export function setupToken() {
   // 任何多余登录都会吊销既有会话并使其 401，因此会话必须全局唯一。
   const provided = __ENV.LEO_PERF_TOKEN;
   if (provided) {
-    return { token: provided, issuedAt: Date.now() };
+    return { token: provided, issuedAt: Date.now(), expiresAt: jwtExpiryMs(provided) };
   }
   // 必须重试：同一账号并发登录会因 sys_user 乐观锁返回 409（已实测），
   // 而 setup 只跑一次——一旦这里拿不到 token，所有 VU 会退化成
@@ -86,7 +142,7 @@ export function setupToken() {
   for (let attempt = 1; attempt <= 8; attempt++) {
     const token = loginNow(`setup-${attempt}`);
     if (token) {
-      return { token, issuedAt: Date.now() };
+      return { token, issuedAt: Date.now(), expiresAt: jwtExpiryMs(token) };
     }
     sleep(1);
   }
@@ -99,18 +155,22 @@ export function setupToken() {
  */
 export function ensureToken(shared) {
   const now = Date.now();
-  if (shared && shared.token && now - shared.issuedAt < TOKEN_TTL_MS) {
+  // 以 JWT 真实 exp 判断有效性（留安全边界），而非硬编码期限
+  if (shared && shared.token && now < (shared.expiresAt || 0) - TOKEN_SAFETY_MARGIN_MS) {
     return shared.token;
   }
-  if (cachedToken && now - cachedAt < TOKEN_TTL_MS) {
+  if (cachedToken && now < cachedExpiresAt - TOKEN_SAFETY_MARGIN_MS) {
     return cachedToken;
   }
   // 重登失败时退避 2s，避免失败被放大成「每迭代一次登录」的风暴
   if (now - lastFailedLoginAt < 2000) {
+    sleep(1);   // 必须 sleep：否则拿不到 token 时迭代不产生请求，k6 会以数万次/秒空转，
+                // 「迭代数」将完全失真（实测空转到 2741 万次，压测实际已停摆）
     return '';
   }
   cachedToken = loginNow('relogin');
   cachedAt = Date.now();
+  cachedExpiresAt = jwtExpiryMs(cachedToken);
   if (!cachedToken) {
     lastFailedLoginAt = Date.now();
   }

@@ -23,9 +23,11 @@ import http from 'k6/http';
 import { check } from 'k6';
 import { Counter } from 'k6/metrics';
 import {
+  assertTokenCoversRun,
   BASE_URL,
   COMPANY_ID,
   ensureToken,
+  parseDurationMs,
   endpointPath,
   pickReadEndpoint,
   readParams,
@@ -52,7 +54,13 @@ export const options = {
 };
 
 export function setup() {
-  return setupToken();
+  const base = setupToken();
+  // 开跑前强制校验：token 必须覆盖本段时长，否则直接失败。
+  // 曾经因为不校验而在开跑 8 分钟后才暴露——全部 VU 转去重登、撞上会话数上限
+  // 互相吊销、形成登录风暴，而压测本身早已不产生有效负载。
+  assertTokenCoversRun(base.token, parseDurationMs(soakDuration), '09-soak');
+  console.log(`soak 校验通过：时长 ${soakDuration}，token 有效期足够覆盖`);
+  return base;
 }
 
 export default function (data) {
