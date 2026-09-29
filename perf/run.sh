@@ -7,7 +7,8 @@
 # 或者用 LEO_PERF_ENV_FILE 指向一个 shell 文件（例如只在本机保留的凭据文件）。
 #
 # 用法：
-#   bash leo/perf/run.sh smoke|baseline|read|write|spike|all
+#   bash leo/perf/run.sh smoke|baseline|read|write|spike|heavy|race|soak|metrics|all
+#   bash leo/perf/run.sh metrics 300 5     # 单独采集服务端指标（秒数 间隔）
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,8 +52,7 @@ log "压测批次 RUN_ID=$LEO_PERF_RUN_ID（写测数据标记前缀 PERF-LOAD-$
 # 服务端对同一账号有会话数上限（SessionManagementService.DEFAULT_MAX_REFRESH_TOKENS = 3），
 # 第 4 次登录会吊销并拉黑最旧会话，使其 access token 立即 401。
 # 因此压测用例、指标采集器、辅助调用必须共用同一个会话，绝不能各自登录。
-resolve_shared_token
-resolve_company_id() {
+resolve_shared_token() {
   if [[ -n "${LEO_PERF_TOKEN:-}" ]]; then
     log "复用外部提供的 LEO_PERF_TOKEN"
     export LEO_PERF_TOKEN
@@ -114,25 +114,39 @@ run_k6() {
 }
 
 run_smoke()  { resolve_company_id; run_k6 "01-smoke" "$K6_DIR/01-smoke.js"; }
+run_heavy()  { resolve_company_id; run_k6 "07-heavy" "$K6_DIR/07-heavy.js"; }
+run_race()   { resolve_company_id; run_k6 "08-concurrency" "$K6_DIR/08-concurrency.js"; }
+run_soak()   { resolve_company_id; run_k6 "09-soak" "$K6_DIR/09-soak.js"; }
+run_metrics() {
+  local seconds="${1:-300}" interval="${2:-5}"
+  LEO_PERF_ENV_FILE="${LEO_PERF_ENV_FILE:-}" \
+    bash "$SCRIPT_DIR/collect-metrics.sh" watch "$RESULT_DIR/metrics.csv" "$seconds" "$interval"
+}
 run_baseline() { run_k6 "02-baseline" "$K6_DIR/02-baseline.js"; }
 run_read()   { run_k6 "03-read-mixed" --out "csv=$RESULT_DIR/03-read-samples.csv" "$K6_DIR/03-read-mixed.js"; }
 run_write()  { resolve_company_id; run_k6 "04-write-mixed" "$K6_DIR/04-write-mixed.js"; }
 run_spike()  { run_k6 "05-spike"    --out "csv=$RESULT_DIR/05-spike-samples.csv" "$K6_DIR/05-spike.js"; }
 
 case "$STAGE" in
-  smoke)    run_smoke ;;
-  baseline) run_baseline ;;
-  read)     run_read ;;
-  write)    run_write ;;
-  spike)    run_spike ;;
+  smoke)       run_smoke ;;
+  baseline)    run_baseline ;;
+  read)        run_read ;;
+  write)       run_write ;;
+  spike)       run_spike ;;
+  heavy)       run_heavy ;;
+  race)        run_race ;;
+  soak)        run_soak ;;
+  metrics)     shift; run_metrics "$@" ;;
   all)
     run_smoke
     run_baseline
     run_read
     resolve_company_id
     run_write
-    run_spike
-    log "全部阶段完成，结果目录: $RESULT_DIR"
+    run_heavy
+    run_race
+    log "常规阶段完成（soak 需单独运行：run.sh soak，其耗时以小时计）"
+    log "结果目录: $RESULT_DIR"
     ;;
-  *) fail "未知阶段: $STAGE（可选 smoke|baseline|read|write|spike|all）" ;;
+  *) fail "未知阶段: $STAGE（可选 smoke|baseline|read|write|spike|heavy|race|soak|metrics|all）" ;;
 esac

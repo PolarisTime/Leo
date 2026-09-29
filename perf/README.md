@@ -52,10 +52,17 @@ bash leo/perf/run.sh baseline
 bash leo/perf/run.sh read
 bash leo/perf/run.sh write
 bash leo/perf/run.sh spike
+bash leo/perf/run.sh heavy        # 导出与计算密集接口（含导入预览）
+bash leo/perf/run.sh race         # 并发写与幂等重放
+bash leo/perf/run.sh soak         # 长时稳定（耗时以小时计，建议单独跑）
+bash leo/perf/run.sh metrics 300 5   # 仅采集服务端指标（秒数 间隔）
 
-# 全流程
+# 全流程（不含 soak，因其耗时为小时级）
 bash leo/perf/run.sh all
 ```
+
+`run.sh` 会在开始阶段**只登录一次**并导出共享 token 给 k6 与采集器，
+这是必需的（见下方「会话唯一性」）。
 
 强度可用环境变量覆盖：
 
