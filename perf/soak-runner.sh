@@ -10,6 +10,12 @@
 # 因此改为「每段独立登录一次」：段长必须明显小于 token 有效期（默认 8m < 540s 边界），
 # 段与段之间串行，全流程只有当前段持有唯一会话。
 #
+# 重要约束：**运行期间严禁用同一账号做任何登录**。
+# 服务端同账号会话数上限为 3（硬编码），任何多余登录都会吊销最旧会话；
+# 一旦吊销的是 soak 所在会话，其 token 立即失效，后续请求全部 401，
+# 且传输层错误计数为 0、后端黑名单分支又不写日志，极难察觉。
+# 本脚本已按段校验失败率并在超标时中止。
+#
 # 用法：
 #   bash leo/perf/soak-runner.sh [总分钟数] [每段分钟数]
 #   bash leo/perf/soak-runner.sh 120 8      # 默认：2 小时，15 段
@@ -92,6 +98,19 @@ for ((i = 1; i <= SEGMENTS; i++)); do
     if [[ ! -s "$COMBINED" ]]; then cat "$CMPARAMS" >> "$COMBINED"; else tail -n +2 "$CMPARAMS" >> "$COMBINED"; fi
   fi
   [[ $RC -ne 0 ]] && log "⚠ 第 ${i} 段 k6 退出码 ${RC}（阈值未达标或发生错误，详见 soak-seg-$i.txt）"
+
+  # 逐段校验有效性：失败率超标说明本段数据已被污染，应立即中止而不是跑完剩余段。
+  # 实测过一次污染：运行 soak 期间我另行登录了同一账号，触发会话数上限（3）
+  # 吊销了 soak 所在会话，其后 618,332 个请求返回 401——而传输层错误计数为 0、
+  # 后端也无业务错误日志（黑名单分支不写日志），因此只有逐段失败率能发现它。
+  SEG_FAIL="$(jq -r '.metrics.http_req_failed.value // 0' "$OUT_DIR/soak-seg-$i.json" 2>/dev/null)"
+  SEG_FAIL_PCT="$(awk -v v="${SEG_FAIL:-0}" 'BEGIN{printf "%.3f", v*100}')"
+  if awk -v v="${SEG_FAIL:-0}" 'BEGIN{exit !(v > 0.01)}'; then
+    fail "第 ${i} 段失败率 ${SEG_FAIL_PCT}% 已超阈值 1%，本段数据不可用，已中止以免继续产出无效数据。\
+常见原因：压测期间有其他客户端登录同一账号并触发会话数上限（默认 3）导致本会话被吊销。\
+因此 —— **soak 运行期间严禁使用同一账号做任何登录操作**。详见 soak-seg-$i.txt 与后端日志。"
+  fi
+  log "  第 ${i} 段失败率 ${SEG_FAIL_PCT}%（阈值 1%）"
 done
 
 DONE_SEGS=$(ls "$OUT_DIR"/soak-seg-*.json 2>/dev/null | wc -l)
