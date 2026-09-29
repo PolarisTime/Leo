@@ -137,7 +137,12 @@ LEO_MANAGEMENT_ENDPOINTS=health,prometheus,loggers bash leo/scripts/backend/star
 export LEO_PERF_TOKEN=<共享 token>
 bash leo/perf/collect-metrics.sh watch <输出.csv> <秒数> [采样间隔秒] &
 bash leo/perf/collect-metrics.sh summary <输出.csv>
+bash leo/perf/collect-metrics.sh trend <输出.csv>     # 长跑用：前后半段对比 + 堆增长斜率
 ```
+
+`trend` 用于判定长跑是否泄漏：泄漏表现为「后半段均值显著高于前半段」而非绝对值大小。
+它用最小二乘给出堆内存增长斜率（MB/小时），>8 MB/h 报「疑似泄漏」，>2 MB/h 提示复核。
+该检测器已用合成数据集验证（注入 +20 MB/h 能精确检出 +20.00，平稳数据集正确报无泄漏）。
 
 采集内容：Hikari 活跃/空闲/等待/获取超时、JVM 堆与存活线程、Tomcat 忙碌线程、
 进程与系统 CPU、Spring Cache 命中率、服务端请求计数与最大耗时。
@@ -184,3 +189,30 @@ LEO_PERF_SOAK_VUS=40 LEO_PERF_SOAK_DURATION=2h k6 run leo/perf/k6/09-soak.js
 只读、不产生业务数据。40 VU 是该实例接近饱和但不自我压垮的档位
 （实测 40 VU 约 1,010 req/s，高于 300 VU 的 909 req/s，说明 300 VU 已过饱和点）。
 用 `summary` 看 JVM 堆与连接池的**趋势**而非绝对值——泄漏表现为单调上升。
+
+
+## Redis 故障降级验证（redis-degradation.sh）
+
+```bash
+bash leo/perf/redis-degradation.sh --yes     # 需要 11211 空闲；脚本自行启停后端并负责恢复
+```
+
+隔离方式：只把 **leo 后端** 指向一个不存在的 Redis 端口，**不触碰共享 Redis 实例**。
+
+实测结论（详见 docs/reports 下的压测报告）：
+
+| 请求 | Redis 正常 | Redis 不可用 |
+|---|---|---|
+| `GET /v2.0/health` | 200 | **503 `DEGRADED`**（优雅） |
+| `GET /v2.0/version` | 200 | 200（不依赖 Redis） |
+| 已登录用户的任何接口 | 200 | **401「登录状态已失效，请重新登录」** |
+| `POST /v2.0/auth/login` | 200 | **503「幂等服务暂不可用」** |
+
+即：**Redis 不是可降级的缓存，而是认证链路与幂等过滤器的硬依赖**——一旦不可用，
+全部在线用户被静默登出且无法重新登录。`CacheConfig` 的 `CacheErrorHandler` 优雅降级
+只覆盖 Spring Cache；认证链路用的是裸 `StringRedisTemplate`，
+`AuthenticatedUserCacheService.getActivePrincipal` 对 Redis 调用无 try/catch，
+异常直接穿透 `JwtAuthenticationFilter`。
+
+另注意 `scripts/backend/start-dev.sh` 含 Redis 预检，Redis 不可用时**直接拒绝启动**，
+因此本脚本绕过该预检以完成降级验证。

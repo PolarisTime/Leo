@@ -151,8 +151,59 @@ cmd_summary() {
     }' "$csv"
 }
 
+# 前后半段对比：长跑中的泄漏表现为「后半段均值显著高于前半段」，而非绝对值大小。
+# 同时用最小二乘给出堆内存的增长斜率（MB/小时），用于量化泄漏速率。
+cmd_trend() {
+  local csv="${1:?缺少 CSV 文件}"
+  [[ -f "$csv" ]] || fail "文件不存在: $csv"
+  awk -F, '
+    NR==1 { for (i=1;i<=NF;i++) { h[i]=$i; idx[$i]=i } ; next }
+    { n++; row[n]=$0; ts[n]=$1 }
+    END {
+      if (n < 6) { printf "数据点仅 %d 个（<6），不足以做前后半段对比\n", n; exit }
+      half = int(n/2)
+      for (r=1; r<=n; r++) {
+        split(row[r], a, ",")
+        for (i=2; i<=NF; i++) {
+          v = a[i]+0
+          if (r <= half) s1[i] += v; else s2[i] += v
+        }
+      }
+      cnt1 = half; cnt2 = n - half
+      printf "数据点: %d（前半段 %d / 后半段 %d）\n\n", n, cnt1, cnt2
+      printf "%-24s %14s %14s %12s\n", "指标", "前半段均值", "后半段均值", "变化"
+      for (i=2; i<=NF; i++) {
+        m1 = s1[i]/cnt1; m2 = s2[i]/cnt2
+        d = (m1 != 0) ? (m2-m1)/m1*100 : 0
+        printf "%-24s %14.2f %14.2f %11.1f%%\n", h[i], m1, m2, d
+      }
+      # 堆内存最小二乘斜率（MB/小时）
+      hi = idx["heap_used_bytes"]
+      for (r=1; r<=n; r++) { split(row[r], a, ","); x=r; y=a[hi]+0; sx+=x; sy+=y; sxx+=x*x; sxy+=x*y }
+      den = n*sxx - sx*sx
+      slope = (den != 0) ? (n*sxy - sx*sy)/den : 0
+      # 由首末时间戳推算采样间隔
+      split(ts[1], t1, ":"); split(ts[n], t2, ":")
+      sec1 = t1[1]*3600 + t1[2]*60 + t1[3]
+      sec2 = t2[1]*3600 + t2[2]*60 + t2[3]
+      if (sec2 < sec1) sec2 += 86400          # 跨零点
+      total = sec2 - sec1
+      interval = (n > 1 && total > 0) ? total/(n-1) : 1
+      perHour = slope * 3600 / interval / 1048576
+      printf "\n堆内存增长斜率: %+.2f MB/小时", perHour
+      if (perHour > 8) printf "  ⚠ 持续增长明显，疑似内存泄漏\n"
+      else if (perHour > 2) printf "  ⚠ 轻微上升，建议结合 GC 指标复核\n"
+      else printf "  ✅ 基本平稳，未见泄漏迹象\n"
+      # 连接池与错误累积
+      ho = last_leak = 0
+      printf "连接池获取超时累计: %.0f\n", a[idx["hikari_timeout_total"]]+0
+      printf "样本跨度: %.1f 分钟\n", total/60
+    }' "$csv"
+}
+
 case "${1:-}" in
   watch)   shift; cmd_watch "$@" ;;
   summary) shift; cmd_summary "$@" ;;
-  *) fail "用法: collect-metrics.sh watch <csv> <秒数> [间隔] | summary <csv>" ;;
+  trend)   shift; cmd_trend "$@" ;;
+  *) fail "用法: collect-metrics.sh watch <csv> <秒数> [间隔] | summary <csv> | trend <csv>" ;;
 esac
