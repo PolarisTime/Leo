@@ -56,6 +56,19 @@ for ((i = 1; i <= SEGMENTS; i++)); do
   [[ -n "$TOKEN" ]] || fail "第 ${i} 段登录失败，已中止（避免在无有效凭据下继续）"
   export LEO_PERF_TOKEN="$TOKEN"
 
+  # 必须解析结算主体 ID：finance/overview 与 cash-ledger 需要 settlementCompanyId，
+  # 缺失时它们会整段返回 400。曾因漏掉这一步导致 8.4% 的请求失败，
+  # 而当时只 grep 了传输层错误（Request Failed），完全没有察觉。
+  if [[ -z "${LEO_PERF_COMPANY_ID:-}" ]]; then
+    LEO_PERF_COMPANY_ID="$(curl -s -m 10 -H "Authorization: Bearer $TOKEN" \
+      "$BASE_URL/v2.0/company-settings?page=0&size=1" \
+      | jq -r 'if type=="array" then .[0].id else (.content // [])[0].id end // empty')"
+    [[ -n "$LEO_PERF_COMPANY_ID" && "$LEO_PERF_COMPANY_ID" != "null" ]] \
+      || fail "第 ${i} 段未能解析结算主体 ID，财务/台账接口将整段失败"
+    export LEO_PERF_COMPANY_ID
+    log "  结算主体 ID = $LEO_PERF_COMPANY_ID"
+  fi
+
   CMPARAMS="$OUT_DIR/metrics-soak-seg-$i.csv"
   LEO_PERF_ENV_FILE="${LEO_PERF_ENV_FILE:-}" bash "$SCRIPT_DIR/collect-metrics.sh" \
     watch "$CMPARAMS" "$(( SEG_MIN * 60 + 20 ))" 30 > "$OUT_DIR/soak-seg-$i-collector.log" 2>&1 &
@@ -67,10 +80,13 @@ for ((i = 1; i <= SEGMENTS; i++)); do
   RC=$?
   kill "$CPID" 2>/dev/null; wait "$CPID" 2>/dev/null
 
-  ERRS=$(grep -cE "Request Failed" "$OUT_DIR/soak-seg-$i.txt" 2>/dev/null || echo 0)
-  ITERS=$(grep -oE "[0-9]+ complete and 0 interrupted" "$OUT_DIR/soak-seg-$i.txt" | tail -1 | awk '{print $1}')
-  log "第 ${i} 段结束 rc=${RC} 错误=${ERRS} 迭代=${ITERS:-未知}"
-  ERR_TOTAL=$(( ERR_TOTAL + ERRS ))
+  # 用 awk 计数：始终输出单个数字且退出码为 0。
+  # 不能用 `grep -c ... || echo 0`——无匹配时 grep 返回 1 会触发 echo，
+  # 使变量变成两行（"0\n0"），进而让下面的算术展开报错并中断循环。
+  ERRS=$(awk '/Request Failed/{n++} END{print n+0}' "$OUT_DIR/soak-seg-$i.txt" 2>/dev/null)
+  ITERS=$(awk '/complete and [0-9]+ interrupted/{if (match($0, /[0-9]+ complete/)) {v=substr($0, RSTART, RLENGTH-9)}} END{print v+0}' "$OUT_DIR/soak-seg-$i.txt" 2>/dev/null)
+  log "第 ${i} 段结束 rc=${RC} 错误=${ERRS:-0} 迭代=${ITERS:-0}"
+  ERR_TOTAL=$(( ERR_TOTAL + ${ERRS:-0} ))
 
   if [[ -s "$CMPARAMS" ]]; then
     if [[ ! -s "$COMBINED" ]]; then cat "$CMPARAMS" >> "$COMBINED"; else tail -n +2 "$CMPARAMS" >> "$COMBINED"; fi
@@ -78,6 +94,17 @@ for ((i = 1; i <= SEGMENTS; i++)); do
   [[ $RC -ne 0 ]] && log "⚠ 第 ${i} 段 k6 退出码 ${RC}（阈值未达标或发生错误，详见 soak-seg-$i.txt）"
 done
 
-log "全部段完成，累计错误=${ERR_TOTAL}"
+DONE_SEGS=$(ls "$OUT_DIR"/soak-seg-*.json 2>/dev/null | wc -l)
+if (( DONE_SEGS < SEGMENTS )); then
+  fail "计划 ${SEGMENTS} 段，实际仅完成 ${DONE_SEGS} 段即退出。这属于静默假成功——必须显式失败而不是宣称完成。请检查各段 soak-seg-*.txt 的结尾，以及上面是否出现过算术/循环异常。"
+fi
+log "全部 ${DONE_SEGS} 段完成，累计错误=${ERR_TOTAL}"
 log "合并后的服务端指标: $COMBINED"
 log "用以下命令做泄漏趋势判定：bash $SCRIPT_DIR/collect-metrics.sh trend $COMBINED"
+
+# 结束即聚合：若存在失败段则以其退出码结束，避免「跑完 2 小时却带着大量失败」
+# 被当成成功。此前的 8.4% 4xx 正是这样逃过检查的。
+AGG_OUT="$(python3 "$SCRIPT_DIR/soak-aggregate.py" "$OUT_DIR" 2>&1)"
+echo "$AGG_OUT"
+python3 "$SCRIPT_DIR/soak-aggregate.py" "$OUT_DIR" > /dev/null 2>&1 \
+  || fail "soak 聚合发现存在失败段，详见上方总览（服务端 5xx 或客户端 4xx 不为 0）"
