@@ -190,7 +190,15 @@ cmd_trend() {
       total = sec2 - sec1
       interval = (n > 1 && total > 0) ? total/(n-1) : 1
       perHour = slope * 3600 / interval / 1048576
-      printf "\n堆内存增长斜率: %+.2f MB/小时", perHour
+      printf "\n样本跨度: %.1f 分钟，指标 %d 个\n", total/60, n
+      # 最小观测窗口保护：JVM 预热期堆会快速上涨，短窗口算出的斜率纯属噪声，
+      # 若就此报「疑似泄漏」会造成误报（实测 2.6 分钟窗口会算出 +7000 MB/h 的假斜率）。
+      if (total/60 < 15) {
+        printf "堆内存增长斜率: %+.2f MB/小时（观测窗口不足 15 分钟，受 JVM 预热影响，不足以判定泄漏）\n", perHour
+        printf "→ 请延长观测窗口后重跑 trend\n"
+        exit
+      }
+      printf "堆内存增长斜率: %+.2f MB/小时", perHour
       if (perHour > 8) printf "  ⚠ 持续增长明显，疑似内存泄漏\n"
       else if (perHour > 2) printf "  ⚠ 轻微上升，建议结合 GC 指标复核\n"
       else printf "  ✅ 基本平稳，未见泄漏迹象\n"
