@@ -47,6 +47,33 @@ RUN_ID="$(date +%Y%m%d-%H%M%S)"
 export LEO_PERF_RUN_ID="${LEO_PERF_RUN_ID:-$RUN_ID}"
 log "压测批次 RUN_ID=$LEO_PERF_RUN_ID（写测数据标记前缀 PERF-LOAD-$LEO_PERF_RUN_ID）"
 
+# ---- 共享 token：全流程只登录一次 --------------------------------------------
+# 服务端对同一账号有会话数上限（SessionManagementService.DEFAULT_MAX_REFRESH_TOKENS = 3），
+# 第 4 次登录会吊销并拉黑最旧会话，使其 access token 立即 401。
+# 因此压测用例、指标采集器、辅助调用必须共用同一个会话，绝不能各自登录。
+resolve_shared_token() {
+  if [[ -n "${LEO_PERF_TOKEN:-}" ]]; then
+    log "复用外部提供的 LEO_PERF_TOKEN"
+    export LEO_PERF_TOKEN
+    return 0
+  fi
+  local attempt token
+  for attempt in 1 2 3 4 5 6; do
+    token="$(curl -s --max-time 15 -X POST "${LEO_PERF_BASE_URL}/v2.0/auth/login" \
+      -H 'Content-Type: application/json' \
+      -H "X-Idempotency-Key: shared-$RANDOM-$RANDOM" \
+      -d "{\"loginName\":\"$LEO_PERF_LOGIN_NAME\",\"password\":\"$LEO_PERF_PASSWORD\"}" \
+      | jq -r '.accessToken // empty')"
+    if [[ -n "$token" ]]; then
+      export LEO_PERF_TOKEN="$token"
+      log "已获取共享 token（本次压测全程只登录一次）"
+      return 0
+    fi
+    sleep 1
+  done
+  fail "无法获取共享 token：请确认该账号无其他客户端并发登录"
+}
+
 # ---- 探测服务可用性 ----------------------------------------------------------
 probe() {
   local url="$1" label="$2" code
@@ -55,18 +82,14 @@ probe() {
   log "$label 正常"
 }
 probe "${LEO_PERF_BASE_URL}/v2.0/health" "后端健康检查"
+resolve_shared_token
 
 # ---- 自动解析结算主体 ID（写接口必需） --------------------------------------
 resolve_company_id() {
   [[ -n "${LEO_PERF_COMPANY_ID:-}" ]] && return 0
-  local token body id
-  token="$(curl -s --max-time 10 -X POST "${LEO_PERF_BASE_URL}/v2.0/auth/login" \
-    -H 'Content-Type: application/json' \
-    -H "X-Idempotency-Key: resolve-$RANDOM-$RANDOM" \
-    -d "{\"loginName\":\"$LEO_PERF_LOGIN_NAME\",\"password\":\"$LEO_PERF_PASSWORD\"}" \
-    | jq -r '.accessToken // empty')"
-  [[ -n "$token" ]] || fail "自动登录失败，无法解析结算主体 ID"
-  body="$(curl -s --max-time 10 -H "Authorization: Bearer $token" \
+  local body id
+  resolve_shared_token
+  body="$(curl -s --max-time 10 -H "Authorization: Bearer $LEO_PERF_TOKEN" \
     "${LEO_PERF_BASE_URL}/v2.0/company-settings?page=0&size=5")"
   id="$(printf '%s' "$body" | jq -r 'if type=="array" then .[0].id else (.content // [])[0].id end // empty')"
   [[ -n "$id" && "$id" != "null" ]] || fail "未能解析结算主体 ID，请显式设置 LEO_PERF_COMPANY_ID"

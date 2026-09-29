@@ -8,6 +8,7 @@
  *   LEO_PERF_RUN_ID      本次压测批次标识，用于标记与清理压测数据
  */
 import http from 'k6/http';
+import { sleep } from 'k6';
 
 export const BASE_URL = (__ENV.LEO_PERF_BASE_URL || 'http://127.0.0.1:11211/api').replace(/\/+$/, '');
 export const LOGIN_NAME = __ENV.LEO_PERF_LOGIN_NAME || '';
@@ -40,6 +41,7 @@ export const TOKEN_TTL_MS = 480 * 1000;
 
 let cachedToken = '';
 let cachedAt = 0;
+let lastFailedLoginAt = 0;
 
 /**
  * 执行一次登录。
@@ -70,8 +72,23 @@ export function loginNow(scope) {
 
 /** 在 setup() 中串行登录一次，返回 {token, issuedAt} 供各 VU 共享。 */
 export function setupToken() {
-  const token = loginNow('setup');
-  return { token, issuedAt: Date.now() };
+  // 优先复用 run.sh 提供的共享 token：服务端对同一账号有会话数上限（默认 3），
+  // 任何多余登录都会吊销既有会话并使其 401，因此会话必须全局唯一。
+  const provided = __ENV.LEO_PERF_TOKEN;
+  if (provided) {
+    return { token: provided, issuedAt: Date.now() };
+  }
+  // 必须重试：同一账号并发登录会因 sys_user 乐观锁返回 409（已实测），
+  // 而 setup 只跑一次——一旦这里拿不到 token，所有 VU 会退化成
+  // 「每次迭代都重登」，直接把被测系统打成登录风暴并耗尽连接池。
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    const token = loginNow(`setup-${attempt}`);
+    if (token) {
+      return { token, issuedAt: Date.now() };
+    }
+    sleep(1);
+  }
+  throw new Error('setup 登录失败：同一账号可能存在并发登录竞争，请确认无其他并发登录后重试');
 }
 
 /**
@@ -86,8 +103,15 @@ export function ensureToken(shared) {
   if (cachedToken && now - cachedAt < TOKEN_TTL_MS) {
     return cachedToken;
   }
+  // 重登失败时退避 2s，避免失败被放大成「每迭代一次登录」的风暴
+  if (now - lastFailedLoginAt < 2000) {
+    return '';
+  }
   cachedToken = loginNow('relogin');
   cachedAt = Date.now();
+  if (!cachedToken) {
+    lastFailedLoginAt = Date.now();
+  }
   return cachedToken;
 }
 
