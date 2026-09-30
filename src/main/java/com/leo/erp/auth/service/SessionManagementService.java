@@ -28,7 +28,6 @@ import java.util.UUID;
 @Service
 public class SessionManagementService {
 
-    private static final int DEFAULT_MAX_REFRESH_TOKENS = 3;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserAccountRepository userAccountRepository;
@@ -39,6 +38,7 @@ public class SessionManagementService {
     private final SessionActivityService sessionActivityService;
     private final AfterCommitExecutor afterCommitExecutor;
     private final AuthProperties authProperties;
+    private final SessionEvictionReporter sessionEvictionReporter;
 
     public SessionManagementService(
             UserAccountRepository userAccountRepository,
@@ -48,7 +48,8 @@ public class SessionManagementService {
             AccessTokenBlacklistService blacklistService,
             SessionActivityService sessionActivityService,
             AfterCommitExecutor afterCommitExecutor,
-            AuthProperties authProperties
+            AuthProperties authProperties,
+            SessionEvictionReporter sessionEvictionReporter
     ) {
         this.userAccountRepository = userAccountRepository;
         this.refreshTokenSessionRepository = refreshTokenSessionRepository;
@@ -58,13 +59,19 @@ public class SessionManagementService {
         this.sessionActivityService = sessionActivityService;
         this.afterCommitExecutor = afterCommitExecutor;
         this.authProperties = authProperties != null ? authProperties : new AuthProperties();
+        this.sessionEvictionReporter = sessionEvictionReporter;
     }
 
     @Transactional
     public RefreshTokenSession createSession(Long userId, String sessionTokenId, String rawRefreshToken,
                                               String loginIp, String userAgent) {
-        UserAccount user = findUserByIdForUpdate(userId);
-        trimActiveSessionsBeforeIssuing(userId);
+        // 刻意不用 findUserByIdForUpdate：对带 @Version 的已加载实体做悲观锁升级会被 Hibernate
+        // 补做版本自增并整行回写，实测导致（1）每次登录都回写 sys_user、（2）用旧快照覆盖审计值、
+        // （3）where version=? 陈旧而把并发登录打成 409、（4）长事务持锁引发连接池饥饿。
+        // 会话数上限的并发安全由 trimActiveSessionsBeforeIssuing 中对 auth_refresh_token 的
+        // 加锁查询（for no key update）保证，无需锁账号行。
+        UserAccount user = findUserById(userId);
+        trimActiveSessionsBeforeIssuing(user);
 
         RefreshTokenSession session = new RefreshTokenSession();
         session.setId(snowflakeIdGenerator.nextId());
@@ -218,13 +225,24 @@ public class SessionManagementService {
         });
     }
 
-    private void trimActiveSessionsBeforeIssuing(Long userId) {
-        int maxSessions = DEFAULT_MAX_REFRESH_TOKENS;
-        if (maxSessions <= 0) {
+    private void trimActiveSessionsBeforeIssuing(UserAccount user) {
+        Long userId = user.getId();
+        String loginName = user.getLoginName();
+        AuthProperties.Session sessionConfig = sessionConfig();
+        var activeTokens = refreshTokenSessionRepository
+                .findByUserIdAndDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtAsc(
+                        userId, LocalDateTime.now());
+        if (sessionConfig.isExempt(loginName)) {
+            // 服务账号/自动化账号豁免：它们往往同时保持多个会话（监控、集成、压测各一份），
+            // 与人工登录共用同一账号时会互相顶掉。
+            sessionEvictionReporter.reportExempt(loginName, activeTokens.size());
             return;
         }
-        var activeTokens = refreshTokenSessionRepository
-                .findByUserIdAndDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtAsc(userId, LocalDateTime.now());
+        int maxSessions = sessionConfig.getMaxRefreshTokens();
+        if (maxSessions <= 0) {
+            // <=0 表示不限制（沿用原语义：上限非正数时不吊销）
+            return;
+        }
         int limitBeforeCreate = maxSessions - 1;
         if (activeTokens.size() <= limitBeforeCreate) {
             return;
@@ -239,6 +257,20 @@ public class SessionManagementService {
             refreshTokenSessionRepository.save(token);
             scheduleSessionRevocationSideEffects(token.getTokenId());
         }
+        // 必须留痕：吊销原先完全静默，导致「被顶掉」无法与「主动登出」区分，
+        // 也导致压测期间的大面积 401 无从定位（详见 SessionEvictionReporter 说明）。
+        sessionEvictionReporter.reportConcurrentLimitRevocation(userId, loginName, toRevoke, maxSessions);
+    }
+
+    /**
+     * 解析会话配置；配置对象缺失时退化为默认值。
+     *
+     * <p>单元测试里 {@code AuthProperties} 常以 Mockito mock 注入，未打桩的 getter 返回 null，
+     * 这里做一次防护，避免配置缺失把登录主流程打成 NPE。</p>
+     */
+    private AuthProperties.Session sessionConfig() {
+        AuthProperties.Session session = authProperties.getSession();
+        return session != null ? session : new AuthProperties().getSession();
     }
 
     public Optional<RefreshTokenSession> findSessionByHash(String rawToken) {

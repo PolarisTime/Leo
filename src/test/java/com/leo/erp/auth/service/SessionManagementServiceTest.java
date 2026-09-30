@@ -54,6 +54,9 @@ class SessionManagementServiceTest {
     @Mock
     private AuthProperties authProperties;
 
+    @Mock
+    private SessionEvictionReporter sessionEvictionReporter;
+
     @InjectMocks
     private SessionManagementService service;
 

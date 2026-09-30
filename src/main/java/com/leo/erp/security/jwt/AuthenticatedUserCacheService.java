@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.auth.api.AuthenticationAccountQuery;
 import com.leo.erp.common.config.RedisTuningProperties;
+import com.leo.erp.security.config.AuthFallbackProperties;
 import com.leo.erp.security.support.SecurityPrincipal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,8 +19,11 @@ import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -32,17 +36,29 @@ public class AuthenticatedUserCacheService {
     private final ObjectMapper objectMapper;
     private final AuthenticationAccountQuery authenticationAccountQuery;
     private final RedisTuningProperties redisTuningProperties;
+    private final AuthFallbackProperties authFallbackProperties;
     private final DefaultRedisScript<Long> snapshotWriteScript;
+
+    /**
+     * 进程内「有界降级快照」：只在 Redis 读取失败时使用，详见 {@link AuthFallbackProperties}。
+     *
+     * <p>每次成功读到主体都会刷新这里，因此窗口内的数据最多比 Redis 旧 ttl 秒；
+     * 这是「Redis 抖动时全站 500」与「吊销最多延迟 ttl 秒生效」之间的取舍，
+     * 由 {@code leo.security.auth-fallback.*} 控制，可设为 0 关闭。</p>
+     */
+    private final Map<Long, FallbackSnapshot> fallbackSnapshots = new ConcurrentHashMap<>();
 
     @Autowired
     public AuthenticatedUserCacheService(StringRedisTemplate redisTemplate,
                                          ObjectMapper objectMapper,
                                          AuthenticationAccountQuery authenticationAccountQuery,
-                                         RedisTuningProperties redisTuningProperties) {
+                                         RedisTuningProperties redisTuningProperties,
+                                         AuthFallbackProperties authFallbackProperties) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.authenticationAccountQuery = authenticationAccountQuery;
         this.redisTuningProperties = redisTuningProperties;
+        this.authFallbackProperties = authFallbackProperties == null ? new AuthFallbackProperties() : authFallbackProperties;
         this.snapshotWriteScript = new DefaultRedisScript<>();
         this.snapshotWriteScript.setLocation(new ClassPathResource("db/authenticated_user_snapshot_write.lua"));
         this.snapshotWriteScript.setResultType(Long.class);
@@ -62,14 +78,24 @@ public class AuthenticatedUserCacheService {
         }
 
         String cacheKey = cacheKey(userId);
-        String cached = redisTemplate.opsForValue().get(cacheKey);
+        String cached;
+        try {
+            cached = redisTemplate.opsForValue().get(cacheKey);
+        } catch (RuntimeException ex) {
+            return degradeOnRedisFailure(userId, expectedCredentialVersion, ex);
+        }
         if (cached != null && !cached.isBlank()) {
             Optional<SecurityPrincipal> principal = parseCachedPrincipal(cacheKey, cached);
             if (principal.isPresent() && credentialVersionMatches(principal.get(), expectedCredentialVersion)) {
+                rememberFallbackSnapshot(principal.get());
                 return principal;
             }
             if (principal.isPresent()) {
-                redisTemplate.delete(cacheKey);
+                try {
+                    redisTemplate.delete(cacheKey);
+                } catch (RuntimeException ex) {
+                    log.warn("认证缓存失效清理失败（忽略，按未命中处理）: userId={} reason={}", userId, ex.getClass().getSimpleName());
+                }
             }
         }
 
@@ -162,14 +188,102 @@ public class AuthenticatedUserCacheService {
             String cacheKey,
             Long expectedCredentialVersion
     ) {
-        return authenticationAccountQuery.findActiveById(userId)
-                .map(this::toSnapshot)
-                .filter(snapshot -> expectedCredentialVersion == null
-                        || snapshot.credentialVersion() == expectedCredentialVersion)
-                .map(snapshot -> {
-                    writeSnapshot(cacheKey, snapshot);
-                    return snapshot.toPrincipal();
-                });
+        Optional<SecurityPrincipal> principal;
+        try {
+            principal = authenticationAccountQuery.findActiveById(userId)
+                    .map(this::toSnapshot)
+                    .filter(snapshot -> expectedCredentialVersion == null
+                            || snapshot.credentialVersion() == expectedCredentialVersion)
+                    .map(CachedAuthenticatedUser::toPrincipal);
+        } catch (RuntimeException ex) {
+            // 数据源不可用属于基础设施故障，同样交给降级/503 处理，避免伪装成 500
+            return degradeOnRedisFailure(userId, expectedCredentialVersion, ex);
+        }
+        principal.ifPresent(value -> {
+            rememberFallbackSnapshot(value);
+            try {
+                writeSnapshot(cacheKey, toSnapshot(value, userId));
+            } catch (RuntimeException ex) {
+                // 写缓存失败不影响本次认证结果：DB 是权威来源，Redis 只是加速层
+                log.warn("认证缓存回填失败（忽略）: userId={} reason={}", userId, ex.getClass().getSimpleName());
+            }
+        });
+        return principal;
+    }
+
+    /**
+     * Redis 读取失败时的降级处理。
+     *
+     * <p>顺序：先在「有界降级窗口」内查找快照（命中即放行，保证 Redis 抖动时登录态不崩），
+     * 窗口未命中则抛 {@link AuthenticationInfrastructureException}（HTTP 503），
+     * 而不是让 {@code RedisConnectionFailureException} 穿透成 500。</p>
+     */
+    private Optional<SecurityPrincipal> degradeOnRedisFailure(Long userId, Long expectedCredentialVersion, RuntimeException cause) {
+        Optional<SecurityPrincipal> snapshot = findFallbackSnapshot(userId, expectedCredentialVersion);
+        if (snapshot.isPresent()) {
+            log.warn("Redis 不可用，使用进程内降级快照放行: userId={} ttlSeconds={} reason={}",
+                    userId, authFallbackProperties.getTtlSeconds(), cause.getClass().getSimpleName());
+            return snapshot;
+        }
+        throw new AuthenticationInfrastructureException(
+                "认证依赖（Redis）不可用，无法校验登录状态，请稍后重试", cause);
+    }
+
+    private void rememberFallbackSnapshot(SecurityPrincipal principal) {
+        if (!authFallbackProperties.isEnabled() || principal == null || principal.id() == null) {
+            return;
+        }
+        if (fallbackSnapshots.size() >= authFallbackProperties.getMaxEntries()
+                && !fallbackSnapshots.containsKey(principal.id())) {
+            evictExpiredSnapshots();
+            if (fallbackSnapshots.size() >= authFallbackProperties.getMaxEntries()) {
+                // 仍然超额时丢弃最早到期的一条，保证内存有界（宁可少一份降级能力，也不无界增长）
+                fallbackSnapshots.entrySet().stream()
+                        .min(Comparator.comparingLong(entry -> entry.getValue().expiresAtMillis()))
+                        .map(Map.Entry::getKey)
+                        .ifPresent(fallbackSnapshots::remove);
+            }
+        }
+        fallbackSnapshots.put(principal.id(), new FallbackSnapshot(
+                principal,
+                System.currentTimeMillis() + authFallbackProperties.ttl().toMillis()));
+    }
+
+    private Optional<SecurityPrincipal> findFallbackSnapshot(Long userId, Long expectedCredentialVersion) {
+        if (!authFallbackProperties.isEnabled()) {
+            return Optional.empty();
+        }
+        FallbackSnapshot snapshot = fallbackSnapshots.get(userId);
+        if (snapshot == null) {
+            return Optional.empty();
+        }
+        if (snapshot.isExpired()) {
+            fallbackSnapshots.remove(userId, snapshot);
+            return Optional.empty();
+        }
+        return credentialVersionMatches(snapshot.principal(), expectedCredentialVersion)
+                ? Optional.of(snapshot.principal())
+                : Optional.empty();
+    }
+
+    private void evictExpiredSnapshots() {
+        fallbackSnapshots.entrySet().removeIf(entry -> entry.getValue().isExpired());
+    }
+
+    private CachedAuthenticatedUser toSnapshot(SecurityPrincipal principal, Long userId) {
+        return new CachedAuthenticatedUser(userId, principal.username(), principal.credentialVersion());
+    }
+
+    /** 供测试观察降级窗口的当前用量。 */
+    int fallbackSnapshotCount() {
+        return fallbackSnapshots.size();
+    }
+
+    private record FallbackSnapshot(SecurityPrincipal principal, long expiresAtMillis) {
+
+        private boolean isExpired() {
+            return System.currentTimeMillis() > expiresAtMillis;
+        }
     }
 
     private CachedAuthenticatedUser toSnapshot(

@@ -15,7 +15,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 
 @Service
 public class LoginService {
@@ -29,19 +28,22 @@ public class LoginService {
     private final LoginAttemptService loginAttemptService;
     private final TokenIssuanceService tokenIssuanceService;
     private final OperationLogService operationLogService;
+    private final LoginAuditService loginAuditService;
 
     public LoginService(
             UserAccountRepository userAccountRepository,
             PasswordEncoder passwordEncoder,
             LoginAttemptService loginAttemptService,
             TokenIssuanceService tokenIssuanceService,
-            OperationLogService operationLogService
+            OperationLogService operationLogService,
+            LoginAuditService loginAuditService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;
         this.loginAttemptService = loginAttemptService;
         this.tokenIssuanceService = tokenIssuanceService;
         this.operationLogService = operationLogService;
+        this.loginAuditService = loginAuditService;
     }
 
     @Transactional
@@ -50,6 +52,10 @@ public class LoginService {
 
         loginAttemptService.ensureLoginAllowed(normalizedLoginName);
 
+        // 刻意**不加行锁**：登录事务里要跑密码哈希（bcrypt，百毫秒级），
+        // 若在事务开头就锁住账号行，并发登录会在行锁上排队并长期占用连接，
+        // 实测 20 并发即打满连接池（active 20/20、获取超时 19 次）并引发大面积超时。
+        // 会话数上限的并发安全由 createSession 里对 auth_refresh_token 的加锁查询保证。
         UserAccount user = userAccountRepository.findByLoginNameAndDeletedFlagFalse(normalizedLoginName)
                 .orElseThrow(() -> invalidCredentials(normalizedLoginName, ctx));
 
@@ -63,7 +69,10 @@ public class LoginService {
         }
 
         loginAttemptService.clearFailures(normalizedLoginName);
-        user.setLastLoginDate(LocalDateTime.now());
+        // 必须走「原子 UPDATE + 节流」，不能写 user.setLastLoginDate(...)：
+        // sys_user 带 @Version，原先每次登录都改实体，提交时做版本比对且冲突后不重试，
+        // 实测同账号 20 并发登录仅 5% 成功（92% 返回 409），还会退化成登录风暴打满连接池。
+        loginAuditService.recordSuccessfulLogin(user);
         TokenResponse response = tokenIssuanceService.issueTokens(user, ctx.loginIp(), ctx.userAgent());
         recordLoginSuccess(user, ctx);
         return response;

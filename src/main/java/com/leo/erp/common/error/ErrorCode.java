@@ -19,6 +19,15 @@ public enum ErrorCode {
     /** 缺少资源版本前置条件: 需要 428。 */
     PRECONDITION_REQUIRED(4280, "缺少资源版本前置条件 X-Resource-Version"),
     TOO_MANY_REQUESTS(4290, "请求过于频繁，请稍后重试"),
+    /**
+     * 依赖服务（当前主要是 Redis）不可用导致请求无法完成。
+     *
+     * <p>为什么必须与 {@link #INTERNAL_ERROR} 分开：实测 Redis 不可用时，
+     * 认证链路抛出的 {@code RedisConnectionFailureException} 会穿透成 500/5000，
+     * 与代码缺陷同码，监控无法区分「依赖挂了」与「代码炸了」，
+     * 客户端也无从判断该重试还是该报障。基础设施不可用应返回 503。</p>
+     */
+    SERVICE_UNAVAILABLE(5030, "依赖服务暂不可用，请稍后重试"),
     INTERNAL_ERROR(5000, "系统内部错误");
 
     private final int code;

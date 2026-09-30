@@ -366,6 +366,17 @@ leo:
       failure-window-seconds: ${LEO_AUTH_LOGIN_PROTECTION_FAILURE_WINDOW_SECONDS:900}
       # 触发保护后的锁定时长，单位秒
       lock-duration-seconds: ${LEO_AUTH_LOGIN_PROTECTION_LOCK_DURATION_SECONDS:900}
+    session:
+      # 同一账号允许并存的 refresh token 数；<=0 表示不限制。
+      # 原为硬编码 3：第 4 次登录会吊销并拉黑最旧会话（其 access token 立即 401）。
+      max-refresh-tokens: ${LEO_AUTH_SESSION_MAX_REFRESH_TOKENS:3}
+      # 豁免会话上限的账号白名单（逗号分隔），支持「精确登录名」与「前缀*」。
+      # 用途：服务账号/监控/集成/压测账号与人工登录共用同一账号时不再互相顶掉。
+      exempt-login-names: ${LEO_AUTH_SESSION_EXEMPT_LOGIN_NAMES:}
+    login-audit:
+      # 相邻两次「最后登录时间」落库的最小间隔（秒）；<=0 表示每次登录都写。
+      # 该字段是审计用途，节流后并发登录不再争抢同一行 sys_user（乐观锁冲突的主要来源）。
+      last-login-write-interval-seconds: ${LEO_AUTH_LOGIN_AUDIT_LAST_LOGIN_WRITE_INTERVAL_SECONDS:60}
     refresh-token:
       # 刷新时是否轮换 refresh token；开启后仍复用同一条 session 记录
       rotation-enabled: ${LEO_AUTH_REFRESH_TOKEN_ROTATION_ENABLED:true}
@@ -403,6 +414,15 @@ leo:
       headers:
         # 是否启用 HSTS；仅在 HTTPS 已正确部署时开启
         hsts-enabled: ${LEO_SECURITY_HSTS_ENABLED:false}
+    # 认证链路在 Redis 不可用时的降级策略。
+    # 默认 fail-closed：Redis 读取失败一律 503（code 5030），不再伪装成 500。
+    # 开启 enabled 后会启用「进程内快照 + 有界 TTL」窗口：窗口内跳过 Redis 吊销校验、
+    # 用最后一版快照放行；代价是**已被吊销/已登出的会话最多还能再用 ttl-seconds 秒**，
+    # 属安全取舍，需在明确接受该延迟后再打开。
+    auth-fallback:
+      enabled: ${LEO_SECURITY_AUTH_FALLBACK_ENABLED:false}
+      ttl-seconds: ${LEO_SECURITY_AUTH_FALLBACK_TTL_SECONDS:5}
+      max-entries: ${LEO_SECURITY_AUTH_FALLBACK_MAX_ENTRIES:10000}
     jwt:
       # JWT 签发者
       issuer: leo-erp

@@ -77,6 +77,7 @@ public class ApiProblemFactory {
             case PRECONDITION_FAILED -> "precondition-failed";
             case PRECONDITION_REQUIRED -> "precondition-required";
             case TOO_MANY_REQUESTS -> "too-many-requests";
+            case SERVICE_UNAVAILABLE -> "service-unavailable";
             case INTERNAL_ERROR -> "internal-error";
         };
     }

@@ -1,9 +1,13 @@
 /**
  * 登录专项压测：量化 POST /v2.0/auth/login 在并发下的表现。
  *
- * 背景：LoginService 每次登录都会写 sys_user.last_login_date，该实体带 @Version 乐观锁
- * 且失败不重试，因此**同一账号**并发登录会大量返回 409（code 4090）。本脚本把这个
- * 行为显式测量出来，并支持传入多账号池以区分「单账号争用」与「多用户真实登录吞吐」。
+ * 背景：LoginService 原先每次登录都写 sys_user.last_login_date，该实体带 @Version 乐观锁
+ * 且失败不重试，因此**同一账号**并发登录会大量返回 409（code 4090）。
+ *
+ * 2026-09-30 实测基线（修复前，20 并发）：仅 **5% 成功**、92% 409、3% 因连接池耗尽 500；
+ * 失控跑还出现过 7,902 次连接池获取超时、整体失败率 86.77%。
+ * 修复（`last_login_date` 改原子 UPDATE + 按间隔节流）后，本脚本的阈值要求
+ * **成功率 > 99%、409 占比 < 1%**——冲突从「预期现象」变成「回归信号」。
  *
  * 用法：
  *   # 单账号（测同一账号并发争用）
@@ -15,6 +19,10 @@
  * 环境变量：
  *   LEO_PERF_LOGIN_VUS        并发上限，默认 20
  *   LEO_PERF_LOGIN_ITERATIONS 每 VU 轮次，默认 10
+ *
+ * 注意：同一账号的会话数默认上限为 3，并发登录会不断吊销旧会话（这是预期行为，
+ * 不影响登录本身成功）。若要让服务账号不受上限影响，可配置
+ * leo.auth.session.exempt-login-names（见 application.yml）。
  */
 import http from 'k6/http';
 import { check } from 'k6';
@@ -65,6 +73,13 @@ export const options = {
     },
   },
   summaryTrendStats: SUMMARY_TREND_STATS,
+  thresholds: {
+    // 修复后同一账号并发登录不应再产生乐观锁冲突；一旦 409 回来，说明
+    // 「登录写用户行」的老问题以别的形式回归了（例如又有人给 UserAccount 加了写入）。
+    login_success: ['rate>0.99'],
+    login_conflict_409: ['rate<0.01'],
+    login_other_failure: ['rate<0.01'],
+  },
 };
 
 export function setup() {
@@ -96,7 +111,9 @@ export default function (data) {
     conflictCounter.add(1);
   }
 
+  // 只接受 200：修复前 409 是「预期现象」所以被容忍，现在它必须让脚本失败，
+  // 否则这个专项会在冲突回归时依然报「通过」。
   check(res, {
-    '登录返回 200 或 409(乐观锁冲突)': (r) => r.status === 200 || r.status === 409,
+    '登录返回 200': (r) => r.status === 200,
   });
 }

@@ -7,7 +7,7 @@
 # 或者用 LEO_PERF_ENV_FILE 指向一个 shell 文件（例如只在本机保留的凭据文件）。
 #
 # 用法：
-#   bash leo/perf/run.sh smoke|baseline|read|write|spike|heavy|race|attachments|soak|metrics|all
+#   bash leo/perf/run.sh smoke|baseline|read|write|spike|login|heavy|race|attachments|soak|metrics|all
 #   bash leo/perf/run.sh metrics 300 5     # 单独采集服务端指标（秒数 间隔）
 set -euo pipefail
 
@@ -144,6 +144,7 @@ run_smoke()  { resolve_company_id; run_k6 "01-smoke" "$K6_DIR/01-smoke.js"; }
 run_heavy()  { resolve_company_id; run_k6 "07-heavy" "$K6_DIR/07-heavy.js"; }
 run_race()   { resolve_company_id; STAGE_MAX_FAILURE_RATE=90 run_k6 "08-concurrency" "$K6_DIR/08-concurrency.js"; }
 run_attachments() { resolve_company_id; run_k6 "10-attachments" "$K6_DIR/10-attachments.js"; }
+run_login()  { run_k6 "06-login" "$K6_DIR/06-login.js"; }
 run_soak()   { resolve_company_id; run_k6 "09-soak" "$K6_DIR/09-soak.js"; }
 run_metrics() {
   local seconds="${1:-300}" interval="${2:-5}"
@@ -164,6 +165,7 @@ case "$STAGE" in
   heavy)       run_heavy ;;
   race)        run_race ;;
   attachments) run_attachments ;;
+  login)       run_login ;;
   soak)        run_soak ;;
   metrics)     shift; run_metrics "$@" ;;
   all)
@@ -177,7 +179,7 @@ case "$STAGE" in
     log "常规阶段完成（soak 需单独运行：run.sh soak，其耗时以小时计）"
     log "结果目录: $RESULT_DIR"
     ;;
-  *) fail "未知阶段: $STAGE（可选 smoke|baseline|read|write|spike|heavy|race|attachments|soak|metrics|all）" ;;
+  *) fail "未知阶段: $STAGE（可选 smoke|baseline|read|write|spike|login|heavy|race|attachments|soak|metrics|all）" ;;
 esac
 
 # 阶段失败必须以非零退出码结束：否则 CI/调用方会把「跑完了」当成「跑对了」。

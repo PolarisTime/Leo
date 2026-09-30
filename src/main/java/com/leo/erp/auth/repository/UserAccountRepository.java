@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 import jakarta.persistence.LockModeType;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface UserAccountRepository extends JpaRepository<UserAccount, Long>, JpaSpecificationExecutor<UserAccount> {
@@ -23,10 +24,21 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long>,
     boolean existsByLoginNameAndDeletedFlagFalse(String loginName);
 
     /**
-     * 统计“启用且拥有指定通配权限”的管理员账号数。
+     * 原子更新「最后登录时间」，不参与乐观锁版本比对。
      *
-     * <p>用于多用户删除/停用前的兜底校验，避免系统失去全部具备管理权限的启用账号。</p>
+     * <p>用法背景见 {@code LoginAuditService}：登录不再改实体、也不再对 {@code sys_user}
+     * 加悲观锁，审计字段用这一条 UPDATE 直写即可，因此不会产生版本冲突。</p>
+     *
+     * <p><b>不要加 {@code clearAutomatically = true}。</b>实测该标志会把持久化上下文清空，
+     * 使同一个登录事务里随后对 {@code sys_user} 的悲观锁读变成「重新加载 + 锁升级」，
+     * 触发 Hibernate 追加一条整行 {@code update sys_user ... version=?}：
+     * 它既用旧快照覆盖刚写好的审计值，又用陈旧版本做 {@code where version=?}（并发时 409）。
+     * 与 {@code flushAutomatically} 一起使用正是当时踩坑的组合。</p>
      */
+    @Modifying
+    @Query("UPDATE UserAccount u SET u.lastLoginDate = :loginAt WHERE u.id = :userId AND u.deletedFlag = false")
+    int updateLastLoginDate(@Param("userId") Long userId, @Param("loginAt") LocalDateTime loginAt);
+
     @Query(value = """
             SELECT COUNT(DISTINCT u.id)
               FROM sys_user u

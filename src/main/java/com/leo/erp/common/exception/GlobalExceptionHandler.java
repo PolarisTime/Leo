@@ -4,6 +4,7 @@ import com.leo.erp.common.api.ApiFieldError;
 import com.leo.erp.common.api.ApiProblemFactory;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.error.ServiceUnavailableException;
 import io.jsonwebtoken.JwtException;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -284,6 +285,23 @@ public class GlobalExceptionHandler {
         return failure(request, HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED, message);
     }
 
+    /**
+     * 依赖服务不可用（如 Redis 抖动）→ 503 + code 5030。
+     *
+     * <p>为什么必须单独处理：实测 Redis 不可用时，认证链路抛出的
+     * {@code RedisConnectionFailureException} 会穿透到通用兜底分支变成 500/5000，
+     * 与代码缺陷同码。监控无法区分「依赖挂了」与「代码炸了」，
+     * 客户端也无从判断该重试还是该报障。</p>
+     */
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<?> handleServiceUnavailable(ServiceUnavailableException ex, HttpServletRequest request) {
+        String message = ex.getMessage() != null && !ex.getMessage().isBlank()
+                ? ex.getMessage()
+                : ErrorCode.SERVICE_UNAVAILABLE.getMessage();
+        log.warn("依赖服务不可用: uri={} message={}", request == null ? null : request.getRequestURI(), message);
+        return failure(request, HttpStatus.SERVICE_UNAVAILABLE, ErrorCode.SERVICE_UNAVAILABLE, message);
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<?> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
         return failure(request, HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN, "拒绝访问");
@@ -403,6 +421,7 @@ public class GlobalExceptionHandler {
             case PRECONDITION_REQUIRED -> HttpStatus.PRECONDITION_REQUIRED;
             case BUSINESS_ERROR -> HttpStatus.UNPROCESSABLE_ENTITY;
             case TOO_MANY_REQUESTS -> HttpStatus.TOO_MANY_REQUESTS;
+            case SERVICE_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
             case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
             case SUCCESS -> HttpStatus.OK;
         };
