@@ -1,7 +1,5 @@
 package com.leo.erp.market.mysteel;
 
-import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.error.ErrorCode;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -66,17 +64,22 @@ public class MysteelClient {
         if (html != null && now - cachedListAt < LIST_CACHE_MILLIS) {
             return html;
         }
-        String fetched = fetcher.fetch(properties.getListUrl(), "行情列表页");
-        if (isInvalidPage(fetched)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
-                    "列表页返回安全验证页(疑似触发IP风控), 请稍后再试");
-        }
+        String fetched = fetcher.fetch(properties.getListUrl(), "行情列表页", this::listPageProblem);
         cachedListHtml = fetched;
         cachedListAt = now;
         return fetched;
     }
 
-    private boolean isInvalidPage(String html) {
-        return fetcher.looksLikeRiskControl(html) || html.length() < MIN_VALID_HTML_LENGTH;
+    /**
+     * 列表页内容校验：返回 {@code null} 表示可用，否则返回问题描述。
+     *
+     * <p>交给 {@link MysteelFetcher#fetch(String, String, java.util.function.Function)} 在重试预算内判定：
+     * 风控页与「被截断的短页面」都算瞬时失败，同一个预算内重试，避免调用方再叠加一层重试。</p>
+     */
+    private String listPageProblem(String html) {
+        if (html.length() < MIN_VALID_HTML_LENGTH) {
+            return "列表页内容不完整(长度 " + html.length() + "), 疑似被截断";
+        }
+        return null;
     }
 }

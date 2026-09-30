@@ -76,16 +76,32 @@ public class SteelxQuoteSyncService {
     }
 
     private SyncResult syncUrl(String url, String region) {
-        String html = fetcher.fetch(url, "西本" + region + "报价");
+        String what = "西本" + region + "报价";
+        String html = fetcher.fetch(url, what, content -> quotePageProblem(content, region));
         SteelxArticleParser.TitleInfo title = SteelxArticleParser.parseTitle(html);
         List<SteelxQuoteRow> rows = SteelxArticleParser.parseRows(html);
         if (rows.isEmpty()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "西本" + region + "未解析到任何价格行");
+            // 校验已保证非空; 保留兜底以防校验与入库之间口径变化。
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, what + "未解析到任何价格行");
         }
         SteelArticle article = steelQuoteStore.persistSteelxArticle(
                 url, title, region, rows, properties.getSource());
         return new SyncResult(article.getId(), url, title.articleDate().toString(), region,
                 article.getRowCount(), true);
+    }
+
+    /**
+     * 报价页内容校验：返回 {@code null} 表示可用，否则返回问题描述。
+     *
+     * <p>西本每日 10:20 前后发布当日报价，定时任务与它几乎同时触发：页面尚未更新时会出现
+     * 「200 但价格表为空」的中间态。这类结果交给 {@link SteelxFetcher#fetch(String, String,
+     * java.util.function.Function)} 在同一个重试预算内退避重试，避免整轮同步直接失败等第二天再补。</p>
+     */
+    private String quotePageProblem(String html, String region) {
+        if (SteelxArticleParser.parseRows(html).isEmpty()) {
+            return "西本" + region + "报价页未解析到任何价格行(页面可能尚未更新或被截断)";
+        }
+        return null;
     }
 
     /** 指定地区是否受支持。 */

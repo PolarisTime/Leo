@@ -1,5 +1,6 @@
 package com.leo.erp.market.mysteel;
 
+import com.leo.erp.common.retry.RetryProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -26,6 +27,8 @@ public class MysteelProperties {
     /** 通过该 SSH 主机(如 root@1.2.3.4)远程执行 curl 取数; 为空则直连。用于绕过本机IP风控。 */
     private String fetchSshHost = "";
     private long rateLimitMillis = 1000;
+    /** 取数失败重试(网络抖动/HTTP 429/5xx/风控页)。 */
+    private RetryProperties retry = new RetryProperties();
     private Sync sync = new Sync();
     private Match match = new Match();
 
@@ -75,6 +78,14 @@ public class MysteelProperties {
 
     public void setRateLimitMillis(long rateLimitMillis) {
         this.rateLimitMillis = rateLimitMillis;
+    }
+
+    public RetryProperties getRetry() {
+        return retry;
+    }
+
+    public void setRetry(RetryProperties retry) {
+        this.retry = retry;
     }
 
     public Sync getSync() {

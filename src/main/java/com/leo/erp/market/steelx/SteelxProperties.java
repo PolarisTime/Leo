@@ -1,5 +1,6 @@
 package com.leo.erp.market.steelx;
 
+import com.leo.erp.common.retry.RetryProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.util.LinkedHashMap;
@@ -25,6 +26,8 @@ public class SteelxProperties {
     /** 通过该 SSH 主机远程 curl 取数; 为空则直连。 */
     private String fetchSshHost = "";
     private long rateLimitMillis = 1000;
+    /** 取数失败重试(网络抖动/HTTP 429/5xx/空响应)。 */
+    private RetryProperties retry = new RetryProperties();
     /** 城市与子域名映射(列表承载, Spring 属性不支持中文键)。 */
     private List<Region> regions = defaultRegions();
     private Sync sync = new Sync();
@@ -75,6 +78,14 @@ public class SteelxProperties {
 
     public void setRateLimitMillis(long rateLimitMillis) {
         this.rateLimitMillis = rateLimitMillis;
+    }
+
+    public RetryProperties getRetry() {
+        return retry;
+    }
+
+    public void setRetry(RetryProperties retry) {
+        this.retry = retry;
     }
 
     public List<Region> getRegions() {

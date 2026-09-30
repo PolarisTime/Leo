@@ -300,6 +300,13 @@ leo:
       rate-limit-millis: ${LEO_MARKET_STEEL_QUOTE_RATE_LIMIT_MILLIS:1000}
       # 经跳板机 SSH 远程取数(如 root@139.224.9.181); 为空则直连。用于绕过本机 IP 风控
       fetch-ssh-host: ${LEO_MARKET_STEEL_QUOTE_FETCH_SSH_HOST:root@139.224.9.181}
+      # 取数失败重试(网络抖动/HTTP 429/5xx/风控页): 退避 = initial × multiplier^(n-1), 封顶 max
+      retry:
+        # 最大尝试次数(含首次); <=1 关闭重试
+        max-attempts: ${LEO_MARKET_STEEL_QUOTE_RETRY_MAX_ATTEMPTS:3}
+        initial-backoff-millis: ${LEO_MARKET_STEEL_QUOTE_RETRY_INITIAL_BACKOFF_MILLIS:1000}
+        multiplier: ${LEO_MARKET_STEEL_QUOTE_RETRY_BACKOFF_MULTIPLIER:2.0}
+        max-backoff-millis: ${LEO_MARKET_STEEL_QUOTE_RETRY_MAX_BACKOFF_MILLIS:8000}
       # 启动时补数天数(默认 0 关闭; >0 时同步最近 N 天, 跳过周末)
       backfill-days: ${LEO_MARKET_STEEL_QUOTE_BACKFILL_DAYS:0}
       sync:
@@ -347,6 +354,12 @@ leo:
       request-timeout-ms: ${LEO_MARKET_STEELX_QUOTE_REQUEST_TIMEOUT_MS:20000}
       fetch-ssh-host: ${LEO_MARKET_STEELX_QUOTE_FETCH_SSH_HOST:}
       rate-limit-millis: ${LEO_MARKET_STEELX_QUOTE_RATE_LIMIT_MILLIS:1000}
+      # 取数失败重试(网络抖动/HTTP 429/5xx/空响应); 经跳板机时单次尝试耗时较长, 可按需调小 max-attempts
+      retry:
+        max-attempts: ${LEO_MARKET_STEELX_QUOTE_RETRY_MAX_ATTEMPTS:3}
+        initial-backoff-millis: ${LEO_MARKET_STEELX_QUOTE_RETRY_INITIAL_BACKOFF_MILLIS:1000}
+        multiplier: ${LEO_MARKET_STEELX_QUOTE_RETRY_BACKOFF_MULTIPLIER:2.0}
+        max-backoff-millis: ${LEO_MARKET_STEELX_QUOTE_RETRY_MAX_BACKOFF_MILLIS:8000}
       # 城市中文名 -> 子域名 slug; 仅列出支持的地区(列表承载, Spring 属性不支持中文键)
       regions:
         - name: 杭州
