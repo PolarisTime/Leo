@@ -11,8 +11,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.TransientDataAccessResourceException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -36,12 +39,34 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    /**
+     * 连接获取失败响应体的统一文案。
+     * <p>刻意不透出异常原文：Hikari 的失败信息包含数据源名、连接池 total/active/idle 等内部拓扑细节，
+     * 只进日志（供排障），不进响应体。</p>
+     */
+    private static final String CONNECTION_UNAVAILABLE_DETAIL = "数据库连接池暂不可用，请稍后重试";
+
+    /**
+     * 连接获取失败时 {@code Retry-After} 的默认秒数。
+     *
+     * <p>取 5 秒的理由：</p>
+     * <ul>
+     *   <li>与 {@code JwtAuthenticationFilter} 依赖不可用分支既有的 {@code Retry-After: 5} 保持同一退避约定，
+     *       客户端只需实现一套重试策略；</li>
+     *   <li>Hikari {@code connection-timeout} 默认 3000ms——请求本身已经阻塞了 3 秒才失败，
+     *       再等 5 秒才重试，能给连接池至少一个获取窗口去释放被占用的连接；</li>
+     *   <li>更短（如 1s）会在池耗尽期间形成重试风暴、把负载进一步放大；更长则无谓延长可用性损失。</li>
+     * </ul>
+     */
+    private static final int CONNECTION_RETRY_AFTER_SECONDS = 5;
 
     private final ApiProblemFactory problemFactory;
 
@@ -302,6 +327,69 @@ public class GlobalExceptionHandler {
         return failure(request, HttpStatus.SERVICE_UNAVAILABLE, ErrorCode.SERVICE_UNAVAILABLE, message);
     }
 
+    /**
+     * 数据库连接获取失败（连接池耗尽、数据库不可达）→ 503 + code 5030 + {@code Retry-After}。
+     *
+     * <p><b>为什么是 503 而不是 500：</b>连接获取失败是服务端依赖（数据库连接池）的容量/可用性问题，
+     * 与本次请求的代码正确性无关——同一段代码稍后重试往往就能成功。HTTP 语义里 503 + Retry-After
+     * 正是「暂时不可用，稍后重试」；若落进兜底的 5000 系统异常，监控将无法区分「依赖挂了」与
+     * 「代码炸了」（2026-09-29 压测建议第 2 条：20 VU 同账号登录时连接池耗尽被记成 7 次 500，
+     * 拖垮 06-login 成功率阈值，且把告警指向了错误的方向）。</p>
+     *
+     * <p><b>为什么与 {@link ServiceUnavailableException} 共用 code 5030：</b>两者对外语义完全一致——
+     * 「依赖服务暂不可用，稍后重试可能成功」，区别只在来源：{@link ServiceUnavailableException} 是
+     * 领域代码显式判断依赖不可用后抛出（Redis/幂等依赖，bc0041ed 引入），本分支则是 Spring 把 DAO
+     * 连接获取失败翻译成 DataAccessException 之后被动产生的数据库依赖故障。code 描述的是对外语义
+     * 而非异常类名，复用既有 {@link ErrorCode#SERVICE_UNAVAILABLE} 可以让监控与客户端把所有
+     * 「基础设施不可用」聚合为同一类故障，而不是为每种依赖各造一个错误码。</p>
+     *
+     * <p><b>为什么不把所有 DataAccessException 一刀切：</b>DataAccessException 家族里混着语义完全
+     * 不同的分支——{@link DataIntegrityViolationException} 是请求数据本身的问题（唯一键/外键/字段
+     * 超长，仍须 409/422），乐观锁与 {@link PessimisticLockingFailureException} 是并发冲突（409）。
+     * 尤其不能按父类 {@code TransientDataAccessException} 拦截：悲观锁、死锁同属 transient 家族，
+     * 一刀切会把既有 409 契约改坏。因此这里只精确圈定「连接获取/资源失败族」。</p>
+     *
+     * <p><b>异常族的选择（Hikari {@code SQLTransientConnectionException} 经翻译后的两种形态）：</b></p>
+     * <ul>
+     *   <li>{@link DataAccessResourceFailureException}：JPA/Hibernate 路径（压测日志实测形态
+     *       {@code Unable to acquire JDBC Connection [...]}）以及 SQLState 类 08（connection
+     *       exception）的翻译结果；同族子类 {@code org.springframework.jdbc.CannotGetJdbcConnectionException}
+     *       与 {@code RedisConnectionFailureException} 也由本处理器覆盖；</li>
+     *   <li>{@link TransientDataAccessResourceException}：Spring {@code SQLExceptionSubclassTranslator}
+     *       按异常子类把 {@code SQLTransientConnectionException} 直接翻译出来的瞬态形态；</li>
+     *   <li>{@link SQLTransientConnectionException}：未经任何翻译直接冒泡时的保险。</li>
+     * </ul>
+     *
+     * <p>注：Spring 并不存在 {@code org.springframework.dao.CannotAcquireConnectionException}
+     * （已逐一核对本项目实际依赖的 spring-tx 5.x/6.x 全部版本），瞬态形态即
+     * {@link TransientDataAccessResourceException}，故按后者覆盖。</p>
+     */
+    @ExceptionHandler({
+            DataAccessResourceFailureException.class,
+            TransientDataAccessResourceException.class,
+            SQLTransientConnectionException.class
+    })
+    public ResponseEntity<?> handleConnectionUnavailable(Exception ex, HttpServletRequest request) {
+        // 日志保留异常原文与堆栈：Hikari 的 message 里带 total/active/idle/waiting 连接池状态，
+        // 是定位「谁占着连接」的关键证据；响应体则只回统一文案，不泄露内部细节。
+        log.warn(
+                "数据库连接获取失败（依赖不可用）: uri={} message={}",
+                request == null ? null : request.getRequestURI(),
+                ex.getMessage(),
+                ex
+        );
+        HttpHeaders retryAfter = new HttpHeaders();
+        retryAfter.set(HttpHeaders.RETRY_AFTER, String.valueOf(CONNECTION_RETRY_AFTER_SECONDS));
+        return failure(
+                request,
+                HttpStatus.SERVICE_UNAVAILABLE,
+                ErrorCode.SERVICE_UNAVAILABLE,
+                CONNECTION_UNAVAILABLE_DETAIL,
+                List.of(),
+                retryAfter
+        );
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<?> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
         return failure(request, HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN, "拒绝访问");
@@ -378,10 +466,23 @@ public class GlobalExceptionHandler {
                                       ErrorCode errorCode,
                                       String message,
                                       List<ApiFieldError> errors) {
+        return failure(request, status, errorCode, message, errors, new HttpHeaders());
+    }
+
+    /** 带额外响应头（如 {@code Retry-After}）的失败响应，body 仍统一走 {@link ApiProblemFactory}。 */
+    private ResponseEntity<?> failure(HttpServletRequest request,
+                                      HttpStatus status,
+                                      ErrorCode errorCode,
+                                      String message,
+                                      List<ApiFieldError> errors,
+                                      HttpHeaders headers) {
         logClientException(request, errorCode, message);
-        return ResponseEntity.status(status)
-                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
-                .body(problemFactory.create(request, status, errorCode, message, errors));
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(status)
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON);
+        if (headers != null && !headers.isEmpty()) {
+            builder.headers(headers);
+        }
+        return builder.body(problemFactory.create(request, status, errorCode, message, errors));
     }
 
     private List<ApiFieldError> fieldErrors(BindingResult bindingResult) {
