@@ -12,7 +12,9 @@
  *   C) 同一客户编码并发创建：唯一性约束下的竞态
  *
  * 本脚本只测量并输出状态码分布，不自动断言业务正确性——业务层
- * 「最终只创建了一条」需由 harness 侧查询核对（见 perf/README.md 说明）。
+ * 「最终只创建了一条」等结论由 SQL 核对给出：perf/verify-race-sql.sh 已把
+ * 2026-09-30 报告第二节的人工核对口径自动化（perf/run.sh 的 race 阶段
+ * 跑前调用 --snapshot 抓单据基线，跑后逐场景 PASS/FAIL/SKIP 核对）。
  *
  * 用法：
  *   source tmp/perf/creds.env && LEO_PERF_COMPANY_ID=<id> k6 run leo/perf/k6/08-concurrency.js
@@ -102,6 +104,9 @@ export const options = {
   thresholds: {
     // 409/422 是本脚本要测量的竞态现象，不计入失败；但任何一个非预期状态
     // （401 会话失效、403 权限、5xx 服务端故障）都说明这次运行不可用于结论。
+    // 口径与 2026-09-30 报告第 8 节一致：EXPECTED 只允许 200/201/409/422，
+    // race_unexpected_status 必须 count==0；perf/verify-race-sql.sh 跑后会
+    // 再从 k6 summary 读取该计数独立核对（非 0 即 FAIL），两处须保持一致。
     race_unexpected_status: ['count==0'],
   },
 };

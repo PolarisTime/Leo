@@ -191,7 +191,40 @@ run_k6() {
 
 run_smoke()  { resolve_company_id; run_k6 "01-smoke" "$K6_DIR/01-smoke.js"; }
 run_heavy()  { resolve_company_id; run_k6 "07-heavy" "$K6_DIR/07-heavy.js"; }
-run_race()   { resolve_company_id; STAGE_MAX_FAILURE_RATE=90 run_k6 "08-concurrency" "$K6_DIR/08-concurrency.js"; }
+
+# ---- 并发专项（race）的 SQL 自动核对 ------------------------------------------
+# 核对口径见 verify-race-sql.sh 头注释（对应 2026-09-30 报告第二节的人工核对口径）。
+# 脚本只读（SELECT 硬防线 + 服务端只读事务兜底）；退出码约定：
+#   0 = PASS 或 SKIP（缺库环境 / 没跑过压测没有靶子数据 —— 不算失败）
+#   1 = 真正核对失败 → 本函数置 FAILED=1 → run.sh 以非零退出码结束
+#   其它 = 脚本异常（防线触发/用法错误）→ 直接 fail 终止
+race_sql_check() {
+  local rc=0
+  set +e
+  bash "$SCRIPT_DIR/verify-race-sql.sh" "$@"
+  rc=$?
+  set -e
+  if [[ $rc -eq 1 ]]; then
+    log "并发专项 SQL 核对失败（verify-race-sql.sh 退出码 1）"
+    FAILED=1
+  elif [[ $rc -ne 0 ]]; then
+    fail "verify-race-sql.sh 异常退出（退出码 $rc）"
+  fi
+}
+
+run_race() {
+  resolve_company_id
+  # 跑前抓靶子单据基线（version / 明细行数），跑后再逐场景核对；
+  # 两步都遵循 SKIP 语义：无数据库环境时不阻断压测流程。
+  race_sql_check --snapshot
+  local failed_before=$FAILED
+  STAGE_MAX_FAILURE_RATE=90 run_k6 "08-concurrency" "$K6_DIR/08-concurrency.js"
+  if [[ $FAILED -eq $failed_before ]]; then
+    race_sql_check
+  else
+    log "race 阶段 k6 未通过，跳过 SQL 核对"
+  fi
+}
 run_attachments() { resolve_company_id; run_k6 "10-attachments" "$K6_DIR/10-attachments.js"; }
 run_login()  { run_k6 "06-login" "$K6_DIR/06-login.js"; }
 run_soak()   { resolve_company_id; run_k6 "09-soak" "$K6_DIR/09-soak.js"; }
