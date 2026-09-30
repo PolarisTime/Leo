@@ -123,6 +123,8 @@ public class CashLedgerQueryRepository {
             )
             """;
 
+    private static final String TOTAL_COLUMN = "__total";
+
     private static final RowMapper<CashLedgerLineResponse> LINE_ROW_MAPPER = (resultSet, rowNum) ->
             new CashLedgerLineResponse(
                     resultSet.getObject("business_date", LocalDate.class),
@@ -140,6 +142,19 @@ public class CashLedgerQueryRepository {
                     resultSet.getString("remark")
             );
 
+    /**
+     * 分页查询同时携带全量窗口聚合（total + 期间收支 + 期初余额），
+     * 所以每一行都是一份「流水行 + 全量汇总」。
+     */
+    private static final RowMapper<LedgerPageRow> LEDGER_PAGE_ROW_MAPPER = (resultSet, rowNum) ->
+            new LedgerPageRow(
+                    LINE_ROW_MAPPER.mapRow(resultSet, rowNum),
+                    resultSet.getLong(TOTAL_COLUMN),
+                    safe(resultSet.getBigDecimal("opening_balance")),
+                    safe(resultSet.getBigDecimal("period_income")),
+                    safe(resultSet.getBigDecimal("period_expense"))
+            );
+
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
     public CashLedgerQueryRepository(NamedParameterJdbcTemplate jdbcTemplate) {
@@ -148,31 +163,44 @@ public class CashLedgerQueryRepository {
 
     public CashLedgerPageResponse page(CashLedgerFilter filter, PageQuery query) {
         MapSqlParameterSource parameters = parameters(filter);
-        CashLedgerSummaryResponse summary = querySummary(filter, parameters);
         String basePredicate = basePredicate(filter, parameters);
         String periodPredicate = periodPredicate(filter, parameters);
-        String whereClause = whereClause(basePredicate, periodPredicate);
 
-        Number totalNumber = jdbcTemplate.queryForObject(
-                LEDGER_CTE + "SELECT COUNT(1) FROM ledger\n" + whereClause,
+        parameters.addValue("limit", query.size());
+        parameters.addValue("offset", (long) query.page() * query.size());
+        // 单条查询：窗口函数在 LIMIT/OFFSET 之前对整个过滤结果集求值，
+        // 因此一次 ledger CTE 扫描即可拿到「当前页数据 + total + 全量 summary + running_balance」。
+        List<LedgerPageRow> rows = jdbcTemplate.query(
+                ledgerPageSql(basePredicate, periodPredicate, query.direction()),
                 parameters,
-                Number.class
+                LEDGER_PAGE_ROW_MAPPER
         );
-        long total = totalNumber == null ? 0L : totalNumber.longValue();
-        Page<CashLedgerLineResponse> page;
-        if (total == 0L) {
-            page = new PageImpl<>(List.of(), PageRequest.of(query.page(), query.size()), 0L);
-        } else {
-            parameters.addValue("openingBalance", summary.openingBalance());
-            parameters.addValue("limit", query.size());
-            parameters.addValue("offset", (long) query.page() * query.size());
-            String dataSql = ledgerDataSql(whereClause)
-                    + stableOrder(query.direction())
-                    + " LIMIT :limit OFFSET :offset";
-            List<CashLedgerLineResponse> rows = jdbcTemplate.query(dataSql, parameters, LINE_ROW_MAPPER);
-            page = new PageImpl<>(rows, PageRequest.of(query.page(), query.size()), total);
+
+        if (!rows.isEmpty()) {
+            LedgerPageRow first = rows.get(0);
+            List<CashLedgerLineResponse> content = rows.stream().map(LedgerPageRow::line).toList();
+            Page<CashLedgerLineResponse> page = new PageImpl<>(
+                    content,
+                    PageRequest.of(query.page(), query.size()),
+                    first.total()
+            );
+            return new CashLedgerPageResponse(
+                    summaryOf(first.openingBalance(), first.periodIncome(), first.periodExpense()),
+                    PageResponse.from(page)
+            );
         }
-        return new CashLedgerPageResponse(summary, PageResponse.from(page));
+
+        // 空页有两种可能：过滤结果本身为空，或 offset 越界（结果集非空）。
+        // 单条窗口查询在这两种情况下都拿不到全量聚合，因此用一条合并的聚合查询补齐。
+        // 注意：期初余额取自「基础筛选（不含期间）」的集合，期间过滤为空时它仍可能非 0，
+        // 所以不能用「全 0 summary」代替回退查询。
+        LedgerSummaryAndTotal fallback = querySummaryAndTotal(filter, parameters, basePredicate, periodPredicate);
+        Page<CashLedgerLineResponse> emptyPage = new PageImpl<>(
+                List.of(),
+                PageRequest.of(query.page(), query.size()),
+                fallback.total()
+        );
+        return new CashLedgerPageResponse(fallback.summary(), PageResponse.from(emptyPage));
     }
 
     public List<CashLedgerLineResponse> listForExport(CashLedgerFilter filter) {
@@ -196,6 +224,15 @@ public class CashLedgerQueryRepository {
     ) {
         String basePredicate = basePredicate(filter, parameters);
         String periodPredicate = periodPredicate(filter, parameters);
+        return querySummaryAndTotal(filter, parameters, basePredicate, periodPredicate).summary();
+    }
+
+    private LedgerSummaryAndTotal querySummaryAndTotal(
+            CashLedgerFilter filter,
+            MapSqlParameterSource parameters,
+            String basePredicate,
+            String periodPredicate
+    ) {
         String openingExpression = filter.startDate() == null
                 ? "CAST(0 AS NUMERIC)"
                 : "COALESCE(SUM(ledger.balance_change) FILTER "
@@ -204,26 +241,96 @@ public class CashLedgerQueryRepository {
                 SELECT
                     %s AS opening_balance,
                     COALESCE(SUM(ledger.income_amount) FILTER (WHERE %s), 0) AS period_income,
-                    COALESCE(SUM(ledger.expense_amount) FILTER (WHERE %s), 0) AS period_expense
+                    COALESCE(SUM(ledger.expense_amount) FILTER (WHERE %s), 0) AS period_expense,
+                    COUNT(1) FILTER (WHERE %s) AS %s
                 FROM ledger
                 %s
                 """.formatted(
                 openingExpression,
                 periodPredicate,
                 periodPredicate,
+                periodPredicate,
+                TOTAL_COLUMN,
                 whereClause(basePredicate)
         );
-        return jdbcTemplate.queryForObject(summarySql, parameters, (resultSet, rowNum) -> {
-            BigDecimal openingBalance = safe(resultSet.getBigDecimal("opening_balance"));
-            BigDecimal periodIncome = safe(resultSet.getBigDecimal("period_income"));
-            BigDecimal periodExpense = safe(resultSet.getBigDecimal("period_expense"));
-            return new CashLedgerSummaryResponse(
-                    openingBalance,
-                    periodIncome,
-                    periodExpense,
-                    openingBalance.add(periodIncome).subtract(periodExpense)
-            );
-        });
+        return jdbcTemplate.queryForObject(summarySql, parameters, (resultSet, rowNum) -> new LedgerSummaryAndTotal(
+                summaryOf(
+                        safe(resultSet.getBigDecimal("opening_balance")),
+                        safe(resultSet.getBigDecimal("period_income")),
+                        safe(resultSet.getBigDecimal("period_expense"))
+                ),
+                resultSet.getLong(TOTAL_COLUMN)
+        ));
+    }
+
+    /**
+     * 资金流水分页单查询 SQL。
+     *
+     * <p>层级说明：</p>
+     * <ol>
+     *     <li>{@code base_ledger}：只应用基础筛选（往来方/流水类型/关键字），不含期间，
+     *         期初余额必须基于它计算；显式 MATERIALIZED 以保证 ledger CTE 只被扫描一次。</li>
+     *     <li>{@code filtered_ledger}：在 base_ledger 上再应用期间筛选，即分页与期间汇总的数据源。</li>
+     *     <li>{@code opening}：基于 base_ledger 计算期初余额，恒为 1 行。</li>
+     *     <li>{@code ledger_with_balance}：窗口函数一次性算出 total、期间收入/支出与 running_balance。</li>
+     * </ol>
+     */
+    private String ledgerPageSql(String basePredicate, String periodPredicate, String direction) {
+        return LEDGER_CTE + """
+                , base_ledger AS MATERIALIZED (
+                    SELECT ledger.*
+                    FROM ledger
+                    %s
+                ), filtered_ledger AS (
+                    SELECT base_ledger.*
+                    FROM base_ledger
+                    WHERE %s
+                ), opening AS (
+                    SELECT COALESCE(SUM(base_ledger.balance_change) FILTER (
+                        WHERE base_ledger.business_date < :startDate
+                    ), 0) AS opening_balance
+                    FROM base_ledger
+                ), ledger_with_balance AS (
+                    SELECT
+                        filtered_ledger.*,
+                        COUNT(1) OVER () AS %s,
+                        COALESCE(SUM(filtered_ledger.income_amount) OVER (), 0) AS period_income,
+                        COALESCE(SUM(filtered_ledger.expense_amount) OVER (), 0) AS period_expense,
+                        opening.opening_balance AS opening_balance,
+                        opening.opening_balance + SUM(filtered_ledger.balance_change) OVER (
+                            ORDER BY filtered_ledger.business_date ASC,
+                                     filtered_ledger.flow_order ASC,
+                                     filtered_ledger.document_id ASC
+                        ) AS running_balance
+                    FROM filtered_ledger
+                    CROSS JOIN opening
+                )
+                SELECT
+                    ledger_with_balance.business_date,
+                    ledger_with_balance.flow_type,
+                    ledger_with_balance.flow_order,
+                    ledger_with_balance.document_id,
+                    ledger_with_balance.document_no,
+                    ledger_with_balance.counterparty_type,
+                    ledger_with_balance.counterparty_id,
+                    ledger_with_balance.counterparty_name,
+                    ledger_with_balance.purpose,
+                    ledger_with_balance.income_amount,
+                    ledger_with_balance.expense_amount,
+                    ledger_with_balance.running_balance,
+                    ledger_with_balance.operator_name,
+                    ledger_with_balance.remark,
+                    ledger_with_balance.%s,
+                    ledger_with_balance.period_income,
+                    ledger_with_balance.period_expense,
+                    ledger_with_balance.opening_balance
+                FROM ledger_with_balance
+                """.formatted(
+                whereClause(basePredicate),
+                periodPredicate,
+                TOTAL_COLUMN,
+                TOTAL_COLUMN
+        ) + stableOrder(direction) + " LIMIT :limit OFFSET :offset";
     }
 
     private String ledgerDataSql(String whereClause) {
@@ -262,15 +369,12 @@ public class CashLedgerQueryRepository {
     }
 
     private MapSqlParameterSource parameters(CashLedgerFilter filter) {
-        MapSqlParameterSource parameters = new MapSqlParameterSource()
-                .addValue("settlementCompanyId", filter.settlementCompanyId(), Types.BIGINT);
-        if (filter.startDate() != null) {
-            parameters.addValue("startDate", filter.startDate(), Types.DATE);
-        }
-        if (filter.endDate() != null) {
-            parameters.addValue("endDate", filter.endDate(), Types.DATE);
-        }
-        return parameters;
+        // startDate/endDate 始终注册：分页单查询里的期初余额窗口表达式总会引用 :startDate，
+        // 未传期间时绑定为 NULL，`business_date < NULL` 恒为 NULL，等同于原实现的 `CAST(0 AS NUMERIC)`。
+        return new MapSqlParameterSource()
+                .addValue("settlementCompanyId", filter.settlementCompanyId(), Types.BIGINT)
+                .addValue("startDate", filter.startDate(), Types.DATE)
+                .addValue("endDate", filter.endDate(), Types.DATE);
     }
 
     private String basePredicate(CashLedgerFilter filter, MapSqlParameterSource parameters) {
@@ -306,13 +410,15 @@ public class CashLedgerQueryRepository {
 
     private String periodPredicate(CashLedgerFilter filter, MapSqlParameterSource parameters) {
         List<String> predicates = new ArrayList<>();
+        // 期间谓词不限定别名：它同时用于 `FROM ledger`（汇总查询）
+        // 与 `FROM base_ledger`（分页单查询，列名与 ledger 完全一致）。
         if (filter.startDate() != null) {
             parameters.addValue("startDate", filter.startDate(), Types.DATE);
-            predicates.add("ledger.business_date >= :startDate");
+            predicates.add("business_date >= :startDate");
         }
         if (filter.endDate() != null) {
             parameters.addValue("endDate", filter.endDate(), Types.DATE);
-            predicates.add("ledger.business_date <= :endDate");
+            predicates.add("business_date <= :endDate");
         }
         return predicates.isEmpty() ? "TRUE" : String.join(" AND ", predicates);
     }
@@ -339,7 +445,32 @@ public class CashLedgerQueryRepository {
                 : keyword.trim().toLowerCase(Locale.ROOT);
     }
 
-    private BigDecimal safe(BigDecimal value) {
+    private static BigDecimal safe(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private static CashLedgerSummaryResponse summaryOf(
+            BigDecimal openingBalance,
+            BigDecimal periodIncome,
+            BigDecimal periodExpense
+    ) {
+        return new CashLedgerSummaryResponse(
+                openingBalance,
+                periodIncome,
+                periodExpense,
+                openingBalance.add(periodIncome).subtract(periodExpense)
+        );
+    }
+
+    record LedgerSummaryAndTotal(CashLedgerSummaryResponse summary, long total) {
+    }
+
+    record LedgerPageRow(
+            CashLedgerLineResponse line,
+            long total,
+            BigDecimal openingBalance,
+            BigDecimal periodIncome,
+            BigDecimal periodExpense
+    ) {
     }
 }
