@@ -54,12 +54,62 @@ class V2ModuleExportControllerTest {
 
     private MockMvc mockMvc;
 
+    /** 真实闸门（默认额度 4）：常规用例应当直接放行，不额外桩化。 */
+    private com.leo.erp.common.export.ExportConcurrencyGuard exportGuard;
+
     @BeforeEach
     void setUp() {
+        exportGuard = new com.leo.erp.common.export.ExportConcurrencyGuard(
+                new com.leo.erp.common.export.ExportConcurrencyProperties());
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new V2ModuleExportController(moduleExportService))
+                .standaloneSetup(new V2ModuleExportController(moduleExportService, exportGuard))
                 .setControllerAdvice(new GlobalExceptionHandler(new ApiProblemFactory("Asia/Shanghai")))
                 .build();
+    }
+
+    /**
+     * 并发闸门：导出额度被占满时必须<strong>快速失败 429</strong>，而不是无界排队——
+     * 无界排队会把 Tomcat 线程与数据库连接一起耗尽，让「导出变慢」升级成「全站不可用」。
+     */
+    @Test
+    void create_whenConcurrencyGateExhausted_shouldReturn429WithoutTouchingService() throws Exception {
+        com.leo.erp.common.export.ExportConcurrencyProperties properties =
+                new com.leo.erp.common.export.ExportConcurrencyProperties();
+        properties.setMaxConcurrent(1);
+        properties.setAcquireTimeoutMillis(0L);
+        com.leo.erp.common.export.ExportConcurrencyGuard gate =
+                new com.leo.erp.common.export.ExportConcurrencyGuard(properties);
+        MockMvc gatedMvc = MockMvcBuilders
+                .standaloneSetup(new V2ModuleExportController(moduleExportService, gate))
+                .setControllerAdvice(new GlobalExceptionHandler(new ApiProblemFactory("Asia/Shanghai")))
+                .build();
+
+        java.util.concurrent.CountDownLatch held = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        Thread occupier = new Thread(() -> gate.execute("occupy", () -> {
+            held.countDown();
+            try {
+                release.await(5, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+            return null;
+        }));
+        occupier.start();
+        assertThat(held.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        try {
+            gatedMvc.perform(post(ENDPOINT)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"moduleKey\":\"sales-order\"}"))
+                    .andExpect(status().isTooManyRequests())
+                    .andExpect(jsonPath("$.code").value(ErrorCode.TOO_MANY_REQUESTS.getCode()))
+                    .andExpect(jsonPath("$.type").value("urn:leo:problem:too-many-requests"));
+
+            verify(moduleExportService, never()).export(anyString(), any());
+        } finally {
+            release.countDown();
+            occupier.join(5_000L);
+        }
     }
 
     @Test

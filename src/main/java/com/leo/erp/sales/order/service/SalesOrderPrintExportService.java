@@ -18,7 +18,6 @@ import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.PrintSetup;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.ss.util.CellReference;
 import org.apache.poi.xssf.usermodel.XSSFCellStyle;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
@@ -28,12 +27,15 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class SalesOrderPrintExportService {
@@ -54,6 +56,14 @@ public class SalesOrderPrintExportService {
     private final SalesOrderPrintDocumentFactory printDocumentFactory;
     private final PrintXlsxExportLayoutProvider layoutProvider;
     private final PrintExportFilenameService filenameService;
+
+    /**
+     * 套打模板字节缓存（key = 模板 classpath 资源路径）。
+     *
+     * <p>模板是不可变的 classpath 资源，原先每次导出都要走一次资源解析与流读取；
+     * 缓存字节后，稳态导出只剩「从字节新建工作簿 + 填充」这一段 CPU 开销。</p>
+     */
+    private final ConcurrentHashMap<String, byte[]> templateBytesCache = new ConcurrentHashMap<>();
 
     public SalesOrderPrintExportService(
             SalesOrderRepository salesOrderRepository,
@@ -114,7 +124,7 @@ public class SalesOrderPrintExportService {
                     order.getId(),
                     layout.moduleKey()
             );
-        } catch (IOException ex) {
+        } catch (IOException | java.io.UncheckedIOException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "销售订单套打 Excel 生成失败");
         }
     }
@@ -142,8 +152,20 @@ public class SalesOrderPrintExportService {
     }
 
     private XSSFWorkbook loadTemplateWorkbook(PrintXlsxExportLayout layout) throws IOException {
-        try (var input = new ClassPathResource(layout.templateResource()).getInputStream()) {
-            return (XSSFWorkbook) WorkbookFactory.create(input);
+        // computeIfAbsent 返回的一定是 map 里生效的那份字节：并发首次读取时以先到者为准，
+        // 输家也用赢家的数组（直接复用本地读到的数组会绕过这一保证，SpotBugs RV_RETURN_VALUE_OF_PUTIFABSENT_IGNORED）。
+        byte[] template = templateBytesCache.computeIfAbsent(layout.templateResource(), this::readTemplateResource);
+        // 只缓存不可变字节，不缓存 workbook：XSSFWorkbook 可变且非线程安全，
+        // cloneSheet/写单元格会互相污染，并发导出必然出错；每次从字节新建才安全。
+        return new XSSFWorkbook(new ByteArrayInputStream(template));
+    }
+
+    /** classpath 资源读取不抛受检异常，包装为非受检以配合 {@code computeIfAbsent}。 */
+    private byte[] readTemplateResource(String resource) {
+        try (InputStream input = new ClassPathResource(resource).getInputStream()) {
+            return input.readAllBytes();
+        } catch (IOException ex) {
+            throw new java.io.UncheckedIOException("读取打印模板失败: " + resource, ex);
         }
     }
 

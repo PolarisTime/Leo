@@ -32,6 +32,12 @@ class V2PrintExportControllerTest {
     @Mock
     private PrintOutputService printOutputService;
 
+    /** 真实闸门（默认额度 4）：单线程用例直接放行，无需桩化；429 行为由 ExportConcurrencyGuardTest 覆盖。 */
+    @org.mockito.Spy
+    private com.leo.erp.common.export.ExportConcurrencyGuard exportConcurrencyGuard =
+            new com.leo.erp.common.export.ExportConcurrencyGuard(
+                    new com.leo.erp.common.export.ExportConcurrencyProperties());
+
     @InjectMocks
     private V2PrintExportController controller;
 

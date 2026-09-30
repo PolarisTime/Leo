@@ -118,8 +118,16 @@ class V2ModuleExportControllerPermissionTest {
         }
 
         @Bean
-        V2ModuleExportController v2ModuleExportController(ModuleExportService moduleExportService) {
-            return new V2ModuleExportController(moduleExportService);
+        com.leo.erp.common.export.ExportConcurrencyGuard exportConcurrencyGuard() {
+            return new com.leo.erp.common.export.ExportConcurrencyGuard(
+                    new com.leo.erp.common.export.ExportConcurrencyProperties());
+        }
+
+        @Bean
+        V2ModuleExportController v2ModuleExportController(
+                ModuleExportService moduleExportService,
+                com.leo.erp.common.export.ExportConcurrencyGuard exportConcurrencyGuard) {
+            return new V2ModuleExportController(moduleExportService, exportConcurrencyGuard);
         }
     }
 }

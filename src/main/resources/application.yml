@@ -442,6 +442,14 @@ leo:
     max-file-size: ${LEO_EXCEL_MAX_FILE_SIZE:10485760}
     # 批量入库大小
     import-batch-size: ${LEO_EXCEL_IMPORT_BATCH_SIZE:500}
+  # 导出并发闸门：并发导出超过上限时快速失败 429（带 Retry-After），
+  # 防止 POI 生成 XLSX 的 CPU 密集负载把线程与连接池一起吃满、外溢成全站故障
+  export:
+    concurrency:
+      # 同时进行的导出任务上限
+      max-concurrent: ${LEO_EXPORT_MAX_CONCURRENT:4}
+      # 等待并发额度的最长时间（毫秒），超时即 429；禁止改为无界排队
+      acquire-timeout-millis: ${LEO_EXPORT_ACQUIRE_TIMEOUT_MILLIS:500}
   id:
     # 雪花 ID 机器标识，范围 0-1023，多实例部署时必须确保唯一
     machine-id: ${LEO_MACHINE_ID:0}

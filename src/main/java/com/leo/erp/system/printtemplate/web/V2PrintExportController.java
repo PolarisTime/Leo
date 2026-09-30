@@ -1,6 +1,7 @@
 package com.leo.erp.system.printtemplate.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.export.ExportConcurrencyGuard;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.security.permission.PermissionCodes;
@@ -42,9 +43,12 @@ import java.util.Base64;
 public class V2PrintExportController {
 
     private final PrintOutputService printOutputService;
+    private final ExportConcurrencyGuard exportConcurrencyGuard;
 
-    public V2PrintExportController(PrintOutputService printOutputService) {
+    public V2PrintExportController(PrintOutputService printOutputService,
+                                   ExportConcurrencyGuard exportConcurrencyGuard) {
         this.printOutputService = printOutputService;
+        this.exportConcurrencyGuard = exportConcurrencyGuard;
     }
 
     @Operation(summary = "创建打印导出资源（同步返回 PDF 文件或打印脚本资源表示）")
@@ -59,12 +63,15 @@ public class V2PrintExportController {
     )
     @RequirePermission(PermissionCodes.PRINT_EXPORTS_PRINT)
     public ResponseEntity<?> create(@Valid @RequestBody @NotNull PrintRecordRequest payload) {
-        PrintOutput output = printOutputService.generateFromRecord(
-                payload.templateId(),
-                payload.moduleKey(),
-                payload.recordId(),
-                payload.resolvedPrintOptions()
-        );
+        // 打印/PDF 生成同属 CPU 密集导出路径，纳入同一闸门（见 ExportConcurrencyGuard）；
+        // 闸门在服务开启事务之前取额度，等待期间不占用数据库连接
+        PrintOutput output = exportConcurrencyGuard.execute("print-output",
+                () -> printOutputService.generateFromRecord(
+                        payload.templateId(),
+                        payload.moduleKey(),
+                        payload.recordId(),
+                        payload.resolvedPrintOptions()
+                ));
         if (output.kind() == PrintOutput.Kind.PDF) {
             return pdfFileResponse(output);
         }

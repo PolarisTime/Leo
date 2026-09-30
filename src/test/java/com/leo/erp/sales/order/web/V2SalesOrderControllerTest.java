@@ -60,6 +60,12 @@ class V2SalesOrderControllerTest {
     @Mock
     private com.leo.erp.sales.order.service.SalesOrderDocumentFlowService documentFlowService;
 
+    /** 真实导出闸门（默认额度 4）：单线程用例直接放行，无需桩化。 */
+    @org.mockito.Spy
+    private com.leo.erp.common.export.ExportConcurrencyGuard exportConcurrencyGuard =
+            new com.leo.erp.common.export.ExportConcurrencyGuard(
+                    new com.leo.erp.common.export.ExportConcurrencyProperties());
+
     @InjectMocks
     private V2SalesOrderController controller;
 

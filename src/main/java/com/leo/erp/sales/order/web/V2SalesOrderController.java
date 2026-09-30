@@ -3,6 +3,7 @@ package com.leo.erp.sales.order.web;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.export.ExportConcurrencyGuard;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
@@ -62,15 +63,18 @@ public class V2SalesOrderController {
     private final SalesOrderPrintExportService printExportService;
     private final SalesOrderSourceCandidateService sourceCandidateService;
     private final SalesOrderDocumentFlowService documentFlowService;
+    private final ExportConcurrencyGuard exportConcurrencyGuard;
 
     public V2SalesOrderController(SalesOrderService service,
                                   SalesOrderPrintExportService printExportService,
                                   SalesOrderSourceCandidateService sourceCandidateService,
-                                  SalesOrderDocumentFlowService documentFlowService) {
+                                  SalesOrderDocumentFlowService documentFlowService,
+                                  ExportConcurrencyGuard exportConcurrencyGuard) {
         this.service = service;
         this.printExportService = printExportService;
         this.sourceCandidateService = sourceCandidateService;
         this.documentFlowService = documentFlowService;
+        this.exportConcurrencyGuard = exportConcurrencyGuard;
     }
 
     @Operation(summary = "分页查询销售订单采购来源候选")
@@ -143,7 +147,10 @@ public class V2SalesOrderController {
         SalesOrderPrintXlsxOptions options = payload == null
                 ? SalesOrderPrintXlsxOptions.defaults()
                 : payload.resolvedPrintOptions();
-        return toDownloadResponse(printExportService.exportSalesOrderPrint(id, options), request);
+        // 闸门在进入 @Transactional 之前拿额度：若在事务内等待，等待线程会一直占着数据库连接，
+        // 导出高峰反而先把连接池耗尽（正是本轮压测要防的「导出故障外溢成全站问题」）。
+        return toDownloadResponse(exportConcurrencyGuard.execute("sales-order-xlsx",
+                () -> printExportService.exportSalesOrderPrint(id, options)), request);
     }
 
     @Operation(summary = "创建销售订单")

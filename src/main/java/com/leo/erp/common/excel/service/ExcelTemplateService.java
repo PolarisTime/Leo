@@ -12,7 +12,7 @@ import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -23,6 +23,7 @@ import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class ExcelTemplateService {
@@ -30,18 +31,46 @@ public class ExcelTemplateService {
     private static final Logger log = LoggerFactory.getLogger(ExcelTemplateService.class);
     private static final int MAX_COL_WIDTH = 30 * 256;
     private static final int MIN_COL_WIDTH = 10 * 256;
+    /** SXSSF 滑动窗口行数：模板本身只有表头+示例行，窗口只需覆盖模板规模。 */
+    private static final int SXSSF_WINDOW_SIZE = 100;
 
     record TemplateField(String header, boolean required, String example, String regex, int order,
                          String[] enumValues) {
     }
 
+    /**
+     * 模板字节按 DTO 类型缓存。
+     *
+     * <p>模板内容完全由 {@link ImportColumn} 注解决定，运行期不会变化；原先每次下载模板
+     * 都要反射解析注解并新建整个工作簿。缓存后稳态零生成，重复下载直接返回字节副本。</p>
+     *
+     * <p>缓存的是<strong>不可变字节</strong>而非 workbook 对象：{@code Workbook} 可变且
+     * 非线程安全，并发下载共享同一实例会互相污染。返回 {@code clone()} 是为了让调用方
+     * 拿到独立数组，不会改坏缓存。</p>
+     */
+    private final ConcurrentHashMap<Class<?>, byte[]> templateCache = new ConcurrentHashMap<>();
+
     public byte[] generateTemplate(Class<?> dtoClass) {
+        byte[] cached = templateCache.get(dtoClass);
+        if (cached != null) {
+            return cached.clone();
+        }
+        byte[] generated = buildTemplate(dtoClass);
+        // 并发首次生成时以先到者为准，输家直接用赢家的结果，保证只缓存一份
+        byte[] winner = templateCache.putIfAbsent(dtoClass, generated);
+        return (winner == null ? generated : winner).clone();
+    }
+
+    private byte[] buildTemplate(Class<?> dtoClass) {
         List<TemplateField> fields = resolveFields(dtoClass);
         if (fields.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模板 DTO 缺少 @ImportColumn 注解");
         }
 
-        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+        // SXSSF 流式写出：即使模板行数增长，也不会把整簿驻留堆；
+        // try-with-resources 关闭时 POI 5.5 会自动 dispose 临时文件
+        try (SXSSFWorkbook workbook = new SXSSFWorkbook(SXSSF_WINDOW_SIZE);
+             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             Sheet dataSheet = workbook.createSheet("数据模板");
             buildDataSheet(workbook, dataSheet, fields);
 

@@ -6,17 +6,38 @@ import com.leo.erp.common.error.ErrorCode;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class PrintXlsxExportLayoutProvider {
 
     private final PrintRuntimeProperties runtimeProperties;
 
+    /**
+     * 布局元数据按 moduleKey 缓存。
+     *
+     * <p>{@code print-runtime.json} 在 {@link PrintRuntimeProperties} 构造时一次性加载，
+     * 运行期不会变化；原先每次导出都要重新遍历 JSON 构建一遍布局对象。
+     * {@link PrintXlsxExportLayout} 是 record 且列表均不可变，跨线程共享安全。</p>
+     */
+    private final ConcurrentHashMap<String, PrintXlsxExportLayout> layouts = new ConcurrentHashMap<>();
+
     public PrintXlsxExportLayoutProvider(PrintRuntimeProperties runtimeProperties) {
         this.runtimeProperties = runtimeProperties;
     }
 
     public PrintXlsxExportLayout layout(String moduleKey) {
+        PrintXlsxExportLayout cached = layouts.get(moduleKey);
+        if (cached != null) {
+            return cached;
+        }
+        PrintXlsxExportLayout built = buildLayout(moduleKey);
+        PrintXlsxExportLayout winner = layouts.putIfAbsent(moduleKey, built);
+        return winner == null ? built : winner;
+    }
+
+    /** 配置缺失时抛出的异常<strong>不</strong>进缓存：让每次调用都拿到同样的失败语义，便于告警。 */
+    private PrintXlsxExportLayout buildLayout(String moduleKey) {
         JsonNode config = runtimeProperties.xlsxExport(moduleKey);
         if (!config.isObject()) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "缺少 Excel 打印导出配置: " + moduleKey);

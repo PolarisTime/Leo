@@ -1,6 +1,7 @@
 package com.leo.erp.common.moduleexport.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.export.ExportConcurrencyGuard;
 import com.leo.erp.common.moduleexport.service.ModuleExportService;
 import com.leo.erp.common.moduleexport.web.dto.ModuleExportRequest;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
@@ -39,9 +40,12 @@ import java.nio.charset.StandardCharsets;
 public class V2ModuleExportController {
 
     private final ModuleExportService moduleExportService;
+    private final ExportConcurrencyGuard exportConcurrencyGuard;
 
-    public V2ModuleExportController(ModuleExportService moduleExportService) {
+    public V2ModuleExportController(ModuleExportService moduleExportService,
+                                    ExportConcurrencyGuard exportConcurrencyGuard) {
         this.moduleExportService = moduleExportService;
+        this.exportConcurrencyGuard = exportConcurrencyGuard;
     }
 
     @Operation(
@@ -63,12 +67,16 @@ public class V2ModuleExportController {
             @ApiResponse(responseCode = "404", description = "recordIds 中存在未删除记录里查不到的 id",
                     content = @Content(mediaType = "application/problem+json")),
             @ApiResponse(responseCode = "422", description = "模块不支持、recordIds 为空集合/超长/重复，或导出行数超过上限",
+                    content = @Content(mediaType = "application/problem+json")),
+            @ApiResponse(responseCode = "429", description = "并发导出数达到上限（快速失败，携带 Retry-After）",
                     content = @Content(mediaType = "application/problem+json"))
     })
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @RequirePermission(PermissionCodes.MODULE_EXPORTS_EXPORT)
     public ResponseEntity<byte[]> create(@Valid @RequestBody ModuleExportRequest payload) {
-        FileDownloadResponse file = moduleExportService.export(payload.moduleKey(), payload.recordIds());
+        // 闸门在服务开启事务之前取额度，等待期间不占用数据库连接（见 ExportConcurrencyGuard）
+        FileDownloadResponse file = exportConcurrencyGuard.execute("module-xlsx",
+                () -> moduleExportService.export(payload.moduleKey(), payload.recordIds()));
         return toDownloadResponse(file);
     }
 
