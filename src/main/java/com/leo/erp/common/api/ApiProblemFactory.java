@@ -74,6 +74,7 @@ public class ApiProblemFactory {
             case SESSION_EVICTED -> "session-evicted";
             case CONCURRENT_MODIFICATION -> "concurrent-modification";
             case REFRESH_TOKEN_REUSE_CONFLICT -> "refresh-token-reuse-conflict";
+            case IDEMPOTENCY_CONFLICT -> "idempotency-conflict";
             case PRECONDITION_FAILED -> "precondition-failed";
             case PRECONDITION_REQUIRED -> "precondition-required";
             case TOO_MANY_REQUESTS -> "too-many-requests";

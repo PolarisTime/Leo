@@ -3,6 +3,7 @@ package com.leo.erp.common.idempotent;
 import com.leo.erp.common.api.ApiErrorResponseWriter;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.support.SecurityPrincipal;
+import lombok.extern.slf4j.Slf4j;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+@Slf4j
 @Component
 public class HttpIdempotencyFilter extends OncePerRequestFilter {
 
@@ -74,7 +76,7 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
             try {
                 fingerprint = multipartFingerprint(request);
             } catch (IOException | ServletException ex) {
-                logger.warn("Failed to fingerprint multipart request, skip HTTP idempotency: path="
+                log.warn("Failed to fingerprint multipart request, skip HTTP idempotency: path="
                         + normalizedPath(request), ex);
                 filterChain.doFilter(request, response);
                 return;
@@ -95,13 +97,13 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
         if (status == HttpIdempotencyService.Status.ACQUIRED) {
             continueRequest(replayableRequest, response, filterChain, scopedKey, fingerprint);
         } else if (status == HttpIdempotencyService.Status.DUPLICATE_PENDING) {
-            writeFailure(request, response, "请勿重复提交，请等待当前请求处理完成");
+            writeConflict(request, response, "请勿重复提交，请等待当前请求处理完成");
         } else if (status == HttpIdempotencyService.Status.DUPLICATE_COMPLETED) {
             replayCompletedResponse(request, response, decision.response());
         } else if (status == HttpIdempotencyService.Status.UNAVAILABLE) {
             writeUnavailable(request, response);
         } else {
-            writeFailure(request, response, "幂等键已用于不同请求，请重新生成幂等键后再提交");
+            writeConflict(request, response, "幂等键已用于不同请求，请重新生成幂等键后再提交");
         }
     }
 
@@ -112,7 +114,7 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
             return false;
         }
         if (isMultipart(request) && !isWithinMultipartLimit(request)) {
-            logger.info("Skip HTTP idempotency for oversized multipart request: path="
+            log.info("Skip HTTP idempotency for oversized multipart request: path="
                     + normalizedPath(request) + ", contentLength=" + request.getContentLengthLong());
             return false;
         }
@@ -148,40 +150,79 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
                         cachedResponse(responseWrapper)
                 );
                 if (!completed) {
-                    logger.error("Failed to persist completed HTTP idempotency response: key=" + scopedKey);
+                    log.error("Failed to persist completed HTTP idempotency response: key=" + scopedKey);
                 }
             } else if (responseWrapper.getStatus() >= 400 && responseWrapper.getStatus() < 500) {
                 idempotencyService.release(scopedKey, fingerprint);
             } else {
-                logger.error("HTTP idempotency pending key retained after server error: key=" + scopedKey
+                log.error("HTTP idempotency pending key retained after server error: key=" + scopedKey
                         + ", status=" + responseWrapper.getStatus());
             }
             responseWrapper.copyBodyToResponse();
         } catch (ServletException | IOException | RuntimeException ex) {
-            logger.error("HTTP idempotency pending key retained after request failure: key=" + scopedKey, ex);
+            log.error("HTTP idempotency pending key retained after request failure: key=" + scopedKey, ex);
             throw ex;
         }
     }
 
-    private void writeFailure(HttpServletRequest request,
-                              HttpServletResponse response,
-                              String message) throws IOException {
+    /**
+     * 幂等键冲突：同一幂等键的请求正在处理中，或该键已被用于不同请求体。
+     *
+     * <p>语义上这是**冲突**而不是「不可处理的语义错误」：同一幂等键代表同一资源的同一提交，
+     * 冲突双方争夺的是同一个业务动作。原先返回 {@code 422 + 4220}（BUSINESS_ERROR），
+     * 与「字段校验失败」同码，客户端无法区分「参数不对」与「重复提交」，
+     * 也无法按统一的重试语义处理（409 更符合 REST 惯例与本项目规范）。</p>
+     *
+     * <p>错误码用专用的 {@link ErrorCode#IDEMPOTENCY_CONFLICT}（4092）而不是
+     * {@link ErrorCode#CONCURRENT_MODIFICATION}（4090）：4090 的文案引导用户「刷新后重试」，
+     * 而重复提交要引导「等待当前请求完成」，前端据此渲染不同提示。</p>
+     *
+     * <p>同时补上结构化日志：本响应由 {@link ApiErrorResponseWriter} 直接写出、
+     * **绕过全局异常处理器**，因此过去完全没有日志——压测报告里「幂等冲突静默无痕」
+     * 正是这个原因，导致一次误判（把 422 当成编码失效）。</p>
+     */
+    private void writeConflict(HttpServletRequest request,
+                               HttpServletResponse response,
+                               String message) throws IOException {
+        log.warn("幂等键冲突，返回 409: method={}, uri={}, keyHash={}, message={}",
+                request.getMethod(),
+                request.getRequestURI(),
+                keyFingerprint(request),
+                message);
         errorResponseWriter.write(
                 request,
                 response,
-                HttpStatus.UNPROCESSABLE_ENTITY,
-                ErrorCode.BUSINESS_ERROR,
+                HttpStatus.CONFLICT,
+                ErrorCode.IDEMPOTENCY_CONFLICT,
                 message
         );
     }
 
+    /** 只记录幂等键的摘要，避免把客户端令牌原文写进日志。 */
+    private String keyFingerprint(HttpServletRequest request) {
+        String key = resolveIdempotencyKey(request);
+        if (key == null || key.isBlank()) {
+            return "-";
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(key.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash, 0, 6);
+        } catch (NoSuchAlgorithmException ex) {
+            return "-";
+        }
+    }
+
     private void writeUnavailable(HttpServletRequest request,
                                   HttpServletResponse response) throws IOException {
+        log.warn("幂等依赖服务不可用，返回 503: method={}, uri={}", request.getMethod(), request.getRequestURI());
+        // 依赖不可用必须用 5030（service-unavailable），不能用 5000（internal-error）：
+        // 否则监控无法区分「Redis 挂了」与「代码有问题」。
         errorResponseWriter.write(
                 request,
                 response,
                 HttpStatus.SERVICE_UNAVAILABLE,
-                ErrorCode.INTERNAL_ERROR,
+                ErrorCode.SERVICE_UNAVAILABLE,
                 "幂等服务暂不可用，请稍后重试"
         );
     }

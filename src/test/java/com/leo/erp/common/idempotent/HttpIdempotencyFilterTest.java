@@ -1,6 +1,7 @@
 package com.leo.erp.common.idempotent;
 
 import com.leo.erp.common.api.ApiErrorResponseWriter;
+import com.leo.erp.common.error.ErrorCode;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -174,6 +176,71 @@ class HttpIdempotencyFilterTest {
         if (idempotencyKey != null) {
             request.addHeader(HttpIdempotencyFilter.HEADER, idempotencyKey);
         }
+        return request;
+    }
+
+    // ---- 幂等冲突的状态码语义（2026-09-30 报告 P3 项）---------------------------------
+    // 冲突（同一幂等键正在处理 / 该键已用于不同请求体）必须返回 409，
+    // 而不是 422：422 与「字段校验失败」同码，客户端无法区分，也不符合 REST 惯例。
+    // 这三条断言同时也是「响应不再静默」的回归保护——写出前必须留下结构化日志。
+
+    @Test
+    void duplicatePending_shouldReturn409Conflict() throws Exception {
+        when(idempotencyService.start(anyString(), anyString(), any(Duration.class)))
+                .thenReturn(HttpIdempotencyService.Decision.duplicatePending());
+
+        MockHttpServletRequest request = jsonRequest();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(request, response, (req, res) -> { });
+
+        ArgumentCaptor<HttpStatus> status = ArgumentCaptor.forClass(HttpStatus.class);
+        ArgumentCaptor<ErrorCode> code = ArgumentCaptor.forClass(ErrorCode.class);
+        ArgumentCaptor<String> message = ArgumentCaptor.forClass(String.class);
+        verify(errorResponseWriter).write(any(), any(), status.capture(), code.capture(), message.capture());
+        assertThat(status.getValue()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(code.getValue()).isEqualTo(ErrorCode.IDEMPOTENCY_CONFLICT);
+        assertThat(message.getValue()).contains("请勿重复提交");
+    }
+
+    @Test
+    void reusedKeyWithDifferentPayload_shouldReturn409Conflict() throws Exception {
+        when(idempotencyService.start(anyString(), anyString(), any(Duration.class)))
+                .thenReturn(HttpIdempotencyService.Decision.parameterMismatch());
+
+        MockHttpServletRequest request = jsonRequest();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(request, response, (req, res) -> { });
+
+        ArgumentCaptor<HttpStatus> status = ArgumentCaptor.forClass(HttpStatus.class);
+        ArgumentCaptor<ErrorCode> code = ArgumentCaptor.forClass(ErrorCode.class);
+        verify(errorResponseWriter).write(any(), any(), status.capture(), code.capture(), any());
+        assertThat(status.getValue()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(code.getValue()).isEqualTo(ErrorCode.IDEMPOTENCY_CONFLICT);
+    }
+
+    @Test
+    void idempotencyServiceUnavailable_shouldReturn503Not500() throws Exception {
+        when(idempotencyService.start(anyString(), anyString(), any(Duration.class)))
+                .thenReturn(HttpIdempotencyService.Decision.unavailable());
+
+        MockHttpServletRequest request = jsonRequest();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(request, response, (req, res) -> { });
+
+        ArgumentCaptor<HttpStatus> status = ArgumentCaptor.forClass(HttpStatus.class);
+        ArgumentCaptor<ErrorCode> code = ArgumentCaptor.forClass(ErrorCode.class);
+        verify(errorResponseWriter).write(any(), any(), status.capture(), code.capture(), any());
+        assertThat(status.getValue()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        // 必须是 5030（service-unavailable）而非 5000（internal-error），
+        // 否则监控无法区分「Redis 挂了」与「代码有问题」。
+        assertThat(code.getValue()).isEqualTo(ErrorCode.SERVICE_UNAVAILABLE);
+    }
+
+    private MockHttpServletRequest jsonRequest() {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v2.0/customers");
+        request.addHeader(HttpIdempotencyFilter.HEADER, IDEMPOTENCY_KEY);
+        request.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        request.setContent(JSON_BODY.getBytes(StandardCharsets.UTF_8));
         return request;
     }
 }
