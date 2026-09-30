@@ -24,10 +24,20 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long>,
     boolean existsByLoginNameAndDeletedFlagFalse(String loginName);
 
     /**
-     * 原子更新「最后登录时间」，不参与乐观锁版本比对。
+     * 原子更新「最后登录时间」，不参与乐观锁版本比对，并把落库节流条件并入 UPDATE 的 WHERE。
      *
      * <p>用法背景见 {@code LoginAuditService}：登录不再改实体、也不再对 {@code sys_user}
      * 加悲观锁，审计字段用这一条 UPDATE 直写即可，因此不会产生版本冲突。</p>
+     *
+     * <p><b>节流进 WHERE 的关键机制（P2，审计报告发现 1）：</b>PostgreSQL READ COMMITTED 下，
+     * 后到的 UPDATE 在拿到行锁后会用<b>最新已提交版本重评 WHERE</b>（EvalPlanQual）——首条事务
+     * 提交后，其余并发事务看到 {@code lastLoginDate} 已被刷新、条件不再成立，直接跳过写入；
+     * 并发突发窗口内实际只写 1 条，不再出现「20 条 UPDATE 全部发出并串行排队」。</p>
+     *
+     * <p><b>两道闸分工：</b>实体快照预判（{@code LoginAuditService.shouldWrite}）防常态下的
+     * 无谓 UPDATE（节流命中时一条 SQL 都不发）；本方法的 WHERE 条件防并发突发——快照在并发下
+     * 会过期，预判全部放行时由 WHERE 兜底。{@code staleBefore} 由调用方按
+     * {@code leo.auth.login-audit.last-login-write-interval-seconds}（默认 60s）计算。</p>
      *
      * <p><b>不要加 {@code clearAutomatically = true}。</b>实测该标志会把持久化上下文清空，
      * 使同一个登录事务里随后对 {@code sys_user} 的悲观锁读变成「重新加载 + 锁升级」，
@@ -36,8 +46,16 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long>,
      * 与 {@code flushAutomatically} 一起使用正是当时踩坑的组合。</p>
      */
     @Modifying
-    @Query("UPDATE UserAccount u SET u.lastLoginDate = :loginAt WHERE u.id = :userId AND u.deletedFlag = false")
-    int updateLastLoginDate(@Param("userId") Long userId, @Param("loginAt") LocalDateTime loginAt);
+    @Query("""
+            UPDATE UserAccount u
+               SET u.lastLoginDate = :loginAt
+             WHERE u.id = :userId
+               AND u.deletedFlag = false
+               AND (u.lastLoginDate IS NULL OR u.lastLoginDate < :staleBefore)
+            """)
+    int updateLastLoginDate(@Param("userId") Long userId,
+                            @Param("loginAt") LocalDateTime loginAt,
+                            @Param("staleBefore") LocalDateTime staleBefore);
 
     @Query(value = """
             SELECT COUNT(DISTINCT u.id)

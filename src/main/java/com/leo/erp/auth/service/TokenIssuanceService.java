@@ -5,7 +5,6 @@ import com.leo.erp.auth.domain.entity.RefreshTokenSession;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.domain.enums.RevokeReason;
 import com.leo.erp.auth.domain.enums.UserStatus;
-import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.web.dto.AuthUserResponse;
 import com.leo.erp.auth.web.dto.TokenResponse;
 import com.leo.erp.common.error.BusinessException;
@@ -28,20 +27,17 @@ public class TokenIssuanceService {
     private static final long MILLIS_PER_SECOND = 1000;
     private static final String TOKEN_TYPE_BEARER = "Bearer";
 
-    private final UserAccountRepository userAccountRepository;
     private final JwtTokenService jwtTokenService;
     private final SessionManagementService sessionManagementService;
     private final ApplicationEventPublisher eventPublisher;
     private final AuthorityProvider authorityProvider;
 
     public TokenIssuanceService(
-            UserAccountRepository userAccountRepository,
             JwtTokenService jwtTokenService,
             SessionManagementService sessionManagementService,
             ApplicationEventPublisher eventPublisher,
             AuthorityProvider authorityProvider
     ) {
-        this.userAccountRepository = userAccountRepository;
         this.jwtTokenService = jwtTokenService;
         this.sessionManagementService = sessionManagementService;
         this.eventPublisher = eventPublisher;
@@ -134,7 +130,12 @@ public class TokenIssuanceService {
         );
         String accessToken = jwtTokenService.generateAccessToken(principal, sessionTokenId);
 
-        userAccountRepository.save(user);
+        // 登录链路禁止写 UserAccount 实体（P1）：审计值 last_login_date 走 LoginAuditService 的原子
+        // UPDATE 落库，此处一旦 save(user)，由于 sys_user 无 @DynamicUpdate，提交时会发出整行
+        // update ... set ... version=? where version=? ——既用登录时的旧快照覆盖同事务刚写入的审计值，
+        // 又会因陈旧 version 在并发登录下复活乐观锁 409（陷阱见 UserAccountRepository 与
+        // SessionManagementService 的注释）。因此 issueTokens 不再持有 UserAccountRepository，
+        // 结构上无法写 sys_user；守护测试见 TokenIssuanceServiceTest 与 LoginServiceTest。
 
         eventPublisher.publishEvent(new SessionInvalidatedEvent(user.getId(), sessionTokenId, false));
 

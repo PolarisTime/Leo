@@ -384,6 +384,8 @@ leo:
     login-audit:
       # 相邻两次「最后登录时间」落库的最小间隔（秒）；<=0 表示每次登录都写。
       # 该字段是审计用途，节流后并发登录不再争抢同一行 sys_user（乐观锁冲突的主要来源）。
+      # 同一间隔用于两道闸：登录时的实体快照预判（节流命中时不发 SQL）与 updateLastLoginDate 的
+      # UPDATE WHERE 条件（并发突发下由 PostgreSQL EvalPlanQual 用最新提交版本重评，实际只写 1 条）。
       last-login-write-interval-seconds: ${LEO_AUTH_LOGIN_AUDIT_LAST_LOGIN_WRITE_INTERVAL_SECONDS:60}
     refresh-token:
       # 刷新时是否轮换 refresh token；开启后仍复用同一条 session 记录

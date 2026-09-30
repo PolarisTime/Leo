@@ -69,12 +69,20 @@ public class LoginService {
         }
 
         loginAttemptService.clearFailures(normalizedLoginName);
+        TokenResponse response = tokenIssuanceService.issueTokens(user, ctx.loginIp(), ctx.userAgent());
+        recordLoginSuccess(user, ctx);
         // 必须走「原子 UPDATE + 节流」，不能写 user.setLastLoginDate(...)：
         // sys_user 带 @Version，原先每次登录都改实体，提交时做版本比对且冲突后不重试，
         // 实测同账号 20 并发登录仅 5% 成功（92% 返回 409），还会退化成登录风暴打满连接池。
+        //
+        // 该调用刻意放在 login() 最末、仍在同一事务内（P2）：updateLastLoginDate 一旦执行就取得
+        // sys_user 行锁并持有到提交，放在此处把行锁窗口从「审计 + 发令牌 + 操作日志 + 提交」
+        // 缩到「审计 + 提交」，同账号并发登录不再在行锁上排队空耗连接。
+        // 语义变化：issueTokens 或操作日志失败时，本次事务回滚、不再留下成功登录的审计值
+        // （原先虽先发 UPDATE，但同事务回滚同样会撤销它，净效果一致）；失败的登录本就不该记成功，
+        // 语义上更正确。失败语义其余不变：本次只移动调用位置，不新增也不移除 try/catch，
+        // 审计/Redis 异常的传播路径与改造前完全一致。
         loginAuditService.recordSuccessfulLogin(user);
-        TokenResponse response = tokenIssuanceService.issueTokens(user, ctx.loginIp(), ctx.userAgent());
-        recordLoginSuccess(user, ctx);
         return response;
     }
 
