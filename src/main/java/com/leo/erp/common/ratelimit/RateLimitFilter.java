@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -57,8 +58,14 @@ import java.util.Set;
  * <p>{@code leo.rate-limit.enabled=false}（默认）时第一行即放行，零额外开销、行为与现状完全一致。
  * 开启后：限流后端不可用（存储返回 UNAVAILABLE，或存储抛出任何异常——此处再兜一层 try/catch）
  * 一律放行 + WARN 日志，本过滤器绝不产生 5xx。</p>
+ *
+ * <p><b>装配注意：</b>本类必须标注 {@code @Component}——{@link com.leo.erp.common.config.SecurityConfig}
+ * 以构造注入方式强依赖它，漏注册会让应用<strong>启动即失败</strong>
+ * （`required a bean of type RateLimitFilter that could not be found`）。
+ * 仓库没有 @SpringBootTest 上下文测试，这类装配错误只能靠启动或 CI 冒烟暴露，评审时须核对注解。</p>
  */
 @Slf4j
+@Component
 public class RateLimitFilter extends OncePerRequestFilter {
 
     /** 429 响应必须携带的重试提示头。 */
