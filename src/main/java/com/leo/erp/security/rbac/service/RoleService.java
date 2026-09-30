@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
  *
  * <p><strong>权限缓存策略：</strong>{@code RoleBasedAuthorityProvider} 的权限集合缓存于 Redis。
  * 本服务的所有写入方法（角色增删改、状态变更、角色权限替换）都会在<em>事务提交后</em>
- * 调用 {@link PermissionCacheService#invalidateAll()} 更换权限版本号，使相关缓存立即失效，
+ * 调用 {@link PermissionCacheService#invalidateUsersByRole(java.util.Collection)} 按角色范围失效权限缓存，
  * 因此角色/权限变更仍在下一个请求即生效。</p>
  */
 @Service
@@ -102,7 +102,8 @@ public class RoleService {
         role.setStatus(normalizeStatusOrDefault(request.status(), StatusConstants.NORMAL));
         SysRole saved = roleRepository.save(role);
         operationLogger.created(saved, saved.getId());
-        permissionCacheService.invalidateAll();
+        // 新建角色尚未分配给任何用户，不会改变任何人的有效权限，因此**不做**缓存失效：
+        // 原先这里换全局纪元，等于每次建角色都把全量权限缓存清空一次。
         return toResponse(saved);
     }
 
@@ -123,7 +124,8 @@ public class RoleService {
         role.setStatus(normalizeStatusOrDefault(request.status(), role.getStatus()));
         SysRole saved = roleRepository.save(role);
         operationLogger.updated(saved, id);
-        permissionCacheService.invalidateAll();
+        // 角色信息/状态可能变化，只失效该角色下用户的权限缓存
+        permissionCacheService.invalidateUsersByRole(List.of(id));
         return toResponse(saved);
     }
 
@@ -138,8 +140,8 @@ public class RoleService {
         if (!nextStatus.equals(role.getStatus())) {
             role.setStatus(nextStatus);
             role = roleRepository.save(role);
-            // 角色启用状态直接决定该角色权限是否生效，必须失效
-            permissionCacheService.invalidateAll();
+            // 角色启用状态直接决定该角色权限是否生效，必须失效；影响面仅限该角色下的用户
+            permissionCacheService.invalidateUsersByRole(List.of(id));
         }
         return toResponse(role);
     }
@@ -153,7 +155,8 @@ public class RoleService {
         role.setDeletedFlag(true);
         roleRepository.save(role);
         operationLogger.deleted(role, id);
-        permissionCacheService.invalidateAll();
+        // 删除角色会让该角色下用户失去其权限，失效范围限定在这些用户
+        permissionCacheService.invalidateUsersByRole(List.of(id));
     }
 
     @Transactional
@@ -191,8 +194,9 @@ public class RoleService {
             rolePermissionRepository.saveAll(links);
         }
         operationLogger.updated(role, id);
-        // 权限集合变更，必须让所有用户已缓存的权限立即失效
-        permissionCacheService.invalidateAll();
+        // 权限集合变更必须让受影响用户（该角色下的人）立即失效；
+        // 不再换全局纪元——否则改一个角色会清空所有人的缓存并造成全站同时回源
+        permissionCacheService.invalidateUsersByRole(List.of(id));
         return toDetail(role);
     }
 

@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.common.support.AfterCommitExecutor;
+import com.leo.erp.security.rbac.repository.SysUserRoleRepository;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import java.time.Duration;
 import java.util.List;
@@ -53,15 +54,37 @@ class PermissionCacheServiceTest {
 
     private RedisTuningProperties redisTuningProperties;
 
+    @Mock
+    private SysUserRoleRepository userRoleRepository;
+
     private PermissionCacheService service;
+
+    /** 纪元 key → value 的内存替身：MGET/GET/SET/SETNX 都走同一份数据，测试才是真实读写路径。 */
+    private final java.util.Map<String, String> epochStore = new java.util.HashMap<>();
 
     @BeforeEach
     void setUp() {
         redisTuningProperties = new RedisTuningProperties();
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        // 两级纪元用一条 MGET 取回（生产路径）；未命中再回退到 GET 重建全局纪元
+        when(valueOperations.multiGet(any())).thenAnswer(invocation -> {
+            java.util.Collection<String> keys = invocation.getArgument(0);
+            // any() 在桩定义期会以 null 调用本方法，必须判空，否则后续测试重设桩时被 NPE 打断
+            return keys == null ? List.of()
+                    : keys.stream().map(epochStore::get).collect(java.util.stream.Collectors.toList());
+        });
+        when(valueOperations.get(anyString())).thenAnswer(invocation -> epochStore.get(invocation.getArgument(0)));
+        when(valueOperations.setIfAbsent(anyString(), anyString()))
+                .thenAnswer(invocation -> epochStore.putIfAbsent(invocation.getArgument(0), invocation.getArgument(1)) == null);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            epochStore.put(invocation.getArgument(0), invocation.getArgument(1));
+            return null;
+        }).when(valueOperations).set(anyString(), anyString());
         // 真实 AfterCommitExecutor：无活动事务时同步执行，等价于提交后立即失效
+        // 无 MeterRegistry（ObjectProvider 传 null 时指标退化为不计数，不影响行为）
         service = new PermissionCacheService(
-                redisTemplate, cacheSupport, new AfterCommitExecutor(), redisTuningProperties);
+                redisTemplate, cacheSupport, new AfterCommitExecutor(), redisTuningProperties,
+                userRoleRepository, null);
     }
 
     private void stubCacheReadEmpty() {
@@ -71,17 +94,35 @@ class PermissionCacheServiceTest {
 
     @Test
     void get_shouldUseCurrentEpochInCacheKey() {
-        when(valueOperations.get(EPOCH_KEY)).thenReturn("epoch-a");
-        when(cacheSupport.read(eq("auth:perm:epoch-a:7:0"),
+        epochStore.put(EPOCH_KEY, "epoch-a");
+        when(cacheSupport.read(eq("auth:perm:epoch-a:-:7:0"),
                 org.mockito.ArgumentMatchers.<TypeReference<List<String>>>any()))
                 .thenReturn(Optional.of(List.of("roles:read")));
 
         assertThat(service.get(USER_ID, CREDENTIAL_VERSION)).contains(List.of("roles:read"));
     }
 
+    /**
+     * 两级纪元都必须进 key：全局纪元让「影响面过大 / 反查失败」的兜底对所有人生效，
+     * 用户级纪元让按范围失效只波及目标用户。
+     */
+    @Test
+    void get_shouldIncludeBothGlobalAndUserEpochsInKey() {
+        epochStore.put(EPOCH_KEY, "epoch-g");
+        epochStore.put("auth:perm:uepoch:7", "epoch-u");
+        stubCacheReadEmpty();
+
+        service.get(USER_ID, CREDENTIAL_VERSION);
+
+        ArgumentCaptor<String> readKey = ArgumentCaptor.forClass(String.class);
+        verify(cacheSupport).read(readKey.capture(),
+                org.mockito.ArgumentMatchers.<TypeReference<List<String>>>any());
+        assertThat(readKey.getValue()).isEqualTo("auth:perm:epoch-g:epoch-u:7:0");
+    }
+
     @Test
     void get_shouldReturnEmptyWhenRedisUnavailable() {
-        when(valueOperations.get(EPOCH_KEY)).thenThrow(new RuntimeException("redis down"));
+        when(valueOperations.multiGet(any())).thenThrow(new RuntimeException("redis down"));
 
         assertThat(service.get(USER_ID, CREDENTIAL_VERSION)).isEmpty();
     }
@@ -97,8 +138,6 @@ class PermissionCacheServiceTest {
     /** epoch 缺失时必须按随机值重建，不能使用固定初值，否则历史 key 会重新可命中。 */
     @Test
     void get_shouldSeedRandomEpochWhenMissing() {
-        when(valueOperations.get(EPOCH_KEY)).thenReturn(null);
-        when(valueOperations.setIfAbsent(eq(EPOCH_KEY), anyString())).thenReturn(true);
         stubCacheReadEmpty();
 
         service.get(USER_ID, CREDENTIAL_VERSION);
@@ -110,8 +149,8 @@ class PermissionCacheServiceTest {
 
     @Test
     void get_shouldReuseConcurrentlySeededEpoch() {
-        when(valueOperations.get(EPOCH_KEY)).thenReturn(null, "epoch-seeded-by-peer");
         when(valueOperations.setIfAbsent(eq(EPOCH_KEY), anyString())).thenReturn(false);
+        when(valueOperations.get(EPOCH_KEY)).thenReturn(null, "epoch-seeded-by-peer");
         stubCacheReadEmpty();
 
         service.get(USER_ID, CREDENTIAL_VERSION);
@@ -119,12 +158,12 @@ class PermissionCacheServiceTest {
         ArgumentCaptor<String> readKey = ArgumentCaptor.forClass(String.class);
         verify(cacheSupport).read(readKey.capture(),
                 org.mockito.ArgumentMatchers.<TypeReference<List<String>>>any());
-        assertThat(readKey.getValue()).startsWith("auth:perm:epoch-seeded-by-peer:7:0");
+        assertThat(readKey.getValue()).isEqualTo("auth:perm:epoch-seeded-by-peer:-:7:0");
     }
 
     @Test
     void put_shouldWriteWithCurrentEpochAndConfiguredTtl() {
-        when(valueOperations.get(EPOCH_KEY)).thenReturn("epoch-a");
+        epochStore.put(EPOCH_KEY, "epoch-a");
 
         service.put(USER_ID, CREDENTIAL_VERSION, List.of("roles:read"));
 
@@ -132,15 +171,17 @@ class PermissionCacheServiceTest {
         ArgumentCaptor<Object> value = ArgumentCaptor.forClass(Object.class);
         ArgumentCaptor<Duration> ttl = ArgumentCaptor.forClass(Duration.class);
         verify(cacheSupport).write(key.capture(), value.capture(), ttl.capture());
-        assertThat(key.getValue()).isEqualTo("auth:perm:epoch-a:7:0");
+        assertThat(key.getValue()).isEqualTo("auth:perm:epoch-a:-:7:0");
         assertThat(value.getValue()).isEqualTo(List.of("roles:read"));
-        assertThat(ttl.getValue()).isEqualTo(redisTuningProperties.permissionTtl());
+        // TTL 现在带随机抖动（避免同批缓存同时过期形成惊群），因此断言区间而非精确值
+        Duration base = redisTuningProperties.permissionTtl();
+        assertThat(ttl.getValue()).isBetween(base, base.plusSeconds(120));
     }
 
     /** 空权限集合需要缓存，避免无角色用户每次请求都回源查库。 */
     @Test
     void put_shouldCacheEmptyCodeSet() {
-        when(valueOperations.get(EPOCH_KEY)).thenReturn("epoch-a");
+        epochStore.put(EPOCH_KEY, "epoch-a");
 
         service.put(USER_ID, CREDENTIAL_VERSION, List.of());
 
@@ -155,7 +196,7 @@ class PermissionCacheServiceTest {
      */
     @Test
     void invalidateAll_shouldRotateEpochSoExistingEntriesBecomeUnreachable() {
-        when(valueOperations.get(EPOCH_KEY)).thenReturn("epoch-old");
+        epochStore.put(EPOCH_KEY, "epoch-old");
         service.put(USER_ID, CREDENTIAL_VERSION, List.of("roles:read"));
 
         ArgumentCaptor<String> writtenKey = ArgumentCaptor.forClass(String.class);
@@ -168,7 +209,6 @@ class PermissionCacheServiceTest {
         String newEpoch = rotated.getValue();
         assertThat(newEpoch).isNotBlank().isNotEqualTo("epoch-old");
 
-        when(valueOperations.get(EPOCH_KEY)).thenReturn(newEpoch);
         stubCacheReadEmpty();
         service.get(USER_ID, CREDENTIAL_VERSION);
 
@@ -177,7 +217,31 @@ class PermissionCacheServiceTest {
                 org.mockito.ArgumentMatchers.<TypeReference<List<String>>>any());
         assertThat(readKey.getValue())
                 .isNotEqualTo(writtenKey.getValue())
-                .isEqualTo("auth:perm:" + newEpoch + ":7:0");
+                .isEqualTo("auth:perm:" + newEpoch + ":-:7:0");
+    }
+
+    /**
+     * 回归（2026-09-30 C 包缺陷修复）：已拥有用户级纪元的用户，全局纪元轮换也必须让它失效。
+     * 若 key 只带用户级纪元，全局轮换对它静默无效——「反查失败兜底」会退化成漏失效（权限收不回来）。
+     */
+    @Test
+    void invalidateAll_shouldAlsoInvalidateUsersHavingUserEpoch() {
+        epochStore.put(EPOCH_KEY, "epoch-old");
+        epochStore.put("auth:perm:uepoch:7", "epoch-u1");
+        service.put(USER_ID, CREDENTIAL_VERSION, List.of("roles:read"));
+
+        ArgumentCaptor<String> writtenKey = ArgumentCaptor.forClass(String.class);
+        verify(cacheSupport).write(writtenKey.capture(), any(), any());
+        assertThat(writtenKey.getValue()).isEqualTo("auth:perm:epoch-old:epoch-u1:7:0");
+
+        service.invalidateAll();
+        stubCacheReadEmpty();
+        service.get(USER_ID, CREDENTIAL_VERSION);
+
+        ArgumentCaptor<String> readKey = ArgumentCaptor.forClass(String.class);
+        verify(cacheSupport).read(readKey.capture(),
+                org.mockito.ArgumentMatchers.<TypeReference<List<String>>>any());
+        assertThat(readKey.getValue()).isNotEqualTo(writtenKey.getValue());
     }
 
     /** 失效失败不能影响业务写入，TTL 兜底会自然过期。 */
@@ -190,7 +254,7 @@ class PermissionCacheServiceTest {
 
     @Test
     void put_shouldSwallowSerializationFailure() {
-        when(valueOperations.get(EPOCH_KEY)).thenReturn("epoch-a");
+        epochStore.put(EPOCH_KEY, "epoch-a");
         doThrow(new RuntimeException("boom")).when(cacheSupport).write(anyString(), any(), any());
 
         assertThatCode(() -> service.put(USER_ID, CREDENTIAL_VERSION, List.of("roles:read")))

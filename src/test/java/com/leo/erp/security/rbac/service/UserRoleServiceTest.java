@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -114,7 +115,7 @@ class UserRoleServiceTest {
         captor.getValue().forEach(inserted::add);
         assertThat(inserted).extracting(SysUserRole::getRoleId).containsExactly(10L);
         assertThat(response.roles()).extracting(RoleResponse::code).containsExactly("A");
-        verify(permissionCacheService).invalidateAll();
+        verify(permissionCacheService).invalidateUser(anyLong());
     }
 
     @Test
@@ -128,7 +129,7 @@ class UserRoleServiceTest {
         verify(userRoleRepository, never()).saveAll(any());
         assertThat(response.roles()).isEmpty();
         // 清空角色同样改变该用户的有效权限，必须失效
-        verify(permissionCacheService).invalidateAll();
+        verify(permissionCacheService).invalidateUser(anyLong());
     }
 
     @Test
@@ -141,7 +142,7 @@ class UserRoleServiceTest {
         userRoleService.grantSuperAdmin(7L);
 
         verify(userRoleRepository).save(any(SysUserRole.class));
-        verify(permissionCacheService).invalidateAll();
+        verify(permissionCacheService).invalidateUser(anyLong());
     }
 
     @Test
@@ -154,7 +155,7 @@ class UserRoleServiceTest {
 
         verify(userRoleRepository, never()).save(any());
         // 未发生变更时不应无谓地刷新权限缓存
-        verify(permissionCacheService, never()).invalidateAll();
+        verify(permissionCacheService, never()).invalidateUser(anyLong());
     }
 
     private UserAccount account(Long id) {

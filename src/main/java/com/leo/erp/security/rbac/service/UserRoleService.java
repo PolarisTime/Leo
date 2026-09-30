@@ -24,8 +24,10 @@ import java.util.Optional;
 /**
  * RBAC0 用户-角色服务，支持整体替换用户角色集合。
  *
- * <p>用户角色变更会影响该用户的权限集合，因此写入方法在事务提交后调用
- * {@link PermissionCacheService#invalidateAll()} 使权限缓存立即失效，变更在下一请求生效。</p>
+ * <p>用户角色变更只影响该用户，因此写入方法在事务提交后调用
+ * {@link PermissionCacheService#invalidateUser(Long)} 只失效该用户的权限缓存，
+ * 不再换全局纪元——后者会让所有用户的缓存一起失效并同时回源
+ * （代价随用户数线性放大，且形成惊群）。变更仍在下一请求生效。</p>
  */
 @Service
 public class UserRoleService {
@@ -89,7 +91,7 @@ public class UserRoleService {
             }).toList();
             userRoleRepository.saveAll(links);
         }
-        permissionCacheService.invalidateAll();
+        permissionCacheService.invalidateUser(userId);
         return rolesOf(userId);
     }
 
@@ -116,7 +118,7 @@ public class UserRoleService {
         link.setUserId(userId);
         link.setRoleId(roleId);
         userRoleRepository.save(link);
-        permissionCacheService.invalidateAll();
+        permissionCacheService.invalidateUser(userId);
     }
 
     private void requireActiveUser(Long userId) {

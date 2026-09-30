@@ -154,7 +154,7 @@ class RoleServiceTest {
         assertThat(response.permissions())
                 .containsExactlyInAnyOrder(PermissionCodes.ROLES_READ, PermissionCodes.ROLES_WRITE);
         // 权限集合未变也允许失效缓存（幂等且安全），但不能要求必然调用
-        verify(permissionCacheService).invalidateAll();
+        verify(permissionCacheService).invalidateUsersByRole(java.util.List.of(5L));
     }
 
     @Test
@@ -218,7 +218,7 @@ class RoleServiceTest {
         inserted.getValue().forEach(links::add);
         assertThat(links).extracting(SysRolePermission::getPermissionCode)
                 .containsExactly(PermissionCodes.MATERIALS_READ);
-        verify(permissionCacheService).invalidateAll();
+        verify(permissionCacheService).invalidateUsersByRole(java.util.List.of(5L));
     }
 
     @Test

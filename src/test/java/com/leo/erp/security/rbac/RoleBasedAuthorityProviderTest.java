@@ -3,6 +3,9 @@ package com.leo.erp.security.rbac;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import com.leo.erp.common.support.StatusConstants;
@@ -39,7 +42,7 @@ class RoleBasedAuthorityProviderTest {
 
     @Test
     void authoritiesFor_shouldAggregateRolePermissions() {
-        when(permissionCacheService.get(USER_ID, CREDENTIAL_VERSION)).thenReturn(Optional.empty());
+        givenCacheMiss();
         when(rolePermissionRepository.findPermissionCodesByUserId(USER_ID, StatusConstants.NORMAL))
                 .thenReturn(List.of("roles:read", "roles:write", "sales-orders:read", "sales-orders:*"));
 
@@ -52,7 +55,7 @@ class RoleBasedAuthorityProviderTest {
 
     @Test
     void authoritiesFor_shouldPassThroughWildcard() {
-        when(permissionCacheService.get(USER_ID, CREDENTIAL_VERSION)).thenReturn(Optional.empty());
+        givenCacheMiss();
         when(rolePermissionRepository.findPermissionCodesByUserId(USER_ID, StatusConstants.NORMAL))
                 .thenReturn(List.of(PermissionCodes.WILDCARD));
 
@@ -64,7 +67,7 @@ class RoleBasedAuthorityProviderTest {
 
     @Test
     void authoritiesFor_shouldReturnEmptyWhenUserHasNoRolePermissions() {
-        when(permissionCacheService.get(USER_ID, CREDENTIAL_VERSION)).thenReturn(Optional.empty());
+        givenCacheMiss();
         when(rolePermissionRepository.findPermissionCodesByUserId(USER_ID, StatusConstants.NORMAL))
                 .thenReturn(List.of());
 
@@ -72,24 +75,40 @@ class RoleBasedAuthorityProviderTest {
                 SecurityPrincipal.authenticated(USER_ID, "tester", CREDENTIAL_VERSION))).isEmpty();
     }
 
-    /** 缓存未命中时，回源结果必须写回缓存，否则缓存永远无法生效。 */
+    /**
+     * 缓存未命中时，必须把「回源供应商」交给缓存层执行并落缓存。
+     *
+     * <p>回填与单飞合并都在 {@link PermissionCacheService} 内部完成，
+     * 因此这里断言的是：供应商被真正调用、且其结果被返回（回填逻辑由缓存层单测覆盖）。</p>
+     */
     @Test
-    void authoritiesFor_cacheMissShouldPopulateCache() {
-        when(permissionCacheService.get(USER_ID, CREDENTIAL_VERSION)).thenReturn(Optional.empty());
+    void authoritiesFor_cacheMissShouldLoadThroughCacheLayer() {
+        givenCacheMiss();
         List<String> codes = List.of("roles:read");
         when(rolePermissionRepository.findPermissionCodesByUserId(USER_ID, StatusConstants.NORMAL))
                 .thenReturn(codes);
+        when(permissionCacheService.getOrLoad(eq(USER_ID), eq(CREDENTIAL_VERSION), any()))
+                .thenAnswer(invocation -> {
+                    for (Object argument : invocation.getArguments()) {
+                        if (argument instanceof java.util.function.Supplier<?> supplier) {
+                            return supplier.get();
+                        }
+                    }
+                    return List.of();
+                });
 
-        provider.authoritiesFor(SecurityPrincipal.authenticated(USER_ID, "tester", CREDENTIAL_VERSION));
+        Collection<String> authorities = provider.authoritiesFor(
+                SecurityPrincipal.authenticated(USER_ID, "tester", CREDENTIAL_VERSION));
 
-        verify(permissionCacheService).put(USER_ID, CREDENTIAL_VERSION, codes);
+        assertThat(authorities).containsExactly("roles:read");
+        verify(rolePermissionRepository).findPermissionCodesByUserId(USER_ID, StatusConstants.NORMAL);
     }
 
     /** 缓存命中时不得再查库——这是本次优化的核心收益。 */
     @Test
     void authoritiesFor_cacheHitShouldNotQueryDatabase() {
-        when(permissionCacheService.get(USER_ID, CREDENTIAL_VERSION))
-                .thenReturn(Optional.of(List.of("roles:read", "sales-orders:read")));
+        when(permissionCacheService.getOrLoad(eq(USER_ID), eq(CREDENTIAL_VERSION), any()))
+                .thenReturn(List.of("roles:read", "sales-orders:read"));
 
         Collection<String> authorities = provider.authoritiesFor(
                 SecurityPrincipal.authenticated(USER_ID, "tester", CREDENTIAL_VERSION));
@@ -104,7 +123,8 @@ class RoleBasedAuthorityProviderTest {
      */
     @Test
     void authoritiesFor_emptyCachedSetShouldNotQueryDatabase() {
-        when(permissionCacheService.get(USER_ID, CREDENTIAL_VERSION)).thenReturn(Optional.of(List.of()));
+        when(permissionCacheService.getOrLoad(eq(USER_ID), eq(CREDENTIAL_VERSION), any()))
+                .thenReturn(List.of());
 
         assertThat(provider.authoritiesFor(
                 SecurityPrincipal.authenticated(USER_ID, "tester", CREDENTIAL_VERSION))).isEmpty();
@@ -114,14 +134,13 @@ class RoleBasedAuthorityProviderTest {
     /** 凭据版本参与缓存 key：版本变化意味着旧缓存不可命中，必须回源。 */
     @Test
     void authoritiesFor_shouldPassCredentialVersionToCache() {
-        when(permissionCacheService.get(USER_ID, 5L)).thenReturn(Optional.empty());
+        givenCacheMiss();
         when(rolePermissionRepository.findPermissionCodesByUserId(USER_ID, StatusConstants.NORMAL))
                 .thenReturn(List.of("roles:read"));
 
         provider.authoritiesFor(SecurityPrincipal.authenticated(USER_ID, "tester", 5L));
 
-        verify(permissionCacheService).get(USER_ID, 5L);
-        verify(permissionCacheService).put(USER_ID, 5L, List.of("roles:read"));
+        verify(permissionCacheService).getOrLoad(eq(USER_ID), eq(5L), any());
     }
 
     @Test
@@ -135,5 +154,18 @@ class RoleBasedAuthorityProviderTest {
     void authoritiesFor_nullPrincipalShouldReturnEmpty() {
         assertThat(provider.authoritiesFor(null)).isEmpty();
         verifyNoInteractions(rolePermissionRepository, permissionCacheService);
+    }
+
+    /** 缓存未命中的统一打桩：把请求交给「回源供应商」，模拟真实缓存层行为。 */
+    private void givenCacheMiss() {
+        when(permissionCacheService.getOrLoad(any(), anyLong(), any()))
+                .thenAnswer(invocation -> {
+                    for (Object argument : invocation.getArguments()) {
+                        if (argument instanceof java.util.function.Supplier<?> supplier) {
+                            return supplier.get();
+                        }
+                    }
+                    return List.of();
+                });
     }
 }
