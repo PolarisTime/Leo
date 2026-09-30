@@ -450,6 +450,27 @@ leo:
     max-file-size: ${LEO_EXCEL_MAX_FILE_SIZE:10485760}
     # 批量入库大小
     import-batch-size: ${LEO_EXCEL_IMPORT_BATCH_SIZE:500}
+  # 读路径限流/背压(2026-09-29 压测报告建议第 3 条): 过载时快速返回 429 + Retry-After, 避免延迟无界增长。
+  # 默认关闭(dev/测试环境零行为变化、零 Redis 开销); 打开后仅限 GET 读路径,
+  # 双维度(已认证按用户/匿名按客户端 IP + 全局)任一超限即 429; Redis 故障 fail-open 放行(仅 WARN), 限流器绝不产生 5xx。
+  rate-limit:
+    # 总开关; 默认 false: 过滤器首行放行, 行为与未接入限流完全一致
+    enabled: ${LEO_RATE_LIMIT_ENABLED:false}
+    # 是否把写方法(POST/PUT/PATCH/DELETE)也纳入限流; 默认 false 只限读。HEAD/OPTIONS 恒不限流
+    limit-write-methods: ${LEO_RATE_LIMIT_LIMIT_WRITE_METHODS:false}
+    # 用户维度额度(已认证按 userId, 匿名按客户端 IP): 每窗口允许的请求数; <=0 表示关闭该维度。
+    # 默认 60/秒: 远高于真人操作峰值(页面并发几十个 GET), 足以拦住刷数脚本与前端死循环重试
+    user-limit: ${LEO_RATE_LIMIT_USER_LIMIT:60}
+    # 用户维度窗口时长(秒); <=0 回退为 1 秒
+    user-window-seconds: ${LEO_RATE_LIMIT_USER_WINDOW_SECONDS:1}
+    # 全局额度(多实例共享 Redis 计数, 语义为"集群全局"): 每窗口允许的请求数; <=0 表示关闭该维度。
+    # 默认 300/秒 ≈ 实测单实例混合吞吐上限(~850 req/s)的 1/3, 在逼近饱和前先对读请求削峰
+    global-limit: ${LEO_RATE_LIMIT_GLOBAL_LIMIT:300}
+    # 全局窗口时长(秒); <=0 回退为 1 秒。默认 1 秒: 报告诉求是"过载时快速 429", 短窗口秒级感知过载
+    global-window-seconds: ${LEO_RATE_LIMIT_GLOBAL_WINDOW_SECONDS:1}
+    # 额外豁免路径(Ant 通配, 逗号分隔)。内置豁免不受本配置影响、不可移除:
+    # /v2.0/health、/v2.0/system/health、/actuator(/actuator/**)、/v2.0/auth/login(登录被限流=拒绝服务)、/error
+    exclude-paths: ${LEO_RATE_LIMIT_EXCLUDE_PATHS:}
   # 导出并发闸门：并发导出超过上限时快速失败 429（带 Retry-After），
   # 防止 POI 生成 XLSX 的 CPU 密集负载把线程与连接池一起吃满、外溢成全站故障
   export:

@@ -6,6 +6,7 @@ import com.leo.erp.common.api.ApiErrorResponseWriter;
 import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.idempotent.HttpIdempotencyFilter;
+import com.leo.erp.common.ratelimit.RateLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
@@ -50,6 +51,7 @@ public class SecurityConfig {
                                                    JwtAuthenticationFilter jwtAuthenticationFilter,
                                                    InitialSetupTokenFilter initialSetupTokenFilter,
                                                    HttpIdempotencyFilter httpIdempotencyFilter,
+                                                   RateLimitFilter rateLimitFilter,
                                                    ApiErrorResponseWriter errorResponseWriter) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -103,7 +105,10 @@ public class SecurityConfig {
                 })
                 .addFilterAfter(initialSetupTokenFilter, CorsFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(httpIdempotencyFilter, JwtAuthenticationFilter.class);
+                .addFilterAfter(httpIdempotencyFilter, JwtAuthenticationFilter.class)
+                // 读路径限流必须在认证之后（能拿到用户身份计键），且位于授权过滤器之前（削峰先于授权/DB 访问）；
+                // 锚定在 HttpIdempotencyFilter 之后，保证「认证 → 幂等 → 限流」的确定顺序。
+                .addFilterAfter(rateLimitFilter, HttpIdempotencyFilter.class);
 
         return http.build();
     }
@@ -145,6 +150,17 @@ public class SecurityConfig {
     public FilterRegistrationBean<HttpIdempotencyFilter> httpIdempotencyFilterRegistration(
             HttpIdempotencyFilter httpIdempotencyFilter) {
         FilterRegistrationBean<HttpIdempotencyFilter> registration = new FilterRegistrationBean<>(httpIdempotencyFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    /**
+     * 限流过滤器只在安全过滤器链内执行（依赖 SecurityContext 中的用户身份），
+     * 禁止 Servlet 容器再注册一次，否则匿名请求会被按 IP 预先计数一次。
+     */
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration(RateLimitFilter rateLimitFilter) {
+        FilterRegistrationBean<RateLimitFilter> registration = new FilterRegistrationBean<>(rateLimitFilter);
         registration.setEnabled(false);
         return registration;
     }
