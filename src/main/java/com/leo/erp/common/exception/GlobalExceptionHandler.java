@@ -68,6 +68,20 @@ public class GlobalExceptionHandler {
      */
     private static final int CONNECTION_RETRY_AFTER_SECONDS = 5;
 
+    /**
+     * 429（{@link ErrorCode#TOO_MANY_REQUESTS}）响应的 {@code Retry-After} 默认秒数。
+     *
+     * <p>取 1 秒的理由：429 的来源是**有界并发闸门**（导出闸门 acquire-timeout 500ms、
+     * 额度按请求粒度快速释放），被拒请求等 1 秒大概率已有额度——这与连接池耗尽（503）的
+     * 5 秒退避语义不同，不应混用；限流过滤器（RateLimitFilter）按窗口精确推导的
+     * {@code Retry-After} 在过滤器内直写，不会经过本分支，两者的值互不干扰。</p>
+     *
+     * <p>背景（2026-09-30 生产量级复测新发现）：module-exports 的 OpenAPI 注解与
+     * {@code ExportConcurrencyGuard} Javadoc 均承诺 429 携带 {@code Retry-After}，
+     * 但实现走的是不带 header 的失败分支——契约与实现不一致，实测抓包确认缺失。</p>
+     */
+    private static final int TOO_MANY_REQUESTS_RETRY_AFTER_SECONDS = 1;
+
     private final ApiProblemFactory problemFactory;
 
     public GlobalExceptionHandler(ApiProblemFactory problemFactory) {
@@ -246,6 +260,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<?> handleBusinessException(BusinessException ex, HttpServletRequest request) {
         HttpStatus status = resolveStatus(ex.getErrorCode());
+        if (ex.getErrorCode() == ErrorCode.TOO_MANY_REQUESTS) {
+            // 429 必须带 Retry-After（module-exports OpenAPI 注解与 ExportConcurrencyGuard
+            // Javadoc 均已承诺）；否则客户端只能盲重试。取值理由见常量注释。
+            HttpHeaders headers = new HttpHeaders();
+            headers.set(HttpHeaders.RETRY_AFTER, String.valueOf(TOO_MANY_REQUESTS_RETRY_AFTER_SECONDS));
+            return failure(request, status, ex.getErrorCode(), ex.getMessage(), List.of(), headers);
+        }
         return failure(request, status, ex.getErrorCode(), ex.getMessage());
     }
 
