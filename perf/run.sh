@@ -52,24 +52,73 @@ log "压测批次 RUN_ID=$LEO_PERF_RUN_ID（写测数据标记前缀 PERF-LOAD-$
 # 服务端对同一账号有会话数上限（SessionManagementService.DEFAULT_MAX_REFRESH_TOKENS = 3），
 # 第 4 次登录会吊销并拉黑最旧会话，使其 access token 立即 401。
 # 因此压测用例、指标采集器、辅助调用必须共用同一个会话，绝不能各自登录。
+#
+# ---- 登录次数不变量（硬门禁）--------------------------------------------------
+# 精确定义：run.sh 的一次进程（= 一轮压测）内，「向服务端 POST /v2.0/auth/login
+# 且成功换回 access token」的真实登录次数必须 <= 1。
+#   * 0 次：复用外部注入的 LEO_PERF_TOKEN，合法；
+#   * 1 次：resolve_shared_token 首次获取共享 token，合法；
+#   * >= 2 次：不变量破坏，脚本在结束时（以及任何再次登录的企图发生时）
+#     以非零退出并明确报错——一轮「跑完了」绝不能掩盖「登录把会话顶掉了」。
+# 为什么是 1：服务端同账号会话上限硬编码为 3，第 4 次登录静默吊销并拉黑最旧会话，
+# 正在压测的会话会被顶掉，表现为被测用例大面积 401 而业务日志毫无异常
+# （实测 07-heavy：346,686 请求 99.3% 变 401）。
+# 与采集器的关系：collect-metrics.sh 有同语义的独立计数（其自身登录次数 > 1 同样
+# 失败退出）。整轮合计仍必须 <= 1——run.sh 只在 resolve_shared_token 登录一次并
+# export LEO_PERF_TOKEN，采集器继承该 token，计 0 次；采集器因取指标失败重登会计入
+# 它自己的计数并在结束时显式打印、超限失败，两处的语义一致、互不豁免。
+#
+# 适用范围（STAGE=login 豁免）：`run.sh login` 跑的 06-login.js 是登录专项场景，
+# 按设计就要并发登录上百次（20 VU × 10 轮），这些业务登录发生在 k6 进程内、
+# 本就不计入下面的计数；为语义明确起见，login 阶段在结束时**打印**登录次数但
+# **豁免**不变量判定。run.sh 自身（resolve_shared_token）在任何阶段仍最多只允许
+# 登录 1 次——该防御门禁不因豁免而放松。
+PERF_LOGIN_COUNT=0
+
+# 每成功换回一个 token 必须调用一次（登录失败不计数：失败的登录不会在服务端创建会话）。
+record_perf_login() {
+  PERF_LOGIN_COUNT=$(( PERF_LOGIN_COUNT + 1 ))
+  log "真实登录计数: $PERF_LOGIN_COUNT/1（不变量上限 1 次）"
+}
+
+# 一轮结束时调用：打印本轮真实登录次数，超限则非零退出（STAGE=login 豁免判定）。
+assert_login_invariant() {
+  if [[ "${STAGE:-}" == "login" ]]; then
+    log "登录专项阶段（STAGE=login）：06-login.js 按设计并发登录，豁免登录次数不变量判定；run.sh 自身真实登录 $PERF_LOGIN_COUNT 次"
+    return 0
+  fi
+  log "登录次数不变量检查：本轮真实登录 $PERF_LOGIN_COUNT 次（硬上限 1 次）"
+  if (( PERF_LOGIN_COUNT > 1 )); then
+    fail "登录次数不变量被破坏：一轮压测只允许登录 <= 1 次，实际 $PERF_LOGIN_COUNT 次。服务端同账号会话上限硬编码为 3，第 4 次登录会静默吊销并拉黑最旧会话，正在压测的会话会被顶掉，表现为大面积 401（业务日志无异常）。请复用 LEO_PERF_TOKEN 并排查重复登录来源"
+  fi
+  return 0
+}
+
 resolve_shared_token() {
   if [[ -n "${LEO_PERF_TOKEN:-}" ]]; then
-    log "复用外部提供的 LEO_PERF_TOKEN"
+    log "复用外部提供的 LEO_PERF_TOKEN（本轮不再登录）"
     export LEO_PERF_TOKEN
     return 0
   fi
   local attempt token
   for attempt in 1 2 3 4 5 6; do
+    # 防御性硬门禁：已经成功登录过一次却仍无有效 token 时，禁止第二次真实登录——
+    # 继续登录只会再去撞服务端会话上限，顶掉正在压测的会话。
+    if (( PERF_LOGIN_COUNT >= 1 )); then
+      fail "登录次数不变量被破坏：本轮已成功登录 $PERF_LOGIN_COUNT 次仍无有效 token，拒绝再次登录（服务端同账号会话上限硬编码为 3，重复登录会静默吊销并拉黑最旧会话，顶掉正在压测的会话）"
+    fi
     token="$(curl -s --max-time 15 -X POST "${LEO_PERF_BASE_URL}/v2.0/auth/login" \
       -H 'Content-Type: application/json' \
       -H "X-Idempotency-Key: shared-$RANDOM-$RANDOM" \
       -d "{\"loginName\":\"$LEO_PERF_LOGIN_NAME\",\"password\":\"$LEO_PERF_PASSWORD\"}" \
       | jq -r '.accessToken // empty')"
     if [[ -n "$token" ]]; then
+      record_perf_login
       export LEO_PERF_TOKEN="$token"
       log "已获取共享 token（本次压测全程只登录一次）"
       return 0
     fi
+    # 登录请求未换回 token：服务端未创建会话，不计入真实登录次数，可安全重试。
     sleep 1
   done
   fail "无法获取共享 token：请确认该账号无其他客户端并发登录"
@@ -181,6 +230,10 @@ case "$STAGE" in
     ;;
   *) fail "未知阶段: $STAGE（可选 smoke|baseline|read|write|spike|login|heavy|race|attachments|soak|metrics|all）" ;;
 esac
+
+# 登录次数不变量是硬门禁：先于阶段结果判定——超限说明会话可能已被顶掉，
+# 此时任何「通过」读数都不可信，必须以非零退出并给出原因。
+assert_login_invariant
 
 # 阶段失败必须以非零退出码结束：否则 CI/调用方会把「跑完了」当成「跑对了」。
 if [[ $FAILED -ne 0 ]]; then

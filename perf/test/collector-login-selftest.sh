@@ -8,16 +8,19 @@
 # 结果是一次 07-heavy 压测的 346,686 个请求里 99.3% 变成 401（业务日志里无异常），
 # 极易被误读成「接口故障」。因此「只登录一次」必须有可执行的证据，不能只看注释。
 #
-# 三个用例：
-#   A 未提供共享 token：整个采集过程只允许登录 1 次
-#   B 提供共享 token：一次都不允许登录
-#   C 每第 3 次取指标都失败：必须重新登录（次数 ≥2）并打印会话吊销告警
+# 三个用例（登录次数语义已从旧版「超限只告警」升级为「超限即失败」）：
+#   A 未提供共享 token：整个采集过程只允许登录 1 次，退出码必须为 0
+#   B 提供共享 token：一次都不允许登录，退出码必须为 0
+#   C 每第 3 次取指标都失败：必须重新登录（次数 ≥2）并打印计数，
+#     此时判定登录不变量破坏 → 采集器必须以非零退出（旧版只告警，是假数据源）
 #
 # 用法： bash leo/perf/test/collector-login-selftest.sh
 set -uo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-COLLECTOR="$REPO_ROOT/leo/perf/collect-metrics.sh"
+# 被测文件相对本脚本自身定位：仓库目录名在不同检出形态下不同（主仓库 leo、
+# worktree d/b6、GitHub Actions 的 Leo），此前写死 `../../..+leo/` 会找不到文件。
+PERF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+COLLECTOR="$PERF_DIR/collect-metrics.sh"
 [[ -f "$COLLECTOR" ]] || { echo "找不到 $COLLECTOR" >&2; exit 1; }
 
 PORT_BASE="${STUB_PORT_BASE:-18899}"   # 每个用例用独立端口，避免上一个桩进程未完全退出导致绑定失败
@@ -139,42 +142,47 @@ report() { # report <期望> <实际> <说明>
   fi
 }
 
-# ---- 用例 A：未提供 token，指标从不失败 -> 只允许 1 次登录 ----
+# ---- 用例 A：未提供 token，指标从不失败 -> 只允许 1 次登录、退出码 0 ----
 echo "用例 A（无共享 token、取指标从不失败）:"
 start_stub 0 "$PORT_A"
 env -u LEO_PERF_TOKEN LEO_PERF_BASE_URL="http://127.0.0.1:$PORT_A/api" \
   LEO_PERF_LOGIN_NAME=stub LEO_PERF_PASSWORD=stub \
   bash "$COLLECTOR" watch "$WORK/a.csv" 6 2 > "$WORK/a.log" 2>&1
+a_rc=$?
 stop_stub
 report 1 "$(logins_seen)" "整个采集过程只登录 1 次"
+report 0 "$a_rc" "登录 1 次未超限，采集器退出码 0"
 if [[ "$(rows_seen "$WORK/a.csv")" -ge 2 ]]; then
   printf '  ✅ 采集到 %s 个数据点\n' "$(rows_seen "$WORK/a.csv")"; pass=$((pass+1))
 else
   printf '  ❌ 数据点过少: %s\n' "$(rows_seen "$WORK/a.csv")"; failed=$((failed+1))
 fi
 
-# ---- 用例 B：提供共享 token -> 一次都不允许登录 ----
+# ---- 用例 B：提供共享 token -> 一次都不允许登录、退出码 0 ----
 echo "用例 B（提供 LEO_PERF_TOKEN）:"
 start_stub 0 "$PORT_B"
 LEO_PERF_TOKEN=stub-shared-token LEO_PERF_BASE_URL="http://127.0.0.1:$PORT_B/api" \
   LEO_PERF_LOGIN_NAME=stub LEO_PERF_PASSWORD=stub \
   bash "$COLLECTOR" watch "$WORK/b.csv" 6 2 > "$WORK/b.log" 2>&1
+b_rc=$?
 stop_stub
 report 0 "$(logins_seen)" "复用共享 token，未发生任何登录"
+report 0 "$b_rc" "登录 0 次未超限，采集器退出码 0"
 if [[ "$(rows_seen "$WORK/b.csv")" -ge 2 ]]; then
   printf '  ✅ 采集到 %s 个数据点\n' "$(rows_seen "$WORK/b.csv")"; pass=$((pass+1))
 else
   printf '  ❌ 数据点过少: %s\n' "$(rows_seen "$WORK/b.csv")"; failed=$((failed+1))
 fi
 
-# ---- 用例 C：取指标周期性失败 -> 必须重登，且必须打印会话吊销告警 ----
+# ---- 用例 C：取指标周期性失败 -> 必须重登，且登录超限必须以非零退出 ----
 echo "用例 C（每第 3 次取指标失败、提供共享 token）:"
 start_stub 3 "$PORT_C"
 # 窗口必须足够长：失败每 3 次才出现一次，2s 间隔下需要 ≥6 个采样点
-# 才会出现第 2 次「失败→重登」，否则用例本身测不到告警分支。
+# 才会出现第 2 次「失败→重登」，否则用例本身测不到不变量破坏分支。
 LEO_PERF_TOKEN=stub-shared-token LEO_PERF_BASE_URL="http://127.0.0.1:$PORT_C/api" \
   LEO_PERF_LOGIN_NAME=stub LEO_PERF_PASSWORD=stub \
   bash "$COLLECTOR" watch "$WORK/c.csv" 12 2 > "$WORK/c.log" 2>&1
+c_rc=$?
 stop_stub
 logins="$(logins_seen)"
 if [[ "$logins" -ge 2 ]]; then
@@ -186,6 +194,17 @@ if grep -q '采集期间登录了' "$WORK/c.log"; then
   printf '  ✅ 打印了会话吊销告警\n'; pass=$((pass+1))
 else
   printf '  ❌ 未打印会话吊销告警（这正是不该发生的静默状态）\n'; failed=$((failed+1))
+fi
+# 语义升级断言：登录次数 > 1 已是不变量破坏，采集器必须失败退出（旧版只告警）。
+if [[ "$c_rc" -ne 0 ]]; then
+  printf '  ✅ 登录超限（%s 次）→ 采集器以非零退出（rc=%s）\n' "$logins" "$c_rc"; pass=$((pass+1))
+else
+  printf '  ❌ 登录超限（%s 次）但采集器退出码 0：不变量只是告警，等于没有门禁\n' "$logins"; failed=$((failed+1))
+fi
+if grep -q '采集期间登录 [0-9]* 次' "$WORK/c.log"; then
+  printf '  ✅ 结束时显式打印了登录总次数\n'; pass=$((pass+1))
+else
+  printf '  ❌ 结束时未打印登录总次数\n'; failed=$((failed+1))
 fi
 if [[ "$(rows_seen "$WORK/c.csv")" -ge 4 ]]; then
   printf '  ✅ 失败样本被跳过、其余样本正常落盘（%s 个数据点）\n' "$(rows_seen "$WORK/c.csv")"; pass=$((pass+1))

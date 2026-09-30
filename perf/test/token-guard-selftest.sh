@@ -13,8 +13,10 @@
 # 用法： bash leo/perf/test/token-guard-selftest.sh
 set -uo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-SCRIPT="$REPO_ROOT/leo/perf/redis-degradation.sh"
+# 被测文件相对本脚本自身定位：仓库目录名在不同检出形态下不同（主仓库 leo、
+# worktree d/b6、GitHub Actions 的 Leo），此前写死 `../../..+leo/` 会找不到文件。
+PERF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT="$PERF_DIR/redis-degradation.sh"
 [[ -f "$SCRIPT" ]] || { echo "找不到 $SCRIPT" >&2; exit 1; }
 
 FUNCS="$(mktemp)"

@@ -40,6 +40,10 @@ login_once() {
 
 LOGIN_COUNT=0
 
+# 登录次数硬上限（不变量）：首次登录 + 至多 1 次容错重登 = 2 次。
+# 超过这个数就不再登录（继续登录只会新增会话、顶掉正在压测的会话）。
+LOGIN_HARD_CAP=2
+
 # 只登录一次并复用 token。
 #
 # 为什么必须如此：服务端同账号会话上限硬编码为 3（SessionManagementService），
@@ -50,9 +54,19 @@ LOGIN_COUNT=0
 # 调用，函数内部的 `TOKEN=...` 赋值只存在于子 shell，永远传不回父 shell，
 # 于是 TOKEN 一直为空、每采样一次登录一次。实测一次 07-heavy：采集器每 ~6 秒登录一次，
 # 346,686 个请求里 99.3% 变成 401，而业务日志里看不到任何异常，极易被误读成接口故障。
-# 现改为「写文件 + 计数」，并对多余登录告警。
+# 现改为「写文件 + 计数」，并把登录次数升级为**硬不变量**（语义与 run.sh 一致）：
+#   * 登录 0 次（复用 LEO_PERF_TOKEN）或 1 次（首次取指标时登录）→ 合法；
+#   * 取指标失败后的容错重登**允许发生**（保证数据 salvage），但同样计入 LOGIN_COUNT；
+#   * LOGIN_COUNT 达到 LOGIN_HARD_CAP 后拒绝再登录，失败采样只跳过；
+#   * watch 结束时显式打印 LOGIN_COUNT，若 > 1 次 → 判定不变量破坏，脚本非零退出。
+# 即：容错路径保留，但「一轮采集多于 1 次登录」不再是告警，而是失败——
+# 采集期间的会话顶掉会让同时进行的压测失败率失真，绝不能静默通过。
 ensure_token() {
   [[ -n "$TOKEN" ]] && return 0
+  if (( LOGIN_COUNT >= LOGIN_HARD_CAP )); then
+    log "⚠ 登录已达硬上限（$LOGIN_COUNT 次），不再重登，本次取指标跳过"
+    return 1
+  fi
   TOKEN="$(login_once)"
   LOGIN_COUNT=$(( LOGIN_COUNT + 1 ))
   [[ -n "$TOKEN" ]] || fail "登录失败，无法读取 /actuator/prometheus"
@@ -63,13 +77,15 @@ ensure_token() {
 # ⚠ 必须直接调用，不要在 `$( )` 里调用本函数，否则 TOKEN/LOGIN_COUNT 的赋值会丢在子 shell。
 fetch_prometheus_to() {
   local out="$1" code
-  ensure_token
+  ensure_token || return 1
   code="$(curl -s --max-time 20 -o "$out" -w '%{http_code}' \
     -H "Authorization: Bearer $TOKEN" "$BASE_URL/actuator/prometheus")"
   if [[ "$code" != "200" ]]; then
-    log "⚠ /actuator/prometheus 返回 $code，重新登录一次后重试"
+    log "⚠ /actuator/prometheus 返回 $code，重新登录一次后重试（重登计入登录不变量）"
     TOKEN=""
-    ensure_token
+    if ! ensure_token; then
+      return 1
+    fi
     code="$(curl -s --max-time 20 -o "$out" -w '%{http_code}' \
       -H "Authorization: Bearer $TOKEN" "$BASE_URL/actuator/prometheus")"
   fi
@@ -141,12 +157,19 @@ cmd_watch() {
   done
   rm -f "$tmp"
   log "采样结束，共 $(( $(wc -l < "$out") - 1 )) 个数据点，采集期间登录 $LOGIN_COUNT 次"
-  # 多于一次登录就是危险信号：多余会话会顶掉正在被压测的会话。
-  # 这里只告警不失败——采集本身仍然有效，但被测用例的失败率可能因此失真。
+  # ---- 登录次数不变量（硬门禁，与 run.sh 语义一致）----
+  # 结束时显式打印的 LOGIN_COUNT 已包含「首次登录」与「取指标失败后的容错重登」。
+  # 只要 > 1 次就判定不变量破坏并以非零退出：服务端同账号会话上限硬编码为 3，
+  # 多余登录会静默吊销并拉黑最旧会话；若同时有压测在跑，其 401 就是本采集器造成的，
+  # 此时采集数据本身也可能因会话抖动而失真，绝不能只告警后「静默通过」。
   if (( LOGIN_COUNT > 1 )); then
-    log "⚠⚠ 采集期间登录了 $LOGIN_COUNT 次：同账号会话上限为 3，多余登录会吊销既有会话，"
-    log "    若同时有压测在跑，其 401 可能由本采集器造成。请通过 LEO_PERF_TOKEN 复用共享会话。"
+    log "✗✗ 登录不变量被破坏：采集期间登录了 $LOGIN_COUNT 次（硬上限 1 次）"
+    log "    服务端同账号会话上限硬编码为 3，多余登录会静默吊销并拉黑最旧会话，"
+    log "    正在压测的会话会被顶掉（表现为大面积 401，业务日志无异常）。"
+    log "    请通过 LEO_PERF_TOKEN 复用共享会话；本采集器以退出码 1 失败。"
+    return 1
   fi
+  return 0
 }
 
 cmd_summary() {

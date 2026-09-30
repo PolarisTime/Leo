@@ -16,8 +16,10 @@
 # 用法： bash leo/perf/test/leak-detector-selftest.sh
 set -uo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-METRICS="$REPO_ROOT/leo/perf/collect-metrics.sh"
+# 被测文件相对本脚本自身定位：仓库目录名在不同检出形态下不同（主仓库 leo、
+# worktree d/b6、GitHub Actions 的 Leo），此前写死 `../../..+leo/` 会找不到文件。
+PERF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+METRICS="$PERF_DIR/collect-metrics.sh"
 [[ -f "$METRICS" ]] || { echo "找不到 $METRICS" >&2; exit 1; }
 
 WORK="$(mktemp -d)"

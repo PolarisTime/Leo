@@ -38,6 +38,22 @@ jobs:
           bash scripts/check-java-module-boundaries.sh
           bash scripts/verify-modulith-architecture.sh
 
+      # 压测套件离线自检：全部用本地桩服务/合成数据离线运行，不依赖后端、DB、Redis 与 k6。
+      # 防护三类「工具骗人」的假数据：
+      #   1) token 守卫失效 → 把 JWT 过期 401 误读成 Redis 故障（token-guard）；
+      #   2) 泄漏检测器把 GC 锯齿噪声误报成内存泄漏（leak-detector）；
+      #   3) 指标采集器反复登录顶掉压测会话 → 大面积 401 却无业务异常
+      #      （collector-login / login-invariant：登录次数硬不变量，超限必须失败而非告警）；
+      #   4) 脚本调用未定义函数（bash -n 查不出的运行时错误）。
+      # 任何一步非零退出即 job 失败。
+      - name: 压测套件离线自检（登录次数不变量/token守卫/泄漏误报假数据，无需后端与 Redis）
+        run: |
+          bash perf/test/token-guard-selftest.sh
+          bash perf/test/leak-detector-selftest.sh
+          bash perf/test/collector-login-selftest.sh
+          bash perf/test/login-invariant-selftest.sh
+          python3 perf/check-undefined-funcs.py perf/*.sh
+
       - name: Static analysis
         run: bash scripts/maven.sh -B -ntp -DskipTests checkstyle:check spotbugs:check
 
