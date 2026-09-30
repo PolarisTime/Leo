@@ -7,6 +7,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.sales.order.config.SalesOrderRetryProperties;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
@@ -28,6 +29,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -81,6 +84,12 @@ class SalesOrderServiceTest {
     @Mock
     private SalesOrderPriceRuleService priceRuleService;
 
+    @Mock
+    private TransactionTemplate transactionTemplate;
+
+    @Mock
+    private SalesOrderRetryProperties salesOrderRetryProperties;
+
     @InjectMocks
     private SalesOrderService service;
 
@@ -88,6 +97,14 @@ class SalesOrderServiceTest {
     void grantFieldPermissionsByDefault() {
         // 默认放行字段级权限，避免影响与字段权限无关的既有用例。
         lenient().when(permissionChecker.has(anyString())).thenReturn(true);
+        // 事务模板按回调直通执行：本类只关心业务分支，不关心事务与重试本身
+        // （重试行为见 SalesOrderServiceOptimisticLockRetryTest）。注意 @InjectMocks 在 @BeforeEach
+        // 之前完成注入，构造期读到的 maxAttempts 是 mock 默认 0（<=1 → 禁用重试），本类用例均单次执行。
+        lenient().doAnswer(invocation -> invocation
+                .getArgument(0, TransactionCallback.class)
+                .doInTransaction(null))
+                .when(transactionTemplate)
+                .execute(any());
     }
 
     private SalesOrderRequest request(String orderNo, String status) {

@@ -12,6 +12,8 @@ import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
+import com.leo.erp.common.transaction.OptimisticLockRetryExecutor;
+import com.leo.erp.sales.order.config.SalesOrderRetryProperties;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
@@ -30,8 +32,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -53,6 +57,8 @@ public class SalesOrderService {
     private final SalesOrderWorkflowService workflowService;
     private final PermissionChecker permissionChecker;
     private final SalesOrderPriceRuleService priceRuleService;
+    /** 同一单据并发写的有界乐观锁重试；配置来自 {@code leo.sales-order.retry.*}，启动期固定。 */
+    private final OptimisticLockRetryExecutor optimisticLockRetry;
 
     @Autowired
     public SalesOrderService(SalesOrderRepository repository,
@@ -62,7 +68,9 @@ public class SalesOrderService {
                              SalesOrderMutationGuardService mutationGuardService,
                              SalesOrderWorkflowService workflowService,
                              PermissionChecker permissionChecker,
-                             SalesOrderPriceRuleService priceRuleService) {
+                             SalesOrderPriceRuleService priceRuleService,
+                             TransactionTemplate transactionTemplate,
+                             SalesOrderRetryProperties retryProperties) {
         this.idGenerator = idGenerator;
         this.repository = repository;
         this.documentChargeItemService = documentChargeItemService;
@@ -71,6 +79,10 @@ public class SalesOrderService {
         this.workflowService = workflowService;
         this.permissionChecker = permissionChecker;
         this.priceRuleService = priceRuleService;
+        this.optimisticLockRetry = new OptimisticLockRetryExecutor(
+                transactionTemplate,
+                retryProperties.getMaxAttempts(),
+                Duration.ofMillis(retryProperties.getBackoffMillis()));
     }
 
     @Transactional(readOnly = true)
@@ -108,6 +120,12 @@ public class SalesOrderService {
         return toDetailResponse(requireDetailEntity(id));
     }
 
+    /**
+     * 创建单据。未纳入乐观锁重试：新实体走 INSERT，冲突形态是订单号唯一键冲突
+     * （{@code DataIntegrityViolationException}），按约定唯一键冲突禁止重试；
+     * 内部审核分支自调用 {@link #updateStatus} 时执行器检测到本方法的活动事务，
+     * 直接参与而不新开事务，与改造前的自调用语义一致。
+     */
     @Transactional
     public SalesOrderResponse create(SalesOrderRequest request) {
         SalesOrderResponse created = createOrder(
@@ -119,8 +137,30 @@ public class SalesOrderService {
         return created;
     }
 
-    @Transactional
+    /**
+     * 整体替换写路径（{@code PUT /api/v2.0/sales-orders/{id}}），带服务端有界乐观锁重试。
+     *
+     * <p><b>为什么不再声明 {@code @Transactional}：</b>事务改由 {@link OptimisticLockRetryExecutor}
+     * 通过 {@link TransactionTemplate} 为「每次尝试」单独开启——只有把事务边界放进重试循环内部，
+     * 冲突后的重试才能拿到干净的新事务、重新加载实体并重放整段写逻辑（费用同步、合计重算、审核分支）；
+     * 若保留 {@code @Transactional}，事务会在进入重试循环之前开启，重试无法形成独立事务，
+     * 且 commit 阶段的冲突也脱离重试循环。方法体本身仍在单个事务内原子执行，语义与改造前一致。
+     *
+     * <p><b>自调用语义：</b>{@code request.audit()} 分支内部自调用 {@link #updateStatus} 时，
+     * 执行器检测到活动事务会直接执行原逻辑（不新开事务、不重试），与改造前「自调用参与外层事务」完全一致。
+     *
+     * <p><b>副作用：</b>费用同步、合计修正、状态发布全部发生在同一事务内，失败整体回滚；
+     * 领域事件由 {@code @ApplicationModuleListener}（AFTER_COMMIT）在提交成功后投递，
+     * 失败的尝试不会重复发布事件/日志。重试仅识别乐观锁异常，耗尽后原样抛出 → 409（现状不变）。
+     */
     public SalesOrderResponse update(Long id, SalesOrderRequest request) {
+        return optimisticLockRetry.execute("sales-order.update", () -> doUpdate(id, request));
+    }
+
+    /**
+     * {@link #update} 的整段写逻辑（在执行器开启的事务内运行，可被完整重放）。
+     */
+    private SalesOrderResponse doUpdate(Long id, SalesOrderRequest request) {
         BigDecimal previousExpenseTotal = documentChargeItemService
                 .sumAmount(documentChargeItemService.list(MODULE_KEY, id));
         SalesOrderResponse updated = updateOrder(id,
@@ -133,8 +173,22 @@ public class SalesOrderService {
         return updated;
     }
 
-    @Transactional
+    /**
+     * 保存并确认交付核定（{@code POST /api/v2.0/sales-orders/{id}/delivery-verifications}）。
+     *
+     * <p>与 PUT 同属「整体替换同一单据」的写路径，冲突画像一致，故同样纳入有界乐观锁重试：
+     * 每次尝试在新事务中重新加载单据、重放替换 + 价格规定 + 完成销售的整段逻辑，
+     * 任一环节失败即整体回滚，不会留下半张单据或重复的完成事件。
+     */
     public SalesOrderResponse updateAndComplete(Long id, SalesOrderRequest request) {
+        return optimisticLockRetry.execute("sales-order.updateAndComplete",
+                () -> doUpdateAndComplete(id, request));
+    }
+
+    /**
+     * {@link #updateAndComplete} 的整段写逻辑（在执行器开启的事务内运行，可被完整重放）。
+     */
+    private SalesOrderResponse doUpdateAndComplete(Long id, SalesOrderRequest request) {
         updateOrder(id, withStatus(request, StatusConstants.DELIVERY_VERIFICATION));
         // 应用交付核定所选价格规定: 校验归属、快照到单据、记录项目上次使用。
         SalesOrder order = requireEntity(id);
@@ -143,8 +197,29 @@ public class SalesOrderService {
         return completeSalesOrder(id);
     }
 
-    @Transactional
+    /**
+     * 状态迁移（{@code PATCH /api/v2.0/sales-orders/{id}/status}），带服务端有界乐观锁重试。
+     *
+     * <p><b>为何纳入：</b>并发审核/反审核打在同一单据上时同样会触发 {@code @Version} 冲突，
+     * 且状态写是「读当前状态 → 校验迁移表 → 写入」的整段逻辑，冲突后在新事务中重放是安全的。
+     *
+     * <p><b>自调用语义：</b>{@link #create} 与 {@link #doUpdate} 的审核分支都会自调用本方法；
+     * 此时已存在活动事务，执行器直接执行原逻辑——不新开事务、不重试，参与外层事务的行为与
+     * 改造前（{@code @Transactional} 被自调用绕过、直接加入外层事务）逐字一致。
+     *
+     * <p><b>事件不重复：</b>{@code publishStatusChanged} 走的领域事件是
+     * {@code @ApplicationModuleListener}（AFTER_COMMIT + REQUIRES_NEW）投递：失败尝试随事务回滚、
+     * 事件被丢弃，只有成功提交的那次尝试投递一次，重试不会造成重复状态变更日志。
+     */
     public SalesOrderResponse updateStatus(Long id, String status) {
+        return optimisticLockRetry.execute("sales-order.updateStatus",
+                () -> doUpdateStatusWithPublish(id, status));
+    }
+
+    /**
+     * {@link #updateStatus} 的整段写逻辑（在执行器开启的事务内运行，可被完整重放）。
+     */
+    private SalesOrderResponse doUpdateStatusWithPublish(Long id, String status) {
         SalesOrder order = requireEntity(id);
         String currentStatus = order.getStatus();
         SalesOrderResponse response = doUpdateStatus(id, status);
@@ -154,6 +229,11 @@ public class SalesOrderService {
         return response;
     }
 
+    /**
+     * 完成销售（专用子资源端点）。暂未纳入乐观锁重试：与「整体替换同一单据」并发的主冲突面
+     * 已由 {@link #updateAndComplete} 的重试边界覆盖；本方法如需接入，按同一模式改造
+     * （去掉 {@code @Transactional}、改由执行器包裹整段逻辑）即可，语义安全性同样成立。
+     */
     @Transactional
     public SalesOrderResponse completeSalesOrder(Long id) {
         SalesOrder order = repository.findForUpdateByIdAndDeletedFlagFalse(id)
@@ -162,6 +242,10 @@ public class SalesOrderService {
         return workflowService.completeSalesOrder(order);
     }
 
+    /**
+     * 软删除单据。未纳入乐观锁重试：删除端点不在压测暴露的冲突面内（整体替换才是热点），
+     * 且删除后的重复重放需要额外评估幂等性；接入方式与完成销售一致。
+     */
     @Transactional
     public void delete(Long id) {
         SalesOrder entity = requireEntity(id);

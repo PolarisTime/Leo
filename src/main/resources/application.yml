@@ -275,6 +275,13 @@ leo:
       # 每天 02:05 导出附件恢复清单到附件存储的隔离前缀
       enabled: ${LEO_MAINTENANCE_ATTACHMENT_MANIFEST_EXPORT_ENABLED:true}
       cron: ${LEO_MAINTENANCE_ATTACHMENT_MANIFEST_EXPORT_CRON:0 5 2 * * *}
+  sales-order:
+    retry:
+      # 同一单据并发写(乐观锁冲突)时服务端的有界重试：单次请求最大尝试次数(含首次执行)；
+      # <=1 表示禁用服务端重试，冲突直接按现状返回 409
+      max-attempts: ${LEO_SALES_ORDER_RETRY_MAX_ATTEMPTS:3}
+      # 相邻两次尝试之间的退避毫秒数，避免并发方在同一时刻反复撞同一版本号
+      backoff-millis: ${LEO_SALES_ORDER_RETRY_BACKOFF_MILLIS:10}
   market:
     quotation:
       # 写接口是否强制要求资源版本前置条件头 X-Resource-Version(缺失返回 428); 灰度兼容期可临时关闭
