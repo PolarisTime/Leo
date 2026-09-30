@@ -9,6 +9,8 @@
 #   bash leo/perf/cleanup-perf-data.sh                 # 只统计，不删除
 #   bash leo/perf/cleanup-perf-data.sh --yes            # 删除全部 PERF-LOAD-* 客户
 #   bash leo/perf/cleanup-perf-data.sh --yes PERF-LOAD-run20260101-120000   # 只删指定批次
+#   bash leo/perf/cleanup-perf-data.sh --race-roles     # 只统计并发专项的 PERF-RACE-* 角色
+#   bash leo/perf/cleanup-perf-data.sh --race-roles --yes   # 删除这些角色及其权限行
 set -euo pipefail
 
 # ---- 附件清理（默认不做，需显式 --attachments）----------------------------------
@@ -76,6 +78,62 @@ if [[ "${1:-}" == "--attachments" ]]; then
   shift
   confirm="${1:-}"; [[ "$confirm" == "--yes" ]] && shift || confirm=""
   cleanup_attachments "$confirm" "${1:-}"
+  exit 0
+fi
+
+# ---- 压测角色清理（--race-roles）------------------------------------------------
+# 并发专项（08-concurrency 场景 A）会创建 PERF-RACE-<批次> 角色作为写入靶子，
+# 压测脚本不会删除它们，长期累积会污染角色列表与核对基线。与附件清理同理：
+# 这是测试数据清理（不是 schema 变更，也不进 Flyway），只允许删除
+# code 前缀为 PERF-RACE- 的角色及其权限行。
+#
+# 两道安全闸：
+#   1) 只按 code LIKE 'PERF-RACE-%' 白名单前缀匹配，前缀不匹配的行一律不碰；
+#   2) 目标角色一旦绑定了任何用户（sys_user_role）立即中止——场景 A 的靶子
+#      从不分配用户，出现绑定说明标记被污染或有真实数据混入，删错不可逆。
+#
+# 用法：
+#   bash leo/perf/cleanup-perf-data.sh --race-roles           # 只统计
+#   bash leo/perf/cleanup-perf-data.sh --race-roles --yes     # 删除角色与其权限行
+cleanup_race_roles() {
+  local confirm="$1"
+  [[ -n "${SPRING_DATASOURCE_PASSWORD:-}" ]] || {
+    echo "角色清理需要数据库凭据：请先 source leo/scripts/env/dev.sh" >&2; exit 1; }
+  command -v psql >/dev/null || { echo "缺少 psql，无法清理角色" >&2; exit 1; }
+
+  local psql_cmd=(psql -h "${SPRING_DATASOURCE_HOST:-localhost}" -p "${SPRING_DATASOURCE_PORT:-5432}"
+    -U "${SPRING_DATASOURCE_USERNAME:-leo}" -d "${SPRING_DATASOURCE_DB:-leo}" -At)
+  export PGPASSWORD="$SPRING_DATASOURCE_PASSWORD"
+
+  local match_sql="code like 'PERF-RACE-%'"
+  local rows count
+  rows="$("${psql_cmd[@]}" -c "select id || '|' || code from sys_role where $match_sql;")"
+  count="$(printf '%s\n' "$rows" | grep -c . || true)"
+  if [[ "$confirm" != "--yes" ]]; then
+    [[ -n "$rows" ]] && printf '%s\n' "$rows" | sed 's/^/  - /'
+    echo "匹配到 $count 个压测角色（前缀 PERF-RACE-）；加 --yes 才会真正删除"
+    return 0
+  fi
+  [[ "$count" -gt 0 ]] || { echo "没有需要清理的压测角色"; return 0; }
+
+  # 安全闸 2：任何绑定都中止
+  local bound
+  bound="$("${psql_cmd[@]}" -c "select count(*) from sys_user_role where role_id in (select id from sys_role where $match_sql);")"
+  [[ "$bound" == "0" ]] || {
+    echo "拒绝清理：$bound 条用户-角色绑定命中前缀角色（标记可能被污染），请人工检查" >&2; exit 1; }
+
+  # 外键 fk_sys_role_permission_role / fk_sys_user_role_role 均为 NO ACTION：
+  # 必须先删权限行再删角色；绑定已确认为 0，无需处理 sys_user_role。
+  local deleted_perm deleted_role
+  deleted_perm="$("${psql_cmd[@]}" -c "delete from sys_role_permission where role_id in (select id from sys_role where $match_sql) returning id;" | grep -c . || true)"
+  deleted_role="$("${psql_cmd[@]}" -c "delete from sys_role where $match_sql returning id;" | grep -c . || true)"
+  echo "已删除 $deleted_role 个压测角色、$deleted_perm 条权限行（前缀 PERF-RACE-）"
+}
+
+if [[ "${1:-}" == "--race-roles" ]]; then
+  shift
+  confirm="${1:-}"; [[ "$confirm" == "--yes" ]] && shift || confirm=""
+  cleanup_race_roles "$confirm"
   exit 0
 fi
 
