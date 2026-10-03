@@ -281,6 +281,28 @@ class RateLimitFilterTest {
     }
 
     @Test
+    void writeMethodOverQuota_returns429WithRetryAfterAndProblemDetail() throws Exception {
+        // 打开写方法限流后，非白名单写接口超限同样必须走完整 429 契约（与读路径同构），
+        // 而不是仅仅「纳入计数」——否则写路径被拒时客户端拿不到 Retry-After 与 problem+json。
+        properties.setLimitWriteMethods(true);
+        when(store.tryAcquire(any(RateLimitCheck.class)))
+                .thenReturn(RateLimitResult.limited(RateLimitResult.Dimension.SUBJECT, 500L));
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicBoolean invoked = new AtomicBoolean(false);
+        filter.doFilter(post("/api/v2.0/customers"), response, (req, res) -> invoked.set(true));
+
+        assertThat(invoked).isFalse();
+        assertThat(response.getStatus()).isEqualTo(429);
+        assertThat(response.getHeader(RateLimitFilter.RETRY_AFTER_HEADER)).isEqualTo("1");
+        assertThat(response.getContentType()).contains("application/problem+json");
+        String body = response.getContentAsString();
+        assertThat(body).contains("\"type\":\"urn:leo:problem:too-many-requests\"");
+        assertThat(body).contains("\"code\":4290");
+        assertThat(body).contains("\"instance\":\"/api/v2.0/customers\"");
+    }
+
+    @Test
     void headAndOptions_neverLimited() throws Exception {
         properties.setLimitWriteMethods(true);
 

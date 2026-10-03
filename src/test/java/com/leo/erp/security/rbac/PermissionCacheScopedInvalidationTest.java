@@ -197,6 +197,41 @@ class PermissionCacheScopedInvalidationTest {
     }
 
     /**
+     * 阈值边界：恰好 500 人（等于 {@code SCOPED_INVALIDATION_MAX_USERS}）仍走按范围失效，
+     * 不得触发全局退化——否则 500/501 只差一人却让全站缓存失效，off-by-one 会造成性能悬崖。
+     */
+    @Test
+    void invalidateUsersByRole_exactlyAtThreshold_staysScopedNotGlobal() {
+        service.getOrLoad(USER_ID, 0L, () -> List.of("roles:read"));
+        service.getOrLoad(9L, 0L, () -> List.of("roles:read"));
+
+        java.util.List<Long> exactlyFiveHundred = new java.util.ArrayList<>();
+        exactlyFiveHundred.add(USER_ID);                                  // 目标用户在范围内
+        for (long id = 100; id <= 598; id++) {
+            exactlyFiveHundred.add(id);                                   // 合计正好 500 人
+        }
+        assertThat(exactlyFiveHundred).hasSize(500);
+        when(userRoleRepository.findUserIdsByRoleIdIn(any())).thenReturn(exactlyFiveHundred);
+
+        service.invalidateUsersByRole(List.of(5L));
+
+        // 范围内用户重新回源；范围外用户（9）仍命中缓存 —— 若误退化为全局，9 也会回源
+        AtomicInteger outsideLoads = new AtomicInteger();
+        service.getOrLoad(9L, 0L, () -> {
+            outsideLoads.incrementAndGet();
+            return List.of("roles:read");
+        });
+        assertThat(outsideLoads.get()).isZero();
+
+        AtomicInteger insideLoads = new AtomicInteger();
+        service.getOrLoad(USER_ID, 0L, () -> {
+            insideLoads.incrementAndGet();
+            return List.of("roles:read");
+        });
+        assertThat(insideLoads.get()).isEqualTo(1);
+    }
+
+    /**
      * 大面积变更（影响用户数超过阈值）退化为全局失效时，同样必须覆盖已有用户级纪元的用户。
      */
     @Test
