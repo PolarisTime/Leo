@@ -1,3 +1,40 @@
+# [12.2.0](https://github.com/PolarisTime/Leo/compare/v12.1.1...v12.2.0) (2026-10-03)
+
+
+### Bug Fixes
+
+* **api:** 429 补上承诺过的 Retry-After 响应头 ([5a88640](https://github.com/PolarisTime/Leo/commit/5a88640776cb7f0708991da771e6e40018a7e929))
+* **api:** 数据库连接获取失败由 500 改为 503 + Retry-After ([e8e9cae](https://github.com/PolarisTime/Leo/commit/e8e9cae44aa16ef48cba9fd9b523de9ff33634ec))
+* **api:** 补 RateLimitFilter 的 @Component 注册，否则应用启动失败 ([c1b9d55](https://github.com/PolarisTime/Leo/commit/c1b9d55ec3455c87ebd73e9be151a54af406e5d2))
+* **perf:** Redis 降级验证改为双实例对照，排除 token 过期造成的误判 ([37ace50](https://github.com/PolarisTime/Leo/commit/37ace50c67b9a5c65f1f04ee46498ec815f3a328))
+* **perf:** trend 对计数器改用区间增量而非累计绝对值 ([eb9b3e6](https://github.com/PolarisTime/Leo/commit/eb9b3e629fc20a8f0d90905fb9a18f0b4a3abe53))
+* **perf:** 修复 run.sh 中 resolve_shared_token 未定义导致的整体不可用 ([cff1207](https://github.com/PolarisTime/Leo/commit/cff1207c9fdb80322429361d168a542a8fdd7705))
+* **perf:** 修复 soak 分段运行两个静默缺陷 ([7509963](https://github.com/PolarisTime/Leo/commit/7509963f7a9592c4c2b430a088ddf59e8fc05432))
+* **perf:** 修复套件自身三类假数据源并补齐五项压测缺口结论 ([9f58159](https://github.com/PolarisTime/Leo/commit/9f581596fb8ef87ec30301f1736092a64458a6db))
+* **perf:** 修复长时压测因 token 有效期假设而失效并改为分段运行 ([c6e564d](https://github.com/PolarisTime/Leo/commit/c6e564d07be8c9e9633e73892ec6e1def45b6312))
+* **perf:** 冒烟脚本漏替换 {companyId} 致财务读接口必然 400 ([b93b494](https://github.com/PolarisTime/Leo/commit/b93b494b1e743b1edd0b308cbc2f21e6cfbc292e))
+* **perf:** 泄漏趋势分析增加最小观测窗口保护 ([7a1357e](https://github.com/PolarisTime/Leo/commit/7a1357e5e404dd7d1b12dba29b71b5f65aa7fc55))
+
+
+### Features
+
+* **api:** 读路径双维度限流背压，默认关闭，超限 429 ([7baa485](https://github.com/PolarisTime/Leo/commit/7baa4852891ffd580728ec1429737e375e8e4bc5))
+* **auth:** 消除登录乐观锁冲突，Redis 故障降级为 503，会话上限可配置 ([5966cc6](https://github.com/PolarisTime/Leo/commit/5966cc6fad4d5b8d5358f80475a44996e09b6b59))
+* **market:** Mysteel 与西本取数增加有界退避重试 ([7988cde](https://github.com/PolarisTime/Leo/commit/7988cde6c5ba168eee19590e7a0af170e3b2be65))
+* **sales:** 同一单据并发写增加服务端有界乐观锁重试 ([a1d252f](https://github.com/PolarisTime/Leo/commit/a1d252f2acacf2562c12ee65e61ba42c2db5f28d))
+
+
+### Performance Improvements
+
+* **auth:** 登录行锁窗口收尾执行并删除潜伏整行写入口 ([a83f1a4](https://github.com/PolarisTime/Leo/commit/a83f1a4bab39c889b4420f3b5a5d3690328782dc))
+* **cache:** 权限缓存改为两级纪元按范围失效并引入单飞回源 ([22d493c](https://github.com/PolarisTime/Leo/commit/22d493c51c4ef7aa234d9d0db7edf5481941e7cd))
+* **cleanup:** 清理脚本支持并发专项角色并清空压测残留 ([1f25211](https://github.com/PolarisTime/Leo/commit/1f2521193f627c52677e32a0586c308776278306))
+* **export:** 导出接入并发闸门并缓存模板字节与布局元数据 ([fbab1f0](https://github.com/PolarisTime/Leo/commit/fbab1f02d18285d04c13ac4d89ea9d3ba628ba2f))
+* **finance:** 资金台账分页由 3 条 SQL 合并为单条窗口查询 ([5df9e69](https://github.com/PolarisTime/Leo/commit/5df9e6917eb1f311542850cdc2b5293df729566f))
+* **race:** 并发专项核对脚本接入 run_race，四场景 SQL 自动核对 ([50c2a6e](https://github.com/PolarisTime/Leo/commit/50c2a6e208905e050de20afca46202e21f28f673))
+* **rbac:** 角色权限改增量替换，并发冲突 74.9% → 0%；幂等冲突改 409 ([dd82202](https://github.com/PolarisTime/Leo/commit/dd82202c4d52a107654bc27ab7942cd9c4ccc492))
+* **sales:** 乐观锁重试退避默认改为 100ms（实测冲突率 74.6% → 53.1%） ([dce6214](https://github.com/PolarisTime/Leo/commit/dce6214d51919e6e22aa44359eb1dca7090e42de))
+
 ## [12.1.1](https://github.com/PolarisTime/Leo/compare/v12.1.0...v12.1.1) (2026-09-29)
 
 
