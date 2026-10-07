@@ -19,6 +19,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -199,12 +200,86 @@ class PurchaseOrderQueryServiceTest {
 
             PurchaseOrderResponse enriched = service.applyReferenceFlags(
                     base,
-                    new PurchaseOrderReferenceQueryRepository.ReferenceStatus(1L, true, false, 7)
+                    new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
+                            1L, true, false, 7,
+                            new BigDecimal("1200.50"), new BigDecimal("200.50"))
             );
 
             assertThat(enriched.referencedBySalesOrder()).isTrue();
             assertThat(enriched.referencedByPurchaseInbound()).isFalse();
             assertThat(enriched.totalRemainingQuantity()).isEqualTo(7);
+            assertThat(enriched.totalActualAmount()).isEqualByComparingTo("1200.50");
+            assertThat(enriched.totalAmountDifference()).isEqualByComparingTo("200.50");
+        }
+
+        /** actual_weight_ton 全为 NULL 时 SQL 兜底为 0，差额等于负的暂定金额。 */
+        @Test
+        void applyReferenceFlags_shouldCarryZeroActualAmountAndNegativeDifference() {
+            PurchaseOrderResponse base = new PurchaseOrderResponse(
+                    1L, "PO-1", null, null, "供应商", null, null, null, null,
+                    null, new BigDecimal("800.00"), "已审核", false, null, List.of()
+            );
+
+            PurchaseOrderResponse enriched = service.applyReferenceFlags(
+                    base,
+                    new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
+                            1L, false, false, 0,
+                            BigDecimal.ZERO, new BigDecimal("-800.00"))
+            );
+
+            assertThat(enriched.totalActualAmount()).isEqualByComparingTo("0");
+            assertThat(enriched.totalAmountDifference()).isEqualByComparingTo("-800.00");
+        }
+
+        @Test
+        void applyReferenceFlags_shouldCarryPositiveDifferenceWhenActualExceedsTentative() {
+            PurchaseOrderResponse base = new PurchaseOrderResponse(
+                    1L, "PO-1", null, null, "供应商", null, null, null, null,
+                    null, new BigDecimal("500.00"), "已审核", false, null, List.of()
+            );
+
+            PurchaseOrderResponse enriched = service.applyReferenceFlags(
+                    base,
+                    new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
+                            1L, false, false, 0,
+                            new BigDecimal("700.00"), new BigDecimal("200.00"))
+            );
+
+            assertThat(enriched.totalAmountDifference()).isEqualByComparingTo("200.00");
+        }
+
+        @Test
+        void applyReferenceFlags_shouldCarryZeroDifference() {
+            PurchaseOrderResponse base = new PurchaseOrderResponse(
+                    1L, "PO-1", null, null, "供应商", null, null, null, null,
+                    null, new BigDecimal("500.00"), "已审核", false, null, List.of()
+            );
+
+            PurchaseOrderResponse enriched = service.applyReferenceFlags(
+                    base,
+                    new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
+                            1L, false, false, 0,
+                            new BigDecimal("500.00"), BigDecimal.ZERO)
+            );
+
+            assertThat(enriched.totalAmountDifference()).isEqualByComparingTo("0");
+        }
+
+        @Test
+        void applyDifference_shouldPassthroughIncludingNullValues() {
+            PurchaseOrderResponse base = new PurchaseOrderResponse(
+                    1L, "PO-1", null, null, "供应商", null, null, null, null,
+                    null, null, "已审核", false, null, List.of()
+            );
+
+            PurchaseOrderResponse withValues = base.applyDifference(
+                    new BigDecimal("123.45"), new BigDecimal("-23.45"));
+            assertThat(withValues.totalActualAmount()).isEqualByComparingTo("123.45");
+            assertThat(withValues.totalAmountDifference()).isEqualByComparingTo("-23.45");
+
+            PurchaseOrderResponse withNulls = base.applyDifference(null, null);
+            assertThat(withNulls.totalActualAmount()).isNull();
+            assertThat(withNulls.totalAmountDifference()).isNull();
         }
 
         @Test

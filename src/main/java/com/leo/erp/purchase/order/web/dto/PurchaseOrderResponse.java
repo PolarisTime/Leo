@@ -25,7 +25,9 @@ public record PurchaseOrderResponse(
         List<DocumentChargeItemResponse> chargeItems,
         boolean referencedBySalesOrder,
         boolean referencedByPurchaseInbound,
-        Integer totalRemainingQuantity
+        Integer totalRemainingQuantity,
+        BigDecimal totalActualAmount,
+        BigDecimal totalAmountDifference
 ) {
 
     public PurchaseOrderResponse(Long id,
@@ -46,7 +48,7 @@ public record PurchaseOrderResponse(
                                  List<DocumentChargeItemResponse> chargeItems) {
         this(id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                false, false, null);
+                false, false, null, null, null);
     }
 
     public PurchaseOrderResponse withReferenceFlags(boolean referencedBySalesOrder,
@@ -54,7 +56,8 @@ public record PurchaseOrderResponse(
         return new PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity
+                referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity,
+                totalActualAmount, totalAmountDifference
         );
     }
 
@@ -62,7 +65,17 @@ public record PurchaseOrderResponse(
         return new PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity
+                referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity,
+                totalActualAmount, totalAmountDifference
+        );
+    }
+
+    public PurchaseOrderResponse applyDifference(BigDecimal totalActualAmount, BigDecimal totalAmountDifference) {
+        return new PurchaseOrderResponse(
+                id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
+                settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
+                referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity,
+                totalActualAmount, totalAmountDifference
         );
     }
 
@@ -83,7 +96,7 @@ public record PurchaseOrderResponse(
                                  List<PurchaseOrderItemResponse> items) {
         this(id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, List.of(),
-                false, false, null);
+                false, false, null, null, null);
     }
 
     public PurchaseOrderResponse(Long id,

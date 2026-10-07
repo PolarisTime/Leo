@@ -1,6 +1,7 @@
 package com.leo.erp.purchase.order.service;
 
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemResponse;
+import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -72,5 +73,48 @@ class PurchaseOrderResponseAssemblerTest {
         assertThat(PurchaseOrderResponseAssembler.totalRemainingQuantity(
                 List.of(item(Integer.MAX_VALUE), item(Integer.MAX_VALUE))))
                 .isEqualTo(Integer.MAX_VALUE);
+    }
+
+    /** 便捷构造默认不带实际货值与差额，交由 applyReferenceFlags 链路补齐。 */
+    @Test
+    void convenienceConstructor_shouldDefaultDifferenceFieldsToNull() {
+        PurchaseOrderResponse response = new PurchaseOrderResponse(
+                1L, "PO-1", null, null, "供应商", null, null, null, null,
+                null, null, "已审核", false, null, List.of()
+        );
+
+        assertThat(response.totalActualAmount()).isNull();
+        assertThat(response.totalAmountDifference()).isNull();
+        assertThat(response.totalRemainingQuantity()).isNull();
+    }
+
+    /** applyDifference 仅替换实际货值与差额，保留既有未入库件数。 */
+    @Test
+    void applyDifference_shouldReplaceOnlyDifferenceFields() {
+        PurchaseOrderResponse base = new PurchaseOrderResponse(
+                1L, "PO-1", null, null, "供应商", null, null, null, null,
+                null, null, "已审核", false, null, List.of()
+        ).applyTotalRemainingQuantity(7);
+
+        PurchaseOrderResponse applied = base.applyDifference(
+                new BigDecimal("1200.50"), new BigDecimal("-200.50"));
+
+        assertThat(applied.totalActualAmount()).isEqualByComparingTo("1200.50");
+        assertThat(applied.totalAmountDifference()).isEqualByComparingTo("-200.50");
+        assertThat(applied.totalRemainingQuantity()).isEqualTo(7);
+    }
+
+    /** applyDifference 透传 null 值。 */
+    @Test
+    void applyDifference_shouldPassthroughNulls() {
+        PurchaseOrderResponse base = new PurchaseOrderResponse(
+                1L, "PO-1", null, null, "供应商", null, null, null, null,
+                null, null, "已审核", false, null, List.of()
+        );
+
+        PurchaseOrderResponse applied = base.applyDifference(null, null);
+
+        assertThat(applied.totalActualAmount()).isNull();
+        assertThat(applied.totalAmountDifference()).isNull();
     }
 }

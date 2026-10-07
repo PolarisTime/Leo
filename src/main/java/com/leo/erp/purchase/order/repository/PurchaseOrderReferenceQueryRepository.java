@@ -4,6 +4,7 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -56,11 +57,23 @@ public class PurchaseOrderReferenceQueryRepository {
                              JOIN po_purchase_inbound inbound
                                ON inbound.id = pii.inbound_id
                               AND inbound.deleted_flag = FALSE
-                            WHERE pii.source_purchase_order_item_id = poi.id
+                             WHERE pii.source_purchase_order_item_id = poi.id
                        ), 0), 0))
                          FROM po_purchase_order_item poi
                         WHERE poi.order_id = po.id
-                   ), 0) AS unreceived_quantity
+                   ), 0) AS unreceived_quantity,
+                   COALESCE((
+                       SELECT SUM(poi.actual_weight_ton * poi.unit_price)
+                         FROM po_purchase_order_item poi
+                        WHERE poi.order_id = po.id
+                          AND poi.actual_weight_ton IS NOT NULL
+                   ), 0) AS actual_amount,
+                   COALESCE((
+                       SELECT SUM(poi.actual_weight_ton * poi.unit_price)
+                         FROM po_purchase_order_item poi
+                        WHERE poi.order_id = po.id
+                          AND poi.actual_weight_ton IS NOT NULL
+                   ), 0) - COALESCE(po.total_amount, 0) AS amount_difference
               FROM po_purchase_order po
              WHERE po.id IN (:ids)
             """;
@@ -81,7 +94,9 @@ public class PurchaseOrderReferenceQueryRepository {
                         resultSet.getLong("id"),
                         resultSet.getBoolean("referenced_by_sales_order"),
                         resultSet.getBoolean("referenced_by_purchase_inbound"),
-                        saturateToInt(resultSet.getLong("unreceived_quantity"))
+                        saturateToInt(resultSet.getLong("unreceived_quantity")),
+                        resultSet.getBigDecimal("actual_amount"),
+                        resultSet.getBigDecimal("amount_difference")
                 ));
         Map<Long, ReferenceStatus> result = new HashMap<>(statuses.size());
         statuses.forEach(status -> result.put(status.orderId(), status));
@@ -100,7 +115,9 @@ public class PurchaseOrderReferenceQueryRepository {
             Long orderId,
             boolean referencedBySalesOrder,
             boolean referencedByPurchaseInbound,
-            int unreceivedQuantity
+            int unreceivedQuantity,
+            BigDecimal actualAmount,
+            BigDecimal amountDifference
     ) {
     }
 }
