@@ -63,6 +63,18 @@ public class PurchaseOrderReferenceQueryRepository {
                         WHERE poi.order_id = po.id
                    ), 0) AS unreceived_quantity,
                    COALESCE((
+                       SELECT SUM(pii.quantity)
+                         FROM po_purchase_inbound_item pii
+                         JOIN po_purchase_inbound inbound
+                           ON inbound.id = pii.inbound_id
+                          AND inbound.deleted_flag = FALSE
+                        WHERE pii.source_purchase_order_item_id IN (
+                            SELECT poi.id
+                              FROM po_purchase_order_item poi
+                             WHERE poi.order_id = po.id
+                        )
+                   ), 0) AS received_quantity,
+                   COALESCE((
                        SELECT SUM(poi.actual_weight_ton * poi.unit_price)
                          FROM po_purchase_order_item poi
                         WHERE poi.order_id = po.id
@@ -95,6 +107,7 @@ public class PurchaseOrderReferenceQueryRepository {
                         resultSet.getBoolean("referenced_by_sales_order"),
                         resultSet.getBoolean("referenced_by_purchase_inbound"),
                         saturateToInt(resultSet.getLong("unreceived_quantity")),
+                        saturateToInt(resultSet.getLong("received_quantity")),
                         resultSet.getBigDecimal("actual_amount"),
                         resultSet.getBigDecimal("amount_difference")
                 ));
@@ -116,6 +129,7 @@ public class PurchaseOrderReferenceQueryRepository {
             boolean referencedBySalesOrder,
             boolean referencedByPurchaseInbound,
             int unreceivedQuantity,
+            int receivedQuantity,
             BigDecimal actualAmount,
             BigDecimal amountDifference
     ) {

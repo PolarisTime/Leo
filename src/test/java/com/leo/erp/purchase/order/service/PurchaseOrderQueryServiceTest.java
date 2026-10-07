@@ -201,15 +201,50 @@ class PurchaseOrderQueryServiceTest {
             PurchaseOrderResponse enriched = service.applyReferenceFlags(
                     base,
                     new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
-                            1L, true, false, 7,
+                            1L, true, false, 7, 3,
                             new BigDecimal("1200.50"), new BigDecimal("200.50"))
             );
 
             assertThat(enriched.referencedBySalesOrder()).isTrue();
             assertThat(enriched.referencedByPurchaseInbound()).isFalse();
             assertThat(enriched.totalRemainingQuantity()).isEqualTo(7);
+            assertThat(enriched.totalReceivedQuantity()).isEqualTo(3);
             assertThat(enriched.totalActualAmount()).isEqualByComparingTo("1200.50");
             assertThat(enriched.totalAmountDifference()).isEqualByComparingTo("200.50");
+        }
+
+        @Test
+        void applyReferenceFlags_shouldCarryPositiveReceivedQuantityOntoResponse() {
+            PurchaseOrderResponse base = new PurchaseOrderResponse(
+                    1L, "PO-1", null, null, "供应商", null, null, null, null,
+                    null, null, "已审核", false, null, List.of()
+            );
+
+            PurchaseOrderResponse enriched = service.applyReferenceFlags(
+                    base,
+                    new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
+                            1L, false, true, 2, 5,
+                            BigDecimal.ZERO, BigDecimal.ZERO)
+            );
+
+            assertThat(enriched.totalReceivedQuantity()).isEqualTo(5);
+        }
+
+        @Test
+        void applyReferenceFlags_shouldCarryZeroReceivedQuantityOntoResponse() {
+            PurchaseOrderResponse base = new PurchaseOrderResponse(
+                    1L, "PO-1", null, null, "供应商", null, null, null, null,
+                    null, null, "已审核", false, null, List.of()
+            );
+
+            PurchaseOrderResponse enriched = service.applyReferenceFlags(
+                    base,
+                    new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
+                            1L, false, false, 0, 0,
+                            BigDecimal.ZERO, BigDecimal.ZERO)
+            );
+
+            assertThat(enriched.totalReceivedQuantity()).isZero();
         }
 
         /** actual_weight_ton 全为 NULL 时 SQL 兜底为 0，差额等于负的暂定金额。 */
@@ -223,7 +258,7 @@ class PurchaseOrderQueryServiceTest {
             PurchaseOrderResponse enriched = service.applyReferenceFlags(
                     base,
                     new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
-                            1L, false, false, 0,
+                            1L, false, false, 0, 0,
                             BigDecimal.ZERO, new BigDecimal("-800.00"))
             );
 
@@ -241,7 +276,7 @@ class PurchaseOrderQueryServiceTest {
             PurchaseOrderResponse enriched = service.applyReferenceFlags(
                     base,
                     new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
-                            1L, false, false, 0,
+                            1L, false, false, 0, 0,
                             new BigDecimal("700.00"), new BigDecimal("200.00"))
             );
 
@@ -258,7 +293,7 @@ class PurchaseOrderQueryServiceTest {
             PurchaseOrderResponse enriched = service.applyReferenceFlags(
                     base,
                     new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
-                            1L, false, false, 0,
+                            1L, false, false, 0, 0,
                             new BigDecimal("500.00"), BigDecimal.ZERO)
             );
 

@@ -86,6 +86,23 @@ class PurchaseOrderResponseAssemblerTest {
         assertThat(response.totalActualAmount()).isNull();
         assertThat(response.totalAmountDifference()).isNull();
         assertThat(response.totalRemainingQuantity()).isNull();
+        assertThat(response.totalReceivedQuantity()).isNull();
+    }
+
+    /** applyReceivedQuantity 仅替换已入库件数，并透传 null。 */
+    @Test
+    void applyReceivedQuantity_shouldReplaceOnlyReceivedQuantity() {
+        PurchaseOrderResponse base = new PurchaseOrderResponse(
+                1L, "PO-1", null, null, "供应商", null, null, null, null,
+                null, null, "已审核", false, null, List.of()
+        ).applyTotalRemainingQuantity(7);
+
+        PurchaseOrderResponse applied = base.applyReceivedQuantity(3);
+
+        assertThat(applied.totalReceivedQuantity()).isEqualTo(3);
+        assertThat(applied.totalRemainingQuantity()).isEqualTo(7);
+
+        assertThat(base.applyReceivedQuantity(null).totalReceivedQuantity()).isNull();
     }
 
     /** applyDifference 仅替换实际货值与差额，保留既有未入库件数。 */

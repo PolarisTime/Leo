@@ -121,7 +121,8 @@ public class PurchaseOrderQueryService {
                         status.referencedByPurchaseInbound()
                 )
                 .applyTotalRemainingQuantity(status.unreceivedQuantity())
-                .applyDifference(status.actualAmount(), status.amountDifference());
+                .applyDifference(status.actualAmount(), status.amountDifference())
+                .applyReceivedQuantity(status.receivedQuantity());
     }
 
     PurchaseOrderResponse toDetailResponse(PurchaseOrder order) {

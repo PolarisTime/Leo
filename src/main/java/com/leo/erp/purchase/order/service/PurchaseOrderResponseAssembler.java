@@ -59,6 +59,7 @@ public class PurchaseOrderResponseAssembler {
                 response.referencedByPurchaseInbound(),
                 totalRemainingQuantity(itemResponses),
                 null,
+                null,
                 null
         );
     }
