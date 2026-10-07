@@ -360,18 +360,157 @@ leo:
         initial-backoff-millis: ${LEO_MARKET_STEELX_QUOTE_RETRY_INITIAL_BACKOFF_MILLIS:1000}
         multiplier: ${LEO_MARKET_STEELX_QUOTE_RETRY_BACKOFF_MULTIPLIER:2.0}
         max-backoff-millis: ${LEO_MARKET_STEELX_QUOTE_RETRY_MAX_BACKOFF_MILLIS:8000}
-      # 城市中文名 -> 子域名 slug; 仅列出支持的地区(列表承载, Spring 属性不支持中文键)
+      # 城市中文名 -> 子域名 slug; 仅列出支持的地区(列表承载, Spring 属性不支持中文键)。
+      # 来源: 西本城市站导航 https://{slug}.steelx2.com/city/Quotation/quotation/1/index.html,
+      # 全部 69 个站点已逐个探测可达且含报价品种; 新增城市前请先探测, 站点不存在会持续产生抓取失败。
+      # 注意 slug 与城市名并非总是拼音直拼: 无锡=jswuxi、福州=fjfuzhou、台州=zjtaizhou、
+      # 哈尔滨=haerbin、成都=chengdo(西本自身拼写)、莱芜=laifu, 请勿"纠正"为拼音, 否则抓取 404。
       regions:
-        - name: 杭州
-          slug: hangzhou
+        # 华东
         - name: 上海
           slug: shanghai
+        - name: 杭州
+          slug: hangzhou
         - name: 宁波
           slug: ningbo
         - name: 嘉兴
           slug: jiaxing
         - name: 绍兴
           slug: shaoxing
+        - name: 湖州
+          slug: huzhou
+        - name: 金华
+          slug: jinhua
+        - name: 丽水
+          slug: lishui
+        - name: 台州
+          slug: zjtaizhou
+        - name: 温州
+          slug: wenzhou
+        - name: 南京
+          slug: nanjing
+        - name: 苏州
+          slug: suzhou
+        - name: 无锡
+          slug: jswuxi
+        - name: 常州
+          slug: changzhou
+        - name: 镇江
+          slug: zhenjiang
+        - name: 扬州
+          slug: yangzhou
+        - name: 南通
+          slug: nantong
+        - name: 泰州
+          slug: taizhou
+        - name: 盐城
+          slug: yancheng
+        - name: 淮安
+          slug: huaian
+        - name: 宿迁
+          slug: suqian
+        - name: 徐州
+          slug: xuzhou
+        - name: 连云港
+          slug: lianyungang
+        - name: 合肥
+          slug: hefei
+        - name: 芜湖
+          slug: wuhu
+        - name: 马鞍山
+          slug: maanshan
+        - name: 蚌埠
+          slug: bengbu
+        - name: 福州
+          slug: fjfuzhou
+        - name: 厦门
+          slug: xiamen
+        - name: 泉州
+          slug: quanzhou
+        - name: 南昌
+          slug: nanchang
+        - name: 九江
+          slug: jiujiang
+        - name: 济南
+          slug: jinan
+        - name: 青岛
+          slug: qingdao
+        - name: 烟台
+          slug: yantai
+        - name: 潍坊
+          slug: weifang
+        - name: 临沂
+          slug: linyi
+        - name: 日照
+          slug: rizhao
+        - name: 莱芜
+          slug: laifu
+        # 华北
+        - name: 北京
+          slug: beijing
+        - name: 天津
+          slug: tianjin
+        - name: 石家庄
+          slug: shijiazhuang
+        - name: 唐山
+          slug: tangshan
+        - name: 邯郸
+          slug: handan
+        - name: 沧州
+          slug: cangzhou
+        - name: 太原
+          slug: taiyuan
+        - name: 包头
+          slug: baotou
+        # 东北
+        - name: 沈阳
+          slug: shenyang
+        - name: 大连
+          slug: dalian
+        - name: 长春
+          slug: changchun
+        - name: 哈尔滨
+          slug: haerbin
+        # 华中
+        - name: 武汉
+          slug: wuhan
+        - name: 郑州
+          slug: zhengzhou
+        - name: 洛阳
+          slug: luoyang
+        - name: 安阳
+          slug: anyang
+        - name: 长沙
+          slug: changsha
+        # 华南
+        - name: 广州
+          slug: guangzhou
+        - name: 深圳
+          slug: shenzhen
+        - name: 南宁
+          slug: nanning
+        - name: 海口
+          slug: haikou
+        # 西南
+        - name: 重庆
+          slug: chongqing
+        - name: 成都
+          slug: chengdo
+        - name: 贵阳
+          slug: guiyang
+        - name: 昆明
+          slug: kunming
+        # 西北
+        - name: 西安
+          slug: xian
+        - name: 兰州
+          slug: lanzhou
+        - name: 西宁
+          slug: xining
+        - name: 银川
+          slug: yinchuan
+        - name: 乌鲁木齐
+          slug: wulumuqi
       sync:
         enabled: ${LEO_MARKET_STEELX_QUOTE_SYNC_ENABLED:true}
         # 西本每日仅一个价(上午发布), 默认 10:20 抓取
