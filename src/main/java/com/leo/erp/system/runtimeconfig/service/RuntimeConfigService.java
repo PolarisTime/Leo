@@ -3,6 +3,7 @@ package com.leo.erp.system.runtimeconfig.service;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.web.PageQuerySettings;
+import com.leo.erp.market.steelx.SteelxProperties;
 import com.leo.erp.system.runtimeconfig.feature.FeatureFlagService;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeBusinessConfig;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeConfigResponse;
@@ -21,19 +22,22 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
     public static final String WEIGHT_ONLY_PURCHASE_INBOUNDS_FEATURE = "purchase-inbound.weight-only-view";
     public static final String WEIGHT_ONLY_SALES_OUTBOUNDS_FEATURE = "sales-outbound.weight-only-view";
     public static final String SHOW_SNOWFLAKE_ID_FEATURE = "ui.show-snowflake-id";
-    public static final String RUNTIME_CONFIG_CACHE_KEY = "leo:system:runtime-config:v3";
+    public static final String RUNTIME_CONFIG_CACHE_KEY = "leo:system:runtime-config:v4";
     private static final Duration RUNTIME_CONFIG_CACHE_TTL = Duration.ofMinutes(10);
 
     private final FeatureFlagService featureFlagService;
     private final PageQuerySettings pageQuerySettings;
+    private final SteelxProperties steelxProperties;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
 
     @Autowired
     public RuntimeConfigService(FeatureFlagService featureFlagService,
                                 PageQuerySettings pageQuerySettings,
+                                SteelxProperties steelxProperties,
                                 @Nullable RedisJsonCacheSupport redisJsonCacheSupport) {
         this.featureFlagService = featureFlagService;
         this.pageQuerySettings = pageQuerySettings;
+        this.steelxProperties = steelxProperties;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
     }
 
@@ -90,7 +94,7 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
 
     private RuntimeBusinessConfig businessConfig() {
         RuntimeStatementConfig statement = new RuntimeStatementConfig(true);
-        return new RuntimeBusinessConfig(statement);
+        return new RuntimeBusinessConfig(statement, steelxProperties.supportedRegions());
     }
 
     private RuntimeFeatureConfig featureConfig() {
