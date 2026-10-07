@@ -48,7 +48,19 @@ public class PurchaseOrderReferenceQueryRepository {
                            ON inbound.id = pii.inbound_id
                           AND inbound.deleted_flag = FALSE
                         WHERE poi.order_id = po.id
-                   ) AS referenced_by_purchase_inbound
+                   ) AS referenced_by_purchase_inbound,
+                   COALESCE((
+                       SELECT SUM(GREATEST(poi.quantity - COALESCE((
+                           SELECT SUM(pii.quantity)
+                             FROM po_purchase_inbound_item pii
+                             JOIN po_purchase_inbound inbound
+                               ON inbound.id = pii.inbound_id
+                              AND inbound.deleted_flag = FALSE
+                            WHERE pii.source_purchase_order_item_id = poi.id
+                       ), 0), 0))
+                         FROM po_purchase_order_item poi
+                        WHERE poi.order_id = po.id
+                   ), 0) AS unreceived_quantity
               FROM po_purchase_order po
              WHERE po.id IN (:ids)
             """;
@@ -68,17 +80,27 @@ public class PurchaseOrderReferenceQueryRepository {
                 new ReferenceStatus(
                         resultSet.getLong("id"),
                         resultSet.getBoolean("referenced_by_sales_order"),
-                        resultSet.getBoolean("referenced_by_purchase_inbound")
+                        resultSet.getBoolean("referenced_by_purchase_inbound"),
+                        saturateToInt(resultSet.getLong("unreceived_quantity"))
                 ));
         Map<Long, ReferenceStatus> result = new HashMap<>(statuses.size());
         statuses.forEach(status -> result.put(status.orderId(), status));
         return result;
     }
 
+    /** 聚合值超出 int 时收敛到 {@link Integer#MAX_VALUE}，避免读取时溢出。 */
+    private static int saturateToInt(long value) {
+        if (value > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        return value < 0 ? 0 : (int) value;
+    }
+
     public record ReferenceStatus(
             Long orderId,
             boolean referencedBySalesOrder,
-            boolean referencedByPurchaseInbound
+            boolean referencedByPurchaseInbound,
+            int unreceivedQuantity
     ) {
     }
 }

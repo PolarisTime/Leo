@@ -9,6 +9,7 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -30,6 +31,13 @@ public class PurchaseOrderResponseAssembler {
         Map<Long, Integer> allocatedQuantityMap = availabilityService.loadInboundAllocatedQuantityMap(order);
         Map<Long, Integer> salesAllocatedQuantityMap = availabilityService.loadSalesAllocatedQuantityMap(order);
         PurchaseOrderResponse response = mapper.toResponse(order);
+        List<PurchaseOrderItemResponse> itemResponses = order.getItems().stream()
+                .map(item -> toItemResponse(
+                        item,
+                        allocatedQuantityMap,
+                        salesAllocatedQuantityMap
+                ))
+                .toList();
         return new PurchaseOrderResponse(
                 response.id(),
                 response.orderNo(),
@@ -45,21 +53,30 @@ public class PurchaseOrderResponseAssembler {
                 response.status(),
                 response.deletedFlag(),
                 response.remark(),
-                order.getItems().stream()
-                        .map(item -> toItemResponse(
-                                item,
-                                allocatedQuantityMap,
-                                salesAllocatedQuantityMap
-                        ))
-                        .toList(),
+                itemResponses,
                 documentChargeItemService.list(ModuleKeys.PURCHASE_ORDER, order.getId()),
                 response.referencedBySalesOrder(),
-                response.referencedByPurchaseInbound()
+                response.referencedByPurchaseInbound(),
+                totalRemainingQuantity(itemResponses)
         );
     }
 
     PurchaseOrderResponse toSummaryResponse(PurchaseOrder order) {
         return mapper.toResponse(order);
+    }
+
+    /** 订单级「未入库」件数：各明细行未入库件数之和。 */
+    static Integer totalRemainingQuantity(List<PurchaseOrderItemResponse> items) {
+        if (items == null || items.isEmpty()) {
+            return 0;
+        }
+        long total = 0L;
+        for (PurchaseOrderItemResponse item : items) {
+            if (item != null && item.remainingQuantity() != null) {
+                total += Math.max(item.remainingQuantity(), 0);
+            }
+        }
+        return total > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) total;
     }
 
     private PurchaseOrderItemResponse toItemResponse(PurchaseOrderItem item,

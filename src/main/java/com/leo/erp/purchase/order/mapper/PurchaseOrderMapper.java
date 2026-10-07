@@ -13,5 +13,7 @@ public interface PurchaseOrderMapper {
     @Mapping(target = "chargeItems", ignore = true)
     @Mapping(target = "referencedBySalesOrder", ignore = true)
     @Mapping(target = "referencedByPurchaseInbound", ignore = true)
+    @Mapping(target = "totalRemainingQuantity", ignore = true)
+    @Mapping(target = "applyTotalRemainingQuantity", ignore = true)
     PurchaseOrderResponse toResponse(PurchaseOrder order);
 }

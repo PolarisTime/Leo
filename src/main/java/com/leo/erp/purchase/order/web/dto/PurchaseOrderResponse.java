@@ -24,7 +24,8 @@ public record PurchaseOrderResponse(
         List<PurchaseOrderItemResponse> items,
         List<DocumentChargeItemResponse> chargeItems,
         boolean referencedBySalesOrder,
-        boolean referencedByPurchaseInbound
+        boolean referencedByPurchaseInbound,
+        Integer totalRemainingQuantity
 ) {
 
     public PurchaseOrderResponse(Long id,
@@ -45,7 +46,7 @@ public record PurchaseOrderResponse(
                                  List<DocumentChargeItemResponse> chargeItems) {
         this(id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                false, false);
+                false, false, null);
     }
 
     public PurchaseOrderResponse withReferenceFlags(boolean referencedBySalesOrder,
@@ -53,7 +54,15 @@ public record PurchaseOrderResponse(
         return new PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                referencedBySalesOrder, referencedByPurchaseInbound
+                referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity
+        );
+    }
+
+    public PurchaseOrderResponse applyTotalRemainingQuantity(Integer totalRemainingQuantity) {
+        return new PurchaseOrderResponse(
+                id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
+                settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
+                referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity
         );
     }
 
@@ -74,8 +83,9 @@ public record PurchaseOrderResponse(
                                  List<PurchaseOrderItemResponse> items) {
         this(id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, List.of(),
-                false, false);
+                false, false, null);
     }
+
     public PurchaseOrderResponse(Long id,
                                  String orderNo,
                                  String supplierCode,

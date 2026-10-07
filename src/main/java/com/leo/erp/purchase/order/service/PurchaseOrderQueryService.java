@@ -112,12 +112,15 @@ public class PurchaseOrderQueryService {
 
     PurchaseOrderResponse applyReferenceFlags(PurchaseOrderResponse response,
                                               PurchaseOrderReferenceQueryRepository.ReferenceStatus status) {
-        return status == null
-                ? response
-                : response.withReferenceFlags(
+        if (status == null) {
+            return response;
+        }
+        return response
+                .withReferenceFlags(
                         status.referencedBySalesOrder(),
                         status.referencedByPurchaseInbound()
-                );
+                )
+                .applyTotalRemainingQuantity(status.unreceivedQuantity());
     }
 
     PurchaseOrderResponse toDetailResponse(PurchaseOrder order) {

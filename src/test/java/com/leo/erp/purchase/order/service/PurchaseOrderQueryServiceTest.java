@@ -7,6 +7,7 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.repository.PurchaseOrderInboundCandidateQueryRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderReferenceQueryRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
+import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -187,6 +188,33 @@ class PurchaseOrderQueryServiceTest {
             when(responseAssembler.toDetailResponse(order)).thenReturn(null);
 
             assertThat(serviceWithoutReferenceRepository.toDetailResponse(order)).isNull();
+        }
+
+        @Test
+        void applyReferenceFlags_shouldCarryUnreceivedQuantityOntoResponse() {
+            PurchaseOrderResponse base = new PurchaseOrderResponse(
+                    1L, "PO-1", null, null, "供应商", null, null, null, null,
+                    null, null, "已审核", false, null, List.of()
+            );
+
+            PurchaseOrderResponse enriched = service.applyReferenceFlags(
+                    base,
+                    new PurchaseOrderReferenceQueryRepository.ReferenceStatus(1L, true, false, 7)
+            );
+
+            assertThat(enriched.referencedBySalesOrder()).isTrue();
+            assertThat(enriched.referencedByPurchaseInbound()).isFalse();
+            assertThat(enriched.totalRemainingQuantity()).isEqualTo(7);
+        }
+
+        @Test
+        void applyReferenceFlags_shouldLeaveResponseUntouchedWhenStatusMissing() {
+            PurchaseOrderResponse base = new PurchaseOrderResponse(
+                    1L, "PO-1", null, null, "供应商", null, null, null, null,
+                    null, null, "已审核", false, null, List.of()
+            );
+
+            assertThat(service.applyReferenceFlags(base, null)).isSameAs(base);
         }
     }
 }
