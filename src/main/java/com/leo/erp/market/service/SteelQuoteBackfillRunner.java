@@ -38,7 +38,7 @@ public class SteelQuoteBackfillRunner implements ApplicationRunner {
         LocalDate from = to.minusDays(days - 1L);
         log.info("行情补数开始: {} ~ {} (最近 {} 天)", from, to, days);
         SteelQuoteSyncService.BackfillResult result = syncService.backfill(from, to);
-        log.info("行情补数结束: 成功 {} 天, 失败 {} 天, 共 {} 行",
-                result.syncedDays(), result.failedDays(), result.totalRows());
+        log.info("行情补数结束: 成功 {} 天, 跳过 {} 天, 失败 {} 天, 共 {} 行",
+                result.syncedDays(), result.skippedDays(), result.failedDays(), result.totalRows());
     }
 }

@@ -1,5 +1,6 @@
 package com.leo.erp.market.schedule;
 
+import com.leo.erp.market.QuoteNotPublishedException;
 import com.leo.erp.market.service.SteelxQuoteSyncService;
 import com.leo.erp.market.steelx.SteelxProperties;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +41,9 @@ public class SteelxQuoteScheduledTasks {
             var results = steelxQuoteSyncService.syncAllRegions();
             log.info("定时西本行情同步完成: {} 个地区, 共 {} 行", results.size(),
                     results.stream().mapToInt(SteelxQuoteSyncService.SyncResult::rowCount).sum());
+        } catch (QuoteNotPublishedException ex) {
+            // 全部地区都是空表(休市/节假日)属预期结果, 记为跳过而不是错误。
+            log.info("定时西本行情同步跳过: 该日无报价 - {}", ex.getMessage());
         } catch (Exception ex) {
             log.error("定时西本行情同步失败", ex);
         } finally {

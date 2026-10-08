@@ -62,10 +62,11 @@ public class RetryExecutor {
      * @param action 日志与错误消息用的动作名（如「行情列表页」「西本杭州报价」）
      * @param work   一次取数尝试
      * @return 取数结果
-     * @throws TransientCallException 尝试次数用尽（或等待退避时被中断）后的最后一次瞬时失败
+     * @throws TransientCallException 尝试次数用尽（或等待退避时被中断）后的最后一次瞬时失败，
+     *                               分类（{@link TransientCallException.Reason}）与最后一次失败一致
      */
     public <T> T execute(String action, Supplier<T> work) {
-        String lastMessage = null;
+        TransientCallException lastFailure = null;
         int tried = 0;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             tried = attempt;
@@ -76,7 +77,7 @@ public class RetryExecutor {
                 }
                 return result;
             } catch (TransientCallException ex) {
-                lastMessage = ex.getMessage();
+                lastFailure = ex;
                 if (attempt >= maxAttempts) {
                     break;
                 }
@@ -89,7 +90,8 @@ public class RetryExecutor {
                 }
             }
         }
-        throw new TransientCallException(lastMessage + "(已尝试 " + tried + " 次)");
+        // 保留最后一次失败的分类：上层据此区分「真失败」与「该日无行情」。
+        throw lastFailure.withAttempts(tried);
     }
 
     /** 第 {@code failedAttempt} 次失败（1 起）之后应等待的毫秒数，封顶 {@code maxBackoffMillis}。 */

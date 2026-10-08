@@ -1,6 +1,7 @@
 package com.leo.erp.market.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.market.QuoteNotPublishedException;
 import com.leo.erp.market.domain.entity.SteelArticle;
 import com.leo.erp.market.mysteel.MysteelClient;
 import com.leo.erp.market.mysteel.MysteelProperties;
@@ -77,9 +78,11 @@ class SteelQuoteSyncServiceTest {
         SteelQuoteSyncService service = service();
         when(mysteelClient.findLatestArticleUrl(DATE)).thenReturn(Optional.empty());
 
+        // 该日无行情文章属于「休市/未发布」而不是故障：单独抛 QuoteNotPublishedException，
+        // 供补数记为跳过；对外仍是业务异常(4220)，HTTP 契约不变。
         assertThatThrownBy(() -> service.sync(DATE))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("未找到");
+                .isInstanceOf(QuoteNotPublishedException.class)
+                .hasMessageContaining("未发布");
     }
 
     @Test
@@ -166,6 +169,54 @@ class SteelQuoteSyncServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("未知时段");
         verify(mysteelClient, never()).findArticleUrls(any(LocalDate.class));
+    }
+
+    @Test
+    void backfill_该日无行情记为跳过而不是失败() {
+        SteelQuoteSyncService service = service();
+        // 周六: 没有发布行情 -> 跳过; 周日(调休补班): 有行情 -> 成功。
+        LocalDate saturday = LocalDate.of(2026, 9, 19);
+        LocalDate sunday = LocalDate.of(2026, 9, 20);
+        when(mysteelClient.findArticleUrls(saturday)).thenReturn(List.of());
+        when(mysteelClient.findArticleUrls(sunday)).thenReturn(List.of(ARTICLE_URL));
+        when(articleRepository.findByArticleUrlAndDeletedFlagFalse(ARTICLE_URL)).thenReturn(Optional.empty());
+        when(mysteelClient.fetchArticle(ARTICLE_URL)).thenReturn(articleHtml("15:40"));
+        when(steelQuoteStore.persistArticle(eq(ARTICLE_URL), anyString(), eq("杭州"))).thenReturn(article());
+
+        SteelQuoteSyncService.BackfillResult result = service.backfill(saturday, sunday);
+
+        assertThat(result.syncedDays()).isEqualTo(1);
+        assertThat(result.skippedDays()).isEqualTo(1);
+        assertThat(result.skippedDates()).containsExactly(saturday);
+        assertThat(result.failedDays()).isZero();
+        assertThat(result.failures()).isEmpty();
+    }
+
+    @Test
+    void backfill_不再盲跳周末() {
+        SteelQuoteSyncService service = service();
+        LocalDate saturday = LocalDate.of(2026, 9, 19);
+        when(mysteelClient.findArticleUrls(saturday)).thenReturn(List.of());
+
+        service.backfill(saturday, saturday);
+
+        // 周末照常发起查询: 是否入库由站点发布情况决定, 而不是由本地星期规则丢弃。
+        verify(mysteelClient).findArticleUrls(saturday);
+    }
+
+    @Test
+    void backfill_真失败仍进失败清单() {
+        SteelQuoteSyncService service = service();
+        LocalDate day = LocalDate.of(2026, 9, 9);
+        when(mysteelClient.findArticleUrls(day))
+                .thenThrow(new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "HTTP 500"));
+
+        SteelQuoteSyncService.BackfillResult result = service.backfill(day, day);
+
+        assertThat(result.failedDays()).isEqualTo(1);
+        assertThat(result.skippedDays()).isZero();
+        assertThat(result.failures()).hasSize(1);
+        assertThat(result.failures().get(0).message()).contains("HTTP 500");
     }
 
     private String articleHtml(String time) {

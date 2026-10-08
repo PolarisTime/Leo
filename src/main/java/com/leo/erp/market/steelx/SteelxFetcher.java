@@ -4,6 +4,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.retry.RetryExecutor;
 import com.leo.erp.common.retry.TransientCallException;
+import com.leo.erp.market.QuoteNotPublishedException;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -14,7 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
+import java.util.function.Consumer;
 
 /**
  * 西本报价页获取传输层: 默认直连 HTTP; 配置了跳板机则经 SSH 远程 curl。
@@ -49,34 +50,40 @@ public class SteelxFetcher {
 
     /** 取回指定地区报价页 HTML。 */
     public String fetch(String url, String what) {
-        return fetch(url, what, content -> null);
+        return fetch(url, what, null);
     }
 
     /**
-     * 取回指定地区报价页 HTML，并用调用方提供的内容校验参与重试判定。
+     * 取回指定地区报价页 HTML，并用调用方提供的内容校验参与重试。
      *
-     * <p>传输层只认识「空内容」这类与页面无关的无效结果；「价格表为空」等依赖页面语义的校验
-     * 由调用方以 {@code contentProblem} 注入：返回 {@code null} 表示内容可用，
-     * 返回问题描述则视为瞬时失败并触发重试。</p>
+     * <p>传输层只认识「空响应」这类与页面无关的无效结果；「价格表为空」等依赖页面语义的校验
+     * 由调用方以 {@code contentCheck} 注入，校验不通过时抛出
+     * {@link TransientCallException}（用 {@link TransientCallException.Reason#CONTENT_EMPTY}
+     * 表示「该日无报价」）。</p>
      *
      * <p>校验在传输层的重试预算内执行，因此调用方不需要（也不应该）在自身循环里再包一层重试，
      * 否则最坏尝试次数会相乘放大。</p>
+     *
+     * <p>预算耗尽后按失败分类上报：{@code CONTENT_EMPTY} 抛
+     * {@link QuoteNotPublishedException}（供补数记为跳过），其余抛业务异常。</p>
      */
-    public String fetch(String url, String what, Function<String, String> contentProblem) {
+    public String fetch(String url, String what, Consumer<String> contentCheck) {
         try {
             return retry.execute(what, () -> {
                 String html = usesSsh() ? fetchViaSsh(url, what) : fetchDirect(url, what);
                 if (html.isBlank()) {
                     throw new TransientCallException(what + "返回空内容");
                 }
-                String problem = contentProblem == null ? null : contentProblem.apply(html);
-                if (problem != null) {
-                    throw new TransientCallException(problem);
+                if (contentCheck != null) {
+                    contentCheck.accept(html);
                 }
                 return html;
             });
         } catch (TransientCallException ex) {
             // 重试预算用尽(或退避等待被中断): 对上层仍是业务异常, HTTP 契约不变。
+            if (ex.getReason() == TransientCallException.Reason.CONTENT_EMPTY) {
+                throw new QuoteNotPublishedException(ex.getMessage());
+            }
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, ex.getMessage());
         }
     }

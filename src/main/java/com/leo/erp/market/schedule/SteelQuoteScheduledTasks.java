@@ -1,5 +1,6 @@
 package com.leo.erp.market.schedule;
 
+import com.leo.erp.market.QuoteNotPublishedException;
 import com.leo.erp.market.mysteel.MysteelProperties;
 import com.leo.erp.market.service.SteelQuoteSyncService;
 import lombok.extern.slf4j.Slf4j;
@@ -41,6 +42,9 @@ public class SteelQuoteScheduledTasks {
             SteelQuoteSyncService.SyncResult result = steelQuoteSyncService.sync(today);
             log.info("定时行情同步完成: {} {} ({} 行, 新文章={})", result.articleDate(), result.articleTime(),
                     result.rowCount(), result.created());
+        } catch (QuoteNotPublishedException ex) {
+            // 站点该日未发布(休市/节假日)属预期结果, 记为跳过而不是错误。
+            log.info("定时行情同步跳过: 该日无行情文章 - {}", ex.getMessage());
         } catch (Exception ex) {
             // 定时任务兜底: 记录告警, 不让异常打穿调度线程
             log.error("定时行情同步失败", ex);

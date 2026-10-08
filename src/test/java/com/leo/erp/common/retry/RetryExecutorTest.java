@@ -140,6 +140,27 @@ class RetryExecutorTest {
     }
 
     @Test
+    void 预算耗尽后保留最后一次失败的分类() {
+        AtomicInteger calls = new AtomicInteger();
+        Supplier<String> work = () -> {
+            calls.incrementAndGet();
+            throw new TransientCallException(TransientCallException.Reason.CONTENT_EMPTY, "该日无行情");
+        };
+
+        assertThatThrownBy(() -> noBackoff(2).execute("行情列表页", work))
+                .isInstanceOf(TransientCallException.class)
+                .extracting(ex -> ((TransientCallException) ex).getReason())
+                .isEqualTo(TransientCallException.Reason.CONTENT_EMPTY);
+        assertThat(calls.get()).isEqualTo(2);
+    }
+
+    @Test
+    void 默认失败的分类为传输层失败() {
+        assertThat(new TransientCallException("HTTP 500").getReason())
+                .isEqualTo(TransientCallException.Reason.TRANSPORT);
+    }
+
+    @Test
     void 退避按倍数递增并封顶() {
         RetryExecutor retry = executor(5, 1000L, 2.0, 3000L);
 

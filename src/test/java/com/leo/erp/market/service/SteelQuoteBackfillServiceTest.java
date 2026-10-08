@@ -1,5 +1,6 @@
 package com.leo.erp.market.service;
 
+import com.leo.erp.market.QuoteNotPublishedException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -7,6 +8,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -20,6 +22,9 @@ class SteelQuoteBackfillServiceTest {
     @Mock
     private SteelQuoteSyncService syncService;
 
+    @Mock
+    private SteelxQuoteSyncService steelxSyncService;
+
     @InjectMocks
     private SteelQuoteBackfillService service;
 
@@ -32,7 +37,8 @@ class SteelQuoteBackfillServiceTest {
         when(syncService.backfill(any(), any())).thenAnswer(invocation -> {
             started.countDown();
             release.await(5, TimeUnit.SECONDS);
-            return new SteelQuoteSyncService.BackfillResult(from, to, 2, 0, 100, java.util.List.of());
+            return new SteelQuoteSyncService.BackfillResult(from, to, 2, 1, 0, 100,
+                    List.of(LocalDate.of(2026, 9, 6)), List.of());
         });
 
         assertThat(service.submit(from, to)).isTrue();
@@ -44,7 +50,26 @@ class SteelQuoteBackfillServiceTest {
         waitUntilIdle();
         assertThat(service.status().running()).isFalse();
         assertThat(service.status().syncedDays()).isEqualTo(2);
+        assertThat(service.status().skippedDays()).isEqualTo(1);
+        assertThat(service.status().skippedDates()).containsExactly(LocalDate.of(2026, 9, 6));
         assertThat(service.status().totalRows()).isEqualTo(100);
+    }
+
+    @Test
+    void 西本补数把该日无报价记为跳过而不是失败() throws Exception {
+        LocalDate from = LocalDate.of(2026, 10, 1);
+        LocalDate to = LocalDate.of(2026, 10, 2);
+        when(steelxSyncService.syncRegion(any(), any()))
+                .thenThrow(new QuoteNotPublishedException("西本杭州未解析到任何价格行"));
+
+        assertThat(service.submit(from, to, "STEELX", "杭州")).isTrue();
+        waitUntilIdle();
+
+        assertThat(service.status().syncedDays()).isZero();
+        assertThat(service.status().failedDays()).isZero();
+        assertThat(service.status().skippedDays()).isEqualTo(2);
+        assertThat(service.status().skippedDates()).containsExactly(from, to);
+        assertThat(service.status().failures()).isEmpty();
     }
 
     private void waitUntilIdle() throws InterruptedException {

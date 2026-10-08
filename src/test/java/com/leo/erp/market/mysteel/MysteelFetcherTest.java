@@ -1,6 +1,8 @@
 package com.leo.erp.market.mysteel;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.retry.TransientCallException;
+import com.leo.erp.market.QuoteNotPublishedException;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -158,8 +160,11 @@ class MysteelFetcherTest {
         script.then(200, "short").then(200, "x".repeat(12000));
         MysteelFetcher fetcher = fetcher(3);
 
-        String html = fetcher.fetch(url(), "行情列表页",
-                content -> content.length() < 10000 ? "列表页内容不完整(长度 " + content.length() + "), 疑似被截断" : null);
+        String html = fetcher.fetch(url(), "行情列表页", content -> {
+            if (content.length() < 10000) {
+                throw new TransientCallException("列表页内容不完整(长度 " + content.length() + "), 疑似被截断");
+            }
+        });
 
         assertThat(html).hasSize(12000);
         assertThat(script.calls.get()).isEqualTo(2);
@@ -169,11 +174,25 @@ class MysteelFetcherTest {
     void 自定义内容校验始终不通过时用尽重试并抛出校验消息() {
         script.then(200, "short");
 
-        assertThatThrownBy(() -> fetcher(2).fetch(url(), "行情列表页", content -> "内容不完整"))
+        assertThatThrownBy(() -> fetcher(2).fetch(url(), "行情列表页", content -> {
+            throw new TransientCallException("内容不完整");
+        }))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("内容不完整")
                 .hasMessageContaining("已尝试 2 次");
         assertThat(script.calls.get()).isEqualTo(2);
+    }
+
+    @Test
+    void 内容为空的校验结果上报为未发布报价异常() {
+        script.then(200, "short");
+
+        assertThatThrownBy(() -> fetcher(2).fetch(url(), "行情列表页", content -> {
+            throw new TransientCallException(TransientCallException.Reason.CONTENT_EMPTY, "该日无行情");
+        }))
+                .isInstanceOf(QuoteNotPublishedException.class)
+                .hasMessageContaining("该日无行情")
+                .hasMessageContaining("已尝试 2 次");
     }
 
     @Test

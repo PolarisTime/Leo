@@ -7,6 +7,7 @@ import com.leo.erp.market.mysteel.MysteelArticleParser;
 import com.leo.erp.market.mysteel.MysteelClient;
 import com.leo.erp.market.mysteel.MysteelRateLimiter;
 import com.leo.erp.market.mysteel.MysteelProperties;
+import com.leo.erp.market.QuoteNotPublishedException;
 import com.leo.erp.market.mysteel.TradingPeriod;
 import com.leo.erp.market.repository.SteelArticleRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -54,8 +55,7 @@ public class SteelQuoteSyncService {
     public SyncResult sync(LocalDate date) {
         rateLimiter.acquire();
         String articleUrl = mysteelClient.findLatestArticleUrl(date)
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR,
-                        String.format("%tF 未找到杭州市场建筑钢材价格行情文章", date)));
+                .orElseThrow(() -> notPublished(date, Set.of()));
         return syncArticle(articleUrl, Set.of());
     }
 
@@ -70,14 +70,14 @@ public class SteelQuoteSyncService {
      * {@code periods} 为空表示全部时段; 非空时仅入库命中时段的文章, 其余跳过。
      * 时段由文章标题时间推导, 需抓取文章后才能判定。
      *
-     * @throws BusinessException 当日无行情文章, 或所选时段均无对应文章
+     * @throws QuoteNotPublishedException 当日站点未发布行情文章(休市/节假日)
+     * @throws BusinessException          所选时段均无对应文章
      */
     public List<SyncResult> syncAll(LocalDate date, Collection<String> periods) {
         Set<String> requestedPeriods = normalizePeriods(periods);
         List<String> articleUrls = mysteelClient.findArticleUrls(date);
         if (articleUrls.isEmpty()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
-                    String.format("%tF 未找到杭州市场建筑钢材价格行情文章", date));
+            throw notPublished(date, requestedPeriods);
         }
         List<SyncResult> results = new ArrayList<>(articleUrls.size());
         for (String articleUrl : articleUrls) {
@@ -94,31 +94,50 @@ public class SteelQuoteSyncService {
         return results;
     }
 
-    /** 补数: 逐日同步区间内所有时段(跳过周末); 返回成功/失败天数与总行数。 */
+    /**
+     * 该日无行情文章：站点正常响应但没有发布，属于「休市/节假日」而不是故障，
+     * 因此单独抛 {@link QuoteNotPublishedException}，让补数记为跳过而非失败。
+     */
+    private static QuoteNotPublishedException notPublished(LocalDate date, Set<String> periods) {
+        String suffix = periods.isEmpty() ? "" : "所选时段(" + String.join("/", periods) + ")";
+        return new QuoteNotPublishedException(
+                String.format("%tF 站点未发布杭州市场建筑钢材价格行情文章%s", date, suffix));
+    }
+
+    /**
+     * 补数: 逐日同步区间内所有时段; 返回成功/跳过/失败天数与总行数。
+     *
+     * <p><b>不再按周末盲跳：</b>节假日与调休并不服从「周六周日无行情」的直觉
+     * （实测 2026-09-20 周日为中秋调休补班、正常发布了 3 篇行情），盲跳会静默漏数且不报错。
+     * 现在逐日都查，由站点是否发布决定结果：没有发布就记为跳过。</p>
+     */
     public BackfillResult backfill(LocalDate from, LocalDate to) {
         int synced = 0;
+        int skipped = 0;
         int failed = 0;
         int totalRows = 0;
+        List<LocalDate> skippedDates = new ArrayList<>();
         List<BackfillFailure> failures = new ArrayList<>();
         for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
-            java.time.DayOfWeek dow = date.getDayOfWeek();
-            if (dow == java.time.DayOfWeek.SATURDAY || dow == java.time.DayOfWeek.SUNDAY) {
-                continue;
-            }
             try {
                 List<SyncResult> results = syncAll(date);
                 synced++;
                 totalRows += results.stream().mapToInt(SyncResult::rowCount).sum();
                 log.info("行情补数成功: {} {}", date,
                         results.stream().map(SyncResult::period).distinct().toList());
+            } catch (QuoteNotPublishedException ex) {
+                skipped++;
+                skippedDates.add(date);
+                log.info("行情补数跳过(该日无行情): {} - {}", date, ex.getMessage());
             } catch (Exception ex) {
                 failed++;
                 failures.add(new BackfillFailure(date, ex.getMessage()));
                 log.warn("行情补数失败: {} - {}", date, ex.getMessage(), ex);
             }
         }
-        log.info("行情补数结束: 成功 {} 天, 失败 {} 天, 共 {} 行", synced, failed, totalRows);
-        return new BackfillResult(from, to, synced, failed, totalRows, failures);
+        log.info("行情补数结束: 成功 {} 天, 跳过 {} 天, 失败 {} 天, 共 {} 行",
+                synced, skipped, failed, totalRows);
+        return new BackfillResult(from, to, synced, skipped, failed, totalRows, skippedDates, failures);
     }
 
     /** 补数失败项。 */
@@ -126,8 +145,8 @@ public class SteelQuoteSyncService {
     }
 
     /** 补数结果。 */
-    public record BackfillResult(LocalDate from, LocalDate to, int syncedDays, int failedDays, int totalRows,
-                                 List<BackfillFailure> failures) {
+    public record BackfillResult(LocalDate from, LocalDate to, int syncedDays, int skippedDays, int failedDays,
+                                 int totalRows, List<LocalDate> skippedDates, List<BackfillFailure> failures) {
     }
 
     private SyncResult syncArticle(String articleUrl, Set<String> requestedPeriods) {
