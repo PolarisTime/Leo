@@ -1,6 +1,7 @@
 package com.leo.erp.market.steelx;
 
 import com.leo.erp.common.retry.RetryProperties;
+import com.leo.erp.common.support.QuoteRegionCatalog;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.util.LinkedHashMap;
@@ -13,9 +14,12 @@ import java.util.Map;
  *
  * <p>西本按地区(城市)报价: 宿主名为 {@code {slug}.steelx2.com}, 路径统一,
  * 故以"城市中文名 -> 子域名 slug"的映射承载; 仅支持配置中列出的城市。</p>
+ *
+ * <p>同时作为 {@link QuoteRegionCatalog} 的实现, 供运行时配置下发可选取价地区,
+ * 避免系统模块反向依赖行情模块。</p>
  */
 @ConfigurationProperties(prefix = "leo.market.steelx-quote")
-public class SteelxProperties {
+public class SteelxProperties implements QuoteRegionCatalog {
 
     private boolean enabled = true;
     /** 数据源标识。 */
@@ -155,6 +159,11 @@ public class SteelxProperties {
 
     public List<String> supportedRegions() {
         return List.copyOf(regionMap().keySet());
+    }
+
+    @Override
+    public List<String> listSupportedQuoteRegions() {
+        return supportedRegions();
     }
 
     private static List<Region> defaultRegions() {

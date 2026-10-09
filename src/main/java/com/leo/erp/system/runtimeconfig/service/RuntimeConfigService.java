@@ -1,9 +1,9 @@
 package com.leo.erp.system.runtimeconfig.service;
 
+import com.leo.erp.common.support.QuoteRegionCatalog;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.web.PageQuerySettings;
-import com.leo.erp.market.steelx.SteelxProperties;
 import com.leo.erp.system.runtimeconfig.feature.FeatureFlagService;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeBusinessConfig;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeConfigResponse;
@@ -27,17 +27,17 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
 
     private final FeatureFlagService featureFlagService;
     private final PageQuerySettings pageQuerySettings;
-    private final SteelxProperties steelxProperties;
+    private final QuoteRegionCatalog quoteRegionCatalog;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
 
     @Autowired
     public RuntimeConfigService(FeatureFlagService featureFlagService,
                                 PageQuerySettings pageQuerySettings,
-                                SteelxProperties steelxProperties,
+                                QuoteRegionCatalog quoteRegionCatalog,
                                 @Nullable RedisJsonCacheSupport redisJsonCacheSupport) {
         this.featureFlagService = featureFlagService;
         this.pageQuerySettings = pageQuerySettings;
-        this.steelxProperties = steelxProperties;
+        this.quoteRegionCatalog = quoteRegionCatalog;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
     }
 
@@ -94,7 +94,7 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
 
     private RuntimeBusinessConfig businessConfig() {
         RuntimeStatementConfig statement = new RuntimeStatementConfig(true);
-        return new RuntimeBusinessConfig(statement, steelxProperties.supportedRegions());
+        return new RuntimeBusinessConfig(statement, quoteRegionCatalog.listSupportedQuoteRegions());
     }
 
     private RuntimeFeatureConfig featureConfig() {
