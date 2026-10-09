@@ -1,3 +1,10 @@
+## [12.3.1](https://github.com/PolarisTime/Leo/compare/v12.3.0...v12.3.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **purchase:** 实际货值按行取整到分, 消除暂定金额的 ±0.01 伪差额 ([d1202bc](https://github.com/PolarisTime/Leo/commit/d1202bc2a3f02f18658624f632b870707ee7c2c7))
+
 # [12.3.0](https://github.com/PolarisTime/Leo/compare/v12.2.0...v12.3.0) (2026-10-09)
 
 
