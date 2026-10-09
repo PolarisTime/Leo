@@ -1,0 +1,37 @@
+[Unit]
+# Leo ERP 生产健康守卫：补齐 2026-10-09 事故暴露的监控盲区
+#   - 磁盘/inode 水位
+#   - PostgreSQL 可用性与 pg_is_in_recovery()
+#   - Redis 可写性（MISCONF 探测）
+#   - 业务健康端点
+#   - 应用日志与 journal 的 ENOSPC / 53100 / 57P03 特征
+# 由 leo-health-guard.timer 触发，默认每 60 秒一次。
+Description=Leo ERP production health guard
+Documentation=file:/instance/steelx/shared/health-guard.sh
+After=network-online.target postgresql-18.service redis.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# 需要读取 /instance/steelx/shared/steelx.env(600) 与 PG/Redis 凭据，故以属主 identity 运行。
+User=sakura
+Group=sakura
+Environment=LEO_GUARD_ENV_FILE=/instance/steelx/shared/steelx.env
+Environment=LEO_GUARD_HEALTH_URL=http://127.0.0.1:57217/api/v2.0/health
+Environment=LEO_GUARD_LOG_FILE=/instance/steelx/logs/backend.log
+Environment=LEO_GUARD_MOUNTS=/:/home
+# 告警外发（可选）：设置为接收 JSON POST 的 webhook，例如内部告警网关。
+# 留空则仅写入 journal，由 journal 采集侧告警（如 Loki/Vector 规则）。
+#Environment=LEO_GUARD_ALERT_WEBHOOK=https://example.invalid/alert
+Environment=LEO_GUARD_TIMEOUT_SECONDS=5
+# 退出码语义: 0=OK 1=WARN 2=CRIT；oneshot 失败会在 journal 中体现，
+# 便于 `systemctl --failed` 与外部告警规则直接捕获。
+ExecStart=/instance/steelx/shared/health-guard.sh
+TimeoutStartSec=60
+# 守卫自身不得占用可观的磁盘/内存
+MemoryMax=64M
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

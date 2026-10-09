@@ -1,0 +1,16 @@
+[Unit]
+# 每 60 秒执行一次生产健康守卫；首次触发使用 OnBootSec 以覆盖刚启动的窗口。
+Description=Run Leo ERP production health guard every minute
+Documentation=file:/instance/steelx/shared/health-guard.sh
+
+[Timer]
+OnCalendar=*:0/1
+OnBootSec=60s
+# 若上一次执行因主机繁忙被推迟，不追补历史触发，避免告警风暴
+Persistent=false
+AccuracySec=5s
+RandomizedDelaySec=5s
+Unit=leo-health-guard.service
+
+[Install]
+WantedBy=timers.target
