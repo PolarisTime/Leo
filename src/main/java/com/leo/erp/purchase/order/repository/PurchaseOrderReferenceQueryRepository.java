@@ -12,6 +12,10 @@ import java.util.Map;
 
 /**
  * 采购订单下游引用状态批量查询，避免列表页按行查询产生 N+1。
+ *
+ * <p>「实际货值」按明细逐行四舍五入到分后求和, 与暂定金额同口径: total_amount 是各行
+ * amount(numeric(14,2)) 之和再加费用, 若实际货值改为整单原始乘积求和, 同一批重量会因
+ * 行级取整产生 ±0.01 的伪差额(实测重量与暂定重量完全一致时也会显示"退 0.01")。</p>
  */
 @Repository
 public class PurchaseOrderReferenceQueryRepository {
@@ -75,13 +79,13 @@ public class PurchaseOrderReferenceQueryRepository {
                         )
                    ), 0) AS received_quantity,
                    COALESCE((
-                       SELECT SUM(poi.actual_weight_ton * poi.unit_price)
+                       SELECT SUM(ROUND(poi.actual_weight_ton * poi.unit_price, 2))
                          FROM po_purchase_order_item poi
                         WHERE poi.order_id = po.id
                           AND poi.actual_weight_ton IS NOT NULL
                    ), 0) AS actual_amount,
                    COALESCE((
-                       SELECT SUM(poi.actual_weight_ton * poi.unit_price)
+                       SELECT SUM(ROUND(poi.actual_weight_ton * poi.unit_price, 2))
                          FROM po_purchase_order_item poi
                         WHERE poi.order_id = po.id
                           AND poi.actual_weight_ton IS NOT NULL
