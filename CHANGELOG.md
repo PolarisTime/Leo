@@ -1,3 +1,21 @@
+# [12.3.0](https://github.com/PolarisTime/Leo/compare/v12.2.0...v12.3.0) (2026-10-09)
+
+
+### Bug Fixes
+
+* **market:** 修复补数按列表页窗口取数导致历史日期全部失败，并区分休市无行情 ([38c9f8b](https://github.com/PolarisTime/Leo/commit/38c9f8b0613b5dfcccf803126c67d9d954ef3a4b))
+* **system:** 取价地区改由 common 端口下发, 解除 market→purchase→system→market 模块环 ([a6fab42](https://github.com/PolarisTime/Leo/commit/a6fab42d4f17b22c4242147e884f07fbe9d6138b))
+
+
+### Features
+
+* **market:** 西本取价地区扩展到 69 个城市站 ([78c245f](https://github.com/PolarisTime/Leo/commit/78c245fa1b620957f60f7de7684b46141f7d0120))
+* **ops:** 新增生产健康守卫并留存存储耗尽事故报告 ([03fbc5f](https://github.com/PolarisTime/Leo/commit/03fbc5f82b7cf417e0ce483d0b76e0ab20e5fc57))
+* **purchase:** 采购订单响应新增未入库件数聚合 ([f126834](https://github.com/PolarisTime/Leo/commit/f1268342329a7904a29859f1b4557b1843831f89))
+* **purchase:** 采购订单返回实际货值与差额 ([f980818](https://github.com/PolarisTime/Leo/commit/f98081804aa1277d0f3f0aabbe188b557b9c9a94))
+* **purchase:** 采购订单返回已入库件数 ([a397451](https://github.com/PolarisTime/Leo/commit/a3974518ddc749f2409e51f40a1edcad670e616f))
+* **runtime-config:** 运行时配置下发西本取价地区 ([f0040a9](https://github.com/PolarisTime/Leo/commit/f0040a956d49c14d60aa4363b8463e2a24ab22f6))
+
 # [12.2.0](https://github.com/PolarisTime/Leo/compare/v12.1.1...v12.2.0) (2026-10-03)
 
 
