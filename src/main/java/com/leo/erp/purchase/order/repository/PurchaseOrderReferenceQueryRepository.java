@@ -16,6 +16,9 @@ import java.util.Map;
  * <p>「实际货值」按明细逐行四舍五入到分后求和, 与暂定金额同口径: total_amount 是各行
  * amount(numeric(14,2)) 之和再加费用, 若实际货值改为整单原始乘积求和, 同一批重量会因
  * 行级取整产生 ±0.01 的伪差额(实测重量与暂定重量完全一致时也会显示"退 0.01")。</p>
+ *
+ * <p>「实际货值 / 差额」只在存在已过磅行时才有值: 未过磅行不产生实际货值, 也不产生补退。
+ * 否则一行都未入库的订单会显示成"退掉整单暂定金额"(实为已付预付款, 并非退款)。</p>
  */
 @Repository
 public class PurchaseOrderReferenceQueryRepository {
@@ -79,18 +82,20 @@ public class PurchaseOrderReferenceQueryRepository {
                              WHERE poi.order_id = po.id
                         )
                    ), 0) AS received_quantity,
-                   COALESCE((
-                       SELECT SUM(ROUND(poi.actual_weight_ton * poi.unit_price, 2))
-                         FROM po_purchase_order_item poi
-                        WHERE poi.order_id = po.id
-                          AND poi.actual_weight_ton IS NOT NULL
-                   ), 0) AS actual_amount,
-                   COALESCE((
-                       SELECT SUM(ROUND(poi.actual_weight_ton * poi.unit_price, 2))
-                         FROM po_purchase_order_item poi
-                        WHERE poi.order_id = po.id
-                          AND poi.actual_weight_ton IS NOT NULL
-                   ), 0) - COALESCE(po.total_amount, 0) AS amount_difference
+                   -- 实际货值: 仅统计已过磅行; 一行都未过磅时返回 NULL(未产生实际货值, 前端显示 —),
+                   -- 否则"0 − 暂定金额"会把整单预付款显示成一笔退款。
+                   (SELECT CASE WHEN COUNT(poi.actual_weight_ton) = 0 THEN NULL
+                                ELSE SUM(ROUND(poi.actual_weight_ton * poi.unit_price, 2)) END
+                      FROM po_purchase_order_item poi
+                     WHERE poi.order_id = po.id) AS actual_amount,
+                   -- 差额(补退): 只对已过磅行按行结算(行实际金额 − 行暂定金额);
+                   -- 无过磅行时为 NULL, 未入库/未过磅的货不产生补退。
+                   -- 全部过磅且无附加费用时等价于 实际货值 − 暂定金额。
+                   (SELECT CASE WHEN COUNT(poi.actual_weight_ton) = 0 THEN NULL
+                                ELSE SUM(ROUND(poi.actual_weight_ton * poi.unit_price, 2)
+                                         - COALESCE(poi.amount, 0)) END
+                      FROM po_purchase_order_item poi
+                     WHERE poi.order_id = po.id) AS amount_difference
               FROM po_purchase_order po
              WHERE po.id IN (:ids)
             """;

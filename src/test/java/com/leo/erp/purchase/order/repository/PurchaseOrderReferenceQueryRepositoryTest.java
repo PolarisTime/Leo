@@ -56,18 +56,25 @@ class PurchaseOrderReferenceQueryRepositoryTest {
     }
 
     @Test
-    void amountDifference_shouldSubtractProvisionalTotalFromRoundedActualAmount() {
+    void amountDifference_shouldSettlePerLineAgainstProvisionalLineAmount() {
         String sql = captureSql();
 
         assertThat(sql).contains("AS actual_amount");
-        assertThat(sql).contains("- COALESCE(po.total_amount, 0) AS amount_difference");
+        // 逐行结算(行实际金额 − 行暂定金额): 全部过磅且无附加费用时等价于 实际货值 − 暂定金额,
+        // 部分过磅时不会把未入库货物算成一笔退款。
+        assertThat(sql).contains("- COALESCE(poi.amount, 0)) END");
+        assertThat(sql).doesNotContain("- COALESCE(po.total_amount, 0) AS amount_difference");
+        assertThat(sql).contains("AS amount_difference");
     }
 
     @Test
-    void query_shouldOnlyAggregateWeighedLines() {
+    void query_shouldReturnNullAmountsWhenNothingWeighed() {
         String sql = captureSql();
 
-        assertThat(sql).contains("AND poi.actual_weight_ton IS NOT NULL");
+        // 一行都没过磅时返回 NULL(前端显示 —), 而不是 0: 否则"0 − 暂定金额"会把整单
+        // 预付款显示成一笔退款。
+        assertThat(sql).contains("WHEN COUNT(poi.actual_weight_ton) = 0 THEN NULL");
+        assertThat(sql).doesNotContain("AND poi.actual_weight_ton IS NOT NULL");
     }
 
     @Test
