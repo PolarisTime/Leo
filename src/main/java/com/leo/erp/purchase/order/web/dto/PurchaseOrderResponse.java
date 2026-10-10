@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.web.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.leo.erp.common.charge.api.DocumentChargeItemResponse;
 
 import java.math.BigDecimal;
@@ -29,7 +30,14 @@ public record PurchaseOrderResponse(
         BigDecimal totalActualAmount,
         BigDecimal totalAmountDifference,
         Integer totalReceivedQuantity,
-        /** 强制结单留痕; 未强制结单时为 null。 */
+        /**
+         * 强制结单留痕; 未强制结单时为 null。
+         *
+         * <p>必须 {@code NON_NULL}: Jackson 默认会把 record 的空组件序列化为 {@code "forceClose": null},
+         * 而线上前端对采购订单列表用的是 {@code z.strictObject}, 多出的键会让整页解析失败。
+         * 未强制结单时不输出该键, 以保持与旧前端的向后兼容(同 chargeItems:null 需要显式声明的道理)。</p>
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
         ForceCloseInfo forceClose
 ) {
 
