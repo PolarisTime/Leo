@@ -1,3 +1,10 @@
+## [12.4.2](https://github.com/PolarisTime/Leo/compare/v12.4.1...v12.4.2) (2026-10-10)
+
+
+### Bug Fixes
+
+* **purchase:** 未过磅不出实际货值/差额, 差额改按已过磅行逐行结算 ([d90b0cc](https://github.com/PolarisTime/Leo/commit/d90b0cc551fbfccc403bb1d6a69ee4d83351d86f))
+
 ## [12.4.1](https://github.com/PolarisTime/Leo/compare/v12.4.0...v12.4.1) (2026-10-10)
 
 
