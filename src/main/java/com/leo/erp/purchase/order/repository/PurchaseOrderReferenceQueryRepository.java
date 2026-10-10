@@ -54,7 +54,8 @@ public class PurchaseOrderReferenceQueryRepository {
                           AND inbound.deleted_flag = FALSE
                         WHERE poi.order_id = po.id
                    ) AS referenced_by_purchase_inbound,
-                   COALESCE((
+                   -- 强制结单: 剩余未入库件数已作废, 对外按 0 返回(不再作为待入库量展示)
+                   CASE WHEN po.force_closed THEN 0 ELSE COALESCE((
                        SELECT SUM(GREATEST(poi.quantity - COALESCE((
                            SELECT SUM(pii.quantity)
                              FROM po_purchase_inbound_item pii
@@ -65,7 +66,7 @@ public class PurchaseOrderReferenceQueryRepository {
                        ), 0), 0))
                          FROM po_purchase_order_item poi
                         WHERE poi.order_id = po.id
-                   ), 0) AS unreceived_quantity,
+                   ), 0) END AS unreceived_quantity,
                    COALESCE((
                        SELECT SUM(pii.quantity)
                          FROM po_purchase_inbound_item pii

@@ -3,14 +3,13 @@ package com.leo.erp.purchase.inbound.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.purchase.api.PurchaseOrderSalesAllocation;
-import com.leo.erp.purchase.api.PurchaseOrderSalesAllocationQuery;
 import com.leo.erp.purchase.api.PurchaseSupplierLedgerLock;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
+import com.leo.erp.purchase.order.service.PurchaseOrderDirectSalesCapacityGuard;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -24,20 +23,20 @@ public class PurchaseInboundCompletionSyncService {
     private final PurchaseInboundAllocationService allocationService;
     private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
     private final PurchaseSupplierLedgerLock supplierLedgerLock;
-    private final PurchaseOrderSalesAllocationQuery purchaseOrderSalesAllocationQuery;
+    private final PurchaseOrderDirectSalesCapacityGuard directSalesCapacityGuard;
     private final PurchaseOrderAuditPublisher purchaseOrderAuditPublisher;
 
     public PurchaseInboundCompletionSyncService(PurchaseInboundSourceValidator sourceValidator,
                                                 PurchaseInboundAllocationService allocationService,
                                                 PurchaseInboundItemQueryService purchaseInboundItemQueryService,
                                                 PurchaseSupplierLedgerLock supplierLedgerLock,
-                                                PurchaseOrderSalesAllocationQuery purchaseOrderSalesAllocationQuery,
+                                                PurchaseOrderDirectSalesCapacityGuard directSalesCapacityGuard,
                                                 PurchaseOrderAuditPublisher purchaseOrderAuditPublisher) {
         this.sourceValidator = sourceValidator;
         this.allocationService = allocationService;
         this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
         this.supplierLedgerLock = supplierLedgerLock;
-        this.purchaseOrderSalesAllocationQuery = purchaseOrderSalesAllocationQuery;
+        this.directSalesCapacityGuard = directSalesCapacityGuard;
         this.purchaseOrderAuditPublisher = purchaseOrderAuditPublisher;
     }
 
@@ -105,6 +104,10 @@ public class PurchaseInboundCompletionSyncService {
                 && !StatusConstants.PURCHASE_COMPLETED.equals(purchaseOrder.getStatus())) {
             return;
         }
+        // 强制结单单据由人工终结: 剩余量已作废, 入库审核/反审核都不得改写其状态。
+        if (purchaseOrder.isForceClosed()) {
+            return;
+        }
         List<Long> sourceItemIds = purchaseOrder.getItems().stream()
                 .map(PurchaseOrderItem::getId)
                 .filter(id -> id != null)
@@ -115,7 +118,8 @@ public class PurchaseInboundCompletionSyncService {
         }
         // 完成采购判定按累计有效入库件数: 未删除且状态为已审核/完成入库的入库单;
         // 草稿不参与, 历史部分入库单无需回填为完成入库即可计入。
-        Map<Long, Integer> receivedQtyByItemId = loadEffectiveReceivedQuantityMap(sourceItemIds);
+        Map<Long, Integer> receivedQtyByItemId =
+                directSalesCapacityGuard.loadReceivedQuantityMap(sourceItemIds);
 
         boolean allFulfilled = purchaseOrder.getItems().stream().allMatch(item -> {
             int expected = item.getQuantity() != null ? item.getQuantity() : 0;
@@ -124,7 +128,7 @@ public class PurchaseInboundCompletionSyncService {
         });
 
         if (allFulfilled) {
-            assertLegacyDirectSalesCapacityCovered(sourceItemIds, receivedQtyByItemId);
+            directSalesCapacityGuard.assertCovered(sourceItemIds, receivedQtyByItemId);
             if (!StatusConstants.PURCHASE_COMPLETED.equals(purchaseOrder.getStatus())) {
                 lockSupplierLedger(purchaseOrder);
                 purchaseOrder.setStatus(StatusConstants.PURCHASE_COMPLETED);
@@ -151,42 +155,6 @@ public class PurchaseInboundCompletionSyncService {
                                     String actionType,
                                     String remark) {
         purchaseOrderAuditPublisher.publish(purchaseOrder, eventType, actionType, remark);
-    }
-
-    private void assertLegacyDirectSalesCapacityCovered(
-            List<Long> sourceItemIds,
-            Map<Long, Integer> receivedQtyByItemId
-    ) {
-        for (PurchaseOrderSalesAllocation summary
-                : purchaseOrderSalesAllocationQuery.summarizeByPurchaseOrderItemIds(sourceItemIds)) {
-            long inboundQuantity = receivedQtyByItemId.getOrDefault(
-                    summary.sourcePurchaseOrderItemId(),
-                    0
-            );
-            long directSalesQuantity = summary.totalQuantity() == null ? 0L : summary.totalQuantity();
-            if (directSalesQuantity > inboundQuantity) {
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_ERROR,
-                        "来源采购明细 " + summary.sourcePurchaseOrderItemId()
-                                + " 的历史直连销售数量超过最终入库量：已入库 " + inboundQuantity
-                                + " 件，已占用 " + directSalesQuantity + " 件，请先处理历史销售订单"
-                );
-            }
-        }
-    }
-
-    /**
-     * 累计有效入库件数：仅统计未删除且状态为已审核/完成入库的入库单，草稿不参与完成度。
-     */
-    private Map<Long, Integer> loadEffectiveReceivedQuantityMap(List<Long> sourceItemIds) {
-        Map<Long, Integer> receivedQtyByItemId = new java.util.HashMap<>();
-        purchaseInboundItemQueryService
-                .summarizeEffectiveQuantityBySourcePurchaseOrderItemIds(sourceItemIds)
-                .forEach((sourceItemId, totalQuantity) -> receivedQtyByItemId.put(
-                        sourceItemId,
-                        totalQuantity == null ? 0 : Math.toIntExact(totalQuantity)
-                ));
-        return receivedQtyByItemId;
     }
 
     private void lockSupplierLedger(PurchaseOrder purchaseOrder) {

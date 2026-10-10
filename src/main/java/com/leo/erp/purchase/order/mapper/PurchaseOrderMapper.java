@@ -17,7 +17,9 @@ public interface PurchaseOrderMapper {
     @Mapping(target = "totalActualAmount", ignore = true)
     @Mapping(target = "totalAmountDifference", ignore = true)
     @Mapping(target = "totalReceivedQuantity", ignore = true)
+    @Mapping(target = "forceClose", ignore = true)
     @Mapping(target = "applyTotalRemainingQuantity", ignore = true)
     @Mapping(target = "applyReceivedQuantity", ignore = true)
+    @Mapping(target = "withForceClose", ignore = true)
     PurchaseOrderResponse toResponse(PurchaseOrder order);
 }

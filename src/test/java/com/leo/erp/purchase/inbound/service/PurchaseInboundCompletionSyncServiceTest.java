@@ -10,6 +10,7 @@ import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
+import com.leo.erp.purchase.order.service.PurchaseOrderDirectSalesCapacityGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,12 +57,18 @@ class PurchaseInboundCompletionSyncServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 直接销售占用校验与"完成采购"共用同一不变式, 由独立守卫承载。
+        PurchaseOrderDirectSalesCapacityGuard directSalesCapacityGuard =
+                new PurchaseOrderDirectSalesCapacityGuard(
+                        purchaseOrderSalesAllocationQuery,
+                        purchaseInboundItemQueryService
+                );
         service = new PurchaseInboundCompletionSyncService(
                 sourceValidator,
                 allocationService,
                 purchaseInboundItemQueryService,
                 supplierLedgerLock,
-                purchaseOrderSalesAllocationQuery,
+                directSalesCapacityGuard,
                 purchaseOrderAuditPublisher
         );
     }
@@ -204,8 +211,30 @@ class PurchaseInboundCompletionSyncServiceTest {
                 "采购订单状态 已审核 -> 完成采购");
     }
 
-    /** 两张「已审核」部分入库单累计等于订单量即可完成采购，历史部分单无需是完成入库。 */
+    /**
+     * 强制结单的订单由人工终结: 剩余量已作废, 入库审核/反审核都不得改写其状态,
+     * 也不得重复发完成采购审计事件(否则撤销入库会把强制结单悄悄回退成已审核)。
+     */
     @Test
+    void synchronizeSourcePurchaseOrders_shouldSkipForceClosedOrder() {
+        PurchaseInbound trigger = inbound(1L, StatusConstants.AUDITED, List.of(inboundItem(1L, 10)));
+        PurchaseOrder order = purchaseOrder(500L, StatusConstants.PURCHASE_COMPLETED, 10L, 20L, new ArrayList<>());
+        order.setForceClosed(true);
+        order.setForceCloseReason("剩余 1 件报废");
+        PurchaseOrderItem sourceItem = orderItem(1L, 10, order);
+        order.getItems().add(sourceItem);
+        when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(1L))).thenReturn(Map.of(1L, sourceItem));
+
+        // allowReopen = true: 未收满时若无强制结单跳过, 该单会被回退为已审核
+        service.synchronizeSourcePurchaseOrders(trigger, true);
+
+        assertThat(order.getStatus()).isEqualTo(StatusConstants.PURCHASE_COMPLETED);
+        assertThat(order.isForceClosed()).isTrue();
+        verify(supplierLedgerLock, never()).lock(any(), any());
+        verify(purchaseOrderAuditPublisher, never()).publish(any(), any(), any(), any());
+    }
+
+    /** 两张「已审核」部分入库单累计等于订单量即可完成采购，历史部分单无需是完成入库。 */    @Test
     void synchronizeSourcePurchaseOrders_shouldCompleteWhenPartialAuditedInboundsSumToOrdered() {
         PurchaseInbound trigger = inbound(2L, StatusConstants.AUDITED, List.of(inboundItem(1L, 5)));
         PurchaseOrder order = purchaseOrder(500L, StatusConstants.AUDITED, 10L, 20L, new ArrayList<>());

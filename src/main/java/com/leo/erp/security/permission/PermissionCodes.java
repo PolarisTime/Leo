@@ -108,6 +108,8 @@ public final class PermissionCodes {
         public static final String WRITE = "write";
         public static final String AUDIT = "audit";
         public static final String UNAUDIT = "unaudit";
+        /** 强制结单: 绕过"必须收满"的自动完成判定, 由人工终结单据(剩余量作废)。 */
+        public static final String FORCE_CLOSE = "force-close";
         public static final String COMPLETE = "complete";
         public static final String CONFIRM = "confirm";
         public static final String PRINT = "print";
@@ -247,6 +249,8 @@ public final class PermissionCodes {
     public static final String PURCHASE_ORDERS_DELETE = Resources.PURCHASE_ORDERS + ":" + Actions.DELETE;
     public static final String PURCHASE_ORDERS_AUDIT = Resources.PURCHASE_ORDERS + ":" + Actions.AUDIT;
     public static final String PURCHASE_ORDERS_UNAUDIT = Resources.PURCHASE_ORDERS + ":" + Actions.UNAUDIT;
+    /** 强制结单: 剩余未入库件数作废并把订单置为完成采购(含撤销)。 */
+    public static final String PURCHASE_ORDERS_FORCE_CLOSE = Resources.PURCHASE_ORDERS + ":" + Actions.FORCE_CLOSE;
 
     // 采购入库
     public static final String PURCHASE_INBOUNDS_READ = Resources.PURCHASE_INBOUNDS + ":" + Actions.READ;
@@ -413,7 +417,8 @@ public final class PermissionCodes {
             PROJECTS_READ, PROJECTS_CREATE, PROJECTS_UPDATE, PROJECTS_DELETE,
             QUOTE_SHEETS_READ, QUOTE_SHEETS_CREATE, QUOTE_SHEETS_UPDATE, QUOTE_SHEETS_DELETE,
             STEEL_QUOTES_READ, PURCHASE_ORDERS_READ, PURCHASE_ORDERS_CREATE, PURCHASE_ORDERS_UPDATE, PURCHASE_ORDERS_DELETE,
-            PURCHASE_ORDERS_AUDIT, PURCHASE_ORDERS_UNAUDIT, PURCHASE_INBOUNDS_READ, PURCHASE_INBOUNDS_CREATE, PURCHASE_INBOUNDS_UPDATE, PURCHASE_INBOUNDS_DELETE,
+            PURCHASE_ORDERS_AUDIT, PURCHASE_ORDERS_UNAUDIT, PURCHASE_ORDERS_FORCE_CLOSE,
+            PURCHASE_INBOUNDS_READ, PURCHASE_INBOUNDS_CREATE, PURCHASE_INBOUNDS_UPDATE, PURCHASE_INBOUNDS_DELETE,
             PURCHASE_INBOUNDS_AUDIT, PURCHASE_INBOUNDS_UNAUDIT, FREIGHT_BILLS_READ, FREIGHT_BILLS_CREATE, FREIGHT_BILLS_UPDATE, FREIGHT_BILLS_DELETE,
             FREIGHT_BILLS_AUDIT, FREIGHT_STATEMENTS_READ, FREIGHT_STATEMENTS_CREATE, FREIGHT_STATEMENTS_UPDATE,
             FREIGHT_STATEMENTS_DELETE, FREIGHT_STATEMENTS_AUDIT,

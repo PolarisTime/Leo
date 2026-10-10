@@ -28,8 +28,28 @@ public record PurchaseOrderResponse(
         Integer totalRemainingQuantity,
         BigDecimal totalActualAmount,
         BigDecimal totalAmountDifference,
-        Integer totalReceivedQuantity
+        Integer totalReceivedQuantity,
+        /** 强制结单留痕; 未强制结单时为 null。 */
+        ForceCloseInfo forceClose
 ) {
+
+    /**
+     * 强制结单留痕: 剩余未入库件数作废后由人工把订单置为完成采购。
+     *
+     * @param reason            结单原因(必填)
+     * @param remainingQuantity 结单时未入库件数快照(即本次作废件数)
+     * @param operatorId        操作人ID
+     * @param operatorName      操作人姓名快照
+     * @param closedAt          结单时刻
+     */
+    public record ForceCloseInfo(
+            String reason,
+            Integer remainingQuantity,
+            Long operatorId,
+            String operatorName,
+            LocalDateTime closedAt
+    ) {
+    }
 
     public PurchaseOrderResponse(Long id,
                                  String orderNo,
@@ -49,7 +69,7 @@ public record PurchaseOrderResponse(
                                  List<DocumentChargeItemResponse> chargeItems) {
         this(id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                false, false, null, null, null, null);
+                false, false, null, null, null, null, null);
     }
 
     public PurchaseOrderResponse withReferenceFlags(boolean referencedBySalesOrder,
@@ -58,7 +78,17 @@ public record PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
                 referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity,
-                totalActualAmount, totalAmountDifference, totalReceivedQuantity
+                totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
+        );
+    }
+
+    /** 覆盖强制结单留痕(实体派生), 其余字段保持不变。 */
+    public PurchaseOrderResponse withForceClose(ForceCloseInfo forceClose) {
+        return new PurchaseOrderResponse(
+                id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
+                settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
+                referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity,
+                totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
         );
     }
 
@@ -67,7 +97,7 @@ public record PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
                 referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity,
-                totalActualAmount, totalAmountDifference, totalReceivedQuantity
+                totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
         );
     }
 
@@ -76,7 +106,7 @@ public record PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
                 referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity,
-                totalActualAmount, totalAmountDifference, totalReceivedQuantity
+                totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
         );
     }
 
@@ -85,7 +115,7 @@ public record PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
                 referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity,
-                totalActualAmount, totalAmountDifference, totalReceivedQuantity
+                totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
         );
     }
 
@@ -106,7 +136,7 @@ public record PurchaseOrderResponse(
                                  List<PurchaseOrderItemResponse> items) {
         this(id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, List.of(),
-                false, false, null, null, null, null);
+                false, false, null, null, null, null, null);
     }
 
     public PurchaseOrderResponse(Long id,

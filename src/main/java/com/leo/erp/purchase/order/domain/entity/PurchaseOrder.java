@@ -66,6 +66,29 @@ public class PurchaseOrder extends AbstractAuditableEntity implements StatusAwar
     @Column(name = "remark", length = 255)
     private String remark;
 
+    /**
+     * 强制结单标记: 剩余未入库件数作废, 订单由人工置为完成采购(区别于入库审核自动完成)。
+     * <p>撤销结单时连同下列留痕字段一起清空。</p>
+     */
+    @Column(name = "force_closed", nullable = false)
+    private boolean forceClosed = false;
+
+    @Column(name = "force_close_reason", length = 255)
+    private String forceCloseReason;
+
+    /** 结单时的未入库件数快照(即本次作废件数)。 */
+    @Column(name = "force_close_remaining_quantity")
+    private Integer forceCloseRemainingQuantity;
+
+    @Column(name = "force_closed_by")
+    private Long forceClosedBy;
+
+    @Column(name = "force_closed_name", length = 64)
+    private String forceClosedName;
+
+    @Column(name = "force_closed_at")
+    private LocalDateTime forceClosedAt;
+
     @OneToMany(mappedBy = "purchaseOrder", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PurchaseOrderItem> items = new ArrayList<>();
 }

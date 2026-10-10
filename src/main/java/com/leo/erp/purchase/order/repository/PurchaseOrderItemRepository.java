@@ -42,12 +42,14 @@ public interface PurchaseOrderItemRepository extends JpaRepository<PurchaseOrder
      * 查询未删除采购订单的明细行(含订单快照), 供报单比价按规格关联。
      * <p>关键字匹配订单号/供应商/类别/材质/规格/长度; 可按订单与状态过滤;
      * 按订单倒序、订单内行号升序。</p>
+     * <p>已强制结单的订单不再作为可开吨位来源: 其剩余吨位已随剩余件数一起作废。</p>
      */
     @Query("""
             select item
             from PurchaseOrderItem item
             join fetch item.purchaseOrder purchaseOrder
             where purchaseOrder.deletedFlag = false
+              and purchaseOrder.forceClosed = false
               and (:status is null or purchaseOrder.status = :status)
               and (:purchaseOrderId is null or purchaseOrder.id = :purchaseOrderId)
               and (:keyword is null

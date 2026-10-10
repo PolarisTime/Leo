@@ -172,7 +172,8 @@ public final class ModuleBoundaryVerifier {
 
     /**
      * 单据状态写入白名单：迁移守卫之外的 setStatus 旁路会绕过 beforeStatusUpdate 业务校验，
-     * 只允许聚合自己的 ApplyService、跨聚合完成同步服务和框架守卫写入实体状态。
+     * 只允许聚合自己的 ApplyService、跨聚合完成同步服务、框架守卫，以及显式登记的人工
+     * 终结/回转服务写入实体状态。
      */
     private static ArchCondition<JavaClass> onlyWriteEntityStatusFromSanctionedClasses() {
         return new ArchCondition<>("only write entity status from sanctioned status-writing classes") {
@@ -200,6 +201,9 @@ public final class ModuleBoundaryVerifier {
         String simpleName = clazz.getSimpleName();
         return simpleName.endsWith("ApplyService")
                 || simpleName.endsWith("CompletionSyncService")
+                // 采购订单强制结单: 人工终结/回转单据状态的受控入口, 自带状态与下游守卫,
+                // 不能走 updateStatus(完成采购被明确禁止手工置位)。
+                || simpleName.endsWith("ForceCloseService")
                 || "com.leo.erp.common.service.CrudStatusGuard".equals(clazz.getName());
     }
 

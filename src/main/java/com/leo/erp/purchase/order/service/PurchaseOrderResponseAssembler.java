@@ -60,12 +60,27 @@ public class PurchaseOrderResponseAssembler {
                 totalRemainingQuantity(itemResponses),
                 null,
                 null,
-                null
+                null,
+                forceCloseInfoOf(order)
         );
     }
 
     PurchaseOrderResponse toSummaryResponse(PurchaseOrder order) {
-        return mapper.toResponse(order);
+        return mapper.toResponse(order).withForceClose(forceCloseInfoOf(order));
+    }
+
+    /** 强制结单留痕: 未强制结单时返回 null, 前端据 null 判定"非强制结单"。 */
+    private static PurchaseOrderResponse.ForceCloseInfo forceCloseInfoOf(PurchaseOrder order) {
+        if (!order.isForceClosed()) {
+            return null;
+        }
+        return new PurchaseOrderResponse.ForceCloseInfo(
+                order.getForceCloseReason(),
+                order.getForceCloseRemainingQuantity(),
+                order.getForceClosedBy(),
+                order.getForceClosedName(),
+                order.getForceClosedAt()
+        );
     }
 
     /** 订单级「未入库」件数：各明细行未入库件数之和。 */

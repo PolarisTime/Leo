@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.web;
 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageFilter;
@@ -8,10 +9,12 @@ import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.support.OptionLimits;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
+import com.leo.erp.purchase.order.service.PurchaseOrderForceCloseService;
 import com.leo.erp.purchase.order.service.PurchaseOrderPickupListService;
 import com.leo.erp.purchase.order.service.PurchaseOrderOptionService;
 import com.leo.erp.purchase.order.service.PurchaseOrderService;
 import com.leo.erp.purchase.order.service.PurchaseOrderWarehouseRecommendationService;
+import com.leo.erp.purchase.order.web.dto.PurchaseOrderForceCloseRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderOptionResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderPageCriteria;
@@ -21,6 +24,7 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderWarehouseRecommendationResponse;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
+import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
@@ -58,15 +62,18 @@ public class V2PurchaseOrderController {
     private final PurchaseOrderPickupListService pickupListService;
     private final PurchaseOrderWarehouseRecommendationService warehouseRecommendationService;
     private final PurchaseOrderOptionService purchaseOrderOptionService;
+    private final PurchaseOrderForceCloseService purchaseOrderForceCloseService;
 
     public V2PurchaseOrderController(PurchaseOrderService purchaseOrderService,
                                      PurchaseOrderPickupListService pickupListService,
                                      PurchaseOrderWarehouseRecommendationService warehouseRecommendationService,
-                                     PurchaseOrderOptionService purchaseOrderOptionService) {
+                                     PurchaseOrderOptionService purchaseOrderOptionService,
+                                     PurchaseOrderForceCloseService purchaseOrderForceCloseService) {
         this.purchaseOrderService = purchaseOrderService;
         this.pickupListService = pickupListService;
         this.warehouseRecommendationService = warehouseRecommendationService;
         this.purchaseOrderOptionService = purchaseOrderOptionService;
+        this.purchaseOrderForceCloseService = purchaseOrderForceCloseService;
     }
 
     @Operation(summary = "采购订单下拉选项(单号/供应商/订货吨数/状态)")
@@ -148,6 +155,42 @@ public class V2PurchaseOrderController {
     @RequirePermission(PermissionCodes.PURCHASE_ORDERS_UPDATE)
     public PurchaseOrderResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return purchaseOrderService.updateStatus(id, request.status());
+    }
+
+    /**
+     * 资源型强制结单端点：创建"强制结单记录"子资源即完成强制结单。
+     * 子资源无独立可回读路径(DELETE 作用于集合本身)，Location 指向父订单
+     * {@code GET /api/v2.0/purchase-orders/{id}}。
+     */
+    @Operation(
+            summary = "强制结单(剩余未入库件数作废)",
+            description = "把「已审核」的采购订单剩余未入库件数一次性作废, 并置为「完成采购」; 原因必填并留痕。"
+                    + "已强制结单、无未入库件数、存在未审核采购入库单、或剩余件数已被销售直接占用时返回 422。"
+    )
+    @PostMapping("/{id}/force-closures")
+    @DomainEventAudited
+    @V2Created
+    @RequirePermission(PermissionCodes.PURCHASE_ORDERS_FORCE_CLOSE)
+    public ResponseEntity<PurchaseOrderResponse> forceClose(@PathVariable Long id,
+                                                           @Valid @RequestBody PurchaseOrderForceCloseRequest request,
+                                                           @AuthenticationPrincipal SecurityPrincipal principal) {
+        PurchaseOrderResponse response = purchaseOrderForceCloseService.forceClose(id, request.reason(), principal);
+        return V2ResponseSupport.created("/purchase-orders", response);
+    }
+
+    @Operation(
+            summary = "撤销强制结单",
+            description = "把强制结单的采购订单退回「已审核」并清空留痕, 未入库件数重新可入库; "
+                    + "供应商台账锁为一次性闩锁, 与采购入库反审核回退一致, 不随撤销解锁。"
+    )
+    @DeleteMapping("/{id}/force-closures")
+    @DomainEventAudited
+    @V2NoContent
+    @RequirePermission(PermissionCodes.PURCHASE_ORDERS_FORCE_CLOSE)
+    public ResponseEntity<Void> cancelForceClose(@PathVariable Long id,
+                                                @AuthenticationPrincipal SecurityPrincipal principal) {
+        purchaseOrderForceCloseService.cancelForceClose(id, principal);
+        return V2ResponseSupport.noContent();
     }
 
     @Operation(summary = "删除采购订单")
