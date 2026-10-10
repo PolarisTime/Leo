@@ -74,6 +74,14 @@ public class Project extends AbstractAuditableEntity {
     @Column(name = "quote_region", length = 32)
     private String quoteRegion;
 
+    /** 允许的品牌(逗号分隔, 来自 md_material.brand); 空表示不限制。 */
+    @Column(name = "allowed_brands", length = 512)
+    private String allowedBrands;
+
+    /** 允许的材质(逗号分隔, 来自 md_material.material); 空表示不限制。 */
+    @Column(name = "allowed_materials", length = 512)
+    private String allowedMaterials;
+
     @Column(name = "remark", length = 255)
     private String remark;
 }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 public record ProjectOptionResponse(
         @JsonSerialize(using = ToStringSerializer.class) Long id,
@@ -25,7 +26,11 @@ public record ProjectOptionResponse(
         /** 默认取价数据源: MYSTEEL/STEELX。 */
         String quoteSource,
         /** 默认取价地区(西本城市中文名)。 */
-        String quoteRegion
+        String quoteRegion,
+        /** 允许的品牌列表; 空列表表示不限制。 */
+        List<String> allowedBrands,
+        /** 允许的材质列表; 空列表表示不限制。 */
+        List<String> allowedMaterials
 ) {
 
     public ProjectOptionResponse(Long id,
@@ -37,7 +42,7 @@ public record ProjectOptionResponse(
                                  String projectName,
                                  String projectNameAbbr) {
         this(id, label, value, customerId, customerCode, projectCode, projectName,
-                projectNameAbbr, null, null, null, null, null, null, null);
+                projectNameAbbr, null, null, null, null, null, null, null, null, null);
     }
 
     public ProjectOptionResponse(Long id,
@@ -51,6 +56,7 @@ public record ProjectOptionResponse(
                                  Long settlementCompanyId,
                                  String settlementCompanyName) {
         this(id, label, value, customerId, customerCode, projectCode, projectName,
-                projectNameAbbr, settlementCompanyId, settlementCompanyName, null, null, null, null, null);
+                projectNameAbbr, settlementCompanyId, settlementCompanyName,
+                null, null, null, null, null, null, null);
     }
 }

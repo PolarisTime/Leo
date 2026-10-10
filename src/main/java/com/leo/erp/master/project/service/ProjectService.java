@@ -10,6 +10,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.CrudOperationLogger;
 import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.service.CrudVisibilityPolicy;
+import com.leo.erp.common.support.CsvValues;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -186,7 +187,9 @@ public class ProjectService {
                         project.getPriceFloatValue(),
                         project.getLastPriceRuleId(),
                         project.getQuoteSource(),
-                        project.getQuoteRegion()
+                        project.getQuoteRegion(),
+                        CsvValues.split(project.getAllowedBrands()),
+                        CsvValues.split(project.getAllowedMaterials())
                 ))
                 .toList();
     }
@@ -213,7 +216,8 @@ public class ProjectService {
                         request.projectAddress(), request.projectManager(), request.customerId(),
                         request.customerCode(), settlementCompanyId, settlementCompanyName,
                         request.status(), request.priceFloatMode(), request.priceFloatValue(),
-                    request.quoteSource(), request.quoteRegion(),
+                        request.quoteSource(), request.quoteRegion(),
+                        request.allowedBrands(), request.allowedMaterials(),
                         request.remark()
                 ),
                 entity
@@ -237,7 +241,19 @@ public class ProjectService {
         entity.setStatus(request.status());
         applyPriceFloat(entity, request);
         applyQuoteSource(entity, request);
+        applyAllowedSpec(entity, request);
         entity.setRemark(trimToNull(request.remark()));
+    }
+
+    /**
+     * 归一化项目允许品牌/材质: 去空白、去重后按逗号分隔落库; 空列表表示不限制(置空)。
+     * <p>
+     * 单项长度与条数上限由 {@link ProjectRequest} 的 Bean Validation 兜底, 这里只做清洗,
+     * 让「空数组」「全为空白」「重复值」三种前端输入统一收敛为同一个库内表示。
+     */
+    private void applyAllowedSpec(Project entity, ProjectRequest request) {
+        entity.setAllowedBrands(CsvValues.join(request.allowedBrands()));
+        entity.setAllowedMaterials(CsvValues.join(request.allowedMaterials()));
     }
 
     /** 归一化并校验网价浮动: 方向与幅度必须同时为空或同时有值; 方向仅允许 ADD/SUBTRACT。 */
@@ -327,6 +343,8 @@ public class ProjectService {
                 request.priceFloatValue(),
                 request.quoteSource(),
                 request.quoteRegion(),
+                request.allowedBrands(),
+                request.allowedMaterials(),
                 request.remark()
         ), customer.getDefaultSettlementCompanyId(), customer.getDefaultSettlementCompanyName());
     }
@@ -347,6 +365,7 @@ public class ProjectService {
                     request.customerCode(), settlementCompanyId, settlementCompanyName,
                     request.status(), request.priceFloatMode(), request.priceFloatValue(),
                     request.quoteSource(), request.quoteRegion(),
+                    request.allowedBrands(), request.allowedMaterials(),
                     request.remark()
             );
         }
@@ -357,7 +376,8 @@ public class ProjectService {
                 request.projectAddress(), request.projectManager(), request.customerId(),
                 request.customerCode(), company.id(), company.name(),
                 request.status(), request.priceFloatMode(), request.priceFloatValue(),
-                    request.quoteSource(), request.quoteRegion(),
+                request.quoteSource(), request.quoteRegion(),
+                request.allowedBrands(), request.allowedMaterials(),
                 request.remark()
         );
     }

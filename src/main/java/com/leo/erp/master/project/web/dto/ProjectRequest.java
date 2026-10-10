@@ -4,8 +4,10 @@ import com.leo.erp.common.support.ValidationMessages;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 public record ProjectRequest(
         @NotBlank(message = "项目编码不能为空")
@@ -33,6 +35,12 @@ public record ProjectRequest(
         String quoteSource,
         /** 默认取价地区(西本城市中文名)。 */
         String quoteRegion,
+        /** 允许的品牌列表; 空列表或 null 表示不限制。 */
+        @Size(max = 100, message = "允许品牌最多 100 项")
+        List<@NotBlank(message = "允许品牌不能为空") @Size(max = 64, message = "允许品牌内容过长") String> allowedBrands,
+        /** 允许的材质列表; 空列表或 null 表示不限制。 */
+        @Size(max = 100, message = "允许材质最多 100 项")
+        List<@NotBlank(message = "允许材质不能为空") @Size(max = 64, message = "允许材质内容过长") String> allowedMaterials,
         String remark
 ) {
     public ProjectRequest(String projectCode,
@@ -44,7 +52,7 @@ public record ProjectRequest(
                           String status,
                           String remark) {
         this(projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
-                null, customerCode, null, null, status, null, null, null, null, remark);
+                null, customerCode, null, null, status, null, null, null, null, null, null, remark);
     }
 
     /** 兼容旧调用方: 未携带取价数据源。 */
@@ -63,7 +71,7 @@ public record ProjectRequest(
                           String remark) {
         this(projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
                 customerId, customerCode, settlementCompanyId, settlementCompanyName,
-                status, priceFloatMode, priceFloatValue, null, null, remark);
+                status, priceFloatMode, priceFloatValue, null, null, null, null, remark);
     }
 
     /** 兼容旧调用方: 未携带网价浮动。 */
@@ -80,6 +88,6 @@ public record ProjectRequest(
                           String remark) {
         this(projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
                 customerId, customerCode, settlementCompanyId, settlementCompanyName,
-                status, null, null, null, null, remark);
+                status, null, null, null, null, null, null, remark);
     }
 }

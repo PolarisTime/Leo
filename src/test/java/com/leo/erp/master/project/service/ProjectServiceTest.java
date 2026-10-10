@@ -13,6 +13,7 @@ import com.leo.erp.master.project.domain.entity.Project;
 import com.leo.erp.master.project.mapper.ProjectMapper;
 import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.master.project.web.dto.ProjectRequest;
+import com.leo.erp.master.project.web.dto.ProjectOptionResponse;
 import com.leo.erp.master.service.ReferenceSnapshotSyncService;
 import com.leo.erp.system.company.api.SettlementCompanySnapshot;
 import com.leo.erp.system.company.service.CompanySettingService;
@@ -364,5 +365,92 @@ class ProjectServiceTest {
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.VALIDATION_ERROR);
         verify(projectRepository, never()).save(any(Project.class));
+    }
+
+    /** 允许品牌/材质: 空白、重复项收敛为去重后的逗号分隔文本。 */
+    @Test
+    void create_normalizesAllowedSpec() {
+        Project[] savedHolder = new Project[1];
+        stubCreateSave(savedHolder);
+
+        service().create(allowedSpecRequest(
+                List.of(" 沙钢 ", "沙钢", "", "   ", "永钢"),
+                List.of("HRB400E", " HRB400 ")));
+
+        Project entity = savedHolder[0];
+        assertThat(entity.getAllowedBrands()).isEqualTo("沙钢,永钢");
+        assertThat(entity.getAllowedMaterials()).isEqualTo("HRB400E,HRB400");
+    }
+
+    /** 未配置(或全为空白)时保持「不限制」语义: 库内为 null, 不能落成空串。 */
+    @Test
+    void create_blankAllowedSpec_persistsNull() {
+        Project[] savedHolder = new Project[1];
+        stubCreateSave(savedHolder);
+
+        service().create(allowedSpecRequest(List.of("   "), List.of()));
+
+        Project entity = savedHolder[0];
+        assertThat(entity.getAllowedBrands()).isNull();
+        assertThat(entity.getAllowedMaterials()).isNull();
+    }
+
+    /** 项目下拉要带上允许品牌/材质, 销售订单导入采购订单时才能在前端做匹配预警。 */
+    @Test
+    void listActiveOptions_splitsAllowedSpecIntoLists() {
+        Customer customer = customer(7L, "C007", null, null);
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L)).thenReturn(Optional.of(customer));
+        Project project = new Project();
+        project.setId(5L);
+        project.setProjectCode("P001");
+        project.setProjectName("项目A");
+        project.setCustomerCode("C007");
+        project.setAllowedBrands("沙钢,永钢");
+        project.setAllowedMaterials("HRB400E");
+        when(projectRepository.findActiveOptionsByCustomerIdentity(7L, "C007", "正常"))
+                .thenReturn(List.of(project));
+
+        List<ProjectOptionResponse> options = service().listActiveOptions(7L);
+
+        assertThat(options).hasSize(1);
+        assertThat(options.get(0).allowedBrands()).containsExactly("沙钢", "永钢");
+        assertThat(options.get(0).allowedMaterials()).containsExactly("HRB400E");
+    }
+
+    /** 未配置白名单的项目选项必须是空列表, 前端据此判定「不限制」。 */
+    @Test
+    void listActiveOptions_absentAllowedSpec_returnsEmptyLists() {
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+        Project project = new Project();
+        project.setId(5L);
+        project.setProjectCode("P001");
+        project.setProjectName("项目A");
+        project.setCustomerCode("C007");
+        when(projectRepository.findActiveOptionsByCustomerIdentity(7L, "C007", "正常"))
+                .thenReturn(List.of(project));
+
+        List<ProjectOptionResponse> options = service().listActiveOptions(7L);
+
+        assertThat(options.get(0).allowedBrands()).isEmpty();
+        assertThat(options.get(0).allowedMaterials()).isEmpty();
+    }
+
+    private void stubCreateSave(Project[] savedHolder) {
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L);
+        when(codeIssuanceService.resolve(eq("project"), any(), anyString())).thenReturn("111");
+        when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
+            Project entity = invocation.getArgument(0);
+            savedHolder[0] = entity;
+            return entity;
+        });
+    }
+
+    private ProjectRequest allowedSpecRequest(List<String> allowedBrands, List<String> allowedMaterials) {
+        return new ProjectRequest("111", "项目A", null, null, null,
+                7L, "C007", null, null, "正常", null, null, null, null,
+                allowedBrands, allowedMaterials, null);
     }
 }
