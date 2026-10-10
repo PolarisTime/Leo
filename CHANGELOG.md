@@ -1,3 +1,10 @@
+# [12.4.0](https://github.com/PolarisTime/Leo/compare/v12.3.1...v12.4.0) (2026-10-10)
+
+
+### Features
+
+* **purchase:** 采购订单新增强制结单, 剩余未入库件数作废 ([fd2d4ab](https://github.com/PolarisTime/Leo/commit/fd2d4ab8b48c490da300dfe823d0a0f3ee4f4fbd))
+
 ## [12.3.1](https://github.com/PolarisTime/Leo/compare/v12.3.0...v12.3.1) (2026-10-09)
 
 
