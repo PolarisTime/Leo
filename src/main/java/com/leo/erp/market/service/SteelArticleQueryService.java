@@ -52,15 +52,7 @@ public class SteelArticleQueryService {
         }
         Map<LocalDate, List<String>> periodsByDate = new LinkedHashMap<>();
         Map<LocalDate, Map<String, Integer>> rowsByDate = new HashMap<>();
-        java.util.List<SteelArticle> articles =
-                (source == null || source.isBlank())
-                        ? articleRepository
-                                .findByArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
-                                        from, to)
-                        : articleRepository
-                                .findBySourceAndMarketAndArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
-                                        source, market, from, to);
-        for (SteelArticle article : articles) {
+        for (SteelArticle article : findCalendarArticles(from, to, source, market)) {
             String period = article.getPeriod();
             if (period == null || period.isBlank()) {
                 continue;
@@ -79,5 +71,38 @@ public class SteelArticleQueryService {
                     rowsByDate.getOrDefault(entry.getKey(), Map.of())));
         }
         return result;
+    }
+
+    /**
+     * 按有效过滤条件取区间内文章。
+     *
+     * <p><b>空白条件一律视为"不过滤"</b>, 不能把空值直接透传给 `market = ?`: `market` 是
+     * NOT NULL 列, 空值会退化成 `market IS NULL` 而恒为空集 —— 「数据源已选、地区未选」是
+     * 最常见的组合(前端只对西本提供地区下拉), 一旦命中这里, 覆盖矩阵与近 30 天覆盖统计会
+     * 整片显示成"缺失", 与实际已同步的日期完全不符。因此按"提供了哪些条件"分别选择查询。</p>
+     */
+    private List<SteelArticle> findCalendarArticles(LocalDate from, LocalDate to, String source, String market) {
+        String normalizedSource = normalizeFilter(source);
+        String normalizedMarket = normalizeFilter(market);
+        if (normalizedSource != null && normalizedMarket != null) {
+            return articleRepository
+                    .findBySourceAndMarketAndArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
+                            normalizedSource, normalizedMarket, from, to);
+        }
+        if (normalizedSource != null) {
+            return articleRepository.findBySourceAndArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
+                    normalizedSource, from, to);
+        }
+        if (normalizedMarket != null) {
+            return articleRepository.findByMarketAndArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
+                    normalizedMarket, from, to);
+        }
+        return articleRepository.findByArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
+                from, to);
+    }
+
+    /** 过滤条件归一化: null/空白/首尾空格都视为未提供。 */
+    private static String normalizeFilter(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

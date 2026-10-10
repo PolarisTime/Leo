@@ -36,5 +36,13 @@ public interface SteelArticleRepository extends JpaRepository<SteelArticle, Long
     List<SteelArticle> findBySourceAndMarketAndArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
             String source, String market, LocalDate from, LocalDate to);
 
+    /** 只按数据源过滤: 未指定地区时的日历文章查询(market 是 NOT NULL 列, 不能用 IS NULL 兜底)。 */
+    List<SteelArticle> findBySourceAndArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
+            String source, LocalDate from, LocalDate to);
+
+    /** 只按地区过滤。 */
+    List<SteelArticle> findByMarketAndArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
+            String market, LocalDate from, LocalDate to);
+
     Page<SteelArticle> findByDeletedFlagFalse(Pageable pageable);
 }
