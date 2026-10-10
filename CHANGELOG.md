@@ -1,3 +1,10 @@
+## [12.4.1](https://github.com/PolarisTime/Leo/compare/v12.4.0...v12.4.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* **purchase:** 强制结单留痕仅在结单后输出, 修复旧前端列表解析失败 ([28813fc](https://github.com/PolarisTime/Leo/commit/28813fceda5bb6189e0a5ca375b3c0a4e0dfa1f8))
+
 # [12.4.0](https://github.com/PolarisTime/Leo/compare/v12.3.1...v12.4.0) (2026-10-10)
 
 
