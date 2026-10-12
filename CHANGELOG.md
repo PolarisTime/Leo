@@ -1,3 +1,11 @@
+# [12.6.0](https://github.com/PolarisTime/Leo/compare/v12.5.0...v12.6.0) (2026-10-12)
+
+
+### Features
+
+* **pricing:** 项目取价基准支持按送货/报单日期自动解析取价日与时段 ([973d2ac](https://github.com/PolarisTime/Leo/commit/973d2ac47b4153699bc8beca614c54ad4c99f421))
+* **sales-order:** 销售订单新增报单日期以支撑报单日基准取价 ([6a31beb](https://github.com/PolarisTime/Leo/commit/6a31bebbc035693754cbfe98fceeae6179c7ad4c))
+
 # [12.5.0](https://github.com/PolarisTime/Leo/compare/v12.4.2...v12.5.0) (2026-10-12)
 
 
