@@ -17,6 +17,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.master.api.ProjectProcurementScopeQuery.Enforcement;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
@@ -189,7 +190,9 @@ public class ProjectService {
                         project.getQuoteSource(),
                         project.getQuoteRegion(),
                         CsvValues.split(project.getAllowedBrands()),
-                        CsvValues.split(project.getAllowedMaterials())
+                        CsvValues.split(project.getAllowedMaterials()),
+                        project.getAllowedBrandSeverity(),
+                        project.getAllowedMaterialSeverity()
                 ))
                 .toList();
     }
@@ -218,6 +221,7 @@ public class ProjectService {
                         request.status(), request.priceFloatMode(), request.priceFloatValue(),
                         request.quoteSource(), request.quoteRegion(),
                         request.allowedBrands(), request.allowedMaterials(),
+                        request.allowedBrandSeverity(), request.allowedMaterialSeverity(),
                         request.remark()
                 ),
                 entity
@@ -252,8 +256,34 @@ public class ProjectService {
      * 让「空数组」「全为空白」「重复值」三种前端输入统一收敛为同一个库内表示。
      */
     private void applyAllowedSpec(Project entity, ProjectRequest request) {
-        entity.setAllowedBrands(CsvValues.join(request.allowedBrands()));
-        entity.setAllowedMaterials(CsvValues.join(request.allowedMaterials()));
+        String allowedBrands = CsvValues.join(request.allowedBrands());
+        String allowedMaterials = CsvValues.join(request.allowedMaterials());
+        entity.setAllowedBrands(allowedBrands);
+        entity.setAllowedMaterials(allowedMaterials);
+        entity.setAllowedBrandSeverity(resolveAllowedSeverity(allowedBrands, request.allowedBrandSeverity(), "允许品牌"));
+        entity.setAllowedMaterialSeverity(resolveAllowedSeverity(allowedMaterials, request.allowedMaterialSeverity(), "允许材质"));
+    }
+
+    /**
+     * 归一化允许范围的处理方式。
+     *
+     * <p>清单为空 = 不限制, 力度随之清空(避免留下「配了力度却没有清单」的半配置状态);
+     * 清单非空但未指定力度时落到 WARN, 这样 V176 已配置的项目升级后行为不变,
+     * 不需要数据回填, 也不需要业务重新保存一次。
+     */
+    private String resolveAllowedSeverity(String allowedValues, String requested, String label) {
+        if (allowedValues == null) {
+            return null;
+        }
+        String normalized = trimToNull(requested);
+        if (normalized == null) {
+            return Enforcement.WARN.name();
+        }
+        if (!Enforcement.isValid(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    label + "的处理方式仅支持 OFF/WARN/BLOCK");
+        }
+        return Enforcement.normalize(normalized).name();
     }
 
     /** 归一化并校验网价浮动: 方向与幅度必须同时为空或同时有值; 方向仅允许 ADD/SUBTRACT。 */
@@ -345,6 +375,8 @@ public class ProjectService {
                 request.quoteRegion(),
                 request.allowedBrands(),
                 request.allowedMaterials(),
+                request.allowedBrandSeverity(),
+                request.allowedMaterialSeverity(),
                 request.remark()
         ), customer.getDefaultSettlementCompanyId(), customer.getDefaultSettlementCompanyName());
     }
@@ -366,6 +398,7 @@ public class ProjectService {
                     request.status(), request.priceFloatMode(), request.priceFloatValue(),
                     request.quoteSource(), request.quoteRegion(),
                     request.allowedBrands(), request.allowedMaterials(),
+                    request.allowedBrandSeverity(), request.allowedMaterialSeverity(),
                     request.remark()
             );
         }
@@ -378,6 +411,7 @@ public class ProjectService {
                 request.status(), request.priceFloatMode(), request.priceFloatValue(),
                 request.quoteSource(), request.quoteRegion(),
                 request.allowedBrands(), request.allowedMaterials(),
+                request.allowedBrandSeverity(), request.allowedMaterialSeverity(),
                 request.remark()
         );
     }

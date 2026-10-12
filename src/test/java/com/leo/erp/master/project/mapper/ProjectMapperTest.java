@@ -23,11 +23,15 @@ class ProjectMapperTest {
         project.setStatus("正常");
         project.setAllowedBrands(" 沙钢 ,永钢");
         project.setAllowedMaterials("HRB400E");
+        project.setAllowedBrandSeverity("BLOCK");
+        project.setAllowedMaterialSeverity("WARN");
 
         ProjectResponse response = mapper.toResponse(project);
 
         assertThat(response.allowedBrands()).containsExactly("沙钢", "永钢");
         assertThat(response.allowedMaterials()).containsExactly("HRB400E");
+        assertThat(response.allowedBrandSeverity()).isEqualTo("BLOCK");
+        assertThat(response.allowedMaterialSeverity()).isEqualTo("WARN");
     }
 
     @Test
@@ -39,6 +43,8 @@ class ProjectMapperTest {
 
         assertThat(response.allowedBrands()).isEmpty();
         assertThat(response.allowedMaterials()).isEmpty();
+        assertThat(response.allowedBrandSeverity()).isNull();
+        assertThat(response.allowedMaterialSeverity()).isNull();
     }
 
     @Test

@@ -22,17 +22,33 @@ public class SalesOrderMutationGuardService {
     private final SalesOrderDownstreamMutationGuard downstreamMutationGuard;
     private final SalesOrderProtectedUpdatePolicy protectedUpdatePolicy;
     private final SalesOrderApplyService salesOrderApplyService;
+    private final SalesOrderProjectScopeGuard projectScopeGuard;
 
     public SalesOrderMutationGuardService(SourceAllocationLockService sourceAllocationLockService,
                                           SalesOrderDeliveryVerificationGuard deliveryVerificationGuard,
                                           SalesOrderDownstreamMutationGuard downstreamMutationGuard,
                                           SalesOrderProtectedUpdatePolicy protectedUpdatePolicy,
-                                          SalesOrderApplyService salesOrderApplyService) {
+                                          SalesOrderApplyService salesOrderApplyService,
+                                          SalesOrderProjectScopeGuard projectScopeGuard) {
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.deliveryVerificationGuard = deliveryVerificationGuard;
         this.downstreamMutationGuard = downstreamMutationGuard;
         this.protectedUpdatePolicy = protectedUpdatePolicy;
         this.salesOrderApplyService = salesOrderApplyService;
+        this.projectScopeGuard = projectScopeGuard;
+    }
+
+    /**
+     * 项目允许品牌/材质的写路径校验（仅 BLOCK 档拒绝）。
+     *
+     * <p>放在通用守卫里而不是各写路径各调一次：创建、修改、交付核定三条路径共用同一判据，
+     * 将来新增写路径也不会漏。</p>
+     */
+    void assertProjectScopeAllowed(SalesOrderRequest request) {
+        if (request == null || projectScopeGuard == null) {
+            return;
+        }
+        projectScopeGuard.assertWithinProjectScope(request.projectId(), request.items());
     }
 
     void lockPurchaseSources(SalesOrder entity, SalesOrderRequest request) {

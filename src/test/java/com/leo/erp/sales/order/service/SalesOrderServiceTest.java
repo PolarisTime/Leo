@@ -516,4 +516,33 @@ class SalesOrderServiceTest {
         inOrder.verify(workflowService).saveStatus(entity);
         inOrder.verify(workflowService).publishStatusChanged(entity, StatusConstants.DRAFT, StatusConstants.AUDITED);
     }
+
+    /**
+     * 写路径接线回归: 创建与修改都必须经过项目采购范围守卫。
+     *
+     * <p>守卫本身的行为见 {@link SalesOrderProjectScopeGuardTest}；这里只锁「有没有接上」——
+     * 漏接一次, BLOCK 档就形同虚设, 而这类遗漏不会有任何编译或测试信号。
+     * 直接调用两个校验方法而不是跑完整 create/update: 完整路径里还有单号签发、审计、
+     * 乐观锁重试等与本结论无关的前置条件, 打桩越多越容易把这条断言写成「测桩」。</p>
+     */
+    @Test
+    void validateCreate_delegatesProjectScopeGuard() {
+        when(repository.existsByOrderNoAndDeletedFlagFalse(any())).thenReturn(false);
+        SalesOrderRequest request = request("SO001", StatusConstants.DRAFT);
+
+        service.validateCreate(request);
+
+        verify(mutationGuardService).assertProjectScopeAllowed(request);
+    }
+
+    @Test
+    void validateUpdate_delegatesProjectScopeGuard() {
+        loginAs(7L);
+        SalesOrder entity = entity(7L, StatusConstants.DRAFT);
+        SalesOrderRequest request = request("SO001", StatusConstants.DRAFT);
+
+        service.validateUpdate(entity, request);
+
+        verify(mutationGuardService).assertProjectScopeAllowed(request);
+    }
 }

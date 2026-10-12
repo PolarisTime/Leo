@@ -23,6 +23,10 @@ public record ProjectResponse(
         List<String> allowedBrands,
         /** 允许的材质列表; 空列表表示不限制。 */
         List<String> allowedMaterials,
+        /** 允许品牌不匹配时的处理方式: OFF/WARN/BLOCK; 清单为空时为空。 */
+        String allowedBrandSeverity,
+        /** 允许材质不匹配时的处理方式: OFF/WARN/BLOCK; 清单为空时为空。 */
+        String allowedMaterialSeverity,
         String remark
 ) {
     public ProjectResponse(Long id,
@@ -35,6 +39,7 @@ public record ProjectResponse(
                            String status,
                            String remark) {
         this(id, projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
-                null, customerCode, null, null, status, null, null, null, null, null, null, remark);
+                null, customerCode, null, null, status, null, null, null, null, null, null,
+                null, null, remark);
     }
 }

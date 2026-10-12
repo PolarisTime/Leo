@@ -449,8 +449,67 @@ class ProjectServiceTest {
     }
 
     private ProjectRequest allowedSpecRequest(List<String> allowedBrands, List<String> allowedMaterials) {
+        return allowedSpecRequest(allowedBrands, allowedMaterials, null, null);
+    }
+
+    private ProjectRequest allowedSpecRequest(List<String> allowedBrands,
+                                              List<String> allowedMaterials,
+                                              String allowedBrandSeverity,
+                                              String allowedMaterialSeverity) {
         return new ProjectRequest("111", "项目A", null, null, null,
                 7L, "C007", null, null, "正常", null, null, null, null,
-                allowedBrands, allowedMaterials, null);
+                allowedBrands, allowedMaterials, allowedBrandSeverity, allowedMaterialSeverity, null);
+    }
+
+    /** 清单非空但未指定力度时落到 WARN: V176 已配置的项目升级后行为必须不变。 */
+    @Test
+    void create_allowedSpecWithoutSeverity_defaultsToWarn() {
+        Project[] savedHolder = new Project[1];
+        stubCreateSave(savedHolder);
+
+        service().create(allowedSpecRequest(List.of("沙钢"), List.of("HRB400")));
+
+        Project entity = savedHolder[0];
+        assertThat(entity.getAllowedBrandSeverity()).isEqualTo("WARN");
+        assertThat(entity.getAllowedMaterialSeverity()).isEqualTo("WARN");
+    }
+
+    @Test
+    void create_persistsBlockSeverityPerDimension() {
+        Project[] savedHolder = new Project[1];
+        stubCreateSave(savedHolder);
+
+        service().create(allowedSpecRequest(List.of("沙钢"), List.of("HRB400"), "block", "OFF"));
+
+        Project entity = savedHolder[0];
+        assertThat(entity.getAllowedBrandSeverity()).isEqualTo("BLOCK");
+        assertThat(entity.getAllowedMaterialSeverity()).isEqualTo("OFF");
+    }
+
+    /** 清单为空 = 不限制, 力度必须一并清空, 避免留下半配置状态。 */
+    @Test
+    void create_emptyAllowedSpec_clearsSeverity() {
+        Project[] savedHolder = new Project[1];
+        stubCreateSave(savedHolder);
+
+        service().create(allowedSpecRequest(List.of(), List.of(), "BLOCK", "BLOCK"));
+
+        Project entity = savedHolder[0];
+        assertThat(entity.getAllowedBrandSeverity()).isNull();
+        assertThat(entity.getAllowedMaterialSeverity()).isNull();
+    }
+
+    @Test
+    void create_rejectsUnknownSeverity() {
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+
+        assertThatThrownBy(() -> service().create(
+                allowedSpecRequest(List.of("沙钢"), List.of(), "DISABLED", null)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("允许品牌的处理方式仅支持 OFF/WARN/BLOCK");
+        verify(projectRepository, never()).save(any(Project.class));
     }
 }

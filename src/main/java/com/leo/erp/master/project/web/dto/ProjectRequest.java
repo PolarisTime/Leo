@@ -41,6 +41,10 @@ public record ProjectRequest(
         /** 允许的材质列表; 空列表或 null 表示不限制。 */
         @Size(max = 100, message = "允许材质最多 100 项")
         List<@NotBlank(message = "允许材质不能为空") @Size(max = 64, message = "允许材质内容过长") String> allowedMaterials,
+        /** 允许品牌不匹配时的处理方式: OFF关闭校验/WARN仅提醒/BLOCK阻断; 空表示按 WARN 处理。 */
+        String allowedBrandSeverity,
+        /** 允许材质不匹配时的处理方式: OFF关闭校验/WARN仅提醒/BLOCK阻断; 空表示按 WARN 处理。 */
+        String allowedMaterialSeverity,
         String remark
 ) {
     public ProjectRequest(String projectCode,
@@ -52,7 +56,8 @@ public record ProjectRequest(
                           String status,
                           String remark) {
         this(projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
-                null, customerCode, null, null, status, null, null, null, null, null, null, remark);
+                null, customerCode, null, null, status, null, null, null, null,
+                null, null, null, null, remark);
     }
 
     /** 兼容旧调用方: 未携带取价数据源。 */
@@ -71,7 +76,7 @@ public record ProjectRequest(
                           String remark) {
         this(projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
                 customerId, customerCode, settlementCompanyId, settlementCompanyName,
-                status, priceFloatMode, priceFloatValue, null, null, null, null, remark);
+                status, priceFloatMode, priceFloatValue, null, null, null, null, null, null, remark);
     }
 
     /** 兼容旧调用方: 未携带网价浮动。 */
@@ -88,6 +93,30 @@ public record ProjectRequest(
                           String remark) {
         this(projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
                 customerId, customerCode, settlementCompanyId, settlementCompanyName,
-                status, null, null, null, null, null, null, remark);
+                status, null, null, null, null, null, null, null, null, remark);
+    }
+
+    /** 兼容旧调用方: 未携带允许品牌/材质的处理方式。 */
+    public ProjectRequest(String projectCode,
+                          String projectName,
+                          String projectNameAbbr,
+                          String projectAddress,
+                          String projectManager,
+                          Long customerId,
+                          String customerCode,
+                          Long settlementCompanyId,
+                          String settlementCompanyName,
+                          String status,
+                          String priceFloatMode,
+                          BigDecimal priceFloatValue,
+                          String quoteSource,
+                          String quoteRegion,
+                          List<String> allowedBrands,
+                          List<String> allowedMaterials,
+                          String remark) {
+        this(projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
+                customerId, customerCode, settlementCompanyId, settlementCompanyName,
+                status, priceFloatMode, priceFloatValue, quoteSource, quoteRegion,
+                allowedBrands, allowedMaterials, null, null, remark);
     }
 }

@@ -82,6 +82,14 @@ public class Project extends AbstractAuditableEntity {
     @Column(name = "allowed_materials", length = 512)
     private String allowedMaterials;
 
+    /** 允许品牌不匹配时的处理方式: OFF关闭校验/WARN仅提醒/BLOCK阻断; 空表示清单为空或按 WARN 处理。 */
+    @Column(name = "allowed_brand_severity", length = 16)
+    private String allowedBrandSeverity;
+
+    /** 允许材质不匹配时的处理方式: OFF关闭校验/WARN仅提醒/BLOCK阻断; 空表示清单为空或按 WARN 处理。 */
+    @Column(name = "allowed_material_severity", length = 16)
+    private String allowedMaterialSeverity;
+
     @Column(name = "remark", length = 255)
     private String remark;
 }

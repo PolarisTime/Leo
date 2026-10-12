@@ -49,6 +49,9 @@ class SalesOrderMutationGuardServiceTest {
     @Mock
     private SalesOrderApplyService salesOrderApplyService;
 
+    @Mock
+    private SalesOrderProjectScopeGuard projectScopeGuard;
+
     @InjectMocks
     private SalesOrderMutationGuardService service;
 
@@ -277,5 +280,21 @@ class SalesOrderMutationGuardServiceTest {
         service.assertDeletable(entity);
 
         verify(deliveryVerificationGuard, never()).assertMutable(any(), anyString());
+    }
+
+    @Test
+    void assertProjectScopeAllowed_delegatesToProjectScopeGuard() {
+        SalesOrderRequest request = request();
+
+        service.assertProjectScopeAllowed(request);
+
+        verify(projectScopeGuard).assertWithinProjectScope(20L, request.items());
+    }
+
+    @Test
+    void assertProjectScopeAllowed_nullRequest_skipsGuard() {
+        service.assertProjectScopeAllowed(null);
+
+        verifyNoInteractions(projectScopeGuard);
     }
 }

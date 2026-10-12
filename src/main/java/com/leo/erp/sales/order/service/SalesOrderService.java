@@ -362,6 +362,9 @@ public class SalesOrderService {
         if (!requestedStatus.isEmpty() && !StatusConstants.DRAFT.equals(requestedStatus)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "新销售订单只能保存为草稿，审核必须通过状态操作完成");
         }
+        // 采购范围校验放在最后: 单号/状态这类「请求本身不合法」的问题优先于业务约定,
+        // 也避免与权限无关的用户从错误文案里读到项目配置。
+        mutationGuardService.assertProjectScopeAllowed(request);
     }
 
     protected void validateUpdate(SalesOrder entity, SalesOrderRequest request) {
@@ -369,6 +372,8 @@ public class SalesOrderService {
         if (!entity.getOrderNo().equals(request.orderNo()) && repository.existsByOrderNoAndDeletedFlagFalse(request.orderNo())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "销售订单号已存在");
         }
+        // 同上: 所有权与单号唯一性先判, 最后才判项目采购范围。
+        mutationGuardService.assertProjectScopeAllowed(request);
     }
 
     private void assertOwnedByCurrentUser(SalesOrder order) {
