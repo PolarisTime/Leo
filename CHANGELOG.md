@@ -1,3 +1,17 @@
+# [12.5.0](https://github.com/PolarisTime/Leo/compare/v12.4.2...v12.5.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **market:** 行情日历按数据源过滤时未选地区返回空集 ([01a9733](https://github.com/PolarisTime/Leo/commit/01a9733618d16aa808f58ec680ff941041686377))
+
+
+### Features
+
+* **market:** 行情日历标记休市日, 节假日不再被当成缺失 ([0a5453a](https://github.com/PolarisTime/Leo/commit/0a5453a307f9e38b14a29880ed2ffcf7d6e698aa))
+* **project:** 项目资料新增允许品牌与允许材质 ([70db4ce](https://github.com/PolarisTime/Leo/commit/70db4ce649125963bcc31e07d432274c5b739e16))
+* **project:** 项目采购范围支持配置处理方式并在销售订单保存时强制 ([83e77ee](https://github.com/PolarisTime/Leo/commit/83e77ee4df72325e6c4a591d03c11260ae3a6f3b))
+
 ## [12.4.2](https://github.com/PolarisTime/Leo/compare/v12.4.1...v12.4.2) (2026-10-10)
 
 
