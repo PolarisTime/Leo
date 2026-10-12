@@ -48,6 +48,9 @@ class SteelxQuoteSyncServiceTest {
     @Mock
     private SteelArticleRepository articleRepository;
 
+    @Mock
+    private SteelQuoteClosedDayService closedDayService;
+
     private static String page(String rows) {
         return "<html><head><title>杭州建材—2026-09-30—西本会员指导价</title></head><body>"
                 + "<table>" + rows + "</table></body></html>";
@@ -58,7 +61,8 @@ class SteelxQuoteSyncServiceTest {
     }
 
     private SteelxQuoteSyncService service() {
-        return new SteelxQuoteSyncService(properties, fetcher, steelQuoteStore, articleRepository);
+        return new SteelxQuoteSyncService(properties, fetcher, steelQuoteStore, articleRepository,
+                closedDayService);
     }
 
     private void stubSupportedRegion() {
@@ -201,5 +205,40 @@ class SteelxQuoteSyncServiceTest {
     void 解析器可识别价格行() {
         assertThat(SteelxArticleParser.parseRows(page(priceRow()))).hasSize(1);
         assertThat(SteelxArticleParser.parseRows(page(""))).isEmpty();
+    }
+
+    @Test
+    void 指定日期该地区无报价时记为休市日() {
+        LocalDate past = LocalDate.of(2026, 9, 30);
+        when(properties.supportsRegion("杭州")).thenReturn(true);
+        when(properties.quotationUrl("杭州", past)).thenReturn(URL);
+        when(properties.getSource()).thenReturn("STEELX");
+        when(fetcher.fetch(eq(URL), anyString(), any()))
+                .thenThrow(new QuoteNotPublishedException("西本杭州报价页未解析到任何价格行"));
+
+        assertThatThrownBy(() -> service().syncRegion("杭州", past))
+                .isInstanceOf(QuoteNotPublishedException.class);
+
+        // 西本地区多, 节假日往往全地区空表: 该地区该日无报价要落库成休市, 矩阵才能区分休市与漏数
+        verify(closedDayService).recordClosedDay(eq("STEELX"), eq("杭州"), eq(past), anyString());
+    }
+
+    @Test
+    void 该地区该日抓到行情后撤销休市标记() {
+        LocalDate day = LocalDate.of(2026, 9, 30);
+        when(properties.supportsRegion("杭州")).thenReturn(true);
+        when(properties.quotationUrl("杭州", day)).thenReturn(URL);
+        when(properties.getSource()).thenReturn("STEELX");
+        when(fetcher.fetch(eq(URL), anyString(), any())).thenReturn(page(priceRow()));
+        SteelArticle article = new SteelArticle();
+        article.setId(9L);
+        article.setArticleDate(day);
+        article.setRowCount(1);
+        when(steelQuoteStore.persistSteelxArticle(anyString(), any(), anyString(), any(), anyString()))
+                .thenReturn(article);
+
+        service().syncRegion("杭州", day);
+
+        verify(closedDayService).clearClosedDay("STEELX", "杭州", day);
     }
 }

@@ -40,6 +40,9 @@ class SteelQuoteSyncServiceTest {
     @Mock
     private SteelArticleRepository articleRepository;
 
+    @Mock
+    private SteelQuoteClosedDayService closedDayService;
+
     @Test
     void sync_fetchesAndImportsNewArticle() {
         SteelQuoteSyncService service = service();
@@ -223,12 +226,40 @@ class SteelQuoteSyncServiceTest {
         return "<html><title>2026年9月9日(" + time + ")杭州市场建筑钢材价格行情</title></html>";
     }
 
+    @Test
+    void 该日站点未发布时记为休市日() {
+        SteelQuoteSyncService service = service();
+        when(mysteelClient.findArticleUrls(DATE)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.syncAll(DATE))
+                .isInstanceOf(QuoteNotPublishedException.class);
+
+        // 节假日/调休无法由前端按周末推算, 必须在判定"未发布"的这一刻落库
+        verify(closedDayService).recordClosedDay(eq(SteelQuoteStore.SOURCE_MYSTEEL), eq("杭州"),
+                eq(DATE), anyString());
+    }
+
+    @Test
+    void 抓到行情后撤销该日的休市标记() {
+        SteelQuoteSyncService service = service();
+        when(mysteelClient.findLatestArticleUrl(DATE)).thenReturn(Optional.of(ARTICLE_URL));
+        when(articleRepository.findByArticleUrlAndDeletedFlagFalse(ARTICLE_URL)).thenReturn(Optional.empty());
+        when(mysteelClient.fetchArticle(ARTICLE_URL)).thenReturn("<html>行情</html>");
+        when(steelQuoteStore.persistArticle(ARTICLE_URL, "<html>行情</html>", "杭州")).thenReturn(article());
+
+        service.sync(DATE);
+
+        // 自愈: 该日既然有行情, 旧的休市结论必须撤销, 否则会长期压制真实数据
+        verify(closedDayService).clearClosedDay(SteelQuoteStore.SOURCE_MYSTEEL, "杭州", DATE);
+        verify(closedDayService, never()).recordClosedDay(anyString(), anyString(), any(), anyString());
+    }
+
     private SteelQuoteSyncService service() {
         MysteelProperties properties = new MysteelProperties();
         properties.setRateLimitMillis(0);
         return new SteelQuoteSyncService(properties, mysteelClient,
                 new com.leo.erp.market.mysteel.MysteelRateLimiter(properties),
-                steelQuoteStore, articleRepository);
+                steelQuoteStore, articleRepository, closedDayService);
     }
 
     private SteelArticle article() {

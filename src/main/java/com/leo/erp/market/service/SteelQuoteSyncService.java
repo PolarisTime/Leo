@@ -35,15 +35,18 @@ public class SteelQuoteSyncService {
     private final MysteelRateLimiter rateLimiter;
     private final SteelQuoteStore steelQuoteStore;
     private final SteelArticleRepository articleRepository;
+    private final SteelQuoteClosedDayService closedDayService;
 
     public SteelQuoteSyncService(MysteelProperties properties, MysteelClient mysteelClient,
                                  MysteelRateLimiter rateLimiter, SteelQuoteStore steelQuoteStore,
-                                 SteelArticleRepository articleRepository) {
+                                 SteelArticleRepository articleRepository,
+                                 SteelQuoteClosedDayService closedDayService) {
         this.properties = properties;
         this.mysteelClient = mysteelClient;
         this.rateLimiter = rateLimiter;
         this.steelQuoteStore = steelQuoteStore;
         this.articleRepository = articleRepository;
+        this.closedDayService = closedDayService;
     }
 
     /** 同步结果。 */
@@ -55,7 +58,7 @@ public class SteelQuoteSyncService {
     public SyncResult sync(LocalDate date) {
         rateLimiter.acquire();
         String articleUrl = mysteelClient.findLatestArticleUrl(date)
-                .orElseThrow(() -> notPublished(date, Set.of()));
+                .orElseThrow(() -> recordAndNotPublished(date, Set.of()));
         return syncArticle(articleUrl, Set.of());
     }
 
@@ -77,7 +80,7 @@ public class SteelQuoteSyncService {
         Set<String> requestedPeriods = normalizePeriods(periods);
         List<String> articleUrls = mysteelClient.findArticleUrls(date);
         if (articleUrls.isEmpty()) {
-            throw notPublished(date, requestedPeriods);
+            throw recordAndNotPublished(date, requestedPeriods);
         }
         List<SyncResult> results = new ArrayList<>(articleUrls.size());
         for (String articleUrl : articleUrls) {
@@ -97,7 +100,17 @@ public class SteelQuoteSyncService {
     /**
      * 该日无行情文章：站点正常响应但没有发布，属于「休市/节假日」而不是故障，
      * 因此单独抛 {@link QuoteNotPublishedException}，让补数记为跳过而非失败。
+     *
+     * <p>同时把该日记为休市日: 覆盖矩阵需要区分「本来就没有行情」与「该有行情却漏了」,
+     * 而节假日/调休无法由前端按周末推算, 只能在这里落库。当天不记录(站点尚未发布属正常中间态)。</p>
      */
+    private QuoteNotPublishedException recordAndNotPublished(LocalDate date, Set<String> periods) {
+        QuoteNotPublishedException exception = notPublished(date, periods);
+        closedDayService.recordClosedDay(SteelQuoteStore.SOURCE_MYSTEEL, properties.getMarket(),
+                date, exception.getMessage());
+        return exception;
+    }
+
     private static QuoteNotPublishedException notPublished(LocalDate date, Set<String> periods) {
         String suffix = periods.isEmpty() ? "" : "所选时段(" + String.join("/", periods) + ")";
         return new QuoteNotPublishedException(
@@ -168,6 +181,9 @@ public class SteelQuoteSyncService {
         }
         SteelArticle article = steelQuoteStore.persistArticle(articleUrl, articleHtml, properties.getMarket());
         log.info("行情同步完成: {} 行, 文章 {}", article.getRowCount(), articleUrl);
+        // 该日已有行情: 撤销可能存在的休市标记(自愈), 避免旧结论长期压制真实数据
+        closedDayService.clearClosedDay(SteelQuoteStore.SOURCE_MYSTEEL, properties.getMarket(),
+                article.getArticleDate());
         return toResult(article, true);
     }
 

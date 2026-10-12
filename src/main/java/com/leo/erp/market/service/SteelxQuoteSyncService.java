@@ -32,14 +32,17 @@ public class SteelxQuoteSyncService {
     private final SteelxFetcher fetcher;
     private final SteelQuoteStore steelQuoteStore;
     private final SteelArticleRepository articleRepository;
+    private final SteelQuoteClosedDayService closedDayService;
 
     public SteelxQuoteSyncService(SteelxProperties properties, SteelxFetcher fetcher,
                                   SteelQuoteStore steelQuoteStore,
-                                  SteelArticleRepository articleRepository) {
+                                  SteelArticleRepository articleRepository,
+                                  SteelQuoteClosedDayService closedDayService) {
         this.properties = properties;
         this.fetcher = fetcher;
         this.steelQuoteStore = steelQuoteStore;
         this.articleRepository = articleRepository;
+        this.closedDayService = closedDayService;
     }
 
     /** 同步结果。 */
@@ -52,11 +55,21 @@ public class SteelxQuoteSyncService {
         return syncRegion(region, null);
     }
 
-    /** 同步指定地区指定日期报价(date 为空表示当日)。 */
+    /**
+     * 同步指定地区指定日期报价(date 为空表示当日)。
+     *
+     * <p>该日该地区无报价时记为休市日(只针对过去的日期): 西本地区众多, 节假日往往全地区空表,
+     * 覆盖矩阵需要据此区分「休市」与「漏数」; 当天不记录, 因为页面尚未更新也是常见的正常态。</p>
+     */
     public SyncResult syncRegion(String region, LocalDate date) {
         String normalized = requireSupportedRegion(region);
         String url = properties.quotationUrl(normalized, date);
-        return syncUrl(url, normalized);
+        try {
+            return syncUrl(url, normalized);
+        } catch (QuoteNotPublishedException ex) {
+            closedDayService.recordClosedDay(properties.getSource(), normalized, date, ex.getMessage());
+            throw ex;
+        }
     }
 
     /**
@@ -117,6 +130,8 @@ public class SteelxQuoteSyncService {
         }
         SteelArticle article = steelQuoteStore.persistSteelxArticle(
                 url, title, region, rows, properties.getSource());
+        // 该地区该日已有行情: 撤销可能存在的休市标记(自愈)
+        closedDayService.clearClosedDay(properties.getSource(), region, title.articleDate());
         return new SyncResult(article.getId(), url, title.articleDate().toString(), region,
                 article.getRowCount(), true);
     }
