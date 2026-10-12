@@ -126,7 +126,7 @@ class SalesOrderServiceOptimisticLockRetryTest {
     private SalesOrderRequest request(String orderNo) {
         return new SalesOrderRequest(
                 orderNo, null, null, "CUST001", 10L, "客户A", 20L, "项目A", null, null,
-                LocalDate.of(2026, 8, 1), "销售员A", null, null, null, List.of(), List.of(), false);
+                LocalDate.of(2026, 8, 1), "销售员A", null, null, List.of(), List.of(), false);
     }
 
     private void loginAs(Long userId) {
@@ -228,7 +228,7 @@ class SalesOrderServiceOptimisticLockRetryTest {
         // 重复单号分支在整体替换路径上不可达，故用状态校验错误覆盖「非乐观锁异常不重试」。
         SalesOrderRequest statusChangingRequest = new SalesOrderRequest(
                 "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A", null, null,
-                LocalDate.of(2026, 8, 1), "销售员A", StatusConstants.AUDITED, null, null,
+                LocalDate.of(2026, 8, 1), "销售员A", StatusConstants.AUDITED, null,
                 List.of(), List.of(), false);
 
         assertThatThrownBy(() -> service(3).update(ORDER_ID, statusChangingRequest))
@@ -325,7 +325,7 @@ class SalesOrderServiceOptimisticLockRetryTest {
 
         SalesOrderRequest auditRequest = new SalesOrderRequest(
                 "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A", null, null,
-                LocalDate.of(2026, 8, 1), "销售员A", null, null, null, List.of(), List.of(), true);
+                LocalDate.of(2026, 8, 1), "销售员A", null, null, List.of(), List.of(), true);
         SalesOrderResponse result = service(3).create(auditRequest);
 
         assertThat(result).isSameAs(response);

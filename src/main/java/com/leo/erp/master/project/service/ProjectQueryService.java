@@ -1,6 +1,7 @@
 package com.leo.erp.master.project.service;
 
 import com.leo.erp.common.support.CsvValues;
+import com.leo.erp.master.api.ProjectPricingBasisQuery;
 import com.leo.erp.master.api.ProjectProcurementScopeQuery;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.project.domain.entity.Project;
@@ -13,7 +14,7 @@ import java.util.Optional;
 
 @Service
 @Transactional(readOnly = true)
-public class ProjectQueryService implements ProjectQuery, ProjectProcurementScopeQuery {
+public class ProjectQueryService implements ProjectQuery, ProjectProcurementScopeQuery, ProjectPricingBasisQuery {
 
     private final ProjectRepository repository;
 
@@ -50,6 +51,27 @@ public class ProjectQueryService implements ProjectQuery, ProjectProcurementScop
                         CsvValues.split(project.getAllowedMaterials()),
                         Enforcement.parse(project.getAllowedBrandSeverity()),
                         Enforcement.parse(project.getAllowedMaterialSeverity())
+                ));
+    }
+
+    /**
+     * 取价基准配置: 空值与历史脏值一律按默认口径兜底(DELIVERY + AUTO),
+     * 让行情侧不必再关心「列里可能是空」这件事。
+     */
+    @Override
+    public Optional<PricingBasis> findPricingBasisById(Long projectId) {
+        if (projectId == null) {
+            return Optional.empty();
+        }
+        return repository.findByIdAndDeletedFlagFalse(projectId)
+                .map(project -> new PricingBasis(
+                        Basis.normalize(project.getPriceDateBasis()),
+                        project.getPriceDateOffsetDays() == null ? 0 : project.getPriceDateOffsetDays(),
+                        Boolean.TRUE.equals(project.getPriceClosedDayPrevSettle()),
+                        PeriodPolicy.normalize(project.getPricePeriodPolicy()),
+                        project.getPricePeriodFixed(),
+                        project.getQuoteSource(),
+                        project.getQuoteRegion()
                 ));
     }
 

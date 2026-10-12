@@ -25,6 +25,18 @@ public record SalesOrderRequest(
         String remark,
         /** 交付核定所选价格规定ID(可选); 服务端据此按网价赋价并快照。 */
         Long priceRuleId,
+        /** 取价基准日(送货日期/报单日期/手工日期); 交付核定解析结果快照。 */
+        LocalDate priceTargetDate,
+        /** 实际取价日(交易日历回退后)。 */
+        LocalDate priceQuoteDate,
+        /** 实际取价时段(上午/中午/下午)。 */
+        String priceQuotePeriod,
+        /** 本次生效的取价基准: DELIVERY/ORDER/MANUAL。 */
+        String priceDateBasis,
+        /** 本次生效的偏移交易日数(0..30)。 */
+        Integer priceDateOffsetDays,
+        /** 本次生效的「报单日休市按前一交易日结算」开关。 */
+        Boolean priceClosedSettlePrev,
         @Valid @NotEmpty List<SalesOrderItemRequest> items,
         @Valid List<DocumentChargeItemRequest> chargeItems,
         boolean audit
@@ -56,7 +68,7 @@ public record SalesOrderRequest(
                              boolean audit) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, status, remark,
-                null, items, chargeItems, audit);
+                null, null, null, null, null, null, null, items, chargeItems, audit);
     }
     public SalesOrderRequest(String orderNo,
                              String purchaseInboundNo,
@@ -73,7 +85,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
-                settlementCompanyId, settlementCompanyName, deliveryDate, salesName, status, remark, null, items,
+                settlementCompanyId, settlementCompanyName, deliveryDate, salesName, status, remark, null, null, null, null, null, null, null, items,
                 List.of(), false);
     }
 
@@ -90,7 +102,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
-                null, null, deliveryDate, salesName, status, remark, null, items, List.of(), false);
+                null, null, deliveryDate, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -105,7 +117,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, null, customerCode, null, customerName, projectId, projectName,
-                null, null, deliveryDate, salesName, status, remark, null, items, List.of(), false);
+                null, null, deliveryDate, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -118,7 +130,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, null, null, null, customerName, null, projectName,
-                null, null, deliveryDate, salesName, status, remark, null, items, List.of(), false);
+                null, null, deliveryDate, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -132,7 +144,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, null, null, customerName, null, projectName,
-                null, null, deliveryDate, salesName, status, remark, null, items, List.of(), false);
+                null, null, deliveryDate, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
     }
 
 }

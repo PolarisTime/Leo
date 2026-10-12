@@ -83,6 +83,26 @@ public class Project extends AbstractAuditableEntity {
     private String allowedMaterials;
 
     /** 允许品牌不匹配时的处理方式: OFF关闭校验/WARN仅提醒/BLOCK阻断; 空表示清单为空或按 WARN 处理。 */
+    /** 取价基准: DELIVERY 送货日期当天 / ORDER 报单日期之后第 N 个交易日 / MANUAL 每次手工选择。 */
+    @Column(name = "price_date_basis", nullable = false, length = 16)
+    private String priceDateBasis;
+
+    /** 报单日基准的偏移交易日数(0..30), 仅 ORDER 有意义。 */
+    @Column(name = "price_date_offset_days", nullable = false)
+    private Integer priceDateOffsetDays;
+
+    /** 报单日为休市日时是否按前一个交易日结算, 仅 ORDER 有意义。 */
+    @Column(name = "price_closed_day_prev_settle", nullable = false)
+    private Boolean priceClosedDayPrevSettle;
+
+    /** 时段策略: AUTO 当日最新 / FIXED 固定 / MANUAL 每次手工选择。 */
+    @Column(name = "price_period_policy", nullable = false, length = 16)
+    private String pricePeriodPolicy;
+
+    /** 固定取价时段(上午/中午/下午), 仅 FIXED 时有值。 */
+    @Column(name = "price_period_fixed", length = 8)
+    private String pricePeriodFixed;
+
     @Column(name = "allowed_brand_severity", length = 16)
     private String allowedBrandSeverity;
 

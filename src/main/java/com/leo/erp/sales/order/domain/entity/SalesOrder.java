@@ -88,6 +88,30 @@ public class SalesOrder extends AbstractAuditableEntity implements StatusAwareEn
     @Column(name = "price_float_value", precision = 12, scale = 2)
     private BigDecimal priceFloatValue;
 
+    /** 取价基准日(送货日期/报单日期/手工日期, 交付核定快照)。 */
+    @Column(name = "price_target_date")
+    private LocalDate priceTargetDate;
+
+    /** 实际取价日(交易日历回退后, 交付核定快照)。 */
+    @Column(name = "price_quote_date")
+    private LocalDate priceQuoteDate;
+
+    /** 实际取价时段(上午/中午/下午, 交付核定快照)。 */
+    @Column(name = "price_quote_period", length = 8)
+    private String priceQuotePeriod;
+
+    /** 本次生效的取价基准(快照, 可能是单据级覆盖值)。 */
+    @Column(name = "price_date_basis", length = 16)
+    private String priceDateBasis;
+
+    /** 本次生效的偏移交易日数(快照)。 */
+    @Column(name = "price_date_offset_days")
+    private Integer priceDateOffsetDays;
+
+    /** 本次生效的「报单日休市按前一交易日结算」开关(快照)。 */
+    @Column(name = "price_closed_settle_prev")
+    private Boolean priceClosedSettlePrev;
+
     @OneToMany(mappedBy = "salesOrder", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SalesOrderItem> items = new ArrayList<>();
 }

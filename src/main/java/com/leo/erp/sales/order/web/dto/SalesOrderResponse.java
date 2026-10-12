@@ -35,6 +35,18 @@ public record SalesOrderResponse(
         String priceRuleName,
         String priceFloatMode,
         BigDecimal priceFloatValue,
+        /** 取价基准日(送货日期/报单日期/手工日期)。 */
+        LocalDate priceTargetDate,
+        /** 实际取价日(交易日历回退后)。 */
+        LocalDate priceQuoteDate,
+        /** 实际取价时段(上午/中午/下午)。 */
+        String priceQuotePeriod,
+        /** 本次生效的取价基准: DELIVERY/ORDER/MANUAL。 */
+        String priceDateBasis,
+        /** 本次生效的偏移交易日数(0..30)。 */
+        Integer priceDateOffsetDays,
+        /** 本次生效的「报单日休市按前一交易日结算」开关。 */
+        Boolean priceClosedSettlePrev,
         List<SalesOrderItemResponse> items,
         List<DocumentChargeItemResponse> chargeItems,
         boolean referencedByFreightBill,
@@ -66,7 +78,7 @@ public record SalesOrderResponse(
                               List<DocumentChargeItemResponse> chargeItems) {
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
-                totalAmount, status, deletedFlag, remark, null, null, null, null, items, chargeItems, false, false, null, null, null);
+                totalAmount, status, deletedFlag, remark, null, null, null, null, null, null, null, null, null, null, items, chargeItems, false, false, null, null, null);
     }
 
     public SalesOrderResponse withReferenceFlags(boolean referencedByFreightBill,
@@ -75,7 +87,8 @@ public record SalesOrderResponse(
                 id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
                 totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
-                priceFloatValue, items, chargeItems, referencedByFreightBill,
+                priceFloatValue, priceTargetDate, priceQuoteDate, priceQuotePeriod, priceDateBasis,
+                priceDateOffsetDays, priceClosedSettlePrev, items, chargeItems, referencedByFreightBill,
                 referencedBySalesOutbound, deliveredQuantity, returnedQuantity, deliveredNetQuantity
         );
     }
@@ -87,7 +100,8 @@ public record SalesOrderResponse(
                 id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
                 totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
-                priceFloatValue, items, chargeItems, referencedByFreightBill,
+                priceFloatValue, priceTargetDate, priceQuoteDate, priceQuotePeriod, priceDateBasis,
+                priceDateOffsetDays, priceClosedSettlePrev, items, chargeItems, referencedByFreightBill,
                 referencedBySalesOutbound, deliveredQuantity, returnedQuantity, deliveredNetQuantity
         );
     }
@@ -113,8 +127,8 @@ public record SalesOrderResponse(
                               List<SalesOrderItemResponse> items) {
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
-                totalAmount, status, deletedFlag, remark, null, null, null, null, items, List.of(), false, false,
-                null, null, null);
+                totalAmount, status, deletedFlag, remark, null, null, null, null, null, null, null, null, null,
+                null, items, List.of(), false, false, null, null, null);
     }
 
     public SalesOrderResponse(Long id,

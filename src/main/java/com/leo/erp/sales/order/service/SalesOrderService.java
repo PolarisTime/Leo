@@ -193,6 +193,8 @@ public class SalesOrderService {
         // 应用交付核定所选价格规定: 校验归属、快照到单据、记录项目上次使用。
         SalesOrder order = requireEntity(id);
         priceRuleService.applyPriceRule(order, request.priceRuleId());
+        // 取价过程快照: 记录本次按哪个基准日/实际取价日/时段赋价, 历史单据不随项目配置变更而失真。
+        priceRuleService.applyPricingSnapshot(order, request);
         repository.save(order);
         return completeSalesOrder(id);
     }
@@ -412,6 +414,12 @@ public class SalesOrderService {
                 request.status(),
                 request.remark(),
                 request.priceRuleId(),
+                request.priceTargetDate(),
+                request.priceQuoteDate(),
+                request.priceQuotePeriod(),
+                request.priceDateBasis(),
+                request.priceDateOffsetDays(),
+                request.priceClosedSettlePrev(),
                 request.items(),
                 request.chargeItems(),
                 request.audit()
@@ -448,6 +456,12 @@ public class SalesOrderService {
                 status,
                 request.remark(),
                 request.priceRuleId(),
+                request.priceTargetDate(),
+                request.priceQuoteDate(),
+                request.priceQuotePeriod(),
+                request.priceDateBasis(),
+                request.priceDateOffsetDays(),
+                request.priceClosedSettlePrev(),
                 request.items(),
                 request.chargeItems(),
                 request.audit()
@@ -472,6 +486,12 @@ public class SalesOrderService {
                 entity.getStatus(),
                 request.remark(),
                 request.priceRuleId(),
+                request.priceTargetDate(),
+                request.priceQuoteDate(),
+                request.priceQuotePeriod(),
+                request.priceDateBasis(),
+                request.priceDateOffsetDays(),
+                request.priceClosedSettlePrev(),
                 request.items(),
                 request.chargeItems(),
                 request.audit()

@@ -3,7 +3,10 @@ package com.leo.erp.sales.order.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.master.api.ProjectPriceRuleQuery;
+import com.leo.erp.master.api.ProjectPricingBasisQuery.Basis;
+import com.leo.erp.master.api.ProjectPricingBasisQuery.QuotePeriod;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
+import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -14,6 +17,9 @@ import java.util.Optional;
  */
 @Service
 public class SalesOrderPriceRuleService {
+
+    /** 取价偏移交易日上限: 与 md_project 的 CHECK 约束一致。 */
+    private static final int MAX_OFFSET_DAYS = 30;
 
     private final ProjectPriceRuleQuery priceRuleQuery;
 
@@ -38,6 +44,69 @@ public class SalesOrderPriceRuleService {
         order.setPriceFloatMode(rule.mode());
         order.setPriceFloatValue(rule.amount());
         priceRuleQuery.rememberLastUsedRuleId(projectId, rule.id());
+    }
+
+    /**
+     * 应用交付核定的取价快照（基准日 / 实际取价日 / 实际时段 / 本次生效的基准口径）。
+     *
+     * <p>契约是「全有或全无」：只要携带了任意一项，就必须同时给出基准日、实际取价日、实际取价时段与基准口径，
+     * 否则 422 —— 半个快照比没有快照更糟，事后无法判断当时到底按哪天赋的价。未携带时按「未记录取价过程」
+     * 清空，与价格规定的清空语义保持一致。</p>
+     */
+    public void applyPricingSnapshot(SalesOrder order, SalesOrderRequest request) {
+        if (!hasPricingSnapshot(request)) {
+            clearPricingSnapshot(order);
+            return;
+        }
+        if (request.priceTargetDate() == null || request.priceQuoteDate() == null
+                || trimToNull(request.priceQuotePeriod()) == null || trimToNull(request.priceDateBasis()) == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "取价快照不完整: 取价基准日、实际取价日、实际取价时段与取价基准必须同时提供");
+        }
+        if (!QuotePeriod.isValid(request.priceQuotePeriod())) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "取价时段仅支持 上午/中午/下午");
+        }
+        Basis basis = Basis.parse(request.priceDateBasis());
+        if (basis == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "取价基准仅支持 DELIVERY/ORDER/MANUAL");
+        }
+        Integer offsetDays = request.priceDateOffsetDays();
+        if (offsetDays != null && (offsetDays < 0 || offsetDays > MAX_OFFSET_DAYS)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "取价偏移交易日数必须在 0 到 " + MAX_OFFSET_DAYS + " 之间");
+        }
+        order.setPriceTargetDate(request.priceTargetDate());
+        order.setPriceQuoteDate(request.priceQuoteDate());
+        order.setPriceQuotePeriod(request.priceQuotePeriod().trim());
+        order.setPriceDateBasis(basis.name());
+        order.setPriceDateOffsetDays(offsetDays == null ? 0 : offsetDays);
+        order.setPriceClosedSettlePrev(Boolean.TRUE.equals(request.priceClosedSettlePrev()));
+    }
+
+    private boolean hasPricingSnapshot(SalesOrderRequest request) {
+        return request.priceTargetDate() != null
+                || request.priceQuoteDate() != null
+                || trimToNull(request.priceQuotePeriod()) != null
+                || trimToNull(request.priceDateBasis()) != null
+                || request.priceDateOffsetDays() != null
+                || request.priceClosedSettlePrev() != null;
+    }
+
+    private void clearPricingSnapshot(SalesOrder order) {
+        order.setPriceTargetDate(null);
+        order.setPriceQuoteDate(null);
+        order.setPriceQuotePeriod(null);
+        order.setPriceDateBasis(null);
+        order.setPriceDateOffsetDays(null);
+        order.setPriceClosedSettlePrev(null);
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private void clearSnapshot(SalesOrder order) {

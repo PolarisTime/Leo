@@ -5,6 +5,9 @@ import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.master.api.ProjectPricingBasisQuery.Basis;
+import com.leo.erp.master.api.ProjectPricingBasisQuery.PeriodPolicy;
+import com.leo.erp.master.api.ProjectPricingBasisQuery.QuotePeriod;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.CrudOperationLogger;
@@ -44,6 +47,9 @@ import java.util.Set;
 
 @Service
 public class ProjectService {
+
+    /** 取价偏移交易日上限: 与 md_project 的 CHECK 约束一致。 */
+    private static final int MAX_PRICE_DATE_OFFSET_DAYS = 30;
 
     private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
     private static final String CODE_MODULE_KEY = ModuleKeys.PROJECT;
@@ -222,7 +228,9 @@ public class ProjectService {
                         request.quoteSource(), request.quoteRegion(),
                         request.allowedBrands(), request.allowedMaterials(),
                         request.allowedBrandSeverity(), request.allowedMaterialSeverity(),
-                        request.remark()
+                        request.priceDateBasis(), request.priceDateOffsetDays(),
+                        request.priceClosedDayPrevSettle(), request.pricePeriodPolicy(),
+                        request.pricePeriodFixed(), request.remark()
                 ),
                 entity
         );
@@ -262,6 +270,78 @@ public class ProjectService {
         entity.setAllowedMaterials(allowedMaterials);
         entity.setAllowedBrandSeverity(resolveAllowedSeverity(allowedBrands, request.allowedBrandSeverity(), "允许品牌"));
         entity.setAllowedMaterialSeverity(resolveAllowedSeverity(allowedMaterials, request.allowedMaterialSeverity(), "允许材质"));
+        applyPricingBasis(entity, request);
+    }
+
+    /**
+     * 归一化取价基准配置。
+     *
+     * <p>非适用字段一律复位（偏移与休市开关只在报单日基准有意义，固定时段只在 FIXED 有意义）：
+     * 否则会出现「切回自动策略却仍带着旧固定时段」这类半配置状态，脏值又会被取价解析当成有效输入。</p>
+     */
+    private void applyPricingBasis(Project entity, ProjectRequest request) {
+        Basis basis = resolvePricingBasis(request.priceDateBasis());
+        // 偏移量无条件校验 0..30(与 md_project 的 CHECK 约束、取价解析侧一致):
+        // 传了非法值说明调用方有 bug, 不该被「非 ORDER 就复位」顺带吞掉。
+        int requestedOffsetDays = resolvePriceOffsetDays(request.priceDateOffsetDays());
+        int offsetDays = basis == Basis.ORDER ? requestedOffsetDays : 0;
+        boolean settlePrev = basis == Basis.ORDER && Boolean.TRUE.equals(request.priceClosedDayPrevSettle());
+        PeriodPolicy policy = resolvePricePeriodPolicy(request.pricePeriodPolicy());
+        String fixedPeriod = policy == PeriodPolicy.FIXED ? requireFixedPeriod(request.pricePeriodFixed()) : null;
+        entity.setPriceDateBasis(basis.name());
+        entity.setPriceDateOffsetDays(offsetDays);
+        entity.setPriceClosedDayPrevSettle(settlePrev);
+        entity.setPricePeriodPolicy(policy.name());
+        entity.setPricePeriodFixed(fixedPeriod);
+    }
+
+    /** 取价基准: 空表示送货日期当天(默认)。 */
+    private Basis resolvePricingBasis(String requested) {
+        String normalized = trimToNull(requested);
+        if (normalized == null) {
+            return Basis.DELIVERY;
+        }
+        Basis parsed = Basis.parse(normalized);
+        if (parsed == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "取价基准仅支持 DELIVERY(送货日期当天)/ORDER(报单日期之后第N个交易日)/MANUAL(每次手工选择)");
+        }
+        return parsed;
+    }
+
+    private int resolvePriceOffsetDays(Integer requested) {
+        if (requested == null) {
+            return 0;
+        }
+        if (requested < 0 || requested > MAX_PRICE_DATE_OFFSET_DAYS) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "取价偏移交易日数必须在 0 到 " + MAX_PRICE_DATE_OFFSET_DAYS + " 之间");
+        }
+        return requested;
+    }
+
+    private PeriodPolicy resolvePricePeriodPolicy(String requested) {
+        String normalized = trimToNull(requested);
+        if (normalized == null) {
+            return PeriodPolicy.AUTO;
+        }
+        PeriodPolicy parsed = PeriodPolicy.parse(normalized);
+        if (parsed == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "时段策略仅支持 AUTO(取当日最新时段)/FIXED(固定时段)/MANUAL(每次手工选择)");
+        }
+        return parsed;
+    }
+
+    private String requireFixedPeriod(String requested) {
+        String normalized = trimToNull(requested);
+        if (normalized == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "固定时段策略必须选择取价时段");
+        }
+        if (!QuotePeriod.isValid(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "固定取价时段仅支持 上午/中午/下午");
+        }
+        return normalized;
     }
 
     /**
@@ -377,6 +457,11 @@ public class ProjectService {
                 request.allowedMaterials(),
                 request.allowedBrandSeverity(),
                 request.allowedMaterialSeverity(),
+                request.priceDateBasis(),
+                request.priceDateOffsetDays(),
+                request.priceClosedDayPrevSettle(),
+                request.pricePeriodPolicy(),
+                request.pricePeriodFixed(),
                 request.remark()
         ), customer.getDefaultSettlementCompanyId(), customer.getDefaultSettlementCompanyName());
     }
@@ -399,7 +484,9 @@ public class ProjectService {
                     request.quoteSource(), request.quoteRegion(),
                     request.allowedBrands(), request.allowedMaterials(),
                     request.allowedBrandSeverity(), request.allowedMaterialSeverity(),
-                    request.remark()
+                    request.priceDateBasis(), request.priceDateOffsetDays(),
+                    request.priceClosedDayPrevSettle(), request.pricePeriodPolicy(),
+                    request.pricePeriodFixed(), request.remark()
             );
         }
         SettlementCompanySnapshot company = companySettingService
@@ -412,7 +499,9 @@ public class ProjectService {
                 request.quoteSource(), request.quoteRegion(),
                 request.allowedBrands(), request.allowedMaterials(),
                 request.allowedBrandSeverity(), request.allowedMaterialSeverity(),
-                request.remark()
+                request.priceDateBasis(), request.priceDateOffsetDays(),
+                request.priceClosedDayPrevSettle(), request.pricePeriodPolicy(),
+                request.pricePeriodFixed(), request.remark()
         );
     }
 
