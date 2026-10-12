@@ -104,6 +104,7 @@ public class SalesOrderResponseAssembler {
                 response.settlementCompanyId(),
                 response.settlementCompanyName(),
                 response.deliveryDate(),
+                response.orderDate(),
                 response.salesName(),
                 response.totalWeight(),
                 response.totalAmount(),

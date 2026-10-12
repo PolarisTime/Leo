@@ -83,6 +83,7 @@ public class SalesOrderAuditedPricingService {
 
         BigDecimal totalAmount = BigDecimal.ZERO;
         entity.setDeliveryDate(request.deliveryDate());
+        entity.setOrderDate(SalesOrderApplyService.resolveOrderDate(entity.getOrderDate(), request.orderDate()));
         entity.setRemark(request.remark());
         for (SalesOrderItem item : entity.getItems()) {
             SalesOrderItemRequest requestItem = requestItemMap.get(item.getId());

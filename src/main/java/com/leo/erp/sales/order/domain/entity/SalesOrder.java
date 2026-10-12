@@ -45,6 +45,10 @@ public class SalesOrder extends AbstractAuditableEntity implements StatusAwareEn
     @Column(name = "delivery_date", nullable = false)
     private LocalDate deliveryDate;
 
+    /** 报单日期(客户报单/落单当天): 取价基准 ORDER(报单日之后第 N 个交易日)的锚点。 */
+    @Column(name = "order_date", nullable = false)
+    private LocalDate orderDate;
+
     @Column(name = "sales_name", nullable = false, length = 32)
     private String salesName;
 

@@ -23,6 +23,8 @@ public record SalesOrderResponse(
         @JsonSerialize(using = ToStringSerializer.class) Long settlementCompanyId,
         String settlementCompanyName,
         LocalDate deliveryDate,
+        /** 报单日期(客户报单/落单当天)。 */
+        LocalDate orderDate,
         String salesName,
         BigDecimal totalWeight,
         @PermissionField("sales-orders:read:amount")
@@ -77,7 +79,7 @@ public record SalesOrderResponse(
                               List<SalesOrderItemResponse> items,
                               List<DocumentChargeItemResponse> chargeItems) {
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
-                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
+                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, totalWeight,
                 totalAmount, status, deletedFlag, remark, null, null, null, null, null, null, null, null, null, null, items, chargeItems, false, false, null, null, null);
     }
 
@@ -85,7 +87,7 @@ public record SalesOrderResponse(
                                                   boolean referencedBySalesOutbound) {
         return new SalesOrderResponse(
                 id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
-                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
+                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, totalWeight,
                 totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
                 priceFloatValue, priceTargetDate, priceQuoteDate, priceQuotePeriod, priceDateBasis,
                 priceDateOffsetDays, priceClosedSettlePrev, items, chargeItems, referencedByFreightBill,
@@ -98,7 +100,7 @@ public record SalesOrderResponse(
                                                      Integer deliveredNetQuantity) {
         return new SalesOrderResponse(
                 id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
-                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
+                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, totalWeight,
                 totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
                 priceFloatValue, priceTargetDate, priceQuoteDate, priceQuotePeriod, priceDateBasis,
                 priceDateOffsetDays, priceClosedSettlePrev, items, chargeItems, referencedByFreightBill,
@@ -126,7 +128,7 @@ public record SalesOrderResponse(
                               String remark,
                               List<SalesOrderItemResponse> items) {
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
-                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
+                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, totalWeight,
                 totalAmount, status, deletedFlag, remark, null, null, null, null, null, null, null, null, null,
                 null, items, List.of(), false, false, null, null, null);
     }

@@ -239,12 +239,12 @@ class SalesOrderPriceRuleServiceTest {
                 .hasMessage("取价偏移交易日数必须在 0 到 30 之间");
     }
 
-    /** 取价快照请求: 24 参规范构造器, 其余字段沿用既有测试的最小合法集合。 */
+    /** 取价快照请求: 规范构造器, 其余字段沿用既有测试的最小合法集合(报单日期与送货日期同值)。 */
     private SalesOrderRequest snapshotRequest(LocalDate priceTargetDate, LocalDate priceQuoteDate,
                                               String priceQuotePeriod, String priceDateBasis,
                                               Integer priceDateOffsetDays, Boolean priceClosedSettlePrev) {
         return new SalesOrderRequest("SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A",
-                null, null, LocalDate.of(2026, 3, 1), "销售员A", "草稿", null, null,
+                null, null, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 1), "销售员A", "草稿", null, null,
                 priceTargetDate, priceQuoteDate, priceQuotePeriod, priceDateBasis,
                 priceDateOffsetDays, priceClosedSettlePrev, List.of(), List.of(), false);
     }

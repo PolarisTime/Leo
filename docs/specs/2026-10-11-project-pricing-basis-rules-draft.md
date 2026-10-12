@@ -224,15 +224,17 @@ GET /api/v2/projects/{projectId}/pricing-quote-resolutions
 - 不改行情抓取/补数链路与 `mk_steel_quote` 结构；
 - 不做多数据源混取（仍按项目 `quote_source` 单源取价）。
 
-## 9. 已知限制：销售订单缺少「报单日期」（待业务确认）
+## 9. 销售订单的「报单日期」（V180 已补）
 
-`ORDER` 基准需要单据的报单日期，但当前 `so_sales_order` 只有 `delivery_date`（`order_date` 属于
-`po_purchase_order`），销售订单的表单、请求/响应契约里也没有该字段。现状：
+`ORDER` 基准的锚点是单据报单日期，而销售订单原先只有送货日期（`order_date` 只存在于采购订单），
+即 `ORDER` 基准在销售订单上无法落地。V180 补齐：
 
-- 解析接口与真值表已完整支持 `ORDER`（调用方传 `orderDate` 即可正常工作，含休市结算开关）；
-- 交付核定弹窗在「项目配置为 ORDER 且单据无报单日期」时会展示后端 422 说明（`按报单日期取价需要提供报单日期`），
-  用户可以临时把基准覆盖为「送货日期」或「每次手工选择」继续作业；
-- 待业务确认后再补数据来源，候选：① 给销售订单新增可编辑的「报单日期」字段（默认取落单当天）；
-  ② 取来源单据（采购订单 / 报单比价）的报单日期，取不到再回退落单当天；③ 直接以销售订单创建日期作为报单日期。
-
-在此之前，`ORDER` 基准在销售订单场景下不可用；`DELIVERY`（默认）与 `MANUAL` 不受影响。
+- 列 `so_sales_order.order_date date NOT NULL DEFAULT CURRENT_DATE`；历史行按 `created_at::date` **回填**
+  （不是升级当天，否则历史单据会被记成规则上线日）；配套 `deleted_flag = false` 的部分索引；
+- 实体 / 请求 / 响应新增 `orderDate`；服务侧在请求未带该字段时**保留原值**（更新场景）或**落到当天**
+  （新建或老调用方），既有调用方与测试无需改动；
+- 前端在销售订单「表单 / 列表列 / 详情」三处新增可编辑的「报单日期」，新建默认落单当天
+  （走既有惰性 `defaultDraftValues` 机制，避免在渲染期取当前时间），编辑时显示后端值；
+  同时纳入保存白名单与 strict 契约（漏了会被载荷裁剪或直接抛契约错误）；
+- 日期格式：前端下发 `yyyy-MM-dd HH:mm:ss`（与 `deliveryDate` 同款），后端 `FlexibleLocalDateDeserializer`
+  同时接受该格式与 ISO `yyyy-MM-dd`；响应统一输出 ISO `yyyy-MM-dd`。

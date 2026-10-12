@@ -20,6 +20,8 @@ public record SalesOrderRequest(
         Long settlementCompanyId,
         String settlementCompanyName,
         @NotNull LocalDate deliveryDate,
+        /** 报单日期(客户报单/落单当天); 取价基准 ORDER 的锚点, 缺省时保留原值/落到当天。 */
+        LocalDate orderDate,
         @jakarta.validation.constraints.NotBlank String salesName,
         String status,
         String remark,
@@ -67,7 +69,7 @@ public record SalesOrderRequest(
                              List<DocumentChargeItemRequest> chargeItems,
                              boolean audit) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
-                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, status, remark,
+                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, status, remark,
                 null, null, null, null, null, null, null, items, chargeItems, audit);
     }
     public SalesOrderRequest(String orderNo,
@@ -85,7 +87,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
-                settlementCompanyId, settlementCompanyName, deliveryDate, salesName, status, remark, null, null, null, null, null, null, null, items,
+                settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, items,
                 List.of(), false);
     }
 
@@ -102,7 +104,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
-                null, null, deliveryDate, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
+                null, null, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -117,7 +119,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, null, customerCode, null, customerName, projectId, projectName,
-                null, null, deliveryDate, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
+                null, null, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -130,7 +132,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, null, null, null, customerName, null, projectName,
-                null, null, deliveryDate, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
+                null, null, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -144,7 +146,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, null, null, customerName, null, projectName,
-                null, null, deliveryDate, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
+                null, null, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
     }
 
 }

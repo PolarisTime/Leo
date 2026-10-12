@@ -305,4 +305,52 @@ class SalesOrderApplyServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("数量不足");
     }
+
+    // ---------- 报单日期(取价基准 ORDER 的锚点) ----------
+
+    private SalesOrderRequest requestWithOrderDate(LocalDate orderDate) {
+        return new SalesOrderRequest(
+                "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A",
+                null, null, LocalDate.of(2026, 8, 1), orderDate, "销售员A", "草稿", null, null,
+                null, null, null, null, null, null, List.of(), List.of(), false);
+    }
+
+    /** 请求带报单日期时按请求值落库。 */
+    @Test
+    void apply_shouldUseRequestedOrderDate() {
+        stubHappyPath();
+        SalesOrder entity = new SalesOrder();
+        LocalDate orderDate = LocalDate.of(2026, 3, 7);
+
+        service.apply(entity, requestWithOrderDate(orderDate), () -> 100L);
+
+        assertThat(entity.getOrderDate()).isEqualTo(orderDate);
+    }
+
+    /**
+     * 老调用方(兼容构造器)不带报单日期且实体也没有时落到当天:
+     * 与 so_sales_order.order_date 的 DEFAULT CURRENT_DATE 一致, 不能留 null 让 ORDER 基准取不到锚点。
+     */
+    @Test
+    void apply_shouldDefaultOrderDateToTodayWhenAbsent() {
+        stubHappyPath();
+        SalesOrder entity = new SalesOrder();
+
+        service.apply(entity, request(10L, "CUST001", "客户A", 20L, "项目A", null), () -> 100L);
+
+        assertThat(entity.getOrderDate()).isEqualTo(LocalDate.now());
+    }
+
+    /** 更新场景: 请求未带报单日期时保留实体原值, 不能被清空或被改成今天。 */
+    @Test
+    void apply_shouldKeepExistingOrderDateWhenRequestOmitsIt() {
+        stubHappyPath();
+        SalesOrder entity = new SalesOrder();
+        LocalDate existing = LocalDate.of(2026, 1, 5);
+        entity.setOrderDate(existing);
+
+        service.apply(entity, request(10L, "CUST001", "客户A", 20L, "项目A", null), () -> 100L);
+
+        assertThat(entity.getOrderDate()).isEqualTo(existing);
+    }
 }

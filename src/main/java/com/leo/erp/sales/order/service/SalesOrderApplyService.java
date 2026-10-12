@@ -24,6 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -143,6 +144,7 @@ public class SalesOrderApplyService {
         entity.setCustomerId(customer == null ? null : customer.id());
         entity.setProjectId(project == null ? request.projectId() : project.id());
         entity.setDeliveryDate(request.deliveryDate());
+        entity.setOrderDate(resolveOrderDate(entity.getOrderDate(), request.orderDate()));
         entity.setSalesName(request.salesName());
         applyProjectSettlementCompany(entity, request, project, customer);
         entity.setStatus(nextStatus);
@@ -410,5 +412,16 @@ public class SalesOrderApplyService {
 
     private record SettlementCompanySnapshot(Long id, String name) {
         private static final SettlementCompanySnapshot EMPTY = new SettlementCompanySnapshot(null, null);
+    }
+
+    /**
+     * 报单日期(取价基准 ORDER 的锚点): 请求给了就用请求值; 未给时保留实体原值(更新场景不覆盖历史);
+     * 两者都没有(新建单据的老调用方)则落到当天 —— 与 so_sales_order.order_date 的 DEFAULT CURRENT_DATE 一致。
+     */
+    static LocalDate resolveOrderDate(LocalDate current, LocalDate requested) {
+        if (requested != null) {
+            return requested;
+        }
+        return current != null ? current : LocalDate.now();
     }
 }
