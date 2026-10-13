@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.leo.erp.master.api.ProjectQuery;
 import org.springframework.stereotype.Service;
 
@@ -76,7 +77,8 @@ public class PrintExportFilenameService {
     ) {
         return build(
                 orderNo,
-                businessDate == null ? "" : businessDate.toString(),
+                // 与 fromPrintData 的 PDF 文件名保持同一中文日期口径：X年X月X日
+                DateTimeFormatSupport.displayDate(businessDate),
                 resolveProjectShortName(projectId, projectName),
                 settlementCompanyName,
                 extension

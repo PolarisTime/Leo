@@ -43,12 +43,21 @@ class PrintExportFilenameServiceTest {
 
     @Test
     void forOrder_shouldBuildFilenameWithAllComponents() {
-        // 注意 forOrder 的日期用 LocalDate.toString()（短横线），非 PDF 中文格式。
+        // forOrder 与 fromPrintData 统一中文日期口径：X年X月X日（月/日补零）。
         String filename = service.forOrder(
                 "CG20260810", LocalDate.of(2026, 8, 10), null, "嘉兴项目", "结算公司", "pdf"
         );
 
-        assertThat(filename).isEqualTo("CG20260810.2026-08-10.嘉兴项目.结算公司.pdf");
+        assertThat(filename).isEqualTo("CG20260810.2026年08月10日.嘉兴项目.结算公司.pdf");
+    }
+
+    @Test
+    void forOrder_shouldPadSingleDigitMonthAndDay() {
+        String filename = service.forOrder(
+                "CG1", LocalDate.of(2026, 1, 5), null, "项目A", "公司X", "pdf"
+        );
+
+        assertThat(filename).isEqualTo("CG1.2026年01月05日.项目A.公司X.pdf");
     }
 
     @Test
@@ -70,7 +79,7 @@ class PrintExportFilenameServiceTest {
                 "CG20260810", LocalDate.of(2026, 8, 10), 5L, "嘉兴项目", "结算公司", "pdf"
         );
 
-        assertThat(filename).isEqualTo("CG20260810.2026-08-10.杭政.结算公司.pdf");
+        assertThat(filename).isEqualTo("CG20260810.2026年08月10日.杭政.结算公司.pdf");
     }
 
     @Test
@@ -83,7 +92,7 @@ class PrintExportFilenameServiceTest {
                 "CG20260810", LocalDate.of(2026, 8, 10), 5L, "嘉兴项目", "结算公司", "pdf"
         );
 
-        assertThat(filename).isEqualTo("CG20260810.2026-08-10.嘉兴项目.结算公司.pdf");
+        assertThat(filename).isEqualTo("CG20260810.2026年08月10日.嘉兴项目.结算公司.pdf");
     }
 
     @Test
@@ -94,7 +103,7 @@ class PrintExportFilenameServiceTest {
                 "CG20260810", LocalDate.of(2026, 8, 10), 5L, "嘉兴项目", "结算公司", "pdf"
         );
 
-        assertThat(filename).isEqualTo("CG20260810.2026-08-10.嘉兴项目.结算公司.pdf");
+        assertThat(filename).isEqualTo("CG20260810.2026年08月10日.嘉兴项目.结算公司.pdf");
     }
 
     @Test
@@ -103,7 +112,7 @@ class PrintExportFilenameServiceTest {
                 "CG20260810", LocalDate.of(2026, 8, 10), null, "嘉兴项目", "结算公司", "pdf"
         );
 
-        assertThat(filename).isEqualTo("CG20260810.2026-08-10.嘉兴项目.结算公司.pdf");
+        assertThat(filename).isEqualTo("CG20260810.2026年08月10日.嘉兴项目.结算公司.pdf");
         verifyNoInteractions(projectQuery);
     }
 
@@ -119,7 +128,7 @@ class PrintExportFilenameServiceTest {
         );
 
         assertThat(filename).isEqualTo(
-                "A".repeat(64) + ".2026-08-10." + "B".repeat(72) + "." + "C".repeat(72) + ".pdf"
+                "A".repeat(64) + ".2026年08月10日." + "B".repeat(72) + "." + "C".repeat(72) + ".pdf"
         );
     }
 
@@ -132,7 +141,7 @@ class PrintExportFilenameServiceTest {
                 "CG1", LocalDate.of(2026, 8, 10), null, longChinese, "公司", "pdf"
         );
 
-        assertThat(filename).isEqualTo("CG1.2026-08-10." + "嘉".repeat(24) + ".公司.pdf");
+        assertThat(filename).isEqualTo("CG1.2026年08月10日." + "嘉".repeat(24) + ".公司.pdf");
     }
 
     @Test
@@ -145,7 +154,7 @@ class PrintExportFilenameServiceTest {
         );
 
         // 72 / 4 = 18 个完整 emoji
-        assertThat(filename).isEqualTo("CG1.2026-08-10." + "😀".repeat(18) + ".公司.pdf");
+        assertThat(filename).isEqualTo("CG1.2026年08月10日." + "😀".repeat(18) + ".公司.pdf");
     }
 
     @Test
@@ -155,7 +164,7 @@ class PrintExportFilenameServiceTest {
                 "A:B*C", LocalDate.of(2026, 8, 10), null, "嘉兴\n项目", "结算|公司", "pdf"
         );
 
-        assertThat(filename).isEqualTo("A_B_C.2026-08-10.嘉兴_项目.结算_公司.pdf");
+        assertThat(filename).isEqualTo("A_B_C.2026年08月10日.嘉兴_项目.结算_公司.pdf");
     }
 
     @Test
@@ -164,7 +173,7 @@ class PrintExportFilenameServiceTest {
                 "CG20260810", LocalDate.of(2026, 8, 10), null, "嘉兴项目. ", "结算公司..", "pdf"
         );
 
-        assertThat(filename).isEqualTo("CG20260810.2026-08-10.嘉兴项目.结算公司.pdf");
+        assertThat(filename).isEqualTo("CG20260810.2026年08月10日.嘉兴项目.结算公司.pdf");
     }
 
     @Test
@@ -173,7 +182,7 @@ class PrintExportFilenameServiceTest {
                 "", LocalDate.of(2026, 8, 10), null, "项目A", "", "pdf"
         );
 
-        assertThat(filename).isEqualTo("-.2026-08-10.项目A.-.pdf");
+        assertThat(filename).isEqualTo("-.2026年08月10日.项目A.-.pdf");
     }
 
     @Test
@@ -189,9 +198,9 @@ class PrintExportFilenameServiceTest {
         );
 
         // 去非字母数字后小写：三种输入均归一为 pdf。
-        assertThat(withSpaces).isEqualTo("CG1.2026-08-10.项目A.公司X.pdf");
-        assertThat(withDots).isEqualTo("CG1.2026-08-10.项目A.公司X.pdf");
-        assertThat(withSymbols).isEqualTo("CG1.2026-08-10.项目A.公司X.pdf");
+        assertThat(withSpaces).isEqualTo("CG1.2026年08月10日.项目A.公司X.pdf");
+        assertThat(withDots).isEqualTo("CG1.2026年08月10日.项目A.公司X.pdf");
+        assertThat(withSymbols).isEqualTo("CG1.2026年08月10日.项目A.公司X.pdf");
     }
 
     @Test
@@ -203,8 +212,8 @@ class PrintExportFilenameServiceTest {
                 "CG1", LocalDate.of(2026, 8, 10), null, "项目A", "公司X", null
         );
 
-        assertThat(noExtension).isEqualTo("CG1.2026-08-10.项目A.公司X");
-        assertThat(nullExtension).isEqualTo("CG1.2026-08-10.项目A.公司X");
+        assertThat(noExtension).isEqualTo("CG1.2026年08月10日.项目A.公司X");
+        assertThat(nullExtension).isEqualTo("CG1.2026年08月10日.项目A.公司X");
     }
 
     // ---------- fromPrintData ----------

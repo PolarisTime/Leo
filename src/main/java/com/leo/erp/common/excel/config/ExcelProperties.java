@@ -11,7 +11,13 @@ public class ExcelProperties {
 
     private int maxExportRows = 10_000;
 
-    private String defaultDateFormat = "yyyy-MM-dd";
+    /**
+     * Excel 日期列的展示格式码。
+     *
+     * <p>中文年/月/日是字面量，POI 数字格式码必须用双引号转义，否则 {@code y}/{@code m}/{@code d}
+     * 会被当成日期占位符导致格式无效。</p>
+     */
+    private String defaultDateFormat = "yyyy\"年\"MM\"月\"dd\"日\"";
 
     private long maxFileSize = 10 * 1024 * 1024;
 

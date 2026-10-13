@@ -2,6 +2,7 @@ package com.leo.erp.market.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.leo.erp.market.domain.entity.SteelArticle;
 import com.leo.erp.market.mysteel.MysteelArticleParser;
 import com.leo.erp.market.mysteel.MysteelClient;
@@ -91,8 +92,8 @@ public class SteelQuoteSyncService {
         }
         if (results.isEmpty()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR,
-                    String.format("%tF 未找到所选时段(%s)的行情文章", date,
-                            String.join("/", requestedPeriods)));
+                    DateTimeFormatSupport.displayDate(date) + " 未找到所选时段("
+                            + String.join("/", requestedPeriods) + ")的行情文章");
         }
         return results;
     }
@@ -113,8 +114,8 @@ public class SteelQuoteSyncService {
 
     private static QuoteNotPublishedException notPublished(LocalDate date, Set<String> periods) {
         String suffix = periods.isEmpty() ? "" : "所选时段(" + String.join("/", periods) + ")";
-        return new QuoteNotPublishedException(
-                String.format("%tF 站点未发布杭州市场建筑钢材价格行情文章%s", date, suffix));
+        return new QuoteNotPublishedException(DateTimeFormatSupport.displayDate(date)
+                + " 站点未发布杭州市场建筑钢材价格行情文章" + suffix);
     }
 
     /**

@@ -3,6 +3,7 @@ package com.leo.erp.market.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.retry.TransientCallException;
+import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.leo.erp.market.QuoteNotPublishedException;
 import com.leo.erp.market.domain.entity.SteelArticle;
 import com.leo.erp.market.repository.SteelArticleRepository;
@@ -110,7 +111,8 @@ public class SteelxQuoteSyncService {
     private List<SyncResult> finishRegionsSync(List<SyncResult> results, List<String> noQuoteRegions,
                                                LocalDate date) {
         if (results.isEmpty()) {
-            throw new QuoteNotPublishedException("西本所有地区" + (date == null ? "当前" : " " + date)
+            String when = date == null ? "当前" : " " + DateTimeFormatSupport.displayDate(date);
+            throw new QuoteNotPublishedException("西本所有地区" + when
                     + "均无报价(" + String.join("/", noQuoteRegions) + ")");
         }
         if (!noQuoteRegions.isEmpty()) {

@@ -1,6 +1,7 @@
 package com.leo.erp.system.printtemplate.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.leo.erp.common.support.DateTimeFormatSupport;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -176,8 +177,9 @@ class PrintRecordLayoutPreparer {
 
     private void enrichTopLevelPrintFields(Map<String, String> data) {
         LocalDateTime now = LocalDateTime.now();
-        data.putIfAbsent("printDate", now.toLocalDate().toString());
-        data.putIfAbsent("printTime", now.toString());
+        // 打印数据直接面向纸质/PDF 输出，日期口径统一为 X年X月X日（带时间则 X年X月X日 HH:mm:ss）
+        data.putIfAbsent("printDate", DateTimeFormatSupport.displayDate(now.toLocalDate()));
+        data.putIfAbsent("printTime", DateTimeFormatSupport.displayDateTime(now));
         JsonNode topLevel = runtimeProperties.topLevelFields();
         putDateParts(data, firstPresent(data, runtimeProperties.childTextValues(topLevel.path("dateParts").path("sourceKeys"))));
         for (JsonNode field : runtimeProperties.childObjects(topLevel.path("decimalFields"))) {

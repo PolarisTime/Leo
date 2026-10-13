@@ -2,6 +2,7 @@ package com.leo.erp.market.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.leo.erp.master.api.ProjectPricingBasisQuery;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.Basis;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.PeriodPolicy;
@@ -43,6 +44,11 @@ class PricingQuoteResolverTest {
 
     private static final Long PROJECT_ID = 100L;
     private static final String MARKET = "杭州";
+
+    /** 中文说明里的日期口径：X年X月X日（月/日补零），与 DateTimeFormatSupport.displayDate 一致。 */
+    private static String display(LocalDate date) {
+        return DateTimeFormatSupport.displayDate(date);
+    }
 
     /** 2026-03-02 是周一。 */
     private static final LocalDate MON = LocalDate.of(2026, 3, 2);
@@ -94,7 +100,7 @@ class PricingQuoteResolverTest {
         assertThat(response.dateFallback().from()).isEqualTo(TUE.toString());
         assertThat(response.dateFallback().to()).isEqualTo(MON.toString());
         assertThat(response.dateFallback().reason()).contains("按最近的前一个交易日结算");
-        assertThat(response.explanation()).contains("按最近的前一个交易日结算").contains(MON.toString());
+        assertThat(response.explanation()).contains("按最近的前一个交易日结算").contains(display(MON));
         assertThat(response.quoteAvailable()).isTrue();
     }
 
@@ -110,7 +116,7 @@ class PricingQuoteResolverTest {
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
                 .hasMessageContaining("找不到之前的交易日")
-                .hasMessageContaining(NEXT_MON.toString());
+                .hasMessageContaining(display(NEXT_MON));
     }
 
     @Test
@@ -146,7 +152,7 @@ class PricingQuoteResolverTest {
         assertThat(response.quoteDate()).isEqualTo(FRI);
         assertThat(response.offsetDays()).isEqualTo(2);
         assertThat(response.dateFallback()).as("无回退时不返回 Fallback").isNull();
-        assertThat(response.explanation()).contains("取之后第 2 个交易日").contains(FRI.toString());
+        assertThat(response.explanation()).contains("取之后第 2 个交易日").contains(display(FRI));
     }
 
     @Test
@@ -205,8 +211,8 @@ class PricingQuoteResolverTest {
         assertThat(response.availablePeriods()).isEmpty();
         assertThat(response.dateFallback()).as("没有换日, 不返回 Fallback").isNull();
         assertThat(response.explanation())
-                .contains("报单日期 " + NEXT_TUE + " 之后第 1 个交易日的行情尚未发布")
-                .contains("可用行情范围为 " + MON + " 至 " + NEXT_TUE)
+                .contains("报单日期 " + display(NEXT_TUE) + " 之后第 1 个交易日的行情尚未发布")
+                .contains("可用行情范围为 " + display(MON) + " 至 " + display(NEXT_TUE))
                 .contains("请稍后重试或手工指定取价日期")
                 .doesNotContain("Optional[");
     }
@@ -226,8 +232,8 @@ class PricingQuoteResolverTest {
         assertThat(response.targetDate()).isEqualTo(latest);
         assertThat(response.quoteDate()).isNull();
         assertThat(response.quoteAvailable()).isFalse();
-        assertThat(response.explanation()).isEqualTo("报单日期 2026-10-13 之后第 1 个交易日的行情尚未发布"
-                + "(可用行情范围为 2026-09-02 至 2026-10-13), 请稍后重试或手工指定取价日期");
+        assertThat(response.explanation()).isEqualTo("报单日期 2026年10月13日 之后第 1 个交易日的行情尚未发布"
+                + "(可用行情范围为 2026年09月02日 至 2026年10月13日), 请稍后重试或手工指定取价日期");
     }
 
     @Test
@@ -268,7 +274,7 @@ class PricingQuoteResolverTest {
         // 周二/周三/周四连续休市(长假): 继续顺延到周五, 而不是停在第一天。
         assertThat(response.quoteDate()).isEqualTo(FRI);
         assertThat(response.quoteAvailable()).isTrue();
-        assertThat(response.explanation()).contains("取之后第 1 个交易日").contains(FRI.toString());
+        assertThat(response.explanation()).contains("取之后第 1 个交易日").contains(display(FRI));
     }
 
     @Test
@@ -315,7 +321,7 @@ class PricingQuoteResolverTest {
         assertThat(response.quoteAvailable()).isFalse();
         assertThat(response.dateFallback()).as("未发布时没有实际换日").isNull();
         assertThat(response.explanation())
-                .contains("报单日期 " + TUE + " 为休市")
+                .contains("报单日期 " + display(TUE) + " 为休市")
                 .contains("其后第 5 个交易日")
                 .contains("行情尚未发布")
                 .contains("请稍后重试或手工指定取价日期");
@@ -333,7 +339,7 @@ class PricingQuoteResolverTest {
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
                 .hasMessageContaining("找不到之前的交易日")
-                .hasMessageContaining(NEXT_MON.toString());
+                .hasMessageContaining(display(NEXT_MON));
     }
 
     // ==================== MANUAL ====================
@@ -349,7 +355,7 @@ class PricingQuoteResolverTest {
         assertThat(response.quoteAvailable()).isTrue();
         assertThat(response.suggestedDate()).isNull();
         assertThat(response.period()).isEqualTo("下午");
-        assertThat(response.explanation()).contains("手工指定取价日期 " + FRI);
+        assertThat(response.explanation()).contains("手工指定取价日期 " + display(FRI));
     }
 
     @Test
@@ -364,7 +370,7 @@ class PricingQuoteResolverTest {
         assertThat(response.period()).isNull();
         assertThat(response.availablePeriods()).isEmpty();
         assertThat(response.dateFallback()).as("无回退时不返回 Fallback").isNull();
-        assertThat(response.explanation()).contains("当日无行情").contains("建议改为 " + WED);
+        assertThat(response.explanation()).contains("当日无行情").contains("建议改为 " + display(WED));
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.leo.erp.common.excel.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.excel.annotation.ExportColumn;
 import com.leo.erp.common.excel.config.ExcelProperties;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -85,11 +87,61 @@ class ExcelExportServiceTest {
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(content))) {
             Row row = workbook.getSheetAt(0).getRow(1);
             assertThat(row.getCell(0).getCellType()).isEqualTo(CellType.NUMERIC);
-            assertThat(row.getCell(0).getCellStyle().getDataFormatString()).isEqualTo("yyyy-MM-dd");
-            assertThat(row.getCell(1).getCellStyle().getDataFormatString()).isEqualTo("yyyy-MM-dd HH:mm:ss");
+            // 中文年/月/日为字面量，POI 格式码用双引号转义
+            assertThat(row.getCell(0).getCellStyle().getDataFormatString())
+                    .isEqualTo("yyyy\"年\"MM\"月\"dd\"日\"");
+            assertThat(row.getCell(1).getCellStyle().getDataFormatString())
+                    .isEqualTo("yyyy\"年\"MM\"月\"dd\"日\" HH:mm:ss");
+            // Excel 序列号写值：读回即原日期/时间（写 epoch millis 会被 Excel 当序列号解释成天文年份）
+            assertThat(row.getCell(0).getLocalDateTimeCellValue()).isEqualTo(LocalDateTime.of(2026, 9, 9, 0, 0));
+            assertThat(row.getCell(1).getLocalDateTimeCellValue()).isEqualTo(LocalDateTime.of(2026, 9, 9, 13, 45, 30));
             Cell blank = row.getCell(2);
             assertThat(blank == null || blank.getCellType() == CellType.BLANK).isTrue();
         }
+    }
+
+    @Test
+    void exportTable_shouldWriteLocalDateAndSqlDateAsRealDateCells() throws Exception {
+        LocalDate date = LocalDate.of(2026, 8, 1);
+
+        byte[] content = excelExportService.exportTable(
+                null,
+                List.of("LocalDate", "SqlDate"),
+                List.of(Arrays.asList(date, java.sql.Date.valueOf(date))));
+
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(content))) {
+            Row row = workbook.getSheetAt(0).getRow(1);
+            assertThat(row.getCell(0).getCellType()).isEqualTo(CellType.NUMERIC);
+            assertThat(row.getCell(1).getCellType()).isEqualTo(CellType.NUMERIC);
+            assertThat(row.getCell(0).getCellStyle().getDataFormatString())
+                    .isEqualTo("yyyy\"年\"MM\"月\"dd\"日\"");
+            // 真日期单元格：读回时间就是当天 00:00（本地时区），Excel 可按日期排序
+            assertThat(row.getCell(0).getLocalDateTimeCellValue().toLocalDate()).isEqualTo(date);
+            assertThat(row.getCell(1).getLocalDateTimeCellValue().toLocalDate()).isEqualTo(date);
+        }
+    }
+
+    @Test
+    void export_shouldWriteAnnotatedLocalDateAsRealDateCell() throws Exception {
+        byte[] content = excelExportService.export(
+                List.of(new DatedRow(LocalDate.of(2026, 1, 5), "甲")),
+                DatedRow.class);
+
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(content))) {
+            Row row = workbook.getSheetAt(0).getRow(1);
+            assertThat(row.getCell(0).getCellType()).isEqualTo(CellType.NUMERIC);
+            assertThat(row.getCell(0).getCellStyle().getDataFormatString())
+                    .isEqualTo("yyyy\"年\"MM\"月\"dd\"日\"");
+            assertThat(row.getCell(0).getLocalDateTimeCellValue().toLocalDate())
+                    .isEqualTo(LocalDate.of(2026, 1, 5));
+            assertThat(row.getCell(1).getStringCellValue()).isEqualTo("甲");
+        }
+    }
+
+    private record DatedRow(
+            @ExportColumn(header = "业务日期", order = 1) LocalDate businessDate,
+            @ExportColumn(header = "描述", order = 2) String description
+    ) {
     }
 
     @Test

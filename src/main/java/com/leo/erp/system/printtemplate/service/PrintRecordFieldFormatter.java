@@ -1,6 +1,7 @@
 package com.leo.erp.system.printtemplate.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.leo.erp.common.support.PrecisionConstants;
 import org.springframework.stereotype.Component;
 
@@ -9,6 +10,7 @@ import java.math.RoundingMode;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -89,6 +91,19 @@ class PrintRecordFieldFormatter {
         return result;
     }
 
+    /**
+     * 打印数据取值口径：日期与时间统一转成面向用户的展示口径（{@code X年X月X日}[ {@code HH:mm:ss}]），
+     * 其余值保持原样。
+     *
+     * <p>打印数据只用于套打/PDF/Excel 输出，不承载机器语义（排序键、对象存储 key、接口 DTO 均取自
+     * 其它路径），因此在此预格式化是安全的：{@code chineseDate} 分支对已含「年」的值原样返回，
+     * 预格式化不会二次包装。</p>
+     *
+     * <p>{@code Timestamp}/{@code LocalDateTime} 落在午夜时按纯日期输出：本系统多张单据把
+     * {@code LocalDate} 语义存成 {@code timestamp}（如 {@code lg_freight_bill.bill_time}），
+     * 打印「单据日期」时不应显示无意义的 {@code 00:00:00}；该口径与
+     * {@code ExcelExportService#writeDateTime} 的 dateOnly 判定一致。</p>
+     */
     String stringValue(Object value) {
         if (value == null) {
             return "";
@@ -97,18 +112,27 @@ class PrintRecordFieldFormatter {
             return decimal.stripTrailingZeros().toPlainString();
         }
         if (value instanceof java.sql.Date date) {
-            return date.toLocalDate().toString();
+            return DateTimeFormatSupport.displayDate(date.toLocalDate());
         }
         if (value instanceof Timestamp timestamp) {
-            return timestamp.toLocalDateTime().toString();
+            return displayDateTime(timestamp.toLocalDateTime());
         }
         if (value instanceof LocalDate date) {
-            return date.toString();
+            return DateTimeFormatSupport.displayDate(date);
         }
         if (value instanceof LocalDateTime dateTime) {
-            return dateTime.toString();
+            return displayDateTime(dateTime);
         }
         return String.valueOf(value);
+    }
+
+    private String displayDateTime(LocalDateTime value) {
+        if (value == null) {
+            return "";
+        }
+        return LocalTime.MIDNIGHT.equals(value.toLocalTime())
+                ? DateTimeFormatSupport.displayDate(value.toLocalDate())
+                : DateTimeFormatSupport.displayDateTime(value);
     }
 
     String value(Map<String, String> row, String key) {

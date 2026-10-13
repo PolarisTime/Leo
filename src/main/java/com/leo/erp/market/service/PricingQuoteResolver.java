@@ -2,6 +2,7 @@ package com.leo.erp.market.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.leo.erp.master.api.ProjectPricingBasisQuery;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.Basis;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.PeriodPolicy;
@@ -174,11 +175,12 @@ public class PricingQuoteResolver {
             return ResolvedDate.of(deliveryDate, deliveryDate, null, null);
         }
         LocalDate previous = calendar.previous(deliveryDate)
-                .orElseThrow(() -> noTradingDay("送货日期 " + deliveryDate
+                .orElseThrow(() -> noTradingDay("送货日期 " + displayDate(deliveryDate)
                         + " 无行情, 且在可用行情范围内找不到之前的交易日", calendar));
         return ResolvedDate.of(deliveryDate, previous, null,
                 Fallback.of(deliveryDate.toString(), previous.toString(),
-                        "送货日期 " + deliveryDate + " 无行情(休市或未发布), 按最近的前一个交易日结算"));
+                        "送货日期 " + displayDate(deliveryDate)
+                                + " 无行情(休市或未发布), 按最近的前一个交易日结算"));
     }
 
     /**
@@ -196,32 +198,34 @@ public class PricingQuoteResolver {
             return calendar.after(orderDate, offsetDays)
                     .map(quoteDate -> ResolvedDate.of(orderDate, quoteDate, null, null))
                     .orElseGet(() -> ResolvedDate.pending(orderDate, unpublished(
-                            "报单日期 " + orderDate + " 之后第 " + offsetDays + " 个交易日", calendar)));
+                            "报单日期 " + displayDate(orderDate) + " 之后第 " + offsetDays + " 个交易日", calendar)));
         }
         if (settlePrevOnClosed) {
             LocalDate base = calendar.previous(orderDate)
-                    .orElseThrow(() -> noTradingDay("报单日期 " + orderDate
+                    .orElseThrow(() -> noTradingDay("报单日期 " + displayDate(orderDate)
                             + " 无行情, 且在可用行情范围内找不到之前的交易日", calendar));
             if (offsetDays == 0) {
                 return ResolvedDate.of(orderDate, base, null,
                         Fallback.of(orderDate.toString(), base.toString(),
-                                "报单日期 " + orderDate + " 为休市, 按前一个交易日结算"));
+                                "报单日期 " + displayDate(orderDate) + " 为休市, 按前一个交易日结算"));
             }
             return calendar.after(base, offsetDays)
                     .map(quoteDate -> ResolvedDate.of(orderDate, quoteDate, null,
                             Fallback.of(orderDate.toString(), quoteDate.toString(),
-                                    "报单日期 " + orderDate + " 为休市, 按前一个交易日结算")))
+                                    "报单日期 " + displayDate(orderDate) + " 为休市, 按前一个交易日结算")))
                     .orElseGet(() -> ResolvedDate.pending(orderDate, unpublished(
-                            "报单日期 " + orderDate + " 的前一个交易日 " + base + " 之后第 "
-                                    + offsetDays + " 个交易日", calendar)));
+                            "报单日期 " + displayDate(orderDate) + " 的前一个交易日 " + displayDate(base)
+                                    + " 之后第 " + offsetDays + " 个交易日", calendar)));
         }
         int effectiveOffset = Math.max(offsetDays, 1);
         return calendar.after(orderDate, effectiveOffset)
                 .map(quoteDate -> ResolvedDate.of(orderDate, quoteDate, null,
                         Fallback.of(orderDate.toString(), quoteDate.toString(),
-                                "报单日期 " + orderDate + " 为休市, 按之后第 " + effectiveOffset + " 个交易日取价")))
+                                "报单日期 " + displayDate(orderDate) + " 为休市, 按之后第 "
+                                        + effectiveOffset + " 个交易日取价")))
                 .orElseGet(() -> ResolvedDate.pending(orderDate, unpublished(
-                        "报单日期 " + orderDate + " 为休市, 其后第 " + effectiveOffset + " 个交易日", calendar)));
+                        "报单日期 " + displayDate(orderDate) + " 为休市, 其后第 " + effectiveOffset
+                                + " 个交易日", calendar)));
     }
 
     /** 手工指定：不自动替换，只给建议日期与可用时段。 */
@@ -263,22 +267,22 @@ public class PricingQuoteResolver {
         }
         String datePart = switch (basis) {
             case DELIVERY -> resolvedDate.fallback() == null
-                    ? "送货日期 " + resolvedDate.targetDate() + " 为交易日, 直接取当日行情"
-                    : resolvedDate.fallback().reason() + ", 实际取价日 " + resolvedDate.quoteDate();
+                    ? "送货日期 " + displayDate(resolvedDate.targetDate()) + " 为交易日, 直接取当日行情"
+                    : resolvedDate.fallback().reason() + ", 实际取价日 " + displayDate(resolvedDate.quoteDate());
             case ORDER -> resolvedDate.fallback() == null
                     ? (offsetDays == 0
-                            ? "报单日期 " + resolvedDate.targetDate() + " 为交易日, 取当日行情"
-                            : "报单日期 " + resolvedDate.targetDate() + " 为交易日, 取之后第 " + offsetDays
-                                    + " 个交易日 " + resolvedDate.quoteDate())
-                    : resolvedDate.fallback().reason() + ", 实际取价日 " + resolvedDate.quoteDate()
+                            ? "报单日期 " + displayDate(resolvedDate.targetDate()) + " 为交易日, 取当日行情"
+                            : "报单日期 " + displayDate(resolvedDate.targetDate()) + " 为交易日, 取之后第 "
+                                    + offsetDays + " 个交易日 " + displayDate(resolvedDate.quoteDate()))
+                    : resolvedDate.fallback().reason() + ", 实际取价日 " + displayDate(resolvedDate.quoteDate())
                             + (settlePrevOnClosed ? "" : "(报单日为休市, 向后取第 "
                                     + Math.max(offsetDays, 1) + " 个交易日)");
             case MANUAL -> resolvedPeriod.period() == null
-                    ? "手工指定取价日期 " + resolvedDate.targetDate() + " 当日无行情"
+                    ? "手工指定取价日期 " + displayDate(resolvedDate.targetDate()) + " 当日无行情"
                             + (resolvedDate.suggestedDate() == null
                                     ? ""
-                                    : ", 建议改为 " + resolvedDate.suggestedDate())
-                    : "手工指定取价日期 " + resolvedDate.targetDate();
+                                    : ", 建议改为 " + displayDate(resolvedDate.suggestedDate()))
+                    : "手工指定取价日期 " + displayDate(resolvedDate.targetDate());
         };
         if (resolvedPeriod.fallback() != null) {
             return datePart + "; " + resolvedPeriod.fallback().reason();
@@ -305,7 +309,7 @@ public class PricingQuoteResolver {
     private String window(TradingCalendar calendar) {
         return calendar.earliest()
                 .flatMap(earliest -> calendar.latest()
-                        .map(latest -> "可用行情范围为 " + earliest + " 至 " + latest))
+                        .map(latest -> "可用行情范围为 " + displayDate(earliest) + " 至 " + displayDate(latest)))
                 .orElse("可用行情范围为空");
     }
 
@@ -315,6 +319,11 @@ public class PricingQuoteResolver {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /** 中文说明里的日期口径：X年X月X日（月/日补零）；接口字段与回退 from/to 仍用 ISO。 */
+    private static String displayDate(LocalDate date) {
+        return DateTimeFormatSupport.displayDate(date);
     }
 
     /** 解析入参：单据日期必传（按基准取用），其余为可选的单据级覆盖。 */

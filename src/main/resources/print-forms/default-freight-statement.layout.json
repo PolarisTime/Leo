@@ -14,7 +14,7 @@
   "fields": {
     "customerName": {"source": ["carrierName", "customerName", "supplierName", "counterpartyName"], "left": 106, "top": 80, "width": 210, "height": 24, "fontSize": 12, "color": "#173f46"},
     "billNo": {"source": ["billNo", "statementNo", "orderNo"], "left": 442, "top": 27, "width": 114, "height": 24, "fontSize": 10, "align": "right", "color": "#ffffff"},
-    "period": {"source": ["period", "dateRange", "startDate"], "left": 106, "top": 116, "width": 210, "height": 24, "fontSize": 11, "color": "#263f43"},
+    "period": {"source": ["period", "dateRange", "startDate"], "format": "chineseDate", "left": 106, "top": 116, "width": 210, "height": 24, "fontSize": 11, "color": "#263f43"},
     "endDate": {"source": ["endDate", "billDate", "statementDate"], "format": "chineseDate", "left": 414, "top": 116, "width": 137, "height": 24, "fontSize": 11, "color": "#263f43"}
   },
   "table": {

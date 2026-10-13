@@ -7,6 +7,7 @@ import com.leo.erp.common.excel.config.ExcelProperties;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.CreationHelper;
+import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -35,7 +36,8 @@ public class ExcelExportService {
 
     private static final Logger log = LoggerFactory.getLogger(ExcelExportService.class);
 
-    private static final String DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
+    /** Excel 日期时间列格式码；中文按字面量加引号转义，与 {@link com.leo.erp.common.excel.config.ExcelProperties} 的日期格式口径一致。 */
+    private static final String DATE_TIME_FORMAT = "yyyy\"年\"MM\"月\"dd\"日\" HH:mm:ss";
     private static final int DEFAULT_COLUMN_WIDTH = 5120;
 
     private final ExcelProperties excelProperties;
@@ -104,7 +106,8 @@ public class ExcelExportService {
      * <ul>
      *     <li>{@link java.math.BigDecimal} 仅在能由 {@code double} 精确表示时才写入数值单元格，
      *         否则写文本，避免 18 位精度的金额/重量在接口层被隐式舍入；</li>
-     *     <li>时间列写为真正的日期单元格（当天 00:00:00 只保留日期，否则保留到秒），便于 Excel 排序。</li>
+     *     <li>日期/时间列一律写为真正的日期单元格（当天 00:00:00 只保留日期，否则保留到秒），便于 Excel 排序，
+     *         并按 {@code X年X月X日}（带时间则 {@code X年X月X日 HH:mm:ss}）的格式码展示。</li>
      * </ul>
      */
     public byte[] exportTable(String sheetName, List<String> headers, List<List<Object>> rows) {
@@ -171,13 +174,12 @@ public class ExcelExportService {
         } else if (value instanceof java.sql.Timestamp timestamp) {
             writeDateTime(cell, timestamp.toLocalDateTime(), dateStyle, dateTimeStyle);
         } else if (value instanceof java.sql.Date sqlDate) {
-            cell.setCellStyle(dateStyle);
-            cell.setCellValue(sqlDate.toLocalDate().toString());
+            // 真日期单元格：写 Excel 日期序列号而非 ISO 文本，日期样式才生效且 Excel 可按日期排序
+            writeDateTime(cell, sqlDate.toLocalDate().atStartOfDay(), dateStyle, dateTimeStyle);
         } else if (value instanceof LocalDateTime dateTime) {
             writeDateTime(cell, dateTime, dateStyle, dateTimeStyle);
         } else if (value instanceof LocalDate date) {
-            cell.setCellStyle(dateStyle);
-            cell.setCellValue(date.toString());
+            writeDateTime(cell, date.atStartOfDay(), dateStyle, dateTimeStyle);
         } else if (value instanceof Instant instant) {
             writeDateTime(cell, LocalDateTime.ofInstant(instant, ZoneId.systemDefault()), dateStyle, dateTimeStyle);
         } else {
@@ -194,10 +196,17 @@ public class ExcelExportService {
         cell.setCellValue(value.toPlainString());
     }
 
+    /**
+     * 写入日期/时间单元格。
+     *
+     * <p>数值必须是 Excel 日期序列号（1900 日期系统），不能用 epoch millis：Excel 与 POI 都会把
+     * 单元格数值直接当序列号解释，写 epoch millis 会显示成天文数字年份。序列号同时保证日期列可排序，
+     * 配合 {@code X年X月X日} 格式码即得到展示口径。</p>
+     */
     private void writeDateTime(Cell cell, LocalDateTime value, CellStyle dateStyle, CellStyle dateTimeStyle) {
         boolean dateOnly = value.toLocalTime().equals(LocalTime.MIDNIGHT);
         cell.setCellStyle(dateOnly ? dateStyle : dateTimeStyle);
-        cell.setCellValue(value.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
+        cell.setCellValue(DateUtil.getExcelDate(value));
         cell.setCellStyle(dateOnly ? dateStyle : dateTimeStyle);
     }
 
@@ -217,14 +226,13 @@ public class ExcelExportService {
         } else if (value instanceof Boolean b) {
             cell.setCellValue(b ? "是" : "否");
         } else if (value instanceof LocalDateTime dt) {
-            cell.setCellStyle(dateStyle);
-            cell.setCellValue(dt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
-            cell.setCellStyle(dateStyle);
+            // DTO 路径只有日期样式：时间值同样写 Excel 序列号，保留可排序性并让日期样式生效
+            writeDateTime(cell, dt, dateStyle, dateStyle);
         } else if (value instanceof LocalDate d) {
-            cell.setCellValue(d.toString());
+            // 真日期单元格：写 Excel 序列号而非 ISO 文本，日期样式才生效且可排序
+            writeDateTime(cell, d.atStartOfDay(), dateStyle, dateStyle);
         } else if (value instanceof Instant inst) {
-            cell.setCellStyle(dateStyle);
-            cell.setCellValue(inst.toEpochMilli());
+            writeDateTime(cell, LocalDateTime.ofInstant(inst, ZoneId.systemDefault()), dateStyle, dateStyle);
         } else {
             cell.setCellValue(value.toString());
         }
