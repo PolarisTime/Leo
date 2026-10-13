@@ -87,6 +87,18 @@ class SalesOrderAuditedPricingServiceTest {
                 new BigDecimal("12.500"), unitPrice, null);
     }
 
+    /** 交付核定场景：显式指定送货日期与报单日期。 */
+    private SalesOrderRequest requestWithDates(String status,
+                                               LocalDate deliveryDate,
+                                               LocalDate orderDate,
+                                               List<SalesOrderItemRequest> items) {
+        return new SalesOrderRequest(
+                "SO001", "IB001", "PO001", "CUST001", 10L, "客户A", 20L, "项目A", null, null,
+                deliveryDate, orderDate, "销售员A", status, null,
+                null, null, null, null, null, null, null,
+                items, List.of(), false);
+    }
+
     private SalesOrderRequest request(String status, String orderNo, List<SalesOrderItemRequest> items) {
         return new SalesOrderRequest(
                 orderNo, "IB001", "PO001", "CUST001", 10L, "客户A", 20L, "项目A", null, null,
@@ -109,6 +121,25 @@ class SalesOrderAuditedPricingServiceTest {
         SalesOrderRequest request = request(StatusConstants.DELIVERY_VERIFICATION, "SO001", List.of(itemRequest(1L, null)));
 
         assertThat(service.isAuditedPricingUpdate(entity, request)).isTrue();
+    }
+
+    @Test
+    void matchesAuditedPricingUpdate_shouldAllowOrderDateChangeInDeliveryVerification() {
+        SalesOrder entity = salesOrder(StatusConstants.DELIVERY_VERIFICATION, List.of(salesOrderItem(1L, 1)));
+        entity.setDeliveryDate(LocalDate.of(2026, 8, 1));
+        entity.setOrderDate(LocalDate.of(2026, 7, 30));
+        SalesOrderRequest request = requestWithDates(
+                StatusConstants.DELIVERY_VERIFICATION,
+                LocalDate.of(2026, 8, 6),
+                LocalDate.of(2026, 7, 29),
+                List.of(itemRequest(1L, null)));
+
+        assertThat(service.matchesAuditedPricingUpdate(entity, request)).isTrue();
+
+        service.applyAuditedPricingUpdate(entity, request);
+
+        assertThat(entity.getOrderDate()).isEqualTo(LocalDate.of(2026, 7, 29));
+        assertThat(entity.getDeliveryDate()).isEqualTo(LocalDate.of(2026, 8, 6));
     }
 
     @Test
