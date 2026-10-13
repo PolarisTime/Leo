@@ -1,3 +1,10 @@
+## [12.6.1](https://github.com/PolarisTime/Leo/compare/v12.6.0...v12.6.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **sales-order:** 列表响应不得清空报单日期 ([1feaa03](https://github.com/PolarisTime/Leo/commit/1feaa031ddf2dee348d52129c37f8757140ab22e))
+
 # [12.6.0](https://github.com/PolarisTime/Leo/compare/v12.5.0...v12.6.0) (2026-10-12)
 
 
