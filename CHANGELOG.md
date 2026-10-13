@@ -1,3 +1,10 @@
+## [12.6.2](https://github.com/PolarisTime/Leo/compare/v12.6.1...v12.6.2) (2026-10-13)
+
+
+### Bug Fixes
+
+* **logistics:** 物流单选择销售订单候选响应补回报单日期 ([8f965d0](https://github.com/PolarisTime/Leo/commit/8f965d042022d2e1a74000af1df765b6feb79f42))
+
 ## [12.6.1](https://github.com/PolarisTime/Leo/compare/v12.6.0...v12.6.1) (2026-10-13)
 
 
