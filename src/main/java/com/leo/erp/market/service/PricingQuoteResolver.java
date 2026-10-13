@@ -26,7 +26,12 @@ import java.util.List;
  *       （货已按当日行情议定，往前找最近一次报价才是结算惯例）；</li>
  *   <li>{@code ORDER}：报单日期之后第 X 个交易日（X=0 表示报单日当天）；
  *       报单日本身休市时，{@code settlePrevOnClosed=true} 按前一个交易日结算，
- *       否则向后取第 max(X,1) 个交易日（当天没有行情，只能向后）；</li>
+ *       否则向后取第 max(X,1) 个交易日（当天没有行情，只能向后）。
+ *       <b>向后取是逐日顺延的</b>：后面的日子仍是休市/无行情，就继续顺延到下一天，
+ *       直到取到第 X 个有行情的交易日；若顺延到可用行情末端仍不足 X 个交易日
+ *       （通常是目标交易日的行情尚未发布），<b>不再报错</b>，返回
+ *       {@code quoteDate=null}、{@code quoteAvailable=false} 的「行情尚未发布」结果，
+ *       由界面提示稍后重试或手工指定取价日期；</li>
  *   <li>{@code MANUAL}：弹窗手工指定日期，<b>不做自动替换</b>，只回传建议日期与可用时段。</li>
  * </ul>
  *
@@ -81,7 +86,10 @@ public class PricingQuoteResolver {
         LocalDate anchor = anchorDate(basis, cmd);
         TradingCalendar calendar = loadCalendar(anchor, project);
         ResolvedDate resolvedDate = resolveDate(basis, calendar, cmd, offsetDays, settlePrevOnClosed);
-        ResolvedPeriod resolvedPeriod = resolvePeriod(periodPolicy, requestedPeriod, calendar, resolvedDate);
+        // 行情尚未发布时没有实际取价日, 也就没有可用时段(不落地空壳日期去取价)
+        ResolvedPeriod resolvedPeriod = resolvedDate.pending()
+                ? new ResolvedPeriod(null, null, List.of())
+                : resolvePeriod(periodPolicy, requestedPeriod, calendar, resolvedDate);
 
         return new PricingQuoteResolutionResponse(
                 projectId,
@@ -173,37 +181,47 @@ public class PricingQuoteResolver {
                         "送货日期 " + deliveryDate + " 无行情(休市或未发布), 按最近的前一个交易日结算"));
     }
 
-    /** 报单日期：报单日之后第 X 个交易日；报单日休市时按开关决定向前结算还是向后取。 */
+    /**
+     * 报单日期：报单日之后第 X 个交易日；报单日休市时按开关决定向前结算还是向后取。
+     *
+     * <p>向后取一律逐日顺延：休市/无行情的日子不计数、继续往后推；推到可用行情末端仍不足
+     * X 个交易日时返回「行情尚未发布」结果，而不是报错。</p>
+     */
     private ResolvedDate resolveOrder(TradingCalendar calendar, LocalDate orderDate,
                                       int offsetDays, boolean settlePrevOnClosed) {
         if (calendar.isTradingDay(orderDate)) {
-            LocalDate quoteDate = offsetDays == 0
-                    ? orderDate
-                    : calendar.after(orderDate, offsetDays)
-                            .orElseThrow(() -> noTradingDay("报单日期 " + orderDate + " 之后第 " + offsetDays
-                                    + " 个交易日超出了可用行情范围", calendar));
-            return ResolvedDate.of(orderDate, quoteDate, null, null);
+            if (offsetDays == 0) {
+                return ResolvedDate.of(orderDate, orderDate, null, null);
+            }
+            return calendar.after(orderDate, offsetDays)
+                    .map(quoteDate -> ResolvedDate.of(orderDate, quoteDate, null, null))
+                    .orElseGet(() -> ResolvedDate.pending(orderDate, unpublished(
+                            "报单日期 " + orderDate + " 之后第 " + offsetDays + " 个交易日", calendar)));
         }
         if (settlePrevOnClosed) {
             LocalDate base = calendar.previous(orderDate)
                     .orElseThrow(() -> noTradingDay("报单日期 " + orderDate
                             + " 无行情, 且在可用行情范围内找不到之前的交易日", calendar));
-            LocalDate quoteDate = offsetDays == 0
-                    ? base
-                    : calendar.after(base, offsetDays)
-                            .orElseThrow(() -> noTradingDay("报单日期 " + orderDate + " 的前一个交易日 " + base
-                                    + " 之后第 " + offsetDays + " 个交易日超出了可用行情范围", calendar));
-            return ResolvedDate.of(orderDate, quoteDate, null,
-                    Fallback.of(orderDate.toString(), quoteDate.toString(),
-                            "报单日期 " + orderDate + " 为休市, 按前一个交易日结算"));
+            if (offsetDays == 0) {
+                return ResolvedDate.of(orderDate, base, null,
+                        Fallback.of(orderDate.toString(), base.toString(),
+                                "报单日期 " + orderDate + " 为休市, 按前一个交易日结算"));
+            }
+            return calendar.after(base, offsetDays)
+                    .map(quoteDate -> ResolvedDate.of(orderDate, quoteDate, null,
+                            Fallback.of(orderDate.toString(), quoteDate.toString(),
+                                    "报单日期 " + orderDate + " 为休市, 按前一个交易日结算")))
+                    .orElseGet(() -> ResolvedDate.pending(orderDate, unpublished(
+                            "报单日期 " + orderDate + " 的前一个交易日 " + base + " 之后第 "
+                                    + offsetDays + " 个交易日", calendar)));
         }
         int effectiveOffset = Math.max(offsetDays, 1);
-        LocalDate quoteDate = calendar.after(orderDate, effectiveOffset)
-                .orElseThrow(() -> noTradingDay("报单日期 " + orderDate + " 为休市, 其后第 " + effectiveOffset
-                        + " 个交易日超出了可用行情范围", calendar));
-        return ResolvedDate.of(orderDate, quoteDate, null,
-                Fallback.of(orderDate.toString(), quoteDate.toString(),
-                        "报单日期 " + orderDate + " 为休市, 按之后第 " + effectiveOffset + " 个交易日取价"));
+        return calendar.after(orderDate, effectiveOffset)
+                .map(quoteDate -> ResolvedDate.of(orderDate, quoteDate, null,
+                        Fallback.of(orderDate.toString(), quoteDate.toString(),
+                                "报单日期 " + orderDate + " 为休市, 按之后第 " + effectiveOffset + " 个交易日取价")))
+                .orElseGet(() -> ResolvedDate.pending(orderDate, unpublished(
+                        "报单日期 " + orderDate + " 为休市, 其后第 " + effectiveOffset + " 个交易日", calendar)));
     }
 
     /** 手工指定：不自动替换，只给建议日期与可用时段。 */
@@ -240,6 +258,9 @@ public class PricingQuoteResolver {
 
     private String explanation(Basis basis, ResolvedDate resolvedDate, ResolvedPeriod resolvedPeriod,
                                int offsetDays, boolean settlePrevOnClosed) {
+        if (resolvedDate.pending()) {
+            return resolvedDate.pendingReason();
+        }
         String datePart = switch (basis) {
             case DELIVERY -> resolvedDate.fallback() == null
                     ? "送货日期 " + resolvedDate.targetDate() + " 为交易日, 直接取当日行情"
@@ -265,11 +286,27 @@ public class PricingQuoteResolver {
         return datePart;
     }
 
+    /**
+     * 目标交易日的行情尚未发布：逐日顺延到可用行情末端也不足所需的交易日数。
+     *
+     * <p>不猜日期、也不阻断：返回 {@code quoteDate=null}、{@code quoteAvailable=false} 的可识别结果，
+     * 界面据此提示稍后重试或手工指定；行情发布后重新解析即可自动取到价。</p>
+     */
+    private String unpublished(String target, TradingCalendar calendar) {
+        return target + "的行情尚未发布(" + window(calendar) + "), 请稍后重试或手工指定取价日期";
+    }
+
     private BusinessException noTradingDay(String message, TradingCalendar calendar) {
-        String window = calendar.earliest()
-                .map(earliest -> "可用行情范围为 " + earliest + " 至 " + calendar.latest())
+        return new BusinessException(ErrorCode.VALIDATION_ERROR,
+                message + "; " + window(calendar) + ", 请手工指定取价日期");
+    }
+
+    /** 可用行情范围的中文描述（按有行情的交易日计，不是查询窗口的边界）。 */
+    private String window(TradingCalendar calendar) {
+        return calendar.earliest()
+                .flatMap(earliest -> calendar.latest()
+                        .map(latest -> "可用行情范围为 " + earliest + " 至 " + latest))
                 .orElse("可用行情范围为空");
-        return new BusinessException(ErrorCode.VALIDATION_ERROR, message + "; " + window + ", 请手工指定取价日期");
     }
 
     private static String trimToNull(String value) {
@@ -295,13 +332,26 @@ public class PricingQuoteResolver {
         }
     }
 
-    /** 日期解析中间结果。 */
+    /**
+     * 日期解析中间结果。
+     *
+     * @param pendingReason 非空表示目标交易日的行情尚未发布：没有实际取价日，也不会有可用时段
+     */
     private record ResolvedDate(LocalDate targetDate, LocalDate quoteDate,
-                                LocalDate suggestedDate, Fallback fallback) {
+                                LocalDate suggestedDate, Fallback fallback, String pendingReason) {
 
         static ResolvedDate of(LocalDate targetDate, LocalDate quoteDate,
                                LocalDate suggestedDate, Fallback fallback) {
-            return new ResolvedDate(targetDate, quoteDate, suggestedDate, fallback);
+            return new ResolvedDate(targetDate, quoteDate, suggestedDate, fallback, null);
+        }
+
+        /** 行情尚未发布：不报错、不换日，交给界面提示「稍后重试或手工指定」。 */
+        static ResolvedDate pending(LocalDate targetDate, String pendingReason) {
+            return new ResolvedDate(targetDate, null, null, null, pendingReason);
+        }
+
+        boolean pending() {
+            return pendingReason != null;
         }
     }
 

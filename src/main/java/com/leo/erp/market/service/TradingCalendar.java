@@ -19,6 +19,10 @@ import java.util.Optional;
  *
  * <p>判定只走行情日历（其休市结论由同步/补数过程落库），前端与业务代码都不要自行推算
  * 「周末无行情」——法定节假日与调休并不服从这个直觉。</p>
+ *
+ * <p>向后取价一律逐日顺延：{@link #next(LocalDate)} / {@link #after(LocalDate, int)} 只把
+ * 有行情的日期当作交易日计数，中间的休市/无行情日照常跳过；顺延到日历末端仍不足所需个数时
+ * 返回空，调用方据此给出「行情尚未发布」而不是报错。</p>
  */
 final class TradingCalendar {
 
@@ -74,22 +78,40 @@ final class TradingCalendar {
         return Optional.ofNullable(found);
     }
 
-    /** 严格晚于给定日期的第 {@code n} 个交易日；{@code n < 1} 视为 1。 */
+    /** 严格晚于给定日期的最近交易日（= 从次日开始逐日向后顺延，跳过休市/无行情日）。 */
+    Optional<LocalDate> next(LocalDate date) {
+        if (date == null) {
+            return Optional.empty();
+        }
+        for (LocalDate day : tradingDays) {
+            if (day.isAfter(date)) {
+                return Optional.of(day);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * 严格晚于给定日期的第 {@code n} 个交易日；{@code n < 1} 视为 1。
+     *
+     * <p>逐日向后顺延：后面仍是休市/无行情（不进入交易日集合）就继续顺延到下一天，直到凑满
+     * {@code n} 个；顺延到日历末端仍不足时返回空 —— 由调用方判定为「行情尚未发布」，不再当作
+     * 参数错误。</p>
+     */
     Optional<LocalDate> after(LocalDate date, int n) {
         if (date == null) {
             return Optional.empty();
         }
         int remaining = Math.max(n, 1);
-        for (LocalDate day : tradingDays) {
-            if (!day.isAfter(date)) {
-                continue;
+        Optional<LocalDate> cursor = Optional.of(date);
+        while (remaining > 0) {
+            cursor = cursor.flatMap(this::next);
+            if (cursor.isEmpty()) {
+                return Optional.empty();
             }
             remaining--;
-            if (remaining == 0) {
-                return Optional.of(day);
-            }
         }
-        return Optional.empty();
+        return cursor;
     }
 
     /** 该日可用时段（交易日历内；非交易日返回空列表）。 */

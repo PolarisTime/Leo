@@ -33,6 +33,10 @@ import static org.mockito.Mockito.when;
  * <p>日历用桩数据构造：{@code 2026-03-02} 起那一周里周一/周三/周五/下周一/下周二有行情，
  * 周二、周四、周六、周日休市 —— 用来验证「只数交易日，跳过休市与周末」这件事由行情日历口径
  * 决定，而不是由代码推算周末。</p>
+ *
+ * <p>向后取价还会验证「逐日顺延」：后面仍是休市/无行情就继续顺延到下一天；顺延到已发布行情
+ * 末端仍不足第 X 个交易日时返回 {@code quoteDate=null}、{@code quoteAvailable=false} 的
+ * 「行情尚未发布」结果，而不是抛校验错误。</p>
  */
 @ExtendWith(MockitoExtension.class)
 class PricingQuoteResolverTest {
@@ -187,29 +191,130 @@ class PricingQuoteResolverTest {
     }
 
     @Test
-    void 报单日之后的目标交易日超出日历窗口时抛出校验错误() {
-        stubProject(orderProject(30, false));
-        stubMarket();
+    void 报单日为最新行情日时次日行情尚未发布不以错误中断() {
+        // 截图场景: 报单日 2026-10-13 正好是可用行情的最后一天, 次日行情还没发布。
+        PricingQuoteResolutionResponse response = resolve(orderProject(1, false), order(NEXT_TUE), week());
 
-        assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, order(NEXT_TUE)))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
-                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
-                .hasMessageContaining("超出了可用行情范围")
-                .hasMessageContaining("请手工指定取价日期");
+        assertThat(response.basis()).isEqualTo("ORDER");
+        assertThat(response.offsetDays()).isEqualTo(1);
+        assertThat(response.targetDate()).isEqualTo(NEXT_TUE);
+        assertThat(response.targetIsTradingDay()).isTrue();
+        assertThat(response.quoteDate()).as("行情尚未发布时没有实际取价日").isNull();
+        assertThat(response.quoteAvailable()).isFalse();
+        assertThat(response.period()).isNull();
+        assertThat(response.availablePeriods()).isEmpty();
+        assertThat(response.dateFallback()).as("没有换日, 不返回 Fallback").isNull();
+        assertThat(response.explanation())
+                .contains("报单日期 " + NEXT_TUE + " 之后第 1 个交易日的行情尚未发布")
+                .contains("可用行情范围为 " + MON + " 至 " + NEXT_TUE)
+                .contains("请稍后重试或手工指定取价日期")
+                .doesNotContain("Optional[");
     }
 
     @Test
-    void 报单日休市向后取价超出日历窗口时抛出校验错误() {
+    void 偏移交易日数超出已发布范围时返回行情尚未发布() {
+        stubProject(orderProject(30, false));
+        stubMarket();
+        when(articleQueryService.calendar(any(), any(), any(), any())).thenReturn(week());
+
+        PricingQuoteResolutionResponse response = resolver().resolve(PROJECT_ID, order(NEXT_TUE));
+
+        assertThat(response.offsetDays()).isEqualTo(30);
+        assertThat(response.quoteDate()).isNull();
+        assertThat(response.quoteAvailable()).isFalse();
+        assertThat(response.explanation())
+                .contains("之后第 30 个交易日的行情尚未发布")
+                .contains("请稍后重试或手工指定取价日期");
+    }
+
+    @Test
+    void 偏移交易日数正好取到最后一个已发布行情日时正常取价() {
+        // 周一之后有行情的是 周三/周五/下周一/下周二: 第 4 个正好是日历末端, 不算未发布。
+        PricingQuoteResolutionResponse response = resolve(orderProject(4, false), order(MON), week());
+
+        assertThat(response.quoteDate()).isEqualTo(NEXT_TUE);
+        assertThat(response.quoteAvailable()).isTrue();
+        assertThat(response.period()).isEqualTo("上午");
+        assertThat(response.explanation()).contains("取之后第 4 个交易日");
+    }
+
+    @Test
+    void 报单日之后连续休市时逐日顺延到下一个有行情的交易日() {
+        stubProject(orderProject(1, false));
+        stubMarket();
+        when(articleQueryService.calendar(any(), any(), any(), any())).thenReturn(holidayThenOpen());
+
+        PricingQuoteResolutionResponse response = resolver().resolve(PROJECT_ID, order(MON));
+
+        // 周二/周三/周四连续休市(长假): 继续顺延到周五, 而不是停在第一天。
+        assertThat(response.quoteDate()).isEqualTo(FRI);
+        assertThat(response.quoteAvailable()).isTrue();
+        assertThat(response.explanation()).contains("取之后第 1 个交易日").contains(FRI.toString());
+    }
+
+    @Test
+    void 连续休市顺延仍不足偏移交易日数时返回行情尚未发布() {
+        stubProject(orderProject(4, false));
+        stubMarket();
+        when(articleQueryService.calendar(any(), any(), any(), any())).thenReturn(holidayThenOpen());
+
+        PricingQuoteResolutionResponse response = resolver().resolve(PROJECT_ID, order(MON));
+
+        assertThat(response.quoteDate()).isNull();
+        assertThat(response.quoteAvailable()).isFalse();
+        assertThat(response.explanation()).contains("之后第 4 个交易日的行情尚未发布");
+    }
+
+    @Test
+    void 行情日历为空时报单日取价返回行情尚未发布() {
+        stubProject(orderProject(1, false));
+        stubMarket();
+        when(articleQueryService.calendar(any(), any(), any(), any())).thenReturn(List.of());
+
+        PricingQuoteResolutionResponse response = resolver().resolve(PROJECT_ID, order(MON));
+
+        assertThat(response.targetDate()).isEqualTo(MON);
+        assertThat(response.targetIsTradingDay()).isFalse();
+        assertThat(response.quoteDate()).isNull();
+        assertThat(response.quoteAvailable()).isFalse();
+        assertThat(response.explanation())
+                .contains("可用行情范围为空")
+                .contains("请稍后重试或手工指定取价日期");
+    }
+
+    @Test
+    void 报单日休市向后取价无已发布行情时返回行情尚未发布() {
         stubProject(orderProject(5, false));
         when(mysteelProperties.getMarket()).thenReturn(MARKET);
         when(articleQueryService.calendar(any(), any(), any(), any())).thenReturn(List.of(open(MON, "上午")));
 
-        assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, order(MON.plusDays(1))))
+        PricingQuoteResolutionResponse response = resolver().resolve(PROJECT_ID, order(MON.plusDays(1)));
+
+        assertThat(response.targetDate()).isEqualTo(TUE);
+        assertThat(response.targetIsTradingDay()).isFalse();
+        assertThat(response.quoteDate()).isNull();
+        assertThat(response.quoteAvailable()).isFalse();
+        assertThat(response.dateFallback()).as("未发布时没有实际换日").isNull();
+        assertThat(response.explanation())
+                .contains("报单日期 " + TUE + " 为休市")
+                .contains("其后第 5 个交易日")
+                .contains("行情尚未发布")
+                .contains("请稍后重试或手工指定取价日期");
+    }
+
+    @Test
+    void 报单日休市按前一交易日结算但之前没有交易日时仍抛出校验错误() {
+        stubProject(orderProject(0, true));
+        stubMarket();
+        when(articleQueryService.calendar(any(), any(), any(), any()))
+                .thenReturn(List.of(closed(TUE), open(NEXT_MON, "上午")));
+
+        assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, order(TUE)))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
-                .hasMessageContaining("超出了可用行情范围");
+                .hasMessageContaining("找不到之前的交易日")
+                .hasMessageContaining(NEXT_MON.toString());
     }
 
     // ==================== MANUAL ====================
@@ -522,6 +627,18 @@ class PricingQuoteResolverTest {
                 closed(SAT),
                 closed(SUN),
                 open(NEXT_MON, "上午", "中午", "下午"),
+                open(NEXT_TUE, "上午"));
+    }
+
+    /** 长假日历：周一有行情，周二/周三/周四连续休市，周五与下周一/下周二有行情。 */
+    private static List<SteelQuoteCalendarResponse> holidayThenOpen() {
+        return List.of(
+                open(MON, "上午"),
+                closed(TUE),
+                closed(WED),
+                closed(THU),
+                open(FRI, "上午"),
+                open(NEXT_MON, "上午"),
                 open(NEXT_TUE, "上午"));
     }
 

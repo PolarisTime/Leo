@@ -41,7 +41,9 @@ public class V2ProjectPricingQuoteResolutionController {
 
     @Operation(summary = "解析项目取价基准",
             description = "按项目配置(或调用方覆盖)与单据日期解析实际取价日与时段; 休市/缺时段会回退并在响应中说明, "
-                    + "手工基准不自动替换只给建议日期")
+                    + "手工基准不自动替换只给建议日期; 报单日基准向后逐日顺延(跳过休市/无行情), "
+                    + "顺延到已发布行情末端仍不足第 N 个交易日时返回 200 且 quoteAvailable=false(行情尚未发布), "
+                    + "由界面提示稍后重试或手工指定取价日期")
     @GetMapping
     @RequirePermission(PermissionCodes.MATERIAL_PRICE_MATCHES_READ)
     public PricingQuoteResolutionResponse resolve(

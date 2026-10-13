@@ -14,7 +14,9 @@ import java.util.Optional;
  * <ul>
  *   <li>{@link Basis#DELIVERY}：送货日期当天；该日无行情时按最近的前一个交易日结算；</li>
  *   <li>{@link Basis#ORDER}：报单日期之后第 {@code offsetDays} 个<b>交易日</b>（0 表示报单日当天）；
- *       报单日本身是休市日时，由 {@code settlePrevOnClosed} 决定按前一个交易日结算还是向后取；</li>
+ *       报单日本身是休市日时，由 {@code settlePrevOnClosed} 决定按前一个交易日结算还是向后取；
+ *       向后取逐日顺延（休市/无行情就继续顺延到下一天），顺延到可用行情末端仍不足时返回
+ *       {@code quoteAvailable=false} 的「行情尚未发布」结果，不猜日期也不报错；</li>
  *   <li>{@link Basis#MANUAL}：交付核定弹窗每次手工指定日期（不做自动回退）。</li>
  * </ul>
  *
