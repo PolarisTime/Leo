@@ -17,6 +17,8 @@ public record FreightBillSalesOrderCandidateResponse(
         Long settlementCompanyId,
         String settlementCompanyName,
         LocalDate deliveryDate,
+        /** 报单日期: 前端 salesOrderRecordShape 必填字段。 */
+        LocalDate orderDate,
         String salesName,
         BigDecimal totalWeight,
         BigDecimal totalAmount,

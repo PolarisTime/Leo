@@ -39,6 +39,7 @@ public class FreightBillSalesOrderCandidateResponseAssembler {
                 snapshot.settlementCompanyId(),
                 snapshot.settlementCompanyName(),
                 snapshot.deliveryDate(),
+                snapshot.orderDate(),
                 snapshot.salesName(),
                 snapshot.totalWeight(),
                 snapshot.totalAmount(),

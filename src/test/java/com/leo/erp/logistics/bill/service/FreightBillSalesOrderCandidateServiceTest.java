@@ -43,7 +43,8 @@ class FreightBillSalesOrderCandidateServiceTest {
     private SalesOrderSourceSnapshot snapshot(Long id, String orderNo) {
         return new SalesOrderSourceSnapshot(
                 id, orderNo, null, null, "CUST001", 10L, "客户A", 20L, "项目A", 30L, "结算公司A",
-                LocalDate.of(2026, 8, 1), "销售员A", new BigDecimal("100"), new BigDecimal("5000"),
+                LocalDate.of(2026, 8, 1), LocalDate.of(2026, 7, 30), "销售员A",
+                new BigDecimal("100"), new BigDecimal("5000"),
                 "SALES_COMPLETED", false, null, List.of());
     }
 

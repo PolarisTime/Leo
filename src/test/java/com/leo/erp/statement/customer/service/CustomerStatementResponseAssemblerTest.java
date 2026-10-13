@@ -46,7 +46,7 @@ class CustomerStatementResponseAssemblerTest {
         );
         SalesOrderSourceSnapshot sourceOrder = new SalesOrderSourceSnapshot(
                 100L, "SO-001", null, null, null, 20L, "客户A", null, "项目A",
-                null, null, LocalDate.of(2026, 8, 15), "销售", BigDecimal.ONE,
+                null, null, LocalDate.of(2026, 8, 15), LocalDate.of(2026, 8, 14), "销售", BigDecimal.ONE,
                 BigDecimal.ONE, "完成销售", false, null, List.of(sourceItem)
         );
         when(sourceQuery.findBySourceItemIds(any())).thenReturn(List.of(sourceOrder));

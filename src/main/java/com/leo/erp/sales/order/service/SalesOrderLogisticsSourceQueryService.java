@@ -84,6 +84,7 @@ public class SalesOrderLogisticsSourceQueryService implements SalesOrderLogistic
                 order.getSettlementCompanyId(),
                 order.getSettlementCompanyName(),
                 order.getDeliveryDate(),
+                order.getOrderDate(),
                 order.getSalesName(),
                 order.getTotalWeight(),
                 order.getTotalAmount(),

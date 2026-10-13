@@ -17,6 +17,8 @@ public record SalesOrderSourceSnapshot(
         Long settlementCompanyId,
         String settlementCompanyName,
         LocalDate deliveryDate,
+        /** 报单日期: 前端销售订单形状必填, 物流单候选/导入候选都必须回传。 */
+        LocalDate orderDate,
         String salesName,
         BigDecimal totalWeight,
         BigDecimal totalAmount,
