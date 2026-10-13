@@ -87,8 +87,8 @@ public record SalesOrderResponse(
                                                   boolean referencedBySalesOutbound) {
         return new SalesOrderResponse(
                 id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
-                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, totalWeight,
-                totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
+                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, orderDate, salesName,
+                totalWeight, totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
                 priceFloatValue, priceTargetDate, priceQuoteDate, priceQuotePeriod, priceDateBasis,
                 priceDateOffsetDays, priceClosedSettlePrev, items, chargeItems, referencedByFreightBill,
                 referencedBySalesOutbound, deliveredQuantity, returnedQuantity, deliveredNetQuantity
@@ -100,8 +100,8 @@ public record SalesOrderResponse(
                                                      Integer deliveredNetQuantity) {
         return new SalesOrderResponse(
                 id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
-                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, totalWeight,
-                totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
+                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, orderDate, salesName,
+                totalWeight, totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
                 priceFloatValue, priceTargetDate, priceQuoteDate, priceQuotePeriod, priceDateBasis,
                 priceDateOffsetDays, priceClosedSettlePrev, items, chargeItems, referencedByFreightBill,
                 referencedBySalesOutbound, deliveredQuantity, returnedQuantity, deliveredNetQuantity
