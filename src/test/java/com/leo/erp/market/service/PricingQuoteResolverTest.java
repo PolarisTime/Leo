@@ -212,6 +212,25 @@ class PricingQuoteResolverTest {
     }
 
     @Test
+    void 截图场景_报单日2026_10_13之后第1个交易日的行情尚未发布() {
+        LocalDate earliest = LocalDate.of(2026, 9, 2);
+        LocalDate latest = LocalDate.of(2026, 10, 13);
+
+        stubProject(orderProject(1, false));
+        stubMarket();
+        when(articleQueryService.calendar(any(), any(), any(), any()))
+                .thenReturn(List.of(open(earliest, "上午"), open(latest, "上午")));
+
+        PricingQuoteResolutionResponse response = resolver().resolve(PROJECT_ID, order(latest));
+
+        assertThat(response.targetDate()).isEqualTo(latest);
+        assertThat(response.quoteDate()).isNull();
+        assertThat(response.quoteAvailable()).isFalse();
+        assertThat(response.explanation()).isEqualTo("报单日期 2026-10-13 之后第 1 个交易日的行情尚未发布"
+                + "(可用行情范围为 2026-09-02 至 2026-10-13), 请稍后重试或手工指定取价日期");
+    }
+
+    @Test
     void 偏移交易日数超出已发布范围时返回行情尚未发布() {
         stubProject(orderProject(30, false));
         stubMarket();
