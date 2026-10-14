@@ -2,11 +2,11 @@ package com.leo.erp.logistics.bill.service;
 
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
-import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceOrder;
+import com.leo.erp.logistics.bill.domain.enums.FreightSettlementMode;
 import com.leo.erp.logistics.bill.repository.FreightBillItemRepository;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
@@ -75,9 +75,32 @@ public class FreightBillApplyService {
         }
         entity.getItems().sort(java.util.Comparator.comparing(FreightBillItem::getLineNo));
         entity.setTotalWeight(TradeItemCalculator.scaleWeightTon(totalWeight));
-        entity.setTotalFreight(totalWeight.multiply(request.unitPrice())
-                .setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING));
+        entity.setTotalFreight(resolveSettlementAmount(entity, request, totalWeight));
         syncSourceOrders(entity, sourceSnapshot.orders(), nextId);
+    }
+
+    /**
+     * 本次结算金额: {@link FreightSettlementMode#FIXED} 取固定运费金额, 否则按吨位价 = 单价 × 吨位
+     * (与历史口径逐位一致, 历史单据数值不变)。
+     *
+     * <p>结算方式与固定运费金额读<b>实体</b>上的值: 二者由
+     * {@code FreightBillService#applySettlementTerms} 唯一一处按「请求未携带则保持原值」的语义校验后
+     * 先行落定, 直接读请求会漏掉"编辑既有固定运费单据时省略该字段"这种继承场景。单价仍取请求值
+     * (本方法就是把请求应用到实体, 服务层此前已把同一个值写入实体)。</p>
+     *
+     * <p>这里仍兜底拦住「FIXED 但金额缺失/非正」: 否则会写出 NULL 结算额, 到数据库才以 NOT NULL
+     * 违约炸出来, 不如在这里给可读消息。</p>
+     */
+    private BigDecimal resolveSettlementAmount(FreightBill entity, FreightBillRequest request,
+                                               BigDecimal totalWeight) {
+        if (entity.getSettlementMode() == FreightSettlementMode.FIXED) {
+            BigDecimal fixedAmount = entity.getFixedFreightAmount();
+            if (fixedAmount == null || fixedAmount.signum() <= 0) {
+                throw business("固定运费结算必须填写大于0的固定运费金额");
+            }
+            return TradeItemCalculator.scaleAmount(fixedAmount);
+        }
+        return TradeItemCalculator.calculateAmount(totalWeight, request.unitPrice());
     }
 
     private int resolveQuantity(FreightBillItemRequest request,

@@ -4,6 +4,7 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
+import com.leo.erp.logistics.bill.domain.enums.FreightSettlementMode;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceOrder;
 import com.leo.erp.logistics.bill.repository.FreightBillItemRepository;
 import com.leo.erp.logistics.bill.repository.FreightBillItemRepository.FreightBillItemOccupancySummary;
@@ -91,7 +92,8 @@ class FreightBillApplyServiceTest {
 
     private FreightBillRequest request(List<FreightBillItemRequest> items) {
         return new FreightBillRequest("FB001", 1L, "C001", "承运商A", 30L, "结算公司A", null, null,
-                LocalDate.of(2026, 8, 1), new BigDecimal("100"), "DRAFT", null, items, List.of(), false);
+                LocalDate.of(2026, 8, 1), new BigDecimal("100"), null, null,
+                "DRAFT", null, items, List.of(), false);
     }
 
     private void stubSources(SalesOrderSourceSnapshot order) {
@@ -158,6 +160,52 @@ class FreightBillApplyServiceTest {
         assertThat(entity.getItems().get(0).getQuantity()).isEqualTo(4);
         assertThat(entity.getItems().get(0).getWeightTon()).isEqualByComparingTo("4.800");
         assertThat(entity.getTotalFreight()).isEqualByComparingTo("480.00");
+    }
+
+    /** 结算方式 BY_TONNAGE(历史默认): 结算额 = 单价 × 吨位。 */
+    @Test
+    void applyItems_byTonnageMode_computesSettlementAmountFromUnitPriceAndWeight() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
+        FreightBill entity = new FreightBill();
+        entity.setSettlementMode(FreightSettlementMode.BY_TONNAGE);
+
+        service.applyItems(entity, request(List.of(itemReq(null, 11L))), () -> 100L);
+
+        assertThat(entity.getTotalWeight()).isEqualByComparingTo("12.500");
+        assertThat(entity.getTotalFreight()).isEqualByComparingTo("1250.00"); // 12.5 × 100
+        assertThat(entity.getFixedFreightAmount()).isNull();
+    }
+
+    /** FIXED: 结算额取固定运费金额, 吨位与单价照旧计算/存储(其它模块与对账单还在读)。 */
+    @Test
+    void applyItems_fixedMode_usesFixedAmountAndKeepsWeightAndUnitPrice() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
+        FreightBill entity = new FreightBill();
+        entity.setSettlementMode(FreightSettlementMode.FIXED);
+        entity.setFixedFreightAmount(new BigDecimal("1800.55"));
+
+        service.applyItems(entity, request(List.of(itemReq(null, 11L))), () -> 100L);
+
+        // 按吨位本来是 12.5 × 100 = 1250.00, 但结算额取固定运费
+        assertThat(entity.getTotalWeight()).isEqualByComparingTo("12.500");
+        assertThat(entity.getTotalFreight()).isEqualByComparingTo("1800.55");
+        assertThat(entity.getSettlementMode()).isEqualTo(FreightSettlementMode.FIXED);
+    }
+
+    /**
+     * FIXED 但实体上没有有效的固定运费金额(绕过服务层直接调用): 兜底拒绝,
+     * 不得写出 NULL 结算额再到数据库以 NOT NULL 违约炸出。
+     */
+    @Test
+    void applyItems_fixedModeWithoutPositiveAmount_isRejected() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
+        FreightBill entity = new FreightBill();
+        entity.setSettlementMode(FreightSettlementMode.FIXED);
+
+        assertThatThrownBy(() -> service.applyItems(entity, request(List.of(itemReq(null, 11L))), () -> 100L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("固定运费结算必须填写大于0");
+        assertThat(entity.getTotalFreight()).isNull();
     }
 
     @Test

@@ -5,10 +5,12 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceOrder;
+import com.leo.erp.logistics.bill.domain.enums.FreightSettlementMode;
 import com.leo.erp.logistics.bill.mapper.FreightBillMapper;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
@@ -90,9 +92,16 @@ class FreightBillServiceTest {
     private FreightBillService service;
 
     private FreightBillRequest request(String billNo, Long carrierId, String status) {
+        return request(billNo, carrierId, status, null, null);
+    }
+
+    /** 带结算口径的请求: settlementMode/fixedFreightAmount 为 null 即"请求里没有该字段"。 */
+    private FreightBillRequest request(String billNo, Long carrierId, String status,
+                                       FreightSettlementMode settlementMode, BigDecimal fixedFreightAmount) {
         return new FreightBillRequest(
                 billNo, carrierId, "C001", "承运商A", null, null, null, null,
-                LocalDate.of(2026, 8, 1), new BigDecimal("100"), status, null, List.of(), List.of(), false);
+                LocalDate.of(2026, 8, 1), new BigDecimal("100"), settlementMode, fixedFreightAmount,
+                status, null, List.of(), List.of(), false);
     }
 
     private CarrierQuery.CarrierSnapshot carrier(Long id, Long defaultSettlementId) {
@@ -196,7 +205,8 @@ class FreightBillServiceTest {
         FreightBill entity = new FreightBill();
         FreightBillRequest request = new FreightBillRequest(
                 "FB001", 1L, "C001", "承运商A", null, null, 5L, "沪A123",
-                LocalDate.of(2026, 8, 1), new BigDecimal("100"), StatusConstants.DRAFT, null, List.of(), List.of(), false);
+                LocalDate.of(2026, 8, 1), new BigDecimal("100"), null, null,
+                StatusConstants.DRAFT, null, List.of(), List.of(), false);
         when(carrierQuery.findActiveById(1L)).thenReturn(Optional.of(carrier(1L, 30L)));
         // 车辆 carrierId=99 与物流商 1 不一致
         when(vehicleQuery.findById(5L)).thenReturn(Optional.of(new VehicleQuery.VehicleSnapshot(5L, 99L, "沪A123")));
@@ -211,13 +221,133 @@ class FreightBillServiceTest {
         FreightBill entity = new FreightBill();
         FreightBillRequest request = new FreightBillRequest(
                 "FB001", 1L, "C001", "承运商A", null, null, 5L, "沪A999",
-                LocalDate.of(2026, 8, 1), new BigDecimal("100"), StatusConstants.DRAFT, null, List.of(), List.of(), false);
+                LocalDate.of(2026, 8, 1), new BigDecimal("100"), null, null,
+                StatusConstants.DRAFT, null, List.of(), List.of(), false);
         when(carrierQuery.findActiveById(1L)).thenReturn(Optional.of(carrier(1L, 30L)));
         when(vehicleQuery.findById(5L)).thenReturn(Optional.of(new VehicleQuery.VehicleSnapshot(5L, 1L, "沪A123")));
 
         assertThatThrownBy(() -> service.apply(entity, request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("车辆ID与车牌号不一致");
+    }
+
+    // ---------- 结算方式: 按吨位 / 固定运费 ----------
+
+    private void stubCarrier() {
+        when(carrierQuery.findActiveById(1L)).thenReturn(Optional.of(carrier(1L, 30L)));
+    }
+
+    private void stubSettlementCompany() {
+        CompanySetting company = new CompanySetting();
+        company.setId(30L);
+        company.setCompanyName("结算公司A");
+        when(companySettingService.requireActiveSettlementCompany(30L)).thenReturn(company);
+    }
+
+    /** 新建时未携带结算方式: 默认按吨位结算, 固定运费金额为空。 */
+    @Test
+    void apply_withoutSettlementMode_defaultsToByTonnage() {
+        FreightBill entity = new FreightBill();
+        stubCarrier();
+        stubSettlementCompany();
+
+        service.apply(entity, request("FB001", 1L, StatusConstants.DRAFT));
+
+        assertThat(entity.getSettlementMode()).isEqualTo(FreightSettlementMode.BY_TONNAGE);
+        assertThat(entity.getFixedFreightAmount()).isNull();
+    }
+
+    /** 显式切回按吨位: 库里遗留的固定运费金额必须被清空, 不残留无意义数值。 */
+    @Test
+    void apply_byTonnageMode_clearsStaleFixedAmount() {
+        FreightBill entity = new FreightBill();
+        entity.setSettlementMode(FreightSettlementMode.FIXED);
+        entity.setFixedFreightAmount(new BigDecimal("800.00"));
+        stubCarrier();
+        stubSettlementCompany();
+
+        service.apply(entity, request("FB001", 1L, StatusConstants.DRAFT,
+                FreightSettlementMode.BY_TONNAGE, null));
+
+        assertThat(entity.getSettlementMode()).isEqualTo(FreightSettlementMode.BY_TONNAGE);
+        assertThat(entity.getFixedFreightAmount()).isNull();
+    }
+
+    /** 互斥: 按吨位结算时显式给固定运费金额 → 422, 消息可读。 */
+    @Test
+    void apply_byTonnageMode_rejectsExplicitFixedAmount() {
+        FreightBill entity = new FreightBill();
+        stubCarrier();
+
+        assertThatThrownBy(() -> service.apply(entity, request("FB001", 1L, StatusConstants.DRAFT,
+                FreightSettlementMode.BY_TONNAGE, new BigDecimal("800.00"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("按吨位结算时不需要填写固定运费金额")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.BUSINESS_ERROR);
+        verify(applyService, never()).applyItems(any(), any(), any());
+    }
+
+    /** FIXED 但没给固定运费金额(新建或原值为空) → 422。 */
+    @Test
+    void apply_fixedMode_withoutAmount_isRejected() {
+        FreightBill entity = new FreightBill();
+        stubCarrier();
+
+        assertThatThrownBy(() -> service.apply(entity, request("FB001", 1L, StatusConstants.DRAFT,
+                FreightSettlementMode.FIXED, null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("固定运费结算必须填写大于0的固定运费金额")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.BUSINESS_ERROR);
+    }
+
+    /** FIXED 金额为 0 / 负数 → 422(服务层兜底, 直接调用绕过 @DecimalMin 时也要挡住)。 */
+    @Test
+    void apply_fixedMode_withNonPositiveAmount_isRejected() {
+        FreightBill entity = new FreightBill();
+        stubCarrier();
+
+        assertThatThrownBy(() -> service.apply(entity, request("FB001", 1L, StatusConstants.DRAFT,
+                FreightSettlementMode.FIXED, BigDecimal.ZERO)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("固定运费结算必须填写大于0的固定运费金额");
+        assertThatThrownBy(() -> service.apply(new FreightBill(), request("FB001", 1L, StatusConstants.DRAFT,
+                FreightSettlementMode.FIXED, new BigDecimal("-1"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("固定运费结算必须填写大于0的固定运费金额");
+    }
+
+    /** FIXED + 正金额: 落库前按 2 位小数归一。 */
+    @Test
+    void apply_fixedMode_acceptsPositiveAmountAndScalesToTwoDecimals() {
+        FreightBill entity = new FreightBill();
+        stubCarrier();
+        stubSettlementCompany();
+
+        service.apply(entity, request("FB001", 1L, StatusConstants.DRAFT,
+                FreightSettlementMode.FIXED, new BigDecimal("1500.5")));
+
+        assertThat(entity.getSettlementMode()).isEqualTo(FreightSettlementMode.FIXED);
+        assertThat(entity.getFixedFreightAmount()).isEqualByComparingTo("1500.50");
+    }
+
+    /**
+     * 回归: 编辑既有固定运费单据时请求未携带结算方式与金额(null = 请求里没有该字段),
+     * 必须保持原结算口径, 不得静默改回按吨位结算。
+     */
+    @Test
+    void apply_omittedModeAndAmount_onFixedBill_keepsExistingTerms() {
+        FreightBill entity = new FreightBill();
+        entity.setSettlementMode(FreightSettlementMode.FIXED);
+        entity.setFixedFreightAmount(new BigDecimal("800.00"));
+        stubCarrier();
+        stubSettlementCompany();
+
+        service.apply(entity, request("FB001", 1L, StatusConstants.DRAFT));
+
+        assertThat(entity.getSettlementMode()).isEqualTo(FreightSettlementMode.FIXED);
+        assertThat(entity.getFixedFreightAmount()).isEqualByComparingTo("800.00");
     }
 
     // ---------- 删除/状态守卫与事件 ----------

@@ -19,8 +19,10 @@ import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
+import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
+import com.leo.erp.logistics.bill.domain.enums.FreightSettlementMode;
 import com.leo.erp.logistics.bill.mapper.FreightBillMapper;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemResponse;
@@ -228,8 +230,10 @@ public class FreightBillService {
                 response.id(), response.billNo(), response.carrierId(), response.carrierCode(), response.carrierName(),
                 response.settlementCompanyId(), response.settlementCompanyName(), response.vehicleId(),
                 response.vehiclePlate(), response.billTime(),
-                response.unitPrice(), response.totalWeight(), response.totalFreight(), response.status(),
-                response.deletedFlag(), response.remark(), entity.getItems().stream().map(this::toItemResponse).toList(),
+                response.unitPrice(), response.totalWeight(), response.totalFreight(),
+                response.settlementMode(), response.fixedFreightAmount(), response.tonnageFreightAmount(),
+                response.status(), response.deletedFlag(), response.remark(),
+                entity.getItems().stream().map(this::toItemResponse).toList(),
                 totalExpenseAmount, chargeItems
         );
     }
@@ -277,7 +281,8 @@ public class FreightBillService {
                 billNo, request.carrierId(), request.carrierCode(), request.carrierName(),
                 request.settlementCompanyId(), request.settlementCompanyName(), request.vehicleId(),
                 request.vehiclePlate(), request.billTime(),
-                request.unitPrice(), request.status(), request.remark(), request.items(), request.chargeItems(), request.audit()
+                request.unitPrice(), request.settlementMode(), request.fixedFreightAmount(),
+                request.status(), request.remark(), request.items(), request.chargeItems(), request.audit()
         );
     }
 
@@ -286,7 +291,8 @@ public class FreightBillService {
                 request.billNo(), request.carrierId(), request.carrierCode(), request.carrierName(),
                 request.settlementCompanyId(), request.settlementCompanyName(), request.vehicleId(),
                 request.vehiclePlate(), request.billTime(),
-                request.unitPrice(), status, request.remark(), request.items(), request.chargeItems(), request.audit()
+                request.unitPrice(), request.settlementMode(), request.fixedFreightAmount(),
+                status, request.remark(), request.items(), request.chargeItems(), request.audit()
         );
     }
 
@@ -317,6 +323,8 @@ public class FreightBillService {
             throw business("物流单保存后不能更换物流商");
         }
         VehicleSnapshot vehicle = resolveVehicle(request, carrier);
+        // 结算口径必须先校验并落到实体, applyItems 依据实体上的口径算「本次结算金额」。
+        applySettlementTerms(entity, request);
         entity.setBillNo(request.billNo());
         entity.setCarrierId(carrier.id());
         entity.setCarrierCode(carrier.code());
@@ -331,6 +339,41 @@ public class FreightBillService {
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
         applyService.applyItems(entity, request, this::nextId);
+    }
+
+    /**
+     * 解析并落定本次结算口径(结算方式 + 固定运费金额), 非法组合抛 422(BUSINESS_ERROR, 消息可直接展示)。
+     *
+     * <p><b>「未携带」与「显式值」语义不同</b>(与报价单关联口径同一原则, 漏字段不得被当成要清空):</p>
+     * <ul>
+     *   <li>{@code settlementMode} 为 null: <b>保持原值</b>(新建时按 BY_TONNAGE) —— 老客户端不带该字段
+     *       编辑时不会把「固定运费」静默改回按吨位结算;</li>
+     *   <li>{@code fixedFreightAmount} 为 null: 保持原值(新建时为 null); FIXED 生效后金额仍为空则 422;</li>
+     *   <li>互斥: BY_TONNAGE 生效时<b>显式</b>给出固定运费金额 → 422(两种模式不能同时给结算额);
+     *       BY_TONNAGE 生效且请求未给金额时会把库里遗留的固定金额清空, 避免残留无意义数值;</li>
+     *   <li>FIXED 生效时金额必须非 null 且大于 0, 否则 422(0 与负数同样拒绝)。</li>
+     * </ul>
+     */
+    private void applySettlementTerms(FreightBill entity, FreightBillRequest request) {
+        FreightSettlementMode mode = request.settlementMode() != null
+                ? request.settlementMode()
+                : Optional.ofNullable(entity.getSettlementMode()).orElse(FreightSettlementMode.BY_TONNAGE);
+        if (mode == FreightSettlementMode.BY_TONNAGE) {
+            if (request.fixedFreightAmount() != null) {
+                throw business("按吨位结算时不需要填写固定运费金额");
+            }
+            entity.setSettlementMode(FreightSettlementMode.BY_TONNAGE);
+            entity.setFixedFreightAmount(null);
+            return;
+        }
+        BigDecimal fixedAmount = request.fixedFreightAmount() != null
+                ? request.fixedFreightAmount()
+                : entity.getFixedFreightAmount();
+        if (fixedAmount == null || fixedAmount.signum() <= 0) {
+            throw business("固定运费结算必须填写大于0的固定运费金额");
+        }
+        entity.setSettlementMode(FreightSettlementMode.FIXED);
+        entity.setFixedFreightAmount(TradeItemCalculator.scaleAmount(fixedAmount));
     }
 
     protected void beforeStatusUpdate(FreightBill entity, String currentStatus, String nextStatus) {

@@ -5,6 +5,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
+import com.leo.erp.logistics.bill.domain.enums.FreightSettlementMode;
 import com.leo.erp.logistics.bill.service.FreightBillSalesOrderCandidateService;
 import com.leo.erp.logistics.bill.service.FreightBillService;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
@@ -67,7 +68,8 @@ class V2FreightBillControllerTest {
     private FreightBillRequest request() {
         return new FreightBillRequest(
                 "FB001", 1L, "C001", "承运商A", 30L, "结算公司A", null, null,
-                LocalDate.of(2026, 8, 1), new BigDecimal("100"), "DRAFT", null, List.of(), List.of(), false);
+                LocalDate.of(2026, 8, 1), new BigDecimal("100"), FreightSettlementMode.BY_TONNAGE, null,
+                "DRAFT", null, List.of(), List.of(), false);
     }
 
     @Test
