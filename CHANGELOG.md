@@ -1,3 +1,52 @@
+# [13.0.0](https://github.com/PolarisTime/Leo/compare/v12.6.2...v13.0.0) (2026-10-14)
+
+
+* fix(quotation)!: 吨位汇总改按「本次在该明细行开出的吨位」计, 修掉多行关联重复吃额度 ([6fac19e](https://github.com/PolarisTime/Leo/commit/6fac19e94edf29c7eac0ee45891154e67d232dc2))
+
+
+### Bug Fixes
+
+* **attachment:** S3 直传校验失败时记录 errorCode 与 requestId ([bf15e58](https://github.com/PolarisTime/Leo/commit/bf15e58648c24592be5886f1f639e2c0f4a33a51))
+* **attachment:** 修复附件 fileSize 序列化导致的列表加载失败 ([4774eb0](https://github.com/PolarisTime/Leo/commit/4774eb0578b3702fa57862aa09ba5860ecb29920))
+* **common:** 明细行顺序可持久化 —— 读路径按 line_no 排序, 并修费用行换位撞唯一键 ([3bd28db](https://github.com/PolarisTime/Leo/commit/3bd28dbb0feadd3d3355ce5bdaec483565b85c4f))
+* **display:** 用户可见日期统一为 X年X月X日（月/日补零） ([39f7fa5](https://github.com/PolarisTime/Leo/commit/39f7fa539491588b7fd8c030f332d7a004720e26))
+* **market:** 覆盖矩阵与取价日历的「有行情」改以行情明细为准 ([e991d91](https://github.com/PolarisTime/Leo/commit/e991d9177bc1831e947ced19887496eb0a84996c))
+* **pricing:** 报单日基准逐日顺延且行情未发布时不再报错 ([38c443d](https://github.com/PolarisTime/Leo/commit/38c443dd4ef67d0ab82e587ea4222301eeb2734c))
+* **quotation:** 关联口径区分未携带与空数组, 汇总合并回单条 SQL 单快照 ([8c918fa](https://github.com/PolarisTime/Leo/commit/8c918fa457bbc4b1620734c07dbda9656c3e6e07))
+* **quotation:** 分配口径改为「允许欠额、只拦超发」, 并补单条订货量上限 ([d57e875](https://github.com/PolarisTime/Leo/commit/d57e8759ca98809ce28590314ab5c6955f226fc1))
+* **quotation:** 报价单行关联采购订单明细行补齐分配校验, 不再静默丢弃 ([3871f65](https://github.com/PolarisTime/Leo/commit/3871f651f1b99c17ab8b3410bc9e611035bfb2cf))
+
+
+### Features
+
+* **attachment:** 支持 STS 临时凭证、可关闭 chunked 编码与预签名 content-type 覆盖 ([0edf4c4](https://github.com/PolarisTime/Leo/commit/0edf4c4f5feabfa64d4c9f977b731893447080bd))
+* **logistics:** 物流单支持按固定运费结算(新增结算方式, 422 校验) ([e8360a3](https://github.com/PolarisTime/Leo/commit/e8360a32daa2d0ef4b2b65891cf1cfa488b87e1e))
+* **quotation:** 报价单行支持关联多张采购订单明细行, 并记录本次开出吨位 ([150b2a9](https://github.com/PolarisTime/Leo/commit/150b2a9558496b14710d26f7eed4b5b9d2442397))
+
+
+### Performance Improvements
+
+* **persistence:** 详情抓取图与关键字索引谓词修正 ([253c8a3](https://github.com/PolarisTime/Leo/commit/253c8a3970cadfa7b4193e87c4d5d6a52ff10aa6))
+
+
+### BREAKING CHANGES
+
+* 同一采购订单明细行的已开/剩余吨位在多行关联场景下按分配量计算, 结果与旧口径不同。
+
+原实现一行挂多张明细行时把**整行吨位**对每张各计一次: 一行 130 吨拆到两张明细行
+(60 + 70), 两张都记 130 ⇒ 两张明细行的"其他已开"各虚增 130、剩余额度被吃两次。
+这与行业口径不符 —— SAP 分配表与 Oracle firm allocation 都区分"计划量"与"分配量",
+聚合必须用分配量; 也违背桥接表的分配对账不变量 Σ(分配量) == 源单量。
+
+修改:
+- 汇总拆成两条独立 JPQL 后相加, 不再用一条带 or 的联表查询:
+  · sumAllocatedTonByPurchaseOrderItemIds: 有明细行关联时按 link.allocated_ton 计入各自那一行
+  · sumLegacyTonByPurchaseOrderItemIds: 没有关联行的历史数据仍按旧单值列 + 整行吨位
+  两段各自走 purchase_order_item_id 索引(or 联表会让 PostgreSQL 无法分别用索引)
+- 集成测试断言改为 60 / 70, 并新增"Σ分配量 == 报单吨位"对账断言
+
+验证: 后端 118 项相关测试通过(含 2 项真实库集成测试)。
+
 ## [12.6.2](https://github.com/PolarisTime/Leo/compare/v12.6.1...v12.6.2) (2026-10-13)
 
 
