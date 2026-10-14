@@ -219,9 +219,12 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
             if (isNotFound(ex)) {
                 throw new BusinessException(ErrorCode.NOT_FOUND, "直传文件不存在");
             }
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "S3 直传校验失败");
+            // 403 有多个来源(签名不匹配/方法绑定/时间偏移/网关合成), 只回「S3 直传校验失败」无法定位,
+            // 必须带上 errorCode 与 requestId; 对外仍是 500「系统异常」, 详情只进服务端日志。
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "S3 直传校验失败: " + describeS3Error(ex));
         } catch (IOException ex) {
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "S3 直传校验失败");
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR,
+                    "S3 直传校验失败: " + ex.getClass().getSimpleName() + ": " + ex.getMessage());
         }
     }
 
@@ -303,7 +306,19 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
         if (message == null || message.isBlank()) {
             message = ex.getMessage();
         }
-        return "HTTP " + ex.statusCode() + " " + message;
+        StringBuilder detail = new StringBuilder("HTTP ").append(ex.statusCode()).append(' ').append(message);
+        // S3 兼容服务的 403 可能是签名不匹配、方法绑定、时间偏移或网关合成, 仅凭状态码无法区分,
+        // 因此把 errorCode 与 requestId 一并带出, 供日志归因(如 MinIO 与网关 403 指纹不同)。
+        if (ex.awsErrorDetails() != null) {
+            String errorCode = ex.awsErrorDetails().errorCode();
+            if (errorCode != null && !errorCode.isBlank()) {
+                detail.append(" errorCode=").append(errorCode);
+            }
+        }
+        if (ex.requestId() != null && !ex.requestId().isBlank()) {
+            detail.append(" requestId=").append(ex.requestId());
+        }
+        return detail.toString();
     }
 
     private String normalizeSha256Hex(String value) {
