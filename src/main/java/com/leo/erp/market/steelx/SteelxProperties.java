@@ -2,6 +2,10 @@ package com.leo.erp.market.steelx;
 
 import com.leo.erp.common.retry.RetryProperties;
 import com.leo.erp.common.support.QuoteRegionCatalog;
+import com.leo.erp.market.region.service.QuoteRegionService;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.util.LinkedHashMap;
@@ -19,7 +23,7 @@ import java.util.Map;
  * 避免系统模块反向依赖行情模块。</p>
  */
 @ConfigurationProperties(prefix = "leo.market.steelx-quote")
-public class SteelxProperties implements QuoteRegionCatalog {
+public class SteelxProperties implements QuoteRegionCatalog, BeanFactoryAware {
 
     private boolean enabled = true;
     /** 数据源标识。 */
@@ -34,6 +38,30 @@ public class SteelxProperties implements QuoteRegionCatalog {
     private RetryProperties retry = new RetryProperties();
     /** 城市与子域名映射(列表承载, Spring 属性不支持中文键)。 */
     private List<Region> regions = defaultRegions();
+
+    /**
+     * 取价地区表服务（延迟解析）。表内有数据时优先采用，表为空或尚未就绪时回退到
+     * 本配置的 regions（yml）与 Java 默认值，保证「表未初始化 / 迁移未执行」时行为不变。
+     *
+     * <p>这里用 {@link BeanFactoryAware} 而非 {@code @Autowired} 注入：配置属性类通常早于业务
+     * Bean 初始化，实测 {@code @Autowired(required=false)} setter 会被静默跳过，导致始终走兜底、
+     * 表数据形同虚设。改为首次使用时按需解析，既不引入初始化顺序耦合，也不影响绑定阶段。</p>
+     */
+    private BeanFactory beanFactory;
+
+    private QuoteRegionService quoteRegionService;
+
+    @Override
+    public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
+        this.beanFactory = beanFactory;
+    }
+
+    private Map<String, String> tableRegionMap() {
+        if (quoteRegionService == null && beanFactory != null) {
+            quoteRegionService = beanFactory.getBeanProvider(QuoteRegionService.class).getIfAvailable();
+        }
+        return quoteRegionService == null ? Map.of() : quoteRegionService.activeRegionMap();
+    }
     private Sync sync = new Sync();
 
     public boolean isEnabled() {
@@ -100,8 +128,12 @@ public class SteelxProperties implements QuoteRegionCatalog {
         this.regions = regions;
     }
 
-    /** 城市中文名 -> 子域名 Map 视图。 */
+    /** 城市中文名 -> 子域名 Map 视图。优先采用 md_quote_region 维护的数据。 */
     public Map<String, String> regionMap() {
+        Map<String, String> fromTable = tableRegionMap();
+        if (!fromTable.isEmpty()) {
+            return fromTable;
+        }
         Map<String, String> map = new LinkedHashMap<>();
         for (Region region : regions) {
             if (region.getName() != null && region.getSlug() != null) {
