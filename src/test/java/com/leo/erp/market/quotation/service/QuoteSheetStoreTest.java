@@ -1936,6 +1936,184 @@ class QuoteSheetStoreTest {
         // 两行 → 只发一次批量查询
         verify(purchaseOrderOptionQuery, org.mockito.Mockito.times(1)).listActiveByIds(any());
     }
+
+    // ------------------------------------------- 行级关联的容错: 不匹配/重复/负值/Σ 不变量
+
+    private static final long LINK_PO_ID = 88L;
+    private static final long LINK_PO_ITEM_ID = 8801L;
+
+    /** 锁定行 + 明细行关联的整行请求(关联门禁要求 locked=true)。 */
+    private static QuoteSheetRequest.ItemRequest linkedItemRequest(
+            BigDecimal ton, List<QuoteSheetRequest.ItemPurchaseOrderRequest> links) {
+        return new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
+                null, ton, true, null, null, links,
+                List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)));
+    }
+
+    /** 可写单据(版本 1): 供关联校验用例复用; 需要落库的用例自行 stub saveAndFlush。 */
+    private QuoteSheet writableSheetWithItem(Long id) {
+        QuoteSheet sheet = sheetWithItem(id);
+        sheet.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(id)).thenReturn(Optional.of(sheet));
+        return sheet;
+    }
+
+    /** 订单 88 下有两条明细行(8801/8802), 订单 99 下有一条(9901)。 */
+    private void stubTwoOrders() {
+        when(purchaseOrderOptionQuery.listActiveByIds(any())).thenReturn(List.of(
+                new com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot(
+                        LINK_PO_ID, "PO-88", "沙钢", new BigDecimal("40.5"), "正常", null),
+                new com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot(
+                        99L, "PO-99", "中天", new BigDecimal("10"), "正常", null)));
+        when(purchaseOrderOptionQuery.listActiveItemsByIds(any())).thenReturn(List.of(
+                linkItemSnapshot(LINK_PO_ID, LINK_PO_ITEM_ID),
+                linkItemSnapshot(LINK_PO_ID, 8802L),
+                linkItemSnapshot(99L, 9901L)));
+    }
+
+    private static com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderItemOptionSnapshot
+            linkItemSnapshot(long purchaseOrderId, long purchaseOrderItemId) {
+        return new com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderItemOptionSnapshot(
+                purchaseOrderId, purchaseOrderItemId, "PO-" + purchaseOrderId, "沙钢", "螺纹钢", "HRB400E",
+                "12", "9米", "中天", new BigDecimal("200"), "正常");
+    }
+
+    /** 明细行 id 真实存在但不属于所关联的订单: 422 并带明细行 id, 不得静默丢弃该条关联。 */
+    @Test
+    void updateItem_linkItemNotBelongingToOrder_isRejected() {
+        writableSheetWithItem(9L);
+        stubTwoOrders();
+
+        assertThatThrownBy(() -> store().updateItem(9L, 301L, linkedItemRequest(new BigDecimal("10"),
+                List.of(new QuoteSheetRequest.ItemPurchaseOrderRequest(LINK_PO_ID, 9901L, new BigDecimal("10")))),
+                1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不属于该采购订单")
+                .hasMessageContaining("9901")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
+    }
+
+    /** 同一明细行重复出现: 422 并带明细行 id, 不得静默去重后只留一条。 */
+    @Test
+    void updateItem_duplicateLinkItem_isRejected() {
+        writableSheetWithItem(9L);
+        stubTwoOrders();
+
+        assertThatThrownBy(() -> store().updateItem(9L, 301L, linkedItemRequest(new BigDecimal("10"),
+                List.of(new QuoteSheetRequest.ItemPurchaseOrderRequest(LINK_PO_ID, LINK_PO_ITEM_ID,
+                                new BigDecimal("5")),
+                        new QuoteSheetRequest.ItemPurchaseOrderRequest(LINK_PO_ID, LINK_PO_ITEM_ID,
+                                new BigDecimal("5")))),
+                1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("重复关联")
+                .hasMessageContaining(String.valueOf(LINK_PO_ITEM_ID))
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
+    }
+
+    /** 负分配量: 绕过 DTO 的 @DecimalMin 直接调服务层也必须 422。 */
+    @Test
+    void updateItem_negativeAllocatedTon_isRejected() {
+        writableSheetWithItem(9L);
+        stubTwoOrders();
+
+        assertThatThrownBy(() -> store().updateItem(9L, 301L, linkedItemRequest(new BigDecimal("10"),
+                List.of(new QuoteSheetRequest.ItemPurchaseOrderRequest(LINK_PO_ID, LINK_PO_ITEM_ID,
+                        new BigDecimal("-1")))),
+                1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能为负")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
+    }
+
+    /** 分配不变量: Σ分配量少于本行吨位 → 422, 消息说明"还缺多少"。 */
+    @Test
+    void updateItem_allocatedTonSumLessThanTon_isRejected() {
+        writableSheetWithItem(9L);
+        stubTwoOrders();
+
+        assertThatThrownBy(() -> store().updateItem(9L, 301L, linkedItemRequest(new BigDecimal("10"),
+                List.of(new QuoteSheetRequest.ItemPurchaseOrderRequest(LINK_PO_ID, LINK_PO_ITEM_ID,
+                        new BigDecimal("3")))),
+                1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不一致")
+                .hasMessageContaining("还缺 7 吨")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
+    }
+
+    /** 分配不变量: Σ分配量超过本行吨位 → 422, 消息说明"超出多少"。 */
+    @Test
+    void updateItem_allocatedTonSumGreaterThanTon_isRejected() {
+        writableSheetWithItem(9L);
+        stubTwoOrders();
+
+        assertThatThrownBy(() -> store().updateItem(9L, 301L, linkedItemRequest(new BigDecimal("10"),
+                List.of(new QuoteSheetRequest.ItemPurchaseOrderRequest(LINK_PO_ID, LINK_PO_ITEM_ID,
+                                new BigDecimal("6")),
+                        new QuoteSheetRequest.ItemPurchaseOrderRequest(LINK_PO_ID, 8802L, new BigDecimal("6")))),
+                1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不一致")
+                .hasMessageContaining("超出 2 吨")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
+    }
+
+    /** 分配不变量: Σ分配量按数值比较(忽略标度), 6 + "4.000" == 10 必须放行。 */
+    @Test
+    void updateItem_allocatedTonSumMatchesTon_persistsAndMirrorsFirstLink() {
+        writableSheetWithItem(9L);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        stubTwoOrders();
+        when(snowflakeIdGenerator.nextId()).thenReturn(9001L, 9002L);
+
+        QuoteSheetItemWrite write = store().updateItem(9L, 301L, linkedItemRequest(new BigDecimal("10"),
+                List.of(new QuoteSheetRequest.ItemPurchaseOrderRequest(LINK_PO_ID, LINK_PO_ITEM_ID, new BigDecimal("6")),
+                        new QuoteSheetRequest.ItemPurchaseOrderRequest(LINK_PO_ID, 8802L, new BigDecimal("4.000")))),
+                1L);
+
+        assertThat(write.item().purchaseOrderLinks())
+                .extracting(QuoteSheetResponse.ItemPurchaseOrderResponse::purchaseOrderItemId)
+                .containsExactly(LINK_PO_ITEM_ID, 8802L);
+        assertThat(write.item().purchaseOrderLinks())
+                .extracting(QuoteSheetResponse.ItemPurchaseOrderResponse::allocatedTon)
+                .containsExactly(new BigDecimal("6"), new BigDecimal("4.000"));
+        // 旧三列镜像第一条
+        assertThat(write.item().purchaseOrderId()).isEqualTo(LINK_PO_ID);
+        assertThat(write.item().purchaseOrderItemId()).isEqualTo(LINK_PO_ITEM_ID);
+    }
+
+    /** 订单级关联(只给 purchaseOrderId、没有明细行)是旧兼容路径: 不适用 Σ 不变量, 仍只写旧三列。 */
+    @Test
+    void updateItem_orderLevelLink_isExemptFromAllocatedTonSum() {
+        writableSheetWithItem(9L);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(purchaseOrderOptionQuery.listActiveByIds(any())).thenReturn(List.of(
+                new com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot(
+                        LINK_PO_ID, "PO-88", "沙钢", new BigDecimal("40.5"), "正常", null)));
+
+        QuoteSheetItemWrite write = store().updateItem(9L, 301L,
+                new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
+                        null, new BigDecimal("10"), true, LINK_PO_ID, null,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
+                1L);
+
+        assertThat(write.item().purchaseOrderId()).isEqualTo(LINK_PO_ID);
+        assertThat(write.item().purchaseOrderNo()).isEqualTo("PO-88");
+        assertThat(write.item().purchaseOrderItemId()).isNull();
+        assertThat(write.item().purchaseOrderLinks()).isEmpty();
+    }
+
     /** 门禁: 未锁定行即使请求携带采购订单关联也被强制清除。 */
     @Test
     void updateItem_unlockedRow_clearsPurchaseOrderLink() {

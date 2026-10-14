@@ -1,5 +1,6 @@
 package com.leo.erp.market.quotation.service;
 
+import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItem;
@@ -31,6 +32,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -130,6 +132,27 @@ class QuoteItemMultiPurchaseOrderLinkPostgresTest {
         assertThat(links.get(0).purchaseOrderItemId()).isEqualTo(POI_2);
         // 分配吨位取本行吨位
         assertThat(links.get(0).allocatedTon()).isEqualByComparingTo("130");
+    }
+
+    /** 分配不变量: ΣallocatedTon 必须等于本行吨位, 不等时 422 且整笔回滚, 不得静默落库。 */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void mismatchedAllocationSum_isRejectedAndNothingPersisted() {
+        stubPurchaseOrders();
+        persistSheet();
+        Long version = repository.findByIdAndDeletedFlagFalse(SHEET_ID).orElseThrow().getVersion();
+
+        // 130 吨的行只分配 60 吨: Σ != 本行吨位, 必须明确报错并说明缺口
+        assertThatThrownBy(() -> store.update(SHEET_ID, request(List.of(
+                new QuoteSheetRequest.ItemPurchaseOrderRequest(PO_1, POI_1, new BigDecimal("60")))), version))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不一致")
+                .hasMessageContaining("还缺 70 吨");
+
+        // 事务回滚: 关联表与旧三列都不得残留
+        QuoteSheetResponse reloaded = store.detail(SHEET_ID);
+        assertThat(reloaded.items().get(0).purchaseOrderLinks()).isEmpty();
+        assertThat(reloaded.items().get(0).purchaseOrderId()).isNull();
     }
 
     /** 与服务端口径一致: 关联分配量 + 历史旧列兜底, 两段相加。 */

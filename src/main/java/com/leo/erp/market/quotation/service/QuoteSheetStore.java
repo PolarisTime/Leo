@@ -55,6 +55,13 @@ public class QuoteSheetStore {
     private static final BigDecimal DEFAULT_LENGTH_PREMIUM = new BigDecimal("30");
     private static final String DEFAULT_STATUS = "报价";
 
+    /**
+     * 锁定行「Σ分配吨位 == 本行吨位」这一分配不变量的比较容差, 默认 0(精确相等)。
+     * <p>数值比较一律走 {@link BigDecimal#compareTo}(忽略标度), 不得用 {@code equals};
+     * 将来确需留容差时只改这里, 不要在各调用点各写一套。</p>
+     */
+    private static final BigDecimal ALLOCATED_TON_TOLERANCE = BigDecimal.ZERO;
+
     private final QuoteSheetRepository repository;
     private final QuoteProjectConfigRepository quoteProjectConfigRepository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
@@ -925,8 +932,15 @@ public class QuoteSheetStore {
      * (合成一条关联, 分配吨位取本行吨位)。旧的三列始终镜像<b>第一条</b>关联, 保证历史读取
      * 与其它模块的单值口径不变。</p>
      *
-     * <p>明细行必须属于对应订单, 否则该条关联被丢弃(不因个别明细失效而拒绝整单保存);
-     * 订单本身不存在则在 {@link #resolvePurchaseOrderLinks} 阶段直接报错。</p>
+     * <p>明细行必须真实存在且属于对应订单, 同一明细行只能出现一次; 违反即 422(VALIDATION_ERROR)
+     * 并在消息中带上明细行 id, 与「采购订单不存在」同一处理口径 —— 个别明细失效不再被静默丢弃,
+     * 否则调用方以为关联成功、实际额度没记上。订单本身不存在则在
+     * {@link #resolvePurchaseOrderLinks} 阶段直接报错。</p>
+     *
+     * <p>分配不变量: 带明细行关联时 Σ{@code allocatedTon} 必须等于本行吨位({@code ton} 为 null 按 0),
+     * 差值超过 {@link #ALLOCATED_TON_TOLERANCE} 即 422, 消息说明缺多少/超多少; 单个分配量不得为负。
+     * 只给 {@code purchaseOrderId} 的<b>订单级关联</b>(不含明细行, 旧兼容路径)不适用该不变量 ——
+     * 它只写旧三列, 不产生关联行, 因而没有可对账的分配量。</p>
      */
     private void applyPurchaseOrderLinks(QuoteSheetItem item, QuoteSheetRequest.ItemRequest request,
                                          Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
@@ -962,27 +976,47 @@ public class QuoteSheetStore {
         }
         List<QuoteSheetItemPurchaseOrder> reconciled = new ArrayList<>();
         Set<Long> usedItemIds = new HashSet<>();
+        BigDecimal allocatedTotal = BigDecimal.ZERO;
         for (QuoteSheetRequest.ItemPurchaseOrderRequest linkRequest : requested) {
+            Long purchaseOrderItemId = linkRequest.purchaseOrderItemId();
+            // DTO 上有 @DecimalMin("0"), 但服务层被直接调用(绕过 @Valid)时必须同样挡住负分配量。
+            if (linkRequest.allocatedTon() != null && linkRequest.allocatedTon().signum() < 0) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "采购订单明细行分配吨位不能为负: " + purchaseOrderItemId
+                                + " = " + linkRequest.allocatedTon().toPlainString());
+            }
             PurchaseOrderLinkSnapshot snapshot = purchaseOrderLinks.get(linkRequest.purchaseOrderId());
-            if (snapshot == null || !snapshot.itemIds().contains(linkRequest.purchaseOrderItemId())) {
-                continue;
+            if (snapshot == null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "采购订单不存在或已删除: " + linkRequest.purchaseOrderId());
             }
-            if (!usedItemIds.add(linkRequest.purchaseOrderItemId())) {
-                continue;
+            if (!snapshot.itemIds().contains(purchaseOrderItemId)) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "采购订单明细行不存在或不属于该采购订单: " + purchaseOrderItemId);
             }
-            QuoteSheetItemPurchaseOrder link = existingByItemId.remove(linkRequest.purchaseOrderItemId());
+            if (!usedItemIds.add(purchaseOrderItemId)) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "采购订单明细行重复关联: " + purchaseOrderItemId);
+            }
+            QuoteSheetItemPurchaseOrder link = existingByItemId.remove(purchaseOrderItemId);
             if (link == null) {
                 link = new QuoteSheetItemPurchaseOrder();
                 link.setId(snowflakeIdGenerator.nextId());
                 link.setItem(item);
-                link.setPurchaseOrderItemId(linkRequest.purchaseOrderItemId());
+                link.setPurchaseOrderItemId(purchaseOrderItemId);
             }
+            BigDecimal allocatedTon = linkRequest.allocatedTon() == null
+                    ? BigDecimal.ZERO : linkRequest.allocatedTon();
             link.setPurchaseOrderId(linkRequest.purchaseOrderId());
             link.setPurchaseOrderNo(snapshot.orderNo());
-            link.setAllocatedTon(linkRequest.allocatedTon() == null
-                    ? BigDecimal.ZERO : linkRequest.allocatedTon());
+            link.setAllocatedTon(allocatedTon);
             link.setSortNo(reconciled.size());
             reconciled.add(link);
+            allocatedTotal = allocatedTotal.add(allocatedTon);
+        }
+        if (!reconciled.isEmpty()) {
+            // 订单级关联(不产生关联行)不经过这里, 因此不适用本不变量。
+            checkAllocatedTonTotal(allocatedTotal, request.ton());
         }
         item.getPurchaseOrderLinks().clear();
         item.getPurchaseOrderLinks().addAll(reconciled);
@@ -1000,6 +1034,25 @@ public class QuoteSheetStore {
         }
     }
 
+    /**
+     * 分配不变量校验: Σ分配吨位必须等于本行吨位(ton 为 null 按 0), 差值超过
+     * {@link #ALLOCATED_TON_TOLERANCE} 即 422, 并把缺口/超量写进消息, 让调用方能直接改对。
+     * <p>比较用 {@link BigDecimal#compareTo}(忽略标度), 与吨位列 numeric(18,8) 的回读精度差异无关。</p>
+     */
+    private static void checkAllocatedTonTotal(BigDecimal allocatedTotal, BigDecimal ton) {
+        BigDecimal expected = ton == null ? BigDecimal.ZERO : ton;
+        BigDecimal gap = allocatedTotal.subtract(expected);
+        if (gap.abs().compareTo(ALLOCATED_TON_TOLERANCE) <= 0) {
+            return;
+        }
+        String detail = gap.signum() < 0
+                ? "还缺 " + gap.abs().toPlainString() + " 吨"
+                : "超出 " + gap.toPlainString() + " 吨";
+        throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                "关联的采购订单明细行分配吨位合计 " + allocatedTotal.toPlainString()
+                        + " 吨与本行吨位 " + expected.toPlainString() + " 吨不一致, " + detail);
+    }
+
     /** 订单关联快照: 订单号 + 该订单下有效明细行 id 集合(构建期可变)。 */
     private record PurchaseOrderLinkSnapshot(String orderNo, Set<Long> itemIds) {
     }
@@ -1007,7 +1060,7 @@ public class QuoteSheetStore {
     /**
      * 批量解析行级采购订单关联(一次查询覆盖整单全部行, 避免逐行查询的 N+1)。
      * <p>订单存在性通过批量订单查询校验; 显式给出的明细行必须真实存在且属于对应订单,
-     * 否则明细关联置空(保留订单级关联), 不因个别明细失效而拒绝整单保存。</p>
+     * 否则在 {@link #applyPurchaseOrderLinks} 落库前报 422(不再静默丢弃该条关联)。</p>
      */
     private Map<Long, PurchaseOrderLinkSnapshot> resolvePurchaseOrderLinks(
             List<QuoteSheetRequest.ItemRequest> items) {
