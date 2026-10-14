@@ -9,6 +9,7 @@ import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItem;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItemPrice;
+import com.leo.erp.market.quotation.domain.entity.QuoteSheetItemPurchaseOrder;
 import com.leo.erp.market.quotation.domain.enums.QuoteRowType;
 import com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository;
 import com.leo.erp.market.quotation.repository.QuoteSheetRepository;
@@ -1958,7 +1959,7 @@ class QuoteSheetStoreTest {
         return sheet;
     }
 
-    /** 订单 88 下有两条明细行(8801/8802), 订单 99 下有一条(9901)。 */
+    /** 订单 88 下有三条明细行(8801/8802/8803), 订单 99 下有一条(9901)。 */
     private void stubTwoOrders() {
         when(purchaseOrderOptionQuery.listActiveByIds(any())).thenReturn(List.of(
                 new com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot(
@@ -1968,6 +1969,7 @@ class QuoteSheetStoreTest {
         when(purchaseOrderOptionQuery.listActiveItemsByIds(any())).thenReturn(List.of(
                 linkItemSnapshot(LINK_PO_ID, LINK_PO_ITEM_ID),
                 linkItemSnapshot(LINK_PO_ID, 8802L),
+                linkItemSnapshot(LINK_PO_ID, 8803L),
                 linkItemSnapshot(99L, 9901L)));
     }
 
@@ -2112,6 +2114,150 @@ class QuoteSheetStoreTest {
         assertThat(write.item().purchaseOrderNo()).isEqualTo("PO-88");
         assertThat(write.item().purchaseOrderItemId()).isNull();
         assertThat(write.item().purchaseOrderLinks()).isEmpty();
+    }
+
+    // ------------------------------------------- P2-17: “未携带”与“空数组”的区分
+
+    /** 给可写单据的第 1 行挂 n 条关联(60/40/30 共 130 吨), 并把旧三列镜像第一条。 */
+    private static void attachLinks(QuoteSheetItem item, int count) {
+        BigDecimal[] tons = {new BigDecimal("60"), new BigDecimal("40"), new BigDecimal("30")};
+        for (int index = 0; index < count; index++) {
+            QuoteSheetItemPurchaseOrder link = new QuoteSheetItemPurchaseOrder();
+            link.setId(900L + index);
+            link.setItem(item);
+            link.setPurchaseOrderId(LINK_PO_ID);
+            link.setPurchaseOrderNo("PO-88");
+            link.setPurchaseOrderItemId(LINK_PO_ITEM_ID + index);
+            link.setAllocatedTon(tons[index]);
+            link.setSortNo(index);
+            item.getPurchaseOrderLinks().add(link);
+        }
+        item.setLocked(true);
+        item.setPurchaseOrderId(LINK_PO_ID);
+        item.setPurchaseOrderNo("PO-88");
+        item.setPurchaseOrderItemId(LINK_PO_ITEM_ID);
+        item.setTon(new BigDecimal("130"));
+    }
+
+    /** 锁定行的整行请求: 显式状态由参数决定, 采购订单字段全不携带。 */
+    private static QuoteSheetRequest.ItemRequest lockedRowRequest(BigDecimal ton,
+                                                                  List<QuoteSheetRequest.ItemPurchaseOrderRequest> links) {
+        return new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
+                null, ton, true, null, null, links,
+                List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)));
+    }
+
+    /** 旧形态单值请求(只带 purchaseOrderId/purchaseOrderItemId, 不带列表)。 */
+    private static QuoteSheetRequest.ItemRequest legacyLinkedRowRequest(BigDecimal ton, Long orderId,
+                                                                       Long orderItemId) {
+        return new QuoteSheetRequest.ItemRequest(QuoteRowType.PRODUCT, "螺纹钢", "HRB400E", 12, "9米",
+                null, ton, true, orderId, orderItemId,
+                List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)));
+    }
+
+    /**
+     * null(未携带任何采购订单字段)≠ 空数组([] 清空): 已有多行关联的锁定行收到"没提这个字段"的
+     * 整行请求时必须原样保留 3 条关联与旧三列镜像, 不得被当成"要清空"。
+     */
+    @Test
+    void updateItem_absentLinkFields_keepsExistingMultipleLinks() {
+        QuoteSheet sheet = writableSheetWithItem(9L);
+        attachLinks(sheet.getItems().get(0), 3);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetItemWrite write = store().updateItem(9L, 301L,
+                lockedRowRequest(new BigDecimal("130"), null), 1L);
+
+        assertThat(write.item().purchaseOrderLinks())
+                .extracting(QuoteSheetResponse.ItemPurchaseOrderResponse::purchaseOrderItemId)
+                .containsExactly(LINK_PO_ITEM_ID, 8802L, 8803L);
+        // 旧三列镜像第一条, 未被清空
+        assertThat(write.item().purchaseOrderId()).isEqualTo(LINK_PO_ID);
+        assertThat(write.item().purchaseOrderItemId()).isEqualTo(LINK_PO_ITEM_ID);
+        assertThat(sheet.getItems().get(0).getPurchaseOrderLinks()).hasSize(3);
+    }
+
+    /** 空数组是显式清空: 3 条关联与旧三列一并清掉, 且不适用 Σ 分配吨位不变量(没有关联行可对账)。 */
+    @Test
+    void updateItem_explicitEmptyLinks_clearsAllLinks() {
+        QuoteSheet sheet = writableSheetWithItem(9L);
+        attachLinks(sheet.getItems().get(0), 3);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetItemWrite write = store().updateItem(9L, 301L,
+                lockedRowRequest(new BigDecimal("130"), List.of()), 1L);
+
+        assertThat(write.item().purchaseOrderLinks()).isEmpty();
+        assertThat(write.item().purchaseOrderId()).isNull();
+        assertThat(write.item().purchaseOrderNo()).isNull();
+        assertThat(write.item().purchaseOrderItemId()).isNull();
+        assertThat(write.item().purchased()).isFalse();
+    }
+
+    /**
+     * P2-17 核心回归: 已有多条关联的行收到旧形态单值请求时, 不得静默压成一条
+     * (旧实现会删掉第 2、3 条, 且 Σ 校验恰好通过: Σ(130) == 本行 130)。这里必须 422 且不落库。
+     */
+    @Test
+    void updateItem_legacyShapeOnMultiLinkedRow_isRejected() {
+        QuoteSheet sheet = writableSheetWithItem(9L);
+        QuoteSheetItem item = sheet.getItems().get(0);
+        attachLinks(item, 3);
+        stubTwoOrders();
+
+        assertThatThrownBy(() -> store().updateItem(9L, 301L,
+                legacyLinkedRowRequest(new BigDecimal("130"), LINK_PO_ID, LINK_PO_ITEM_ID), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("单值形态")
+                .hasMessageContaining("purchaseOrderLinks")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+
+        verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
+        // 内存中的 3 条关联必须原样保留(没有被 clear)
+        assertThat(item.getPurchaseOrderLinks()).hasSize(3);
+    }
+
+    /**
+     * 旧形态在该行只有一条关联时仍兼容(旧客户端改吨位不必换形态): 复用那条关联,
+     * 分配吨位按旧规则取本行吨位。
+     */
+    @Test
+    void updateItem_legacyShapeOnSingleLinkedRow_rewritesThatLink() {
+        QuoteSheet sheet = writableSheetWithItem(9L);
+        QuoteSheetItem item = sheet.getItems().get(0);
+        attachLinks(item, 1);
+        item.setTon(new BigDecimal("10"));
+        stubTwoOrders();
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetItemWrite write = store().updateItem(9L, 301L,
+                legacyLinkedRowRequest(new BigDecimal("10"), LINK_PO_ID, LINK_PO_ITEM_ID), 1L);
+
+        assertThat(write.item().purchaseOrderLinks()).hasSize(1);
+        assertThat(write.item().purchaseOrderLinks().get(0).purchaseOrderItemId()).isEqualTo(LINK_PO_ITEM_ID);
+        assertThat(write.item().purchaseOrderLinks().get(0).allocatedTon()).isEqualByComparingTo("10");
+        assertThat(write.item().purchaseOrderItemId()).isEqualTo(LINK_PO_ITEM_ID);
+    }
+
+    /** 列表里出现半截关联(缺订单或明细行)时 422, 不得像旧实现那样静默丢弃该条。 */
+    @Test
+    void updateItem_incompleteLinkEntry_isRejected() {
+        writableSheetWithItem(9L);
+        when(purchaseOrderOptionQuery.listActiveByIds(any())).thenReturn(List.of(
+                new com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot(
+                        LINK_PO_ID, "PO-88", "沙钢", new BigDecimal("40.5"), "正常", null)));
+
+        assertThatThrownBy(() -> store().updateItem(9L, 301L,
+                lockedRowRequest(new BigDecimal("10"),
+                        List.of(new QuoteSheetRequest.ItemPurchaseOrderRequest(LINK_PO_ID, null,
+                                new BigDecimal("10")))), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("明细行")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+
+        verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
     }
 
     /** 门禁: 未锁定行即使请求携带采购订单关联也被强制清除。 */

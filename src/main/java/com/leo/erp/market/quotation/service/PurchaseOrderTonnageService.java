@@ -82,12 +82,14 @@ public class PurchaseOrderTonnageService {
         Set<Long> itemIds = items.stream()
                 .map(PurchaseOrderItemOptionSnapshot::purchaseOrderItemId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-        // 关联分配量 + 历史旧列兜底: 两段分别走索引(避免 or 联表), 在内存里相加
+        /*
+         * 关联分配量 + 历史旧列兜底两段口径必须一次读完: 由仓储单条 SQL(UNION ALL)给出,
+         * 数据库保证整条语句只用一个快照。拆成两次查询再在内存相加时, READ COMMITTED 下
+         * 另一事务在两句之间提交(把旧单值行改写成关联行这类转换), 该行会两段都不计而瞬时少计。
+         */
         Map<Long, BigDecimal> issuedByItemId = new HashMap<>();
         accumulateTon(issuedByItemId,
-                quoteSheetRepository.sumAllocatedTonByPurchaseOrderItemIds(itemIds, excludeSheetId));
-        accumulateTon(issuedByItemId,
-                quoteSheetRepository.sumLegacyTonByPurchaseOrderItemIds(itemIds, excludeSheetId));
+                quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(itemIds, excludeSheetId));
         return items.stream()
                 .map(item -> toResponse(item, issuedByItemId.getOrDefault(
                         item.purchaseOrderItemId(), BigDecimal.ZERO)))

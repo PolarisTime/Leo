@@ -18,7 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,9 +47,7 @@ class PurchaseOrderTonnageServiceTest {
     void summarize_carriesItemBrandForIssuedBrandDisplay() {
         when(purchaseOrderOptionQuery.listActiveItemsByIds(any()))
                 .thenReturn(List.of(item(1L, 11L, "PO-1", "12", "40.5")));
-        when(quoteSheetRepository.sumAllocatedTonByPurchaseOrderItemIds(any(), any()))
-                .thenReturn(List.of());
-        when(quoteSheetRepository.sumLegacyTonByPurchaseOrderItemIds(any(), any()))
+        when(quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(any(), any()))
                 .thenReturn(List.of());
 
         List<PurchaseOrderTonnageResponse> result = service().summarize(List.of(11L), null);
@@ -62,12 +62,10 @@ class PurchaseOrderTonnageServiceTest {
                 .thenReturn(List.of(
                         item(1L, 11L, "PO-1", "12", "40.5"),
                         item(1L, 12L, "PO-1", "25", "10")));
-        when(quoteSheetRepository.sumAllocatedTonByPurchaseOrderItemIds(any(), eq(7L)))
+        when(quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(any(), eq(7L)))
                 .thenReturn(List.<Object[]>of(
                 new Object[]{11L, new BigDecimal("30.5")},
                 new Object[]{12L, null}));
-        when(quoteSheetRepository.sumLegacyTonByPurchaseOrderItemIds(any(), eq(7L)))
-                .thenReturn(List.of());
 
         List<PurchaseOrderTonnageResponse> result = service().summarize(List.of(11L, 12L), 7L);
 
@@ -90,10 +88,8 @@ class PurchaseOrderTonnageServiceTest {
                 .thenReturn(List.of(
                         item(1L, 11L, "PO-1", "12", "5"),
                         item(1L, 12L, "PO-1", "25", "10")));
-        when(quoteSheetRepository.sumAllocatedTonByPurchaseOrderItemIds(any(), any()))
+        when(quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(any(), any()))
                 .thenReturn(List.<Object[]>of(new Object[]{11L, new BigDecimal("8")}));
-        when(quoteSheetRepository.sumLegacyTonByPurchaseOrderItemIds(any(), any()))
-                .thenReturn(List.of());
 
         List<PurchaseOrderTonnageResponse> result = service().summarize(List.of(11L, 12L), null);
 
@@ -105,10 +101,8 @@ class PurchaseOrderTonnageServiceTest {
     void summarize_overIssued_returnsNegativeRemaining() {
         when(purchaseOrderOptionQuery.listActiveItemsByIds(any()))
                 .thenReturn(List.of(item(1L, 11L, "PO-1", "12", "10")));
-        when(quoteSheetRepository.sumAllocatedTonByPurchaseOrderItemIds(any(), any()))
+        when(quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(any(), any()))
                 .thenReturn(List.<Object[]>of(new Object[]{11L, new BigDecimal("12.5")}));
-        when(quoteSheetRepository.sumLegacyTonByPurchaseOrderItemIds(any(), any()))
-                .thenReturn(List.of());
 
         List<PurchaseOrderTonnageResponse> result = service().summarize(List.of(11L), null);
 
@@ -119,17 +113,35 @@ class PurchaseOrderTonnageServiceTest {
     void summarize_emptyIds_returnsEmptyWithoutQuerying() {
         assertThat(service().summarize(List.of(), null)).isEmpty();
         assertThat(service().summarize(null, null)).isEmpty();
-        verify(quoteSheetRepository, never()).sumAllocatedTonByPurchaseOrderItemIds(any(), any());
-        verify(quoteSheetRepository, never()).sumLegacyTonByPurchaseOrderItemIds(any(), any());
+        verify(quoteSheetRepository, never()).sumIssuedTonByPurchaseOrderItemIds(any(), any());
+    }
+
+    /**
+     * P2-18 回归: 两段口径(关联分配量 + 历史旧列兜底)必须由**一次**仓储调用读完。
+     * <p>拆成两次查询再在内存相加时, READ COMMITTED 下另一事务在两条语句之间提交
+     * (把旧单值行改写成关联行这类转换), 该行会两段都不计而瞬时少计。这里以"只调用一次
+     * 汇总方法、不产生第二次汇总调用"钉住单语句/单快照行为(并发时序难以稳定复现, 故用调用次数)。
+     */
+    @Test
+    void summarize_readsIssuedTonInSingleStatementForSingleSnapshot() {
+        when(purchaseOrderOptionQuery.listActiveItemsByIds(any()))
+                .thenReturn(List.of(item(1L, 11L, "PO-1", "12", "40.5")));
+        when(quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(any(), any()))
+                .thenReturn(List.<Object[]>of(new Object[]{11L, new BigDecimal("30.5")}));
+
+        List<PurchaseOrderTonnageResponse> result = service().summarize(List.of(11L), null);
+
+        assertThat(result.get(0).issuedWeight()).isEqualByComparingTo("30.5");
+        verify(quoteSheetRepository, times(1)).sumIssuedTonByPurchaseOrderItemIds(any(), any());
+        // 任何第二次汇总调用都意味着又开了一条语句 → 两段口径不在同一快照里
+        verifyNoMoreInteractions(quoteSheetRepository);
     }
 
     @Test
     void listOptions_delegatesKeywordStatusAndOrder() {
         when(purchaseOrderOptionQuery.listActiveItemOptions("沙", "正常", 88L))
                 .thenReturn(List.of(item(88L, 11L, "PO-88", "12", "5")));
-        when(quoteSheetRepository.sumAllocatedTonByPurchaseOrderItemIds(any(), any()))
-                .thenReturn(List.of());
-        when(quoteSheetRepository.sumLegacyTonByPurchaseOrderItemIds(any(), any()))
+        when(quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(any(), any()))
                 .thenReturn(List.of());
 
         List<PurchaseOrderTonnageResponse> result =

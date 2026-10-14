@@ -927,10 +927,21 @@ public class QuoteSheetStore {
     /**
      * 应用行级采购订单关联(可多条), 整组替换。
      *
-     * <p>兼容两种请求形态: 新的 {@code purchaseOrderLinks} 列表(一行可挂多张明细行, 每张带
-     * 本次开出吨位), 以及只带 {@code purchaseOrderId}/{@code purchaseOrderItemId} 的旧形态
-     * (合成一条关联, 分配吨位取本行吨位)。旧的三列始终镜像<b>第一条</b>关联, 保证历史读取
-     * 与其它模块的单值口径不变。</p>
+     * <p><b>「请求里没有该字段」与「空数组」语义不同, 必须区分</b>:</p>
+     * <ul>
+     *   <li>{@code purchaseOrderLinks} 显式给出(含空数组): 该列表即权威整组, 按 (订单, 明细行)
+     *       协调落库; {@code []} 表示<b>清空关联</b>(旧三列一并清空), 非空则校验 Σ 分配吨位不变量。
+     *       此形态下旧单值三列只是冗余镜像, 不作为关联来源。</li>
+     *   <li>{@code purchaseOrderLinks} 为 null 且旧单值字段也全为空: <b>不改关联</b> —— 保留该行现有
+     *       关联行与旧三列快照。要清空必须显式传 {@code []}: 否则"请求里没有这个字段"会被误读成
+     *       "要清空", 静默删掉多行关联。</li>
+     *   <li>{@code purchaseOrderLinks} 为 null 且旧单值字段非空: 旧形态兼容。该行当前至多一条关联时
+     *       沿用旧规则(带明细行则合成一条、分配吨位取本行吨位; 只带订单则仅写旧三列);
+     *       该行已是<b>多条</b>关联时旧形态无法表达, 直接 422, 不得静默压成一条
+     *       (旧实现会删掉其余关联行, 且 Σ 分配吨位校验恰好通过而无人察觉)。</li>
+     * </ul>
+     *
+     * <p>旧的三列始终镜像<b>第一条</b>关联, 无关联时清空, 保证历史读取与其它模块的单值口径不变。</p>
      *
      * <p>明细行必须真实存在且属于对应订单, 同一明细行只能出现一次; 违反即 422(VALIDATION_ERROR)
      * 并在消息中带上明细行 id, 与「采购订单不存在」同一处理口径 —— 个别明细失效不再被静默丢弃,
@@ -944,32 +955,73 @@ public class QuoteSheetStore {
      */
     private void applyPurchaseOrderLinks(QuoteSheetItem item, QuoteSheetRequest.ItemRequest request,
                                          Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
-        List<QuoteSheetRequest.ItemPurchaseOrderRequest> requested = new ArrayList<>();
-        if (request.purchaseOrderLinks() != null) {
-            for (QuoteSheetRequest.ItemPurchaseOrderRequest link : request.purchaseOrderLinks()) {
-                if (link != null && link.purchaseOrderId() != null && link.purchaseOrderItemId() != null) {
-                    requested.add(link);
-                }
-            }
+        List<QuoteSheetRequest.ItemPurchaseOrderRequest> explicit = request.purchaseOrderLinks();
+        if (explicit != null) {
+            // 显式列表(含空数组): 以它为权威整组, 旧单值字段不再参与
+            reconcileLinks(item, requireCompleteLinks(explicit), purchaseOrderLinks, request.ton());
+            return;
+        }
+        if (request.purchaseOrderId() == null && request.purchaseOrderItemId() == null) {
+            // 未携带任何关联字段: 保持现状; 清空关联必须显式传空数组
+            return;
+        }
+        if (request.purchaseOrderId() == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "关联的采购订单不能为空");
+        }
+        int existingLinkCount = item.getPurchaseOrderLinks().size();
+        if (existingLinkCount > 1) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "该行已关联 " + existingLinkCount + " 张采购订单明细行, 单值形态无法完整表达; "
+                            + "请改用 purchaseOrderLinks 整组下发(清空请传空数组)");
+        }
+        if (request.purchaseOrderItemId() == null) {
+            /*
+             * 订单级关联(只选订单、未选具体明细行): 关联表要求明细行非空, 因此沿用旧行为 ——
+             * 只写三列(订单 + 订单号快照, 明细留空), 不产生关联行。历史与既有测试都依赖这一点。
+             * 该行至多一条关联行已在上面拦下, 这里清掉它以保证三列与关联行一致。
+             */
+            PurchaseOrderLinkSnapshot orderOnly = purchaseOrderLinks.get(request.purchaseOrderId());
+            item.getPurchaseOrderLinks().clear();
+            item.setPurchaseOrderId(request.purchaseOrderId());
+            item.setPurchaseOrderNo(orderOnly == null ? null : orderOnly.orderNo());
+            item.setPurchaseOrderItemId(null);
+            return;
         }
         // 旧形态: 只有单值关联时合成一条, 分配吨位取本行吨位(等价于"这一行全部开在这张明细行上")
-        if (requested.isEmpty() && request.purchaseOrderId() != null) {
-            if (request.purchaseOrderItemId() == null) {
-                /*
-                 * 订单级关联(只选订单、未选具体明细行): 关联表要求明细行非空, 因此沿用旧行为 ——
-                 * 只写三列(订单 + 订单号快照, 明细留空), 不产生关联行。历史与既有测试都依赖这一点。
-                 */
-                PurchaseOrderLinkSnapshot orderOnly = purchaseOrderLinks.get(request.purchaseOrderId());
-                item.getPurchaseOrderLinks().clear();
-                item.setPurchaseOrderId(request.purchaseOrderId());
-                item.setPurchaseOrderNo(orderOnly == null ? null : orderOnly.orderNo());
-                item.setPurchaseOrderItemId(null);
-                return;
-            }
-            requested.add(new QuoteSheetRequest.ItemPurchaseOrderRequest(
-                    request.purchaseOrderId(), request.purchaseOrderItemId(), request.ton()));
-        }
+        reconcileLinks(item, List.of(new QuoteSheetRequest.ItemPurchaseOrderRequest(
+                request.purchaseOrderId(), request.purchaseOrderItemId(), request.ton())),
+                purchaseOrderLinks, request.ton());
+    }
 
+    /**
+     * 校验显式关联列表的每条都完整(订单与明细行都非空), 返回可直接落库的请求列表。
+     * <p>{@code @Valid} 的 {@code @NotNull} 只覆盖 HTTP 入口, 服务层被直接调用时同样要挡住,
+     * 否则半截关联会被静默丢弃(与明细行不存在的处理口径一致)。</p>
+     */
+    private static List<QuoteSheetRequest.ItemPurchaseOrderRequest> requireCompleteLinks(
+            List<QuoteSheetRequest.ItemPurchaseOrderRequest> links) {
+        List<QuoteSheetRequest.ItemPurchaseOrderRequest> requested = new ArrayList<>(links.size());
+        for (QuoteSheetRequest.ItemPurchaseOrderRequest link : links) {
+            if (link == null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "关联的采购订单明细行不能为空");
+            }
+            if (link.purchaseOrderId() == null || link.purchaseOrderItemId() == null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "关联的采购订单与采购订单明细行都不能为空");
+            }
+            requested.add(link);
+        }
+        return requested;
+    }
+
+    /**
+     * 把请求关联列表整组协调进该行: 同 (订单明细行) 复用原实体(仅更新分配吨位/顺序/订单号快照),
+     * 新增才创建, 请求未携带的关联行从集合移除; 随后校验 Σ 分配吨位并镜像旧三列。
+     */
+    private void reconcileLinks(QuoteSheetItem item,
+                                List<QuoteSheetRequest.ItemPurchaseOrderRequest> requested,
+                                Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks,
+                                BigDecimal ton) {
         Map<Long, QuoteSheetItemPurchaseOrder> existingByItemId = new HashMap<>();
         for (QuoteSheetItemPurchaseOrder existing : item.getPurchaseOrderLinks()) {
             existingByItemId.put(existing.getPurchaseOrderItemId(), existing);
@@ -1016,7 +1068,7 @@ public class QuoteSheetStore {
         }
         if (!reconciled.isEmpty()) {
             // 订单级关联(不产生关联行)不经过这里, 因此不适用本不变量。
-            checkAllocatedTonTotal(allocatedTotal, request.ton());
+            checkAllocatedTonTotal(allocatedTotal, ton);
         }
         item.getPurchaseOrderLinks().clear();
         item.getPurchaseOrderLinks().addAll(reconciled);
