@@ -54,6 +54,15 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
     @EntityGraph(attributePaths = "items")
     Optional<SalesOrder> findByIdAndDeletedFlagFalse(Long id);
 
+    /**
+     * 详情查询专用覆写: 销售订单详情允许查看已删除记录, 因此不能改为
+     * {@link #findByIdAndDeletedFlagFalse(Long)}(会额外过滤 deleted_flag, 属可见性语义变更)。
+     * 这里只给 {@code items} 挂抓取图, 让详情装配由 1 + N 条 select 收敛为 1 条。
+     */
+    @Override
+    @EntityGraph(attributePaths = "items")
+    Optional<SalesOrder> findById(Long id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = "items")
     @Query("select salesOrder from SalesOrder salesOrder where salesOrder.id = :id and salesOrder.deletedFlag = false")

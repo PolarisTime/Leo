@@ -43,6 +43,15 @@ public interface ReceiptRepository extends JpaRepository<Receipt, Long>, JpaSpec
     @EntityGraph(attributePaths = "items")
     Optional<Receipt> findByIdAndDeletedFlagFalse(Long id);
 
+    /**
+     * 详情查询专用覆写: 收款单详情允许查看已删除记录, 因此不能改为
+     * {@link #findByIdAndDeletedFlagFalse(Long)}(会额外过滤 deleted_flag, 属可见性语义变更)。
+     * 这里只给 {@code items} 挂抓取图, 让详情装配由 1 + N 条 select 收敛为 1 条。
+     */
+    @Override
+    @EntityGraph(attributePaths = "items")
+    Optional<Receipt> findById(Long id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select receipt from Receipt receipt where receipt.id = :id and receipt.deletedFlag = false")
     Optional<Receipt> findByIdAndDeletedFlagFalseForUpdate(@Param("id") Long id);

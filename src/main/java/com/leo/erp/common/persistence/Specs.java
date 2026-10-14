@@ -4,6 +4,7 @@ import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import org.hibernate.query.criteria.HibernateCriteriaBuilder;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.LocalDate;
@@ -12,6 +13,9 @@ import java.util.Locale;
 public final class Specs {
 
     private static final String DELETED_DOCUMENT_STATUS = "已删除";
+
+    /** LIKE/ILIKE 转义字符，与 {@link #containsLikePatternIgnoreCase(String)} 的转义保持一致。 */
+    private static final char LIKE_ESCAPE_CHARACTER = '\\';
 
     private Specs() {}
 
@@ -34,7 +38,7 @@ public final class Specs {
             if (pattern == null) return cb.conjunction();
             var predicates = new jakarta.persistence.criteria.Predicate[fields.length];
             for (int i = 0; i < fields.length; i++) {
-                predicates[i] = cb.like(cb.lower(root.get(fields[i])), pattern, '\\');
+                predicates[i] = caseInsensitiveLike(cb, root.get(fields[i]), pattern);
             }
             return cb.or(predicates);
         };
@@ -72,7 +76,30 @@ public final class Specs {
         if (pattern == null) {
             return criteriaBuilder.conjunction();
         }
-        return criteriaBuilder.like(criteriaBuilder.lower(expression), pattern, '\\');
+        return caseInsensitiveLike(criteriaBuilder, expression, pattern);
+    }
+
+    /**
+     * 大小写不敏感包含匹配，两端语义一致：命中 {@code col ILIKE '%kw%'} 而不是
+     * {@code lower(col) LIKE '%kw%'}。
+     *
+     * <p>原因：V1 基线与后续迁移里的关键字索引全部建在<b>裸列</b>且带
+     * {@code WHERE deleted_flag = false} 的 partial 条件（{@code gin_trgm_ops}）。{@code lower(col)}
+     * 是另一个表达式，无法匹配裸列索引表达式，关键字一非空就退化为顺序扫描，这些 trgm 索引等于白建。
+     * PostgreSQL 方言声明了 {@code supportsCaseInsensitiveLike()} 并返回 {@code ilike}，因此
+     * Hibernate 会直接渲染 SQL 的 {@code ILIKE}（pg_trgm 的 {@code gin_trgm_ops} 支持 {@code ~~*} 运算符），
+     * 既保留大小写不敏感语义，又能复用既有裸列 partial 索引。</p>
+     *
+     * <p>保留 {@code cb.like(cb.lower(...))} 作为非 Hibernate 提供方（如测试替身）的兜底分支，
+     * 保证语义不因 SPI 而改变。</p>
+     */
+    private static Predicate caseInsensitiveLike(CriteriaBuilder criteriaBuilder,
+                                                 Expression<String> expression,
+                                                 String pattern) {
+        if (criteriaBuilder instanceof HibernateCriteriaBuilder hibernateCriteriaBuilder) {
+            return hibernateCriteriaBuilder.ilike(expression, pattern, LIKE_ESCAPE_CHARACTER);
+        }
+        return criteriaBuilder.like(criteriaBuilder.lower(expression), pattern, LIKE_ESCAPE_CHARACTER);
     }
 
     public static String containsLikePatternIgnoreCase(String keyword) {
@@ -123,11 +150,28 @@ public final class Specs {
         };
     }
 
-    /** 按主键集合排除（空集合时为无操作），供候选查询排除已引用记录复用。 */
+    /**
+     * 按主键集合排除（空集合时为无操作），供候选查询排除已引用记录复用。
+     *
+     * <p><b>NULL 陷阱防护</b>：{@code id NOT IN (?, NULL, ?)} 对任何行都返回 UNKNOWN，会静默把结果集
+     * 清空；因此这里先把集合里的 {@code null} 元素剔除，再生成 NOT IN。剔除后 {@code id} 是主键
+     * （非空），右侧也再无 {@code null}，NOT IN 的三值逻辑不会再把结果整体置空。</p>
+     *
+     * <p><b>取舍</b>：理想形态是 {@code id <> ALL(cast(? as bigint[]))} 这类单绑定参数的数组反连接
+     * （Hibernate 6.6.53 只为 loader 批量装载构造 {@code InArrayPredicate}，用户查询走
+     * {@code visitInListPredicate}，一定会把集合展开成 N 个绑定参数），但 Criteria 层无法表达
+     * {@code <> ALL(array)}；用 {@code array_position(string_to_array(...))} 模拟会导致每行重新线性
+     * 扫描数组（本机 20 万行 × 5 万排除 id 实测超过 180s 未完成），不能采用。因此本次只做零风险的
+     * 语义修正（剔除 NULL），不做会引入性能回退的改写。绑定参数个数问题应在 SQL 层（native 查询
+     * 数组参数）单独治理。</p>
+     */
     public static <T> Specification<T> idNotIn(java.util.Collection<Long> excludedIds) {
-        return (root, q, cb) -> excludedIds == null || excludedIds.isEmpty()
+        var effectiveIds = excludedIds == null
+                ? java.util.List.<Long>of()
+                : excludedIds.stream().filter(java.util.Objects::nonNull).toList();
+        return (root, q, cb) -> effectiveIds.isEmpty()
                 ? cb.conjunction()
-                : cb.not(root.get("id").in(excludedIds));
+                : cb.not(root.get("id").in(effectiveIds));
     }
 
     public static <T, V extends Comparable<? super V>> Specification<T> betweenIfPresent(String field, V start, V end) {
