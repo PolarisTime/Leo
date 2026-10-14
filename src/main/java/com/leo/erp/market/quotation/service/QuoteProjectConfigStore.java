@@ -1,5 +1,6 @@
 package com.leo.erp.market.quotation.service;
 
+import com.leo.erp.market.quotation.QuoteDefaults;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -30,7 +31,6 @@ import java.util.Set;
 @Service
 public class QuoteProjectConfigStore {
 
-    private static final BigDecimal DEFAULT_LENGTH_PREMIUM = new BigDecimal("30");
 
     private final QuoteProjectConfigRepository repository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
@@ -63,7 +63,7 @@ public class QuoteProjectConfigStore {
         return repository.findByProjectIdAndDeletedFlagFalse(projectId)
                 .map(this::toResponse)
                 .orElseGet(() -> new QuoteProjectConfigResponse(
-                        projectId, DEFAULT_LENGTH_PREMIUM, false, List.of(), List.of(), null, List.of(), 0L,
+                        projectId, QuoteDefaults.LENGTH_PREMIUM, false, List.of(), List.of(), null, List.of(), 0L,
                         quoteSourceOf(projectId)));
     }
 
@@ -109,7 +109,7 @@ public class QuoteProjectConfigStore {
     /** 应用标量字段并返回是否发生实际变化(用于判定是否需要显式 FORCE_INCREMENT)。 */
     private boolean apply(QuoteProjectConfig entity, QuoteProjectConfigRequest request) {
         boolean changed = false;
-        BigDecimal lengthPremium = request.lengthPremium() == null ? DEFAULT_LENGTH_PREMIUM : request.lengthPremium();
+        BigDecimal lengthPremium = request.lengthPremium() == null ? QuoteDefaults.LENGTH_PREMIUM : request.lengthPremium();
         // 数值列回读后标度可能不同(如 30 vs 30.00), 必须按数值比较, 否则会误判为已变更而跳过 FORCE_INCREMENT。
         changed |= differs(lengthPremium, entity.getLengthPremium());
         entity.setLengthPremium(lengthPremium);

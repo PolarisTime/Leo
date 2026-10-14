@@ -1,5 +1,6 @@
 package com.leo.erp.market.quotation.service;
 
+import com.leo.erp.market.quotation.QuoteDefaults;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -52,7 +53,6 @@ import java.util.Set;
 @Service
 public class QuoteSheetStore {
 
-    private static final BigDecimal DEFAULT_LENGTH_PREMIUM = new BigDecimal("30");
     private static final String DEFAULT_STATUS = "报价";
 
     /**
@@ -723,7 +723,7 @@ public class QuoteSheetStore {
         entity.setRefDate(request.refDate());
         changed |= !Objects.equals(request.refPeriod(), entity.getRefPeriod());
         entity.setRefPeriod(request.refPeriod());
-        BigDecimal lengthPremium = request.lengthPremium() == null ? DEFAULT_LENGTH_PREMIUM : request.lengthPremium();
+        BigDecimal lengthPremium = request.lengthPremium() == null ? QuoteDefaults.LENGTH_PREMIUM : request.lengthPremium();
         // 数值列回读后标度可能不同(如 30 vs 30.00), 必须按数值比较, 否则会误判为已变更而跳过 FORCE_INCREMENT。
         changed |= differs(lengthPremium, entity.getLengthPremium());
         entity.setLengthPremium(lengthPremium);

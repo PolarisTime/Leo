@@ -1,6 +1,7 @@
 package com.leo.erp.master.valuealias.service;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -10,6 +11,7 @@ import com.leo.erp.master.valuealias.domain.entity.MdValueAlias;
 import com.leo.erp.master.valuealias.repository.MdValueAliasRepository;
 import com.leo.erp.master.valuealias.web.dto.ValueAliasRequest;
 import com.leo.erp.master.valuealias.web.dto.ValueAliasResponse;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -65,6 +67,7 @@ public class ValueAliasService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'value-alias:' + #result.dimension()")
     public ValueAliasResponse create(ValueAliasRequest request) {
         String dimension = ValueAliasDimension.require(request.dimension()).name();
         String sourceValue = normalizeValue(request.sourceValue(), "源写法");
@@ -87,6 +90,7 @@ public class ValueAliasService {
     }
 
     @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'value-alias:' + #result.dimension()")
     public ValueAliasResponse update(Long id, ValueAliasRequest request) {
         MdValueAlias entity = requireActive(id);
         String dimension = ValueAliasDimension.require(request.dimension()).name();
@@ -107,6 +111,8 @@ public class ValueAliasService {
     }
 
     @Transactional
+    // 删除无法从返回值取维度, 且属低频操作, 直接清空下拉缓存区
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, allEntries = true)
     public void delete(Long id) {
         MdValueAlias entity = requireActive(id);
         entity.setDeletedFlag(true);
@@ -128,7 +134,8 @@ public class ValueAliasService {
         for (MdValueAlias row : rows) {
             mapping.putIfAbsent(row.getSourceValue(), row.getTargetValue());
         }
-        return Map.copyOf(mapping);
+        // 返回可变 LinkedHashMap: 该结果会被 @Cacheable 写入 Redis, 不可变集合类型反序列化易踩坑
+        return mapping;
     }
 
     private MdValueAlias requireActive(Long id) {

@@ -1,6 +1,8 @@
 package com.leo.erp.market.service;
 
 import com.leo.erp.master.api.MaterialQuery;
+import com.leo.erp.master.valuealias.service.ValueAliasDimension;
+import com.leo.erp.master.valuealias.service.ValueAliasLookup;
 import com.leo.erp.market.domain.entity.SteelArticle;
 import com.leo.erp.market.domain.entity.SteelQuote;
 import com.leo.erp.market.mysteel.MysteelProperties;
@@ -15,11 +17,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,7 +42,15 @@ class SteelQuoteMatchServiceTest {
     private MaterialQuery materialQuery;
 
     private SteelQuoteMatchService service() {
-        return new SteelQuoteMatchService(quoteRepository, articleRepository, materialQuery, new MysteelProperties());
+        return new SteelQuoteMatchService(quoteRepository, articleRepository, materialQuery, new MysteelProperties(),
+                emptyAliasLookup());
+    }
+
+    /** 归一化查表返回空映射, 使匹配回退到内置默认规则(与改造前行为一致)。 */
+    private ValueAliasLookup emptyAliasLookup() {
+        ValueAliasLookup lookup = mock(ValueAliasLookup.class);
+        lenient().when(lookup.mapping(any())).thenReturn(Map.of());
+        return lookup;
     }
 
     @Test
@@ -63,6 +76,45 @@ class SteelQuoteMatchServiceTest {
         // 9米: 基准价
         assertThat(rows.get(1).price()).isEqualByComparingTo("3160");
         assertThat(rows.get(1).priceType()).isEqualTo("基准价");
+    }
+
+    @Test
+    void match_prefersTableAliasOverBuiltInRules() {
+        // md_value_alias 里维护了规则时, 必须优先采用表数据而不是代码里的内置默认规则
+        stubLatestArticle();
+        when(quoteRepository.findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
+                        "MYSTEEL", "杭州", QUOTE_DATE, "下午"))
+                .thenReturn(List.of(quote("表内品牌目标", "表内品名目标", "HRB400E", "Φ16-25", "3160", "")));
+        when(materialQuery.findActiveProducts()).thenReturn(List.of(
+                material(1L, "M001", "万泰", "HRB400E", "直条", "16", "9米")));
+
+        ValueAliasLookup lookup = mock(ValueAliasLookup.class);
+        lenient().when(lookup.mapping(ValueAliasDimension.BRAND)).thenReturn(Map.of("万泰", "表内品牌目标"));
+        lenient().when(lookup.mapping(ValueAliasDimension.CATEGORY)).thenReturn(Map.of("直条", "表内品名目标"));
+
+        SteelQuoteMatchService withTableRules = new SteelQuoteMatchService(
+                quoteRepository, articleRepository, materialQuery, new MysteelProperties(), lookup);
+
+        MaterialPriceMatchResponse row = withTableRules.match(QUOTE_DATE, "下午").get(0);
+
+        assertThat(row.status()).isEqualTo("匹配");
+        assertThat(row.factory()).isEqualTo("表内品牌目标");
+    }
+
+    @Test
+    void match_fallsBackToBuiltInRulesWhenTableEmpty() {
+        // 表未初始化时回退内置规则: 品牌 万泰→浙江万泰、类别 直条→螺纹钢 仍然生效
+        stubLatestArticle();
+        when(quoteRepository.findBySourceAndMarketAndQuoteDateAndPeriodAndDeletedFlagFalse(
+                        "MYSTEEL", "杭州", QUOTE_DATE, "下午"))
+                .thenReturn(List.of(quote("浙江万泰", "螺纹钢", "HRB400E", "Φ16-25", "3160", "")));
+        when(materialQuery.findActiveProducts()).thenReturn(List.of(
+                material(1L, "M001", "万泰", "HRB400E", "直条", "16", "9米")));
+
+        MaterialPriceMatchResponse row = service().match(QUOTE_DATE, "下午").get(0);
+
+        assertThat(row.status()).isEqualTo("匹配");
+        assertThat(row.factory()).isEqualTo("浙江万泰");
     }
 
     @Test

@@ -4,6 +4,8 @@ import com.leo.erp.master.api.MaterialQuery;
 import com.leo.erp.market.domain.entity.SteelArticle;
 import com.leo.erp.market.domain.entity.SteelQuote;
 import com.leo.erp.market.mysteel.MysteelProperties;
+import com.leo.erp.master.valuealias.service.ValueAliasDimension;
+import com.leo.erp.master.valuealias.service.ValueAliasLookup;
 import com.leo.erp.market.repository.SteelArticleRepository;
 import com.leo.erp.market.repository.SteelQuoteRepository;
 import com.leo.erp.market.web.dto.MaterialPriceMatchResponse;
@@ -48,14 +50,29 @@ public class SteelQuoteMatchService {
     private final SteelArticleRepository articleRepository;
     private final MaterialQuery materialQuery;
     private final MysteelProperties properties;
+    private final ValueAliasLookup valueAliasLookup;
 
     public SteelQuoteMatchService(SteelQuoteRepository quoteRepository,
                                   SteelArticleRepository articleRepository,
-                                  MaterialQuery materialQuery, MysteelProperties properties) {
+                                  MaterialQuery materialQuery, MysteelProperties properties,
+                                  ValueAliasLookup valueAliasLookup) {
         this.quoteRepository = quoteRepository;
         this.articleRepository = articleRepository;
         this.materialQuery = materialQuery;
         this.properties = properties;
+        this.valueAliasLookup = valueAliasLookup;
+    }
+
+    /**
+     * 归一化查表：优先采用 md_value_alias 里维护的规则；该维度表内无数据时回退到内置默认规则，
+     * 保证「表未初始化 / 迁移未执行」时行为与改造前完全一致。
+     *
+     * <p>映射以「同一含义多种写法」为界，不做跨语义合并，因此查不到时原样返回。</p>
+     */
+    private String resolveAlias(ValueAliasDimension dimension, String raw, Map<String, String> fallback) {
+        Map<String, String> mapping = valueAliasLookup.mapping(dimension);
+        Map<String, String> effective = mapping.isEmpty() ? fallback : mapping;
+        return effective.getOrDefault(raw, raw);
     }
 
     /** 按日期+时段匹配全部实体商品(Mysteel 默认源); 未传日期/时段时取最新文章的日期与时段。 */
@@ -117,7 +134,8 @@ public class SteelQuoteMatchService {
             return noPrice(material, quoteDate, quotePeriod);
         }
         String category = material.category();
-        String breed = properties.getMatch().getBreedMap().getOrDefault(category, category);
+        String breed = resolveAlias(ValueAliasDimension.CATEGORY, category,
+                properties.getMatch().getBreedMap());
         Integer erpSpec = parseSpec(material.spec());
         if (erpSpec == null) {
             return noPrice(material, quoteDate, quotePeriod);
@@ -171,9 +189,11 @@ public class SteelQuoteMatchService {
             return noPrice(material, quoteDate, quotePeriod);
         }
         String brand = material.brand();
-        String alias = properties.getMatch().getBrandAlias().getOrDefault(brand, brand);
+        String alias = resolveAlias(ValueAliasDimension.BRAND, brand,
+                properties.getMatch().getBrandAlias());
         String category = material.category();
-        String breed = properties.getMatch().getBreedMap().getOrDefault(category, category);
+        String breed = resolveAlias(ValueAliasDimension.CATEGORY, category,
+                properties.getMatch().getBreedMap());
         Integer erpSpec = parseSpec(material.spec());
         if (erpSpec == null) {
             return noPrice(material, quoteDate, quotePeriod);
