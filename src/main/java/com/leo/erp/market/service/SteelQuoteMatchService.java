@@ -5,6 +5,7 @@ import com.leo.erp.market.domain.entity.SteelArticle;
 import com.leo.erp.market.domain.entity.SteelQuote;
 import com.leo.erp.market.mysteel.MysteelProperties;
 import com.leo.erp.master.valuealias.service.ValueAliasDimension;
+import com.leo.erp.market.lengthpremium.service.LengthPremiumService;
 import com.leo.erp.master.valuealias.service.ValueAliasLookup;
 import com.leo.erp.market.repository.SteelArticleRepository;
 import com.leo.erp.market.repository.SteelQuoteRepository;
@@ -51,16 +52,19 @@ public class SteelQuoteMatchService {
     private final MaterialQuery materialQuery;
     private final MysteelProperties properties;
     private final ValueAliasLookup valueAliasLookup;
+    private final LengthPremiumService lengthPremiumService;
 
     public SteelQuoteMatchService(SteelQuoteRepository quoteRepository,
                                   SteelArticleRepository articleRepository,
                                   MaterialQuery materialQuery, MysteelProperties properties,
-                                  ValueAliasLookup valueAliasLookup) {
+                                  ValueAliasLookup valueAliasLookup,
+                                  LengthPremiumService lengthPremiumService) {
         this.quoteRepository = quoteRepository;
         this.articleRepository = articleRepository;
         this.materialQuery = materialQuery;
         this.properties = properties;
         this.valueAliasLookup = valueAliasLookup;
+        this.lengthPremiumService = lengthPremiumService;
     }
 
     /**
@@ -286,7 +290,12 @@ public class SteelQuoteMatchService {
     }
 
     private Integer resolveLengthPremium(String length) {
-        Map<String, Integer> premiumMap = properties.getMatch().getLengthPremium();
+        // 优先采用 md_length_premium 维护的规则; 表为空时回退 yml 与 Java 默认值,
+        // 保证「表未初始化 / 迁移未执行」时行为与改造前一致。
+        Map<String, Integer> fromTable = lengthPremiumService.activePremiumMap();
+        Map<String, Integer> premiumMap = fromTable.isEmpty()
+                ? properties.getMatch().getLengthPremium()
+                : fromTable;
         if (length == null) {
             return null;
         }

@@ -2,6 +2,7 @@ package com.leo.erp.market.service;
 
 import com.leo.erp.master.api.MaterialQuery;
 import com.leo.erp.master.valuealias.service.ValueAliasDimension;
+import com.leo.erp.market.lengthpremium.service.LengthPremiumService;
 import com.leo.erp.master.valuealias.service.ValueAliasLookup;
 import com.leo.erp.market.domain.entity.SteelArticle;
 import com.leo.erp.market.domain.entity.SteelQuote;
@@ -43,7 +44,14 @@ class SteelQuoteMatchServiceTest {
 
     private SteelQuoteMatchService service() {
         return new SteelQuoteMatchService(quoteRepository, articleRepository, materialQuery, new MysteelProperties(),
-                emptyAliasLookup());
+                emptyAliasLookup(), emptyLengthPremiumService());
+    }
+
+    /** 定尺加价查表返回空映射, 使匹配回退到配置默认规则。 */
+    private LengthPremiumService emptyLengthPremiumService() {
+        LengthPremiumService service = mock(LengthPremiumService.class);
+        lenient().when(service.activePremiumMap()).thenReturn(Map.of());
+        return service;
     }
 
     /** 归一化查表返回空映射, 使匹配回退到内置默认规则(与改造前行为一致)。 */
@@ -93,7 +101,8 @@ class SteelQuoteMatchServiceTest {
         lenient().when(lookup.mapping(ValueAliasDimension.CATEGORY)).thenReturn(Map.of("直条", "表内品名目标"));
 
         SteelQuoteMatchService withTableRules = new SteelQuoteMatchService(
-                quoteRepository, articleRepository, materialQuery, new MysteelProperties(), lookup);
+                quoteRepository, articleRepository, materialQuery, new MysteelProperties(), lookup,
+                emptyLengthPremiumService());
 
         MaterialPriceMatchResponse row = withTableRules.match(QUOTE_DATE, "下午").get(0);
 

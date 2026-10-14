@@ -37,7 +37,8 @@ public final class PageSortFieldCatalog {
             Map.entry("role", Set.of("id", "code", "name", "status", "builtin", "createdAt", "updatedAt")),
             Map.entry("user", Set.of("id", "loginName", "userName", "mobile", "status", "lastLoginDate", "createdAt", "updatedAt")),
             Map.entry("value-alias", Set.of("id", "dimension", "sourceValue", "targetValue", "createdAt", "updatedAt")),
-            Map.entry("quote-region", Set.of("id", "regionName", "slug", "sortOrder", "status", "createdAt", "updatedAt"))
+            Map.entry("quote-region", Set.of("id", "regionName", "slug", "sortOrder", "status", "createdAt", "updatedAt")),
+            Map.entry("length-premium", Set.of("id", "lengthName", "premium", "sortOrder", "status", "createdAt", "updatedAt"))
     );
 
     private PageSortFieldCatalog() {

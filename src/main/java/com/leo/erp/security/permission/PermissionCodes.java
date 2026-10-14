@@ -60,6 +60,7 @@ public final class PermissionCodes {
         public static final String CARRIERS = "carriers";
         public static final String VALUE_ALIASES = "value-aliases";
         public static final String QUOTE_REGIONS = "quote-regions";
+        public static final String LENGTH_PREMIUMS = "length-premiums";
         public static final String PROJECTS = "projects";
         public static final String QUOTE_SHEETS = "quote-sheets";
         public static final String STEEL_QUOTES = "steel-quotes";
@@ -240,6 +241,12 @@ public final class PermissionCodes {
     public static final String QUOTE_REGIONS_CREATE = Resources.QUOTE_REGIONS + ":" + Actions.CREATE;
     public static final String QUOTE_REGIONS_UPDATE = Resources.QUOTE_REGIONS + ":" + Actions.UPDATE;
     public static final String QUOTE_REGIONS_DELETE = Resources.QUOTE_REGIONS + ":" + Actions.DELETE;
+
+    // 定尺加价: md_length_premium 的可维护规则(原为 yml 与 Java 默认值双份定义)
+    public static final String LENGTH_PREMIUMS_READ = Resources.LENGTH_PREMIUMS + ":" + Actions.READ;
+    public static final String LENGTH_PREMIUMS_CREATE = Resources.LENGTH_PREMIUMS + ":" + Actions.CREATE;
+    public static final String LENGTH_PREMIUMS_UPDATE = Resources.LENGTH_PREMIUMS + ":" + Actions.UPDATE;
+    public static final String LENGTH_PREMIUMS_DELETE = Resources.LENGTH_PREMIUMS + ":" + Actions.DELETE;
 
     // 项目
     public static final String PROJECTS_READ = Resources.PROJECTS + ":" + Actions.READ;
@@ -430,6 +437,7 @@ public final class PermissionCodes {
             CARRIERS_READ, CARRIERS_CREATE, CARRIERS_UPDATE, CARRIERS_DELETE,
             VALUE_ALIASES_READ, VALUE_ALIASES_CREATE, VALUE_ALIASES_UPDATE, VALUE_ALIASES_DELETE,
             QUOTE_REGIONS_READ, QUOTE_REGIONS_CREATE, QUOTE_REGIONS_UPDATE, QUOTE_REGIONS_DELETE,
+            LENGTH_PREMIUMS_READ, LENGTH_PREMIUMS_CREATE, LENGTH_PREMIUMS_UPDATE, LENGTH_PREMIUMS_DELETE,
             PROJECTS_READ, PROJECTS_CREATE, PROJECTS_UPDATE, PROJECTS_DELETE,
             QUOTE_SHEETS_READ, QUOTE_SHEETS_CREATE, QUOTE_SHEETS_UPDATE, QUOTE_SHEETS_DELETE,
             STEEL_QUOTES_READ, PURCHASE_ORDERS_READ, PURCHASE_ORDERS_CREATE, PURCHASE_ORDERS_UPDATE, PURCHASE_ORDERS_DELETE,
