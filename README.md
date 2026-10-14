@@ -130,10 +130,19 @@ GitHub Actions 当前会依次执行：
 
 - 使用 Checkstyle 与 SpotBugs 完成静态分析。
 - 启动 PostgreSQL 与 Redis 服务，并执行 `flyway:migrate`、`flyway:validate` 校验迁移链路。
-- 使用 `-DskipTests` 构建后端 JAR。
+- 执行 `mvn package`：单元测试与真实库集成测试都在这一步跑（`package` 不加 `-DskipTests`）。
 - 构建后端镜像，启动容器并通过 `/api/v2.0/health` 完成冒烟检查。
 
-CI 不运行活动测试套件，详细命令以 `.github/workflows/ci.yml` 为准。
+真实 PostgreSQL 集成用例（`@DataJpaTest`，如报价单多行采购订单关联、分配吨位汇总口径）默认被
+`@EnabledIfEnvironmentVariable(named = "LEO_TEST_POSTGRES", matches = "true")` 跳过；CI 的 `package`
+job 已设置 `LEO_TEST_POSTGRES=true`（配合上面的 postgres service 与 `flyway:migrate`），因此它们会真正执行。
+本地要在开发库上跑同一批用例，先加载 `scripts/env/dev.sh` 的默认值再显式打开开关：
+
+```bash
+LEO_TEST_POSTGRES=true bash scripts/maven.sh -o test -Dtest='QuoteItemMultiPurchaseOrderLinkPostgresTest' -DfailIfNoTests=false
+```
+
+详细命令以 `.github/workflows/ci.yml` 为准。
 
 ## 安全说明
 

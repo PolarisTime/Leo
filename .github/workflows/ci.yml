@@ -100,6 +100,10 @@ jobs:
       LEO_JWT_SECRET: ci-jwt-secret-ci-jwt-secret-ci-jwt-secret
       LEO_DATA_ENCRYPTION_KEY: ci-data-secret-ci-data-secret-ci-data
       LEO_MACHINE_ID: 1
+      # 口径/迁移类的真实库回归(@DataJpaTest + @EnabledIfEnvironmentVariable)默认被跳过, 不设这个变量
+      # 时多行采购订单关联、分配吨位汇总、整单替换版本等断言在 CI 只是"假绿"; 这里显式开启,
+      # 让它们在下面的 postgres service(已由 flyway:migrate 建好 schema)上真正执行。
+      LEO_TEST_POSTGRES: "true"
 
     steps:
       - name: Checkout
