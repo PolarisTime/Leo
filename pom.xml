@@ -20,6 +20,14 @@
     <properties>
         <java.version>21</java.version>
         <maven.compiler.release>21</maven.compiler.release>
+        <!-- 版本信息里的「编译时间」= 本次构建真实时刻, 显式取自 Maven 会话启动时间。
+             不能依赖 spring-boot-maven-plugin build-info 的默认取值: 它优先读
+             project.build.outputTimestamp, 而构建环境常把该属性固定成可复现构建的 ZIP 纪元
+             哨兵 1980-02-01T00:00:00Z(实测: 显式 -Dproject.build.outputTimestamp=1980-02-01T00:00:00Z
+             即精确复现线上「编译时间 1980年02月01日 08:00:00」; SOURCE_DATE_EPOCH=0/空 在本机
+             Maven 3.9.11 下不会触发)。这里显式注入, 把口径固定在唯一常量上;
+             BuildInfoFreshnessTest 会在它退化时变红。 -->
+        <build.timestamp>${maven.build.timestamp}</build.timestamp>
         <mapstruct.version>1.6.3</mapstruct.version>
         <jjwt.version>0.13.0</jjwt.version>
         <flyway.version>11.20.3</flyway.version>
@@ -346,6 +354,9 @@
                     </execution>
                 </executions>
                 <configuration>
+                    <!-- 显式注入编译时刻: 不写时该 goal 会退回 project.build.outputTimestamp,
+                         可复现构建下那是 1980-02-01T00:00:00Z 哨兵, 版本信息会显示 1980 年。 -->
+                    <time>${build.timestamp}</time>
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>
