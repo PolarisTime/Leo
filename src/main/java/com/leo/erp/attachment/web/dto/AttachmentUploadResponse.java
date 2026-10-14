@@ -1,5 +1,8 @@
 package com.leo.erp.attachment.web.dto;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.leo.erp.common.json.NumericLongSerializer;
+
 import java.time.LocalDateTime;
 
 public record AttachmentUploadResponse(
@@ -8,7 +11,8 @@ public record AttachmentUploadResponse(
         String fileName,
         String originalFileName,
         String contentType,
-        Long fileSize,
+        /** 字节数, 不是雪花 ID: 与 AttachmentResponse 一致输出 JSON number, 避免前端契约校验失败。 */
+        @JsonSerialize(using = NumericLongSerializer.class) Long fileSize,
         String sourceType,
         String uploader,
         LocalDateTime uploadTime,
