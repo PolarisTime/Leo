@@ -110,7 +110,23 @@ public class AttachmentProperties {
 
         private String secretKey;
 
+        /** STS 临时凭证的 SecurityToken; 为空表示使用长期密钥。 */
+        private String sessionToken;
+
         private boolean pathStyleAccess = false;
+
+        /**
+         * 是否启用 AWS SDK 的 aws-chunked 传输编码与 trailer checksum。
+         * 阿里云 OSS 等部分 S3 兼容服务不支持, 会以 400 STREAMING-UNSIGNED-PAYLOAD-TRAILER 拒绝写入。
+         */
+        private boolean chunkedEncodingEnabled = true;
+
+        /**
+         * 预签名下载是否覆盖 response-content-type。
+         * 阿里云 OSS 拒绝该覆盖(400 Can not override response header on content-type);
+         * 上传时已写入 content-type, 故默认不覆盖。
+         */
+        private boolean overrideResponseContentType = false;
 
         private boolean encryptedStorage = false;
 
@@ -162,6 +178,30 @@ public class AttachmentProperties {
 
         public void setSecretKey(String secretKey) {
             this.secretKey = secretKey;
+        }
+
+        public String getSessionToken() {
+            return sessionToken;
+        }
+
+        public void setSessionToken(String sessionToken) {
+            this.sessionToken = sessionToken;
+        }
+
+        public boolean isChunkedEncodingEnabled() {
+            return chunkedEncodingEnabled;
+        }
+
+        public void setChunkedEncodingEnabled(boolean chunkedEncodingEnabled) {
+            this.chunkedEncodingEnabled = chunkedEncodingEnabled;
+        }
+
+        public boolean isOverrideResponseContentType() {
+            return overrideResponseContentType;
+        }
+
+        public void setOverrideResponseContentType(boolean overrideResponseContentType) {
+            this.overrideResponseContentType = overrideResponseContentType;
         }
 
         public boolean isPathStyleAccess() {

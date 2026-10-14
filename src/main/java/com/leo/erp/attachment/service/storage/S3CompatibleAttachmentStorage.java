@@ -239,15 +239,18 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "当前 S3 配置与附件桶不一致");
         }
         S3Presigner presigner = clientProvider.getPresigner(s3);
-        GetObjectRequest request = GetObjectRequest.builder()
+        GetObjectRequest.Builder requestBuilder = GetObjectRequest.builder()
                 .bucket(s3.getBucket())
                 .key(parsed.objectKey())
-                .responseContentType(contentType)
-                .responseContentDisposition(contentDisposition(inline, fileName))
-                .build();
+                .responseContentDisposition(contentDisposition(inline, fileName));
+        // 阿里云 OSS 拒绝 response-content-type 覆盖(400 Can not override response header on content-type);
+        // 上传时已写入 content-type, 因此默认不覆盖, 仅在需要纠正历史对象类型时显式开启。
+        if (s3.isOverrideResponseContentType()) {
+            requestBuilder.responseContentType(contentType);
+        }
         PresignedGetObjectRequest presigned = presigner.presignGetObject(GetObjectPresignRequest.builder()
                 .signatureDuration(previewTtl(s3))
-                .getObjectRequest(request)
+                .getObjectRequest(requestBuilder.build())
                 .build());
         return URI.create(presigned.url().toString());
     }

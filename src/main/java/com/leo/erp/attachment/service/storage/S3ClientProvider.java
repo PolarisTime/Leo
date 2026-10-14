@@ -6,6 +6,7 @@ import com.leo.erp.common.error.ErrorCode;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.http.apache.ApacheHttpClient;
 import software.amazon.awssdk.regions.Region;
@@ -67,14 +68,18 @@ public class S3ClientProvider implements DisposableBean {
         }
     }
 
-    private String fingerprint(AttachmentProperties.S3 s3) {
+    /** 包级可见: 供同包测试验证「STS token 轮换必须触发客户端重建」。 */
+    String fingerprint(AttachmentProperties.S3 s3) {
         return String.join("|",
                 value(s3.getEndpoint()),
                 value(s3.getRegion()),
                 value(s3.getBucket()),
                 value(s3.getAccessKey()),
                 value(s3.getSecretKey()),
+                // STS 临时凭证会轮换, token 变化必须重建客户端, 否则会继续用已失效凭证
+                value(s3.getSessionToken()),
                 String.valueOf(s3.isPathStyleAccess()),
+                String.valueOf(s3.isChunkedEncodingEnabled()),
                 String.valueOf(s3.isEncryptedStorage()),
                 String.valueOf(s3.isServerProxyOnly()),
                 String.valueOf(s3.getConnectTimeout()),
@@ -100,9 +105,7 @@ public class S3ClientProvider implements DisposableBean {
     private S3Client buildClient(AttachmentProperties.S3 s3) {
         URI endpoint = parseEndpoint(s3.getEndpoint());
         return S3Client.builder()
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(s3.getAccessKey(), s3.getSecretKey())
-                ))
+                .credentialsProvider(credentials(s3))
                 .region(Region.of(s3.getRegion()))
                 .endpointOverride(endpoint)
                 .httpClientBuilder(ApacheHttpClient.builder()
@@ -110,6 +113,7 @@ public class S3ClientProvider implements DisposableBean {
                         .socketTimeout(s3.getReadTimeout()))
                 .serviceConfiguration(S3Configuration.builder()
                         .pathStyleAccessEnabled(s3.isPathStyleAccess())
+                        .chunkedEncodingEnabled(s3.isChunkedEncodingEnabled())
                         .checksumValidationEnabled(false)
                         .build())
                 .build();
@@ -118,15 +122,28 @@ public class S3ClientProvider implements DisposableBean {
     private S3Presigner buildPresigner(AttachmentProperties.S3 s3) {
         URI endpoint = parseEndpoint(s3.getEndpoint());
         return S3Presigner.builder()
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(s3.getAccessKey(), s3.getSecretKey())
-                ))
+                .credentialsProvider(credentials(s3))
                 .region(Region.of(s3.getRegion()))
                 .endpointOverride(endpoint)
                 .serviceConfiguration(S3Configuration.builder()
                         .pathStyleAccessEnabled(s3.isPathStyleAccess())
                         .build())
                 .build();
+    }
+
+    /**
+     * STS 临时凭证必须同时携带 SecurityToken, 否则服务端以 InvalidAccessKeyId 拒绝;
+     * token 为空时回退长期密钥, 既有部署行为不变。
+     */
+    /** 包级可见: 供同包测试验证长期密钥与 STS 临时凭证的选择。 */
+    StaticCredentialsProvider credentials(AttachmentProperties.S3 s3) {
+        String sessionToken = s3.getSessionToken();
+        if (sessionToken != null && !sessionToken.isBlank()) {
+            return StaticCredentialsProvider.create(AwsSessionCredentials.create(
+                    s3.getAccessKey(), s3.getSecretKey(), sessionToken.trim()));
+        }
+        return StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(s3.getAccessKey(), s3.getSecretKey()));
     }
 
     private URI parseEndpoint(String endpoint) {
