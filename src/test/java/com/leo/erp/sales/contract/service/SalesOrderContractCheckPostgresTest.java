@@ -237,6 +237,9 @@ class SalesOrderContractCheckPostgresTest {
         order.setProjectName("PG项目");
         order.setProjectId(projectId);
         order.setDeliveryDate(LocalDate.of(2026, 1, 1));
+        // V180 起 so_sales_order.order_date 是 NOT NULL(DEFAULT CURRENT_DATE 只在"列被省略"时生效,
+        // 而 Hibernate 的 INSERT 会列出所有映射列, 未赋值即显式 NULL) ⇒ fixture 必须显式给值。
+        order.setOrderDate(LocalDate.of(2026, 1, 1));
         order.setSalesName("系统");
         order.setTotalAmount(new BigDecimal(amount));
         order.setTotalWeight(new BigDecimal(weight));
