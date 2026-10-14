@@ -43,37 +43,44 @@ public record QuoteSheetResponse(
                                     Long supplierId, String supplierName) {
     }
 
+    /** 行级关联的采购订单明细行(可多条): allocatedTon 是本次在该明细行开出的吨位。 */
+    public record ItemPurchaseOrderResponse(Long purchaseOrderId, String purchaseOrderNo,
+                                            Long purchaseOrderItemId, BigDecimal allocatedTon,
+                                            Integer sortNo) {
+    }
+
     public record ItemResponse(Long id, Integer lineNo, QuoteRowType rowType, String category, String material,
                                Integer spec, String length, String remark, BigDecimal ton, boolean purchased,
                                boolean locked,
                                Long purchaseOrderId, String purchaseOrderNo, Long purchaseOrderItemId,
+                               List<ItemPurchaseOrderResponse> purchaseOrderLinks,
                                List<ItemPriceResponse> prices) {
 
         /** 兼容旧调用方: 未显式传行类型与行备注。 */
         public ItemResponse(Long id, Integer lineNo, String category, String material, Integer spec,
                             String length, BigDecimal ton, List<ItemPriceResponse> prices) {
             this(id, lineNo, QuoteRowType.PRODUCT, category, material, spec, length, null, ton, false,
-                    false, null, null, null, prices);
+                    false, null, null, null, List.of(), prices);
         }
 
         /** 兼容旧调用方: 未携带行备注。 */
         public ItemResponse(Long id, Integer lineNo, QuoteRowType rowType, String category, String material,
                             Integer spec, String length, BigDecimal ton, List<ItemPriceResponse> prices) {
-            this(id, lineNo, rowType, category, material, spec, length, null, ton, false, false, null, null, null, prices);
+            this(id, lineNo, rowType, category, material, spec, length, null, ton, false, false, null, null, null, List.of(), prices);
         }
 
         /** 兼容旧调用方: 未携带已采购标记。 */
         public ItemResponse(Long id, Integer lineNo, QuoteRowType rowType, String category, String material,
                             Integer spec, String length, String remark, BigDecimal ton,
                             List<ItemPriceResponse> prices) {
-            this(id, lineNo, rowType, category, material, spec, length, remark, ton, false, false, null, null, null, prices);
+            this(id, lineNo, rowType, category, material, spec, length, remark, ton, false, false, null, null, null, List.of(), prices);
         }
 
         /** 兼容旧调用方: 未携带关联采购订单(含明细行)。 */
         public ItemResponse(Long id, Integer lineNo, QuoteRowType rowType, String category, String material,
                             Integer spec, String length, String remark, BigDecimal ton, boolean purchased,
                             List<ItemPriceResponse> prices) {
-            this(id, lineNo, rowType, category, material, spec, length, remark, ton, purchased, false, null, null, null, prices);
+            this(id, lineNo, rowType, category, material, spec, length, remark, ton, purchased, false, null, null, null, List.of(), prices);
         }
 
         /** 兼容旧调用方: 未携带订单明细行关联。 */
@@ -82,7 +89,7 @@ public record QuoteSheetResponse(
                             Long purchaseOrderId, String purchaseOrderNo,
                             List<ItemPriceResponse> prices) {
             this(id, lineNo, rowType, category, material, spec, length, remark, ton, purchased, false,
-                    purchaseOrderId, purchaseOrderNo, null, prices);
+                    purchaseOrderId, purchaseOrderNo, null, List.of(), prices);
         }
     }
 }

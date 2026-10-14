@@ -99,6 +99,15 @@ public class QuoteSheetItem {
         return purchaseOrderId != null;
     }
 
+    /**
+     * 关联的采购订单明细行(可多条): 旧的三列继续镜像第一条, 保证历史读取口径不变。
+     * <p>LAZY 反向集合: 不参与 fetch join(避免与 items 双 bag), 按 50 一批懒加载避免 N+1。</p>
+     */
+    @OneToMany(mappedBy = "item", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @BatchSize(size = 50)
+    @OrderBy("sortNo ASC")
+    private List<QuoteSheetItemPurchaseOrder> purchaseOrderLinks = new ArrayList<>();
+
     /** LAZY 反向集合: 不参与 fetch join(避免与 items 双 bag), 按 50 一批懒加载避免 N+1。 */
     @OneToMany(mappedBy = "item", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @BatchSize(size = 50)

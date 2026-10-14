@@ -10,6 +10,7 @@ import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItem;
+import com.leo.erp.market.quotation.domain.entity.QuoteSheetItemPurchaseOrder;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItemPrice;
 import com.leo.erp.market.quotation.domain.enums.QuoteRowType;
 import com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository;
@@ -867,6 +868,7 @@ public class QuoteSheetStore {
             item.setPurchaseOrderId(null);
             item.setPurchaseOrderNo(null);
             item.setPurchaseOrderItemId(null);
+            item.getPurchaseOrderLinks().clear();
             item.getPrices().clear();
             return;
         }
@@ -885,9 +887,9 @@ public class QuoteSheetStore {
             item.setPurchaseOrderId(null);
             item.setPurchaseOrderNo(null);
             item.setPurchaseOrderItemId(null);
+            item.getPurchaseOrderLinks().clear();
         } else {
-            applyPurchaseOrderLink(item, request.purchaseOrderId(), request.purchaseOrderItemId(),
-                    purchaseOrderLinks);
+            applyPurchaseOrderLinks(item, request, purchaseOrderLinks);
         }
         Map<String, QuoteSheetItemPrice> existingByBrandName = new HashMap<>();
         for (QuoteSheetItemPrice price : item.getPrices()) {
@@ -916,27 +918,86 @@ public class QuoteSheetStore {
     }
 
     /**
-     * 应用行级采购订单关联: null 表示解除关联(清空订单与明细快照)。
-     * <p>整行替换语义下请求总是显式携带该字段, 因此 null 一律视为解除;
-     * 非空时从批量解析结果取订单号快照(存在性已在 {@link #resolvePurchaseOrderLinks} 校验),
-     * 供订单号变更/删除后仍可读。明细行 id 同为计划态引用, 不校验规格一致性(前端已保证)。</p>
+     * 应用行级采购订单关联(可多条), 整组替换。
+     *
+     * <p>兼容两种请求形态: 新的 {@code purchaseOrderLinks} 列表(一行可挂多张明细行, 每张带
+     * 本次开出吨位), 以及只带 {@code purchaseOrderId}/{@code purchaseOrderItemId} 的旧形态
+     * (合成一条关联, 分配吨位取本行吨位)。旧的三列始终镜像<b>第一条</b>关联, 保证历史读取
+     * 与其它模块的单值口径不变。</p>
+     *
+     * <p>明细行必须属于对应订单, 否则该条关联被丢弃(不因个别明细失效而拒绝整单保存);
+     * 订单本身不存在则在 {@link #resolvePurchaseOrderLinks} 阶段直接报错。</p>
      */
-    private void applyPurchaseOrderLink(QuoteSheetItem item, Long purchaseOrderId,
-                                        Long purchaseOrderItemId,
-                                        Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
-        if (purchaseOrderId == null) {
+    private void applyPurchaseOrderLinks(QuoteSheetItem item, QuoteSheetRequest.ItemRequest request,
+                                         Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
+        List<QuoteSheetRequest.ItemPurchaseOrderRequest> requested = new ArrayList<>();
+        if (request.purchaseOrderLinks() != null) {
+            for (QuoteSheetRequest.ItemPurchaseOrderRequest link : request.purchaseOrderLinks()) {
+                if (link != null && link.purchaseOrderId() != null && link.purchaseOrderItemId() != null) {
+                    requested.add(link);
+                }
+            }
+        }
+        // 旧形态: 只有单值关联时合成一条, 分配吨位取本行吨位(等价于"这一行全部开在这张明细行上")
+        if (requested.isEmpty() && request.purchaseOrderId() != null) {
+            if (request.purchaseOrderItemId() == null) {
+                /*
+                 * 订单级关联(只选订单、未选具体明细行): 关联表要求明细行非空, 因此沿用旧行为 ——
+                 * 只写三列(订单 + 订单号快照, 明细留空), 不产生关联行。历史与既有测试都依赖这一点。
+                 */
+                PurchaseOrderLinkSnapshot orderOnly = purchaseOrderLinks.get(request.purchaseOrderId());
+                item.getPurchaseOrderLinks().clear();
+                item.setPurchaseOrderId(request.purchaseOrderId());
+                item.setPurchaseOrderNo(orderOnly == null ? null : orderOnly.orderNo());
+                item.setPurchaseOrderItemId(null);
+                return;
+            }
+            requested.add(new QuoteSheetRequest.ItemPurchaseOrderRequest(
+                    request.purchaseOrderId(), request.purchaseOrderItemId(), request.ton()));
+        }
+
+        Map<Long, QuoteSheetItemPurchaseOrder> existingByItemId = new HashMap<>();
+        for (QuoteSheetItemPurchaseOrder existing : item.getPurchaseOrderLinks()) {
+            existingByItemId.put(existing.getPurchaseOrderItemId(), existing);
+        }
+        List<QuoteSheetItemPurchaseOrder> reconciled = new ArrayList<>();
+        Set<Long> usedItemIds = new HashSet<>();
+        for (QuoteSheetRequest.ItemPurchaseOrderRequest linkRequest : requested) {
+            PurchaseOrderLinkSnapshot snapshot = purchaseOrderLinks.get(linkRequest.purchaseOrderId());
+            if (snapshot == null || !snapshot.itemIds().contains(linkRequest.purchaseOrderItemId())) {
+                continue;
+            }
+            if (!usedItemIds.add(linkRequest.purchaseOrderItemId())) {
+                continue;
+            }
+            QuoteSheetItemPurchaseOrder link = existingByItemId.remove(linkRequest.purchaseOrderItemId());
+            if (link == null) {
+                link = new QuoteSheetItemPurchaseOrder();
+                link.setId(snowflakeIdGenerator.nextId());
+                link.setItem(item);
+                link.setPurchaseOrderItemId(linkRequest.purchaseOrderItemId());
+            }
+            link.setPurchaseOrderId(linkRequest.purchaseOrderId());
+            link.setPurchaseOrderNo(snapshot.orderNo());
+            link.setAllocatedTon(linkRequest.allocatedTon() == null
+                    ? BigDecimal.ZERO : linkRequest.allocatedTon());
+            link.setSortNo(reconciled.size());
+            reconciled.add(link);
+        }
+        item.getPurchaseOrderLinks().clear();
+        item.getPurchaseOrderLinks().addAll(reconciled);
+
+        // 旧三列镜像第一条, 无关联时清空
+        if (reconciled.isEmpty()) {
             item.setPurchaseOrderId(null);
             item.setPurchaseOrderNo(null);
             item.setPurchaseOrderItemId(null);
-            return;
+        } else {
+            QuoteSheetItemPurchaseOrder first = reconciled.get(0);
+            item.setPurchaseOrderId(first.getPurchaseOrderId());
+            item.setPurchaseOrderNo(first.getPurchaseOrderNo());
+            item.setPurchaseOrderItemId(first.getPurchaseOrderItemId());
         }
-        PurchaseOrderLinkSnapshot link = purchaseOrderLinks.get(purchaseOrderId);
-        item.setPurchaseOrderId(purchaseOrderId);
-        item.setPurchaseOrderNo(link == null ? null : link.orderNo());
-        item.setPurchaseOrderItemId(
-                purchaseOrderItemId != null && link != null && link.itemIds().contains(purchaseOrderItemId)
-                        ? purchaseOrderItemId
-                        : null);
     }
 
     /** 订单关联快照: 订单号 + 该订单下有效明细行 id 集合(构建期可变)。 */
@@ -966,6 +1027,20 @@ public class QuoteSheetStore {
                 }
                 if (item.purchaseOrderItemId() != null) {
                     itemIds.add(item.purchaseOrderItemId());
+                }
+                // 多行关联: 每条关联的订单与明细行都要在同一批校验里解析出订单号快照
+                if (item.purchaseOrderLinks() != null) {
+                    for (QuoteSheetRequest.ItemPurchaseOrderRequest link : item.purchaseOrderLinks()) {
+                        if (link == null) {
+                            continue;
+                        }
+                        if (link.purchaseOrderId() != null) {
+                            orderIds.add(link.purchaseOrderId());
+                        }
+                        if (link.purchaseOrderItemId() != null) {
+                            itemIds.add(link.purchaseOrderItemId());
+                        }
+                    }
                 }
             }
         }
@@ -1016,6 +1091,11 @@ public class QuoteSheetStore {
                 item.getSpec(), item.getLength(), item.getRemark(), item.getTon(), item.isPurchased(),
                 item.isLocked(),
                 item.getPurchaseOrderId(), item.getPurchaseOrderNo(), item.getPurchaseOrderItemId(),
+                item.getPurchaseOrderLinks().stream()
+                        .map(link -> new QuoteSheetResponse.ItemPurchaseOrderResponse(
+                                link.getPurchaseOrderId(), link.getPurchaseOrderNo(),
+                                link.getPurchaseOrderItemId(), link.getAllocatedTon(), link.getSortNo()))
+                        .toList(),
                 item.getPrices().stream()
                         .map(price -> new QuoteSheetResponse.ItemPriceResponse(
                                 price.getId(), price.getBrandName(), price.getSpotPrice(),

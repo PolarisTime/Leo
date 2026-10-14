@@ -45,6 +45,17 @@ public record QuoteSheetRequest(
     }
 
     /**
+     * 行级关联的采购订单明细行: 一行可关联多张, {@code allocatedTon} 是本次在该明细行开出的吨位。
+     * <p>不携带订单号快照 —— 快照由服务端按 {@code purchaseOrderId} 批量解析后写入。</p>
+     */
+    public record ItemPurchaseOrderRequest(
+            @NotNull(message = "关联的采购订单不能为空") Long purchaseOrderId,
+            @NotNull(message = "关联的采购订单明细行不能为空") Long purchaseOrderItemId,
+            @DecimalMin(value = "0", message = "分配吨位不能为负") BigDecimal allocatedTon
+    ) {
+    }
+
+    /**
      * 商品行/隔断行。
      * <p>
      * {@code rowType} 为空按 {@code PRODUCT}(商品行)处理, 兼容历史请求; 商品字段的"必填"校验
@@ -63,32 +74,51 @@ public record QuoteSheetRequest(
                 Boolean locked,
                 Long purchaseOrderId,
                 Long purchaseOrderItemId,
+                @Valid List<ItemPurchaseOrderRequest> purchaseOrderLinks,
                 @Valid List<ItemPriceRequest> prices
         ) {
 
             /** 兼容旧调用方: 未显式传行类型时按商品行处理。 */
             public ItemRequest(String category, String material, Integer spec, String length,
                                BigDecimal ton, List<ItemPriceRequest> prices) {
-                this(null, category, material, spec, length, null, ton, null, null, null, prices);
+                this(null, category, material, spec, length, null, ton, null, null, null, null, prices);
             }
 
             /** 兼容旧调用方: 未携带行备注。 */
             public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
                                String length, BigDecimal ton, List<ItemPriceRequest> prices) {
-                this(rowType, category, material, spec, length, null, ton, null, null, null, prices);
+                this(rowType, category, material, spec, length, null, ton, null, null, null, null, prices);
             }
 
             /** 兼容旧调用方: 未携带行备注。 */
             public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
                                String length, String remark, BigDecimal ton, List<ItemPriceRequest> prices) {
-                this(rowType, category, material, spec, length, remark, ton, null, null, null, prices);
+                this(rowType, category, material, spec, length, remark, ton, null, null, null, null, prices);
             }
 
             /** 兼容旧调用方: 未携带订单明细行关联。 */
             public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
                                String length, String remark, BigDecimal ton, Long purchaseOrderId,
                                List<ItemPriceRequest> prices) {
-                this(rowType, category, material, spec, length, remark, ton, null, purchaseOrderId, null, prices);
+                this(rowType, category, material, spec, length, remark, ton, null, purchaseOrderId, null, null, prices);
+            }
+
+            /** 兼容旧调用方: 单值关联形态(物料...|locked|purchaseOrderId|purchaseOrderItemId|prices)。 */
+            public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
+                               String length, String remark, BigDecimal ton, Boolean locked,
+                               Long purchaseOrderId, Long purchaseOrderItemId,
+                               List<ItemPriceRequest> prices) {
+                this(rowType, category, material, spec, length, remark, ton, locked,
+                        purchaseOrderId, purchaseOrderItemId, null, prices);
+            }
+
+            /** 兼容旧调用方: 单值关联形态, 未携带行备注。 */
+            public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
+                               String length, BigDecimal ton, Boolean locked,
+                               Long purchaseOrderId, Long purchaseOrderItemId,
+                               List<ItemPriceRequest> prices) {
+                this(rowType, category, material, spec, length, null, ton, locked,
+                        purchaseOrderId, purchaseOrderItemId, null, prices);
             }
         }
 }

@@ -50,18 +50,23 @@ public interface QuoteSheetRepository extends JpaRepository<QuoteSheet, Long>,
 
     /**
      * 按采购订单明细行汇总报单已开吨位: 按规格扣减的唯一真源。
-     * <p>仅统计 {@code purchaseOrderItemId} 非空的商品行; 未回填的历史行不参与行级口径。</p>
+     * <p>来源取「旧单值列 ∪ 新关联表」并去重: 一行关联多张明细行时, 该行的吨位对每张明细行都
+     * 计入一次(多行关联的语义), 但同一条 (明细行, 订单明细行) 关联只计一次, 避免迁移前后重复计数。
+     * 未关联明细行的历史行仍按旧单值列统计。</p>
      *
      * @return 每行 {@code [purchaseOrderItemId(Long), totalTon(BigDecimal or null)]}
      */
     @Query("""
-            select item.purchaseOrderItemId, sum(item.ton)
+            select coalesce(link.purchaseOrderItemId, item.purchaseOrderItemId),
+                   sum(item.ton)
             from QuoteSheetItem item
-            where item.purchaseOrderItemId in :purchaseOrderItemIds
+            left join item.purchaseOrderLinks link
+            where (link.purchaseOrderItemId in :purchaseOrderItemIds
+                   or item.purchaseOrderItemId in :purchaseOrderItemIds)
               and item.sheet.deletedFlag = false
               and (:excludeSheetId is null or item.sheet.id <> :excludeSheetId)
-            group by item.purchaseOrderItemId
+            group by coalesce(link.purchaseOrderItemId, item.purchaseOrderItemId)
             """)
-    List<Object[]> sumIssuedTonByPurchaseOrderItemIds(@Param("purchaseOrderItemIds") Collection<Long> purchaseOrderItemIds,
+List<Object[]> sumIssuedTonByPurchaseOrderItemIds(@Param("purchaseOrderItemIds") Collection<Long> purchaseOrderItemIds,
                                                       @Param("excludeSheetId") Long excludeSheetId);
 }
