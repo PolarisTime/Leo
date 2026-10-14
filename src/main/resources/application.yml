@@ -150,10 +150,10 @@ spring:
 
   servlet:
     multipart:
-      # 单文件上传大小限制
-      max-file-size: 20MB
-      # 单次请求总上传大小限制
-      max-request-size: 25MB
+      # 单文件上传大小限制(与 leo.attachment.max-file-size 同源, 避免两处漂移)
+      max-file-size: ${LEO_ATTACHMENT_MAX_FILE_SIZE:20MB}
+      # 单次请求总上传大小限制(可含多个文件, 故独立于单文件上限)
+      max-request-size: ${LEO_ATTACHMENT_MAX_REQUEST_SIZE:25MB}
 
 # JaVers 仅由显式领域事件驱动，表结构统一交给 Flyway 管理
 javers:
@@ -221,7 +221,7 @@ leo:
       mget-batch-size: ${LEO_REDIS_SESSION_MGET_BATCH_SIZE:500}
   attachment:
     # 业务层额外限制的附件大小
-    max-file-size: 20MB
+    max-file-size: ${LEO_ATTACHMENT_MAX_FILE_SIZE:20MB}
     storage:
       # 附件存储类型：local / s3
       type: ${LEO_ATTACHMENT_STORAGE_TYPE:local}
@@ -266,8 +266,8 @@ leo:
         # 浏览器预览预签名有效期
         presign-preview-ttl: ${LEO_ATTACHMENT_S3_PRESIGN_PREVIEW_TTL:5m}
   database:
-    # 数据库是否只读，开启后应限制写操作
-    read-only: false
+    # 数据库是否只读，开启后应限制写操作(维护/迁移窗口期用)
+    read-only: ${LEO_DATABASE_READ_ONLY:false}
     # Hikari 连接泄漏检测阈值，默认关闭；排障时通过环境变量临时开启
     hikari-leak-detection-threshold: ${LEO_DATABASE_HIKARI_LEAK_DETECTION_THRESHOLD:0}
   maintenance:
@@ -662,11 +662,16 @@ springdoc:
 
 # 可观测性配置
 management:
+  endpoint:
+    configprops:
+      # Spring Boot 3.4+ 默认 never: 所有配置值脱敏为 ******; 排障时设为 always 可查看当前生效值。
+      # 默认保持 never, 避免内网管理端口被本机其他用户读到连接串与密钥。
+      show-values: ${LEO_CONFIGPROPS_SHOW_VALUES:never}
   endpoints:
     web:
       exposure:
         # 暴露 loggers 以便运行时按需调整日志级别(排障), health 供探活
-        include: ${LEO_MANAGEMENT_ENDPOINTS:health,loggers}
+        include: ${LEO_MANAGEMENT_ENDPOINTS:health,loggers,configprops}
   tracing:
     sampling:
       # 本地和测试默认全采样，便于排查；生产环境在 application-prod.yml 中默认降为 10%。

@@ -51,7 +51,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: ${LEO_MANAGEMENT_ENDPOINTS:health,prometheus,loggers}
+        include: ${LEO_MANAGEMENT_ENDPOINTS:health,prometheus,loggers,configprops}
   tracing:
     sampling:
       # 生产默认按 10% 采样；排障时可临时通过环境变量提高。
