@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -81,15 +82,25 @@ public class PurchaseOrderTonnageService {
         Set<Long> itemIds = items.stream()
                 .map(PurchaseOrderItemOptionSnapshot::purchaseOrderItemId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-        Map<Long, BigDecimal> issuedByItemId = quoteSheetRepository
-                .sumIssuedTonByPurchaseOrderItemIds(itemIds, excludeSheetId).stream()
-                .collect(Collectors.toMap(
-                        row -> (Long) row[0],
-                        row -> row[1] == null ? BigDecimal.ZERO : (BigDecimal) row[1]));
+        // 关联分配量 + 历史旧列兜底: 两段分别走索引(避免 or 联表), 在内存里相加
+        Map<Long, BigDecimal> issuedByItemId = new HashMap<>();
+        accumulateTon(issuedByItemId,
+                quoteSheetRepository.sumAllocatedTonByPurchaseOrderItemIds(itemIds, excludeSheetId));
+        accumulateTon(issuedByItemId,
+                quoteSheetRepository.sumLegacyTonByPurchaseOrderItemIds(itemIds, excludeSheetId));
         return items.stream()
                 .map(item -> toResponse(item, issuedByItemId.getOrDefault(
                         item.purchaseOrderItemId(), BigDecimal.ZERO)))
                 .toList();
+    }
+
+    /** 把 [明细行 id, 吨位] 行累加进 map(多段汇总相加, 不是覆盖)。 */
+    private static void accumulateTon(Map<Long, BigDecimal> target, List<Object[]> rows) {
+        for (Object[] row : rows) {
+            Long itemId = (Long) row[0];
+            BigDecimal ton = row[1] == null ? BigDecimal.ZERO : (BigDecimal) row[1];
+            target.merge(itemId, ton, BigDecimal::add);
+        }
     }
 
     private static PurchaseOrderTonnageResponse toResponse(PurchaseOrderItemOptionSnapshot item,

@@ -50,23 +50,41 @@ public interface QuoteSheetRepository extends JpaRepository<QuoteSheet, Long>,
 
     /**
      * 按采购订单明细行汇总报单已开吨位: 按规格扣减的唯一真源。
-     * <p>来源取「旧单值列 ∪ 新关联表」并去重: 一行关联多张明细行时, 该行的吨位对每张明细行都
-     * 计入一次(多行关联的语义), 但同一条 (明细行, 订单明细行) 关联只计一次, 避免迁移前后重复计数。
-     * 未关联明细行的历史行仍按旧单值列统计。</p>
+     * <p>口径拆成两条独立查询后相加, 而不是一条带 {@code or} 的联表:</p>
+     * <ul>
+     *   <li>{@link #sumAllocatedTonByPurchaseOrderItemIds}: 有明细行关联时按 {@code allocated_ton}
+     *       计 —— 一行 130 吨拆到两张明细行(60+70)时, 两张各计自己那一份, 不能各计 130,
+     *       否则同一张单据会把两张明细行的额度都吃掉;</li>
+     *   <li>{@link #sumLegacyTonByPurchaseOrderItemIds}: 没有关联行的历史数据仍按旧单值列 +
+     *       整行吨位统计(迁移回填前的兼容口径)。</li>
+     * </ul>
+     * <p>两段各自走 purchase_order_item_id 上的索引; 用 {@code or} 联表会让 PostgreSQL 无法
+     * 分别用索引(见 Crunchy Data 的 LEFT JOIN vs UNION ALL 实测)。</p>
      *
      * @return 每行 {@code [purchaseOrderItemId(Long), totalTon(BigDecimal or null)]}
      */
     @Query("""
-            select coalesce(link.purchaseOrderItemId, item.purchaseOrderItemId),
-                   sum(item.ton)
+            select link.purchaseOrderItemId, sum(link.allocatedTon)
+            from QuoteSheetItemPurchaseOrder link
+            where link.purchaseOrderItemId in :purchaseOrderItemIds
+              and link.item.sheet.deletedFlag = false
+              and (:excludeSheetId is null or link.item.sheet.id <> :excludeSheetId)
+            group by link.purchaseOrderItemId
+            """)
+    List<Object[]> sumAllocatedTonByPurchaseOrderItemIds(
+            @Param("purchaseOrderItemIds") Collection<Long> purchaseOrderItemIds,
+            @Param("excludeSheetId") Long excludeSheetId);
+
+    @Query("""
+            select item.purchaseOrderItemId, sum(item.ton)
             from QuoteSheetItem item
-            left join item.purchaseOrderLinks link
-            where (link.purchaseOrderItemId in :purchaseOrderItemIds
-                   or item.purchaseOrderItemId in :purchaseOrderItemIds)
+            where item.purchaseOrderItemId in :purchaseOrderItemIds
+              and item.purchaseOrderLinks is empty
               and item.sheet.deletedFlag = false
               and (:excludeSheetId is null or item.sheet.id <> :excludeSheetId)
-            group by coalesce(link.purchaseOrderItemId, item.purchaseOrderItemId)
+            group by item.purchaseOrderItemId
             """)
-List<Object[]> sumIssuedTonByPurchaseOrderItemIds(@Param("purchaseOrderItemIds") Collection<Long> purchaseOrderItemIds,
-                                                      @Param("excludeSheetId") Long excludeSheetId);
+    List<Object[]> sumLegacyTonByPurchaseOrderItemIds(
+            @Param("purchaseOrderItemIds") Collection<Long> purchaseOrderItemIds,
+            @Param("excludeSheetId") Long excludeSheetId);
 }

@@ -102,15 +102,17 @@ class QuoteItemMultiPurchaseOrderLinkPostgresTest {
                 .extracting(QuoteSheetResponse.ItemPurchaseOrderResponse::purchaseOrderItemId)
                 .containsExactly(POI_1, POI_2);
 
-        // 汇总: 同一行的 130 吨对两张已关联明细行各计一次
-        assertThat(tonByItem(POI_1, null)).isEqualByComparingTo("130");
-        assertThat(tonByItem(POI_2, null)).isEqualByComparingTo("130");
+        // 汇总按**本次在该明细行开出的吨位**(allocated_ton)计: 60 + 70 = 报单 130
+        assertThat(tonByItem(POI_1, null)).isEqualByComparingTo("60");
+        assertThat(tonByItem(POI_2, null)).isEqualByComparingTo("70");
+        assertThat(links.get(0).allocatedTon().add(links.get(1).allocatedTon()))
+                .isEqualByComparingTo("130");
         // 排除本单据后没有其他占用: 查询不返回该明细行(调用方按 null 当 0 处理)
         assertThat(tonByItem(POI_1, SHEET_ID)).isNull();
         // 未关联的明细行不参与行级口径
         assertThat(tonByItem(921000000000000099L, null)).isNull();
-        // 去重: 旧单值列与新关联表指向同一条关联时不得双计
-        assertThat(tonByItem(POI_1, null)).isEqualByComparingTo("130");
+        // 有分配行时旧单值列不再重复计(旧列只是第一条的镜像)
+        assertThat(tonByItem(POI_1, null)).isEqualByComparingTo("60");
     }
 
     @Test
@@ -130,12 +132,18 @@ class QuoteItemMultiPurchaseOrderLinkPostgresTest {
         assertThat(links.get(0).allocatedTon()).isEqualByComparingTo("130");
     }
 
+    /** 与服务端口径一致: 关联分配量 + 历史旧列兜底, 两段相加。 */
     private BigDecimal tonByItem(long purchaseOrderItemId, Long excludeSheetId) {
-        return repository.sumIssuedTonByPurchaseOrderItemIds(List.of(purchaseOrderItemId), excludeSheetId)
-                .stream()
-                .findFirst()
-                .map(row -> (BigDecimal) row[1])
-                .orElse(null);
+        List<Long> ids = List.of(purchaseOrderItemId);
+        BigDecimal allocated = repository
+                .sumAllocatedTonByPurchaseOrderItemIds(ids, excludeSheetId).stream()
+                .findFirst().map(row -> (BigDecimal) row[1]).orElse(BigDecimal.ZERO);
+        BigDecimal legacy = repository
+                .sumLegacyTonByPurchaseOrderItemIds(ids, excludeSheetId).stream()
+                .findFirst().map(row -> (BigDecimal) row[1]).orElse(BigDecimal.ZERO);
+        BigDecimal total = allocated.add(legacy);
+        return total.signum() == 0 && allocated.signum() == 0 && legacy.signum() == 0
+                ? null : total;
     }
 
     private void stubPurchaseOrders() {

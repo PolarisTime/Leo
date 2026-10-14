@@ -45,7 +45,9 @@ class PurchaseOrderTonnageServiceTest {
     void summarize_carriesItemBrandForIssuedBrandDisplay() {
         when(purchaseOrderOptionQuery.listActiveItemsByIds(any()))
                 .thenReturn(List.of(item(1L, 11L, "PO-1", "12", "40.5")));
-        when(quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(any(), any()))
+        when(quoteSheetRepository.sumAllocatedTonByPurchaseOrderItemIds(any(), any()))
+                .thenReturn(List.of());
+        when(quoteSheetRepository.sumLegacyTonByPurchaseOrderItemIds(any(), any()))
                 .thenReturn(List.of());
 
         List<PurchaseOrderTonnageResponse> result = service().summarize(List.of(11L), null);
@@ -60,9 +62,12 @@ class PurchaseOrderTonnageServiceTest {
                 .thenReturn(List.of(
                         item(1L, 11L, "PO-1", "12", "40.5"),
                         item(1L, 12L, "PO-1", "25", "10")));
-        when(quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(any(), eq(7L))).thenReturn(List.<Object[]>of(
+        when(quoteSheetRepository.sumAllocatedTonByPurchaseOrderItemIds(any(), eq(7L)))
+                .thenReturn(List.<Object[]>of(
                 new Object[]{11L, new BigDecimal("30.5")},
                 new Object[]{12L, null}));
+        when(quoteSheetRepository.sumLegacyTonByPurchaseOrderItemIds(any(), eq(7L)))
+                .thenReturn(List.of());
 
         List<PurchaseOrderTonnageResponse> result = service().summarize(List.of(11L, 12L), 7L);
 
@@ -85,8 +90,10 @@ class PurchaseOrderTonnageServiceTest {
                 .thenReturn(List.of(
                         item(1L, 11L, "PO-1", "12", "5"),
                         item(1L, 12L, "PO-1", "25", "10")));
-        when(quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(any(), any()))
+        when(quoteSheetRepository.sumAllocatedTonByPurchaseOrderItemIds(any(), any()))
                 .thenReturn(List.<Object[]>of(new Object[]{11L, new BigDecimal("8")}));
+        when(quoteSheetRepository.sumLegacyTonByPurchaseOrderItemIds(any(), any()))
+                .thenReturn(List.of());
 
         List<PurchaseOrderTonnageResponse> result = service().summarize(List.of(11L, 12L), null);
 
@@ -98,8 +105,10 @@ class PurchaseOrderTonnageServiceTest {
     void summarize_overIssued_returnsNegativeRemaining() {
         when(purchaseOrderOptionQuery.listActiveItemsByIds(any()))
                 .thenReturn(List.of(item(1L, 11L, "PO-1", "12", "10")));
-        when(quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(any(), any()))
+        when(quoteSheetRepository.sumAllocatedTonByPurchaseOrderItemIds(any(), any()))
                 .thenReturn(List.<Object[]>of(new Object[]{11L, new BigDecimal("12.5")}));
+        when(quoteSheetRepository.sumLegacyTonByPurchaseOrderItemIds(any(), any()))
+                .thenReturn(List.of());
 
         List<PurchaseOrderTonnageResponse> result = service().summarize(List.of(11L), null);
 
@@ -110,14 +119,17 @@ class PurchaseOrderTonnageServiceTest {
     void summarize_emptyIds_returnsEmptyWithoutQuerying() {
         assertThat(service().summarize(List.of(), null)).isEmpty();
         assertThat(service().summarize(null, null)).isEmpty();
-        verify(quoteSheetRepository, never()).sumIssuedTonByPurchaseOrderItemIds(any(), any());
+        verify(quoteSheetRepository, never()).sumAllocatedTonByPurchaseOrderItemIds(any(), any());
+        verify(quoteSheetRepository, never()).sumLegacyTonByPurchaseOrderItemIds(any(), any());
     }
 
     @Test
     void listOptions_delegatesKeywordStatusAndOrder() {
         when(purchaseOrderOptionQuery.listActiveItemOptions("沙", "正常", 88L))
                 .thenReturn(List.of(item(88L, 11L, "PO-88", "12", "5")));
-        when(quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(any(), any()))
+        when(quoteSheetRepository.sumAllocatedTonByPurchaseOrderItemIds(any(), any()))
+                .thenReturn(List.of());
+        when(quoteSheetRepository.sumLegacyTonByPurchaseOrderItemIds(any(), any()))
                 .thenReturn(List.of());
 
         List<PurchaseOrderTonnageResponse> result =
