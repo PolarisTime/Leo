@@ -49,3 +49,36 @@ bash scripts/maven.sh -B -ntp test -Dleo.test.postgres=true -Dtest=QuoteSheetFet
    只做"收窄后的查询"而不校验命中集合，会让 SQL 计数类断言在空结果时假绿。
 4. **提交前执行**：涉及 SQL、迁移、实体映射、仓储与服务口径的改动，提交前跑定向真实库用例；
    `db/migration` 改动必须跑全量（`-Dleo.test.postgres=true`）。
+
+## 迁移历史门禁（CI 与生产部署共用同一份实现）
+
+`flyway:validate` 只回答“库中记录与本地脚本是否对齐”，它**不是**“这条迁移到底跑没跑”的探针：
+判断某版本是否已执行必须看 `flyway_schema_history` 的 `success` / `checksum`。因此
+`.github/workflows/ci.yml` 的 package job 与 `.github/workflows/deploy-production.yml` 的
+backend job 在 `flyway:migrate`/`flyway:validate` 之后追加同源 SQL 断言，任一条不满足即失败：
+
+| 门禁 | 位置 | 断言 / 变红条件 |
+| --- | --- | --- |
+| 迁移历史断言 | `scripts/deploy/assert-flyway-history.sh` | `success=false` 行数必须为 0；目标版本恰 1 行且 `success=true`、`checksum` 非空（漏跑/失败/checksum 为空/重复行都红）；`max(已成功版本)` 必须等于 `scripts/deploy/verify-flyway-target.sh` 输出；目标版本必须等于代码库最新迁移版本（把 target 调低也红） |
+| 基线冻结 | `scripts/deploy/assert-flyway-baseline-frozen.sh` + `scripts/deploy/flyway-baseline.sha256` | `V1__baseline.sql` 的 sha256 与冻结清单不一致（改写）或清单记录缺失（删除条目）即红 |
+| repair 守卫 | `scripts/deploy/assert-no-migration-repair.sh` | `.github/workflows` 与 `scripts` 中出现 Flyway 的 repair goal / 子命令即红 |
+
+- 目标版本由 `verify-flyway-target.sh` 解析（当前 186），新增迁移后无需改 workflow；
+  生产部署流程显式传入部署变量 `FLYWAY_TARGET`。
+- `flyway info` 输出与断言证据作为 `flyway-migration-evidence` artifact 留档，故障复盘不必重连库。
+- 门禁自带负例自检 `scripts/deploy/test/assert-flyway-history-selftest.sh`（1 正例 + 6 负例，
+  用 `(VALUES …) AS h(…)` 合成历史，纯只读、不建表不写库）；CI 每次执行，防止门禁“假绿”。
+- 本地复现（对开发库只读）：
+  ```bash
+  source scripts/env/dev.sh
+  export PGHOST="$SPRING_DATASOURCE_HOST" PGPORT="$SPRING_DATASOURCE_PORT" \
+         PGDATABASE="$SPRING_DATASOURCE_DB" PGUSER="$SPRING_DATASOURCE_USERNAME" \
+         PGPASSWORD="$SPRING_DATASOURCE_PASSWORD"
+  bash scripts/deploy/assert-flyway-history.sh --target "$(bash scripts/deploy/verify-flyway-target.sh .)"
+  bash scripts/deploy/assert-flyway-baseline-frozen.sh .
+  bash scripts/deploy/assert-no-migration-repair.sh
+  ```
+- 明确边界：**不执行 flyway repair**（它会改写 `flyway_schema_history`，一旦进入流水线就会把
+  “迁移对不上”静默抹平）；**不自行计算 md5/CRC 去比 checksum**（checksum 算法属 Flyway 实现细节，
+  一致性交给 `flyway:validate`，门禁只断言 checksum 非空）；本门禁也**不是 drift 检测**
+  （drift 属 Flyway Enterprise 功能）。

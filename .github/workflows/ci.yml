@@ -38,6 +38,17 @@ jobs:
           bash scripts/check-java-module-boundaries.sh
           bash scripts/verify-modulith-architecture.sh
 
+      # 迁移政策门禁（无需数据库）：
+      #   1) V1__baseline.sql 的 sha256 冻结：基线不可改写，内容一改即红。官方 flyway:validate
+      #      是“库中记录与本地脚本是否对齐”的收官校验，不是“基线有没有被改写”的政策闸门，
+      #      这里用独立门禁兜底；它不是 drift 检测（drift 属 Flyway Enterprise 功能）。
+      #   2) 流水线与部署脚本禁止出现 Flyway 的 repair goal / 子命令：repair 会直接改写
+      #      flyway_schema_history，进了流水线就会把“迁移对不上”静默抹平。
+      - name: 迁移门禁：V1 基线冻结与 repair 守卫
+        run: |
+          bash scripts/deploy/assert-flyway-baseline-frozen.sh .
+          bash scripts/deploy/assert-no-migration-repair.sh
+
       # 压测套件离线自检：全部用本地桩服务/合成数据离线运行，不依赖后端、DB、Redis 与 k6。
       # 防护三类「工具骗人」的假数据：
       #   1) token 守卫失效 → 把 JWT 过期 401 误读成 Redis 故障（token-guard）；
@@ -135,6 +146,60 @@ jobs:
             -Dflyway.cleanDisabled=true \
             -Dflyway.placeholderReplacement=false \
             -Dflyway.validateMigrationNaming=true
+
+      # 承接上面 migrate/validate 的 SQL 断言门禁：validate 只说明“库中记录与本地脚本对齐”，
+      # 不回答“目标版本这条迁移到底跑没跑”。这里直接查 flyway_schema_history 并失败即红：
+      #   success=false 行数必须为 0；目标版本恰 1 行且 success=true、checksum 非空；
+      #   max(已成功版本) 必须等于 verify-flyway-target.sh 输出；目标版本必须等于代码库最新版本
+      #   （把 target 调低后“看起来绿”同样失败）。查询证据写入 flyway-history-gate.txt 留档。
+      # 目标版本由 verify-flyway-target.sh 解析（当前为 186），不硬编码，新增迁移无需改 workflow。
+      - name: Flyway 历史断言门禁（success / 目标版本 / checksum / max 版本）
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGDATABASE: leo
+        run: |
+          set -euo pipefail
+          export PGUSER="$SPRING_DATASOURCE_USERNAME"
+          export PGPASSWORD="$SPRING_DATASOURCE_PASSWORD"
+          flyway_target="$(bash scripts/deploy/verify-flyway-target.sh .)"
+          bash scripts/deploy/assert-flyway-history.sh --target "$flyway_target" --report flyway-history-gate.txt
+
+      - name: Flyway 门禁负例自检（改错即变红）
+        if: always()
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGDATABASE: leo
+        run: |
+          set -euo pipefail
+          export PGUSER="$SPRING_DATASOURCE_USERNAME"
+          export PGPASSWORD="$SPRING_DATASOURCE_PASSWORD"
+          bash scripts/deploy/test/assert-flyway-history-selftest.sh 2>&1 | tee flyway-gate-selftest.txt
+
+      # flyway info 输出留档：pending/success/checksum 的原始视图，故障复盘时不必再连库重算。
+      - name: 采集 flyway info 证据（artifact 留档）
+        if: always()
+        run: |
+          bash scripts/maven.sh -B -ntp flyway:info \
+            -Dflyway.url="$SPRING_DATASOURCE_URL" \
+            -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
+            -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
+            -Dflyway.locations="filesystem:src/main/resources/db/migration" \
+            -Dflyway.cleanDisabled=true \
+            -Dflyway.placeholderReplacement=false \
+            -Dflyway.validateMigrationNaming=true 2>&1 | tee flyway-info.txt
+
+      - name: Upload flyway migration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flyway-migration-evidence
+          path: |
+            flyway-info.txt
+            flyway-history-gate.txt
+            flyway-gate-selftest.txt
+          if-no-files-found: warn
 
       - name: Test & Package
         run: bash scripts/maven.sh -B -ntp package

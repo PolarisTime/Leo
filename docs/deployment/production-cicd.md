@@ -34,6 +34,13 @@
 
 仓库级 Variable `PROD_FLYWAY_TARGET` 必须配置为发布包内最高的 `V*.sql` 迁移版本。tag 自动发布使用该值；手工 `workflow_dispatch` 使用显式 `flyway_target` 输入。构建期会校验 target 与发布包最高迁移版本完全一致，随后 `flyway:migrate/validate`、local/SSH 部署前校验和生产 `SPRING_FLYWAY_TARGET` 也必须保持一致；缺失、`latest`、落后或超前都会停止发布，禁止应用代码先于数据库结构上线。
 
+发布流程的 `flyway:migrate/validate` 之后还有同源 SQL 断言门禁与证据留档（`ci.yml` 与 `deploy-production.yml` 的 backend job 共用
+`scripts/deploy/assert-flyway-history.sh`）：`flyway_schema_history` 中 `success=false` 行数必须为 0、目标版本（生产由 `FLYWAY_TARGET`
+变量给出）必须恰 1 行且 `success=true`、`checksum` 非空、`max(已成功版本)` 必须等于 `verify-flyway-target.sh` 输出；同时强制
+V1 基线 sha256 冻结（`scripts/deploy/assert-flyway-baseline-frozen.sh`）并禁止 Flyway 的 repair goal 进入流水线
+（`scripts/deploy/assert-no-migration-repair.sh`）。`flyway info` 输出与断言证据作为 `flyway-migration-evidence` artifact 留档。
+细节与本地复现见 `docs/real-db-test-gate.md` 的“迁移历史门禁”一节。
+
 默认生产目标是 `local`，要求本机已注册 GitHub self-hosted runner，并带有以下标签：
 
 - `self-hosted`

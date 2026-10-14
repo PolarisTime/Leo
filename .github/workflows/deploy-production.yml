@@ -104,6 +104,15 @@ jobs:
           echo "FLYWAY_TARGET=$flyway_target" >> "$GITHUB_ENV"
           echo "Resolved production Flyway target: $flyway_target"
 
+      # 生产发布前的迁移政策门禁（与 ci.yml 同源实现）：
+      #   1) V1__baseline.sql sha256 冻结：基线不可改写；
+      #   2) 禁止出现 Flyway 的 repair goal / 子命令（repair 会改写 flyway_schema_history，
+      #      绝不能进入发布链路）；不是 drift 检测（drift 属 Flyway Enterprise 功能）。
+      - name: 迁移门禁：V1 基线冻结与 repair 守卫
+        run: |
+          bash scripts/deploy/assert-flyway-baseline-frozen.sh .
+          bash scripts/deploy/assert-no-migration-repair.sh
+
       - name: Verify Flyway migrations
         run: |
           bash scripts/maven.sh -B -ntp flyway:migrate \
@@ -124,6 +133,58 @@ jobs:
             -Dflyway.cleanDisabled=true \
             -Dflyway.placeholderReplacement=false \
             -Dflyway.validateMigrationNaming=true
+
+      # 与 ci.yml 同源的 SQL 断言门禁：validate 只说明“库中记录与本地脚本对齐”，
+      # 不回答“目标版本这条迁移到底跑没跑”。这里目标版本由部署变量 FLYWAY_TARGET 给出，
+      # 断言 success=false 行为 0、目标版本恰 1 行且 success=true、checksum 非空、
+      # max(已成功版本) 等于 verify-flyway-target.sh 输出；任一条不满足即停止发布。
+      - name: Flyway 历史断言门禁（目标版本来自部署变量）
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGDATABASE: leo
+        run: |
+          set -euo pipefail
+          : "${FLYWAY_TARGET:?缺少部署 Flyway 目标版本}"
+          export PGUSER="$SPRING_DATASOURCE_USERNAME"
+          export PGPASSWORD="$SPRING_DATASOURCE_PASSWORD"
+          bash scripts/deploy/assert-flyway-history.sh --target "$FLYWAY_TARGET" --report flyway-history-gate.txt
+
+      - name: Flyway 门禁负例自检（改错即变红）
+        if: always()
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGDATABASE: leo
+        run: |
+          set -euo pipefail
+          export PGUSER="$SPRING_DATASOURCE_USERNAME"
+          export PGPASSWORD="$SPRING_DATASOURCE_PASSWORD"
+          bash scripts/deploy/test/assert-flyway-history-selftest.sh 2>&1 | tee flyway-gate-selftest.txt
+
+      - name: 采集 flyway info 证据（artifact 留档）
+        if: always()
+        run: |
+          bash scripts/maven.sh -B -ntp flyway:info \
+            -Dflyway.url="$SPRING_DATASOURCE_URL" \
+            -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
+            -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
+            -Dflyway.target="$FLYWAY_TARGET" \
+            -Dflyway.locations="filesystem:src/main/resources/db/migration" \
+            -Dflyway.cleanDisabled=true \
+            -Dflyway.placeholderReplacement=false \
+            -Dflyway.validateMigrationNaming=true 2>&1 | tee flyway-info.txt
+
+      - name: Upload flyway migration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flyway-migration-evidence
+          path: |
+            flyway-info.txt
+            flyway-history-gate.txt
+            flyway-gate-selftest.txt
+          if-no-files-found: warn
 
       - name: Test & Package
         run: bash scripts/maven.sh -B -ntp package
