@@ -1938,7 +1938,7 @@ class QuoteSheetStoreTest {
         verify(purchaseOrderOptionQuery, org.mockito.Mockito.times(1)).listActiveByIds(any());
     }
 
-    // ------------------------------------------- 行级关联的容错: 不匹配/重复/负值/Σ 不变量
+    // ------------------------- 行级关联的容错: 不匹配/重复/负值/超发拦截/单条订货量上限
 
     private static final long LINK_PO_ID = 88L;
     private static final long LINK_PO_ITEM_ID = 8801L;
@@ -2034,25 +2034,33 @@ class QuoteSheetStoreTest {
         verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
     }
 
-    /** 分配不变量: Σ分配量少于本行吨位 → 422, 消息说明"还缺多少"。 */
+    /**
+     * 欠额是合法业务态, 不是错误: Σ分配量(3) < 本行吨位(10) 必须保存成功, 且 allocated_ton
+     * 原样落库(不按本行吨位补齐)。业务来源: 本行报 200 吨而可关联明细行订货量合计只有 130 吨时,
+     * 前端按 min(剩余, 订货量) 分摊, Σ 必然小于本行吨位。
+     */
     @Test
-    void updateItem_allocatedTonSumLessThanTon_isRejected() {
-        writableSheetWithItem(9L);
+    void updateItem_allocatedTonSumLessThanTon_isPersistedAsIs() {
+        QuoteSheet sheet = writableSheetWithItem(9L);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
         stubTwoOrders();
+        when(snowflakeIdGenerator.nextId()).thenReturn(9001L);
 
-        assertThatThrownBy(() -> store().updateItem(9L, 301L, linkedItemRequest(new BigDecimal("10"),
+        QuoteSheetItemWrite write = store().updateItem(9L, 301L, linkedItemRequest(new BigDecimal("10"),
                 List.of(new QuoteSheetRequest.ItemPurchaseOrderRequest(LINK_PO_ID, LINK_PO_ITEM_ID,
                         new BigDecimal("3")))),
-                1L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("不一致")
-                .hasMessageContaining("还缺 7 吨")
-                .extracting(ex -> ((BusinessException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.VALIDATION_ERROR);
-        verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
+                1L);
+
+        assertThat(write.item().purchaseOrderLinks()).hasSize(1);
+        assertThat(write.item().purchaseOrderLinks().get(0).allocatedTon()).isEqualByComparingTo("3");
+        // 落库实体上的分配吨位保持 3, 没有被补齐成 10(旧三列仍镜像第一条)
+        assertThat(sheet.getItems().get(0).getPurchaseOrderLinks()).hasSize(1);
+        assertThat(sheet.getItems().get(0).getPurchaseOrderLinks().get(0).getAllocatedTon())
+                .isEqualByComparingTo("3");
+        assertThat(write.item().purchaseOrderItemId()).isEqualTo(LINK_PO_ITEM_ID);
     }
 
-    /** 分配不变量: Σ分配量超过本行吨位 → 422, 消息说明"超出多少"。 */
+    /** 超发拦截: Σ分配量超过本行吨位 → 422, 消息同时给出合计/本行吨位/超出发数。 */
     @Test
     void updateItem_allocatedTonSumGreaterThanTon_isRejected() {
         writableSheetWithItem(9L);
@@ -2064,14 +2072,34 @@ class QuoteSheetStoreTest {
                         new QuoteSheetRequest.ItemPurchaseOrderRequest(LINK_PO_ID, 8802L, new BigDecimal("6")))),
                 1L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("不一致")
-                .hasMessageContaining("超出 2 吨")
+                .hasMessageContaining("分配吨位合计 12 吨已超过本行报单吨位 10 吨（超出 2 吨）")
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.VALIDATION_ERROR);
         verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
     }
 
-    /** 分配不变量: Σ分配量按数值比较(忽略标度), 6 + "4.000" == 10 必须放行。 */
+    /**
+     * 单条不得超过该明细行订货量: 8801 订货量 200, 分配 250 → 422, 消息带明细行/分配量/订货量。
+     * 本行吨位取 300 是为了让 Σ(250) 不触发超发校验, 从而单独锁住这一条兜底。
+     */
+    @Test
+    void updateItem_allocatedTonExceedsOrderedWeight_isRejected() {
+        writableSheetWithItem(9L);
+        stubTwoOrders();
+
+        assertThatThrownBy(() -> store().updateItem(9L, 301L, linkedItemRequest(new BigDecimal("300"),
+                List.of(new QuoteSheetRequest.ItemPurchaseOrderRequest(LINK_PO_ID, LINK_PO_ITEM_ID,
+                        new BigDecimal("250")))),
+                1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("在明细行 " + LINK_PO_ITEM_ID + " 上分配 250 吨")
+                .hasMessageContaining("超过其订货量 200 吨")
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(repository, never()).saveAndFlush(any(QuoteSheet.class));
+    }
+
+    /** 分配量按数值比较(忽略标度): 6 + "4.000" 刚好打平本行吨位 10, 必须放行。 */
     @Test
     void updateItem_allocatedTonSumMatchesTon_persistsAndMirrorsFirstLink() {
         writableSheetWithItem(9L);
@@ -2095,7 +2123,7 @@ class QuoteSheetStoreTest {
         assertThat(write.item().purchaseOrderItemId()).isEqualTo(LINK_PO_ITEM_ID);
     }
 
-    /** 订单级关联(只给 purchaseOrderId、没有明细行)是旧兼容路径: 不适用 Σ 不变量, 仍只写旧三列。 */
+    /** 订单级关联(只给 purchaseOrderId、没有明细行)是旧兼容路径: 不适用分配校验, 仍只写旧三列。 */
     @Test
     void updateItem_orderLevelLink_isExemptFromAllocatedTonSum() {
         writableSheetWithItem(9L);

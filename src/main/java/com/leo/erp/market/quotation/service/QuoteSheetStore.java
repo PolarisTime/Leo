@@ -56,11 +56,16 @@ public class QuoteSheetStore {
     private static final String DEFAULT_STATUS = "报价";
 
     /**
-     * 锁定行「Σ分配吨位 == 本行吨位」这一分配不变量的比较容差, 默认 0(精确相等)。
-     * <p>数值比较一律走 {@link BigDecimal#compareTo}(忽略标度), 不得用 {@code equals};
-     * 将来确需留容差时只改这里, 不要在各调用点各写一套。</p>
+     * 锁定行 Σ分配吨位<b>超发</b>的判定容差, 默认 0(精确): 只有 {@code Σ > ton} 才拒绝,
+     * {@code Σ <= ton} 一律放行。
+     * <p>欠额是合法业务态而非错误 —— 本行报 200 吨、可关联的明细行只有 60+70=130 吨时,
+     * 前端按 {@code min(剩余, 订货量)} 分摊, Σ 必然小于本行吨位; 它表示"这条报单还有一部分
+     * 没落到订单上", 由前端据此保持比价区可见(不遮蔽)。若要求 Σ 精确等于 ton, 这种常见
+     * 情形会必然 422, 用户关联成功却存不下去。</p>
+     * <p>只用于正向超发判定, 不得按"绝对值差"或"等值容差"使用(欠额永不报错)。
+     * 数值比较一律走 {@link BigDecimal#compareTo}(忽略标度), 不得用 {@code equals}。</p>
      */
-    private static final BigDecimal ALLOCATED_TON_TOLERANCE = BigDecimal.ZERO;
+    private static final BigDecimal ALLOCATED_TON_OVERRUN_TOLERANCE = BigDecimal.ZERO;
 
     private final QuoteSheetRepository repository;
     private final QuoteProjectConfigRepository quoteProjectConfigRepository;
@@ -948,9 +953,12 @@ public class QuoteSheetStore {
      * 否则调用方以为关联成功、实际额度没记上。订单本身不存在则在
      * {@link #resolvePurchaseOrderLinks} 阶段直接报错。</p>
      *
-     * <p>分配不变量: 带明细行关联时 Σ{@code allocatedTon} 必须等于本行吨位({@code ton} 为 null 按 0),
-     * 差值超过 {@link #ALLOCATED_TON_TOLERANCE} 即 422, 消息说明缺多少/超多少; 单个分配量不得为负。
-     * 只给 {@code purchaseOrderId} 的<b>订单级关联</b>(不含明细行, 旧兼容路径)不适用该不变量 ——
+     * <p>分配口径: 带明细行关联时 Σ{@code allocatedTon} <b>不得超过</b>本行报单吨位({@code ton} 为 null
+     * 按 0), 超发 422; <b>允许少于</b>本行吨位 —— 欠额表示这条报单还有一部分没落到订单上
+     * (本行报 200 吨、可关联明细行只有 60+70 吨时前端按 {@code min(剩余, 订货量)} 分摊,
+     * Σ 必然小于本行吨位), 不是错误。单条分配量不得为负, 也不得超过该明细行的订货量
+     * ({@code orderedWeight} 未知时不校验单条上限)。
+     * 只给 {@code purchaseOrderId} 的<b>订单级关联</b>(不含明细行, 旧兼容路径)不适用上述校验 ——
      * 它只写旧三列, 不产生关联行, 因而没有可对账的分配量。</p>
      */
     private void applyPurchaseOrderLinks(QuoteSheetItem item, QuoteSheetRequest.ItemRequest request,
@@ -1016,7 +1024,7 @@ public class QuoteSheetStore {
 
     /**
      * 把请求关联列表整组协调进该行: 同 (订单明细行) 复用原实体(仅更新分配吨位/顺序/订单号快照),
-     * 新增才创建, 请求未携带的关联行从集合移除; 随后校验 Σ 分配吨位并镜像旧三列。
+     * 新增才创建, 请求未携带的关联行从集合移除; 随后校验单条上限与 Σ 超发并镜像旧三列。
      */
     private void reconcileLinks(QuoteSheetItem item,
                                 List<QuoteSheetRequest.ItemPurchaseOrderRequest> requested,
@@ -1037,14 +1045,23 @@ public class QuoteSheetStore {
                         "采购订单明细行分配吨位不能为负: " + purchaseOrderItemId
                                 + " = " + linkRequest.allocatedTon().toPlainString());
             }
+            BigDecimal allocatedTon = linkRequest.allocatedTon() == null
+                    ? BigDecimal.ZERO : linkRequest.allocatedTon();
             PurchaseOrderLinkSnapshot snapshot = purchaseOrderLinks.get(linkRequest.purchaseOrderId());
             if (snapshot == null) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR,
                         "采购订单不存在或已删除: " + linkRequest.purchaseOrderId());
             }
-            if (!snapshot.itemIds().contains(purchaseOrderItemId)) {
+            if (!snapshot.orderedWeights().containsKey(purchaseOrderItemId)) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR,
                         "采购订单明细行不存在或不属于该采购订单: " + purchaseOrderItemId);
+            }
+            // 单条不得超过该明细行的订货量: 否则这条报单会把别人已占的额度吃掉(订货量为空表示未知, 不校验)
+            BigDecimal orderedWeight = snapshot.orderedWeights().get(purchaseOrderItemId);
+            if (orderedWeight != null && allocatedTon.compareTo(orderedWeight) > 0) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "在明细行 " + purchaseOrderItemId + " 上分配 " + plain(allocatedTon)
+                                + " 吨，超过其订货量 " + plain(orderedWeight) + " 吨");
             }
             if (!usedItemIds.add(purchaseOrderItemId)) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR,
@@ -1057,8 +1074,6 @@ public class QuoteSheetStore {
                 link.setItem(item);
                 link.setPurchaseOrderItemId(purchaseOrderItemId);
             }
-            BigDecimal allocatedTon = linkRequest.allocatedTon() == null
-                    ? BigDecimal.ZERO : linkRequest.allocatedTon();
             link.setPurchaseOrderId(linkRequest.purchaseOrderId());
             link.setPurchaseOrderNo(snapshot.orderNo());
             link.setAllocatedTon(allocatedTon);
@@ -1067,8 +1082,8 @@ public class QuoteSheetStore {
             allocatedTotal = allocatedTotal.add(allocatedTon);
         }
         if (!reconciled.isEmpty()) {
-            // 订单级关联(不产生关联行)不经过这里, 因此不适用本不变量。
-            checkAllocatedTonTotal(allocatedTotal, ton);
+            // 订单级关联(不产生关联行)不经过这里, 因此不适用本校验。
+            checkAllocatedTonNotOverTon(allocatedTotal, ton);
         }
         item.getPurchaseOrderLinks().clear();
         item.getPurchaseOrderLinks().addAll(reconciled);
@@ -1087,26 +1102,34 @@ public class QuoteSheetStore {
     }
 
     /**
-     * 分配不变量校验: Σ分配吨位必须等于本行吨位(ton 为 null 按 0), 差值超过
-     * {@link #ALLOCATED_TON_TOLERANCE} 即 422, 并把缺口/超量写进消息, 让调用方能直接改对。
+     * 分配吨位校验: <b>只拦超发</b> —— {@code Σ分配吨位 > 本行报单吨位}(ton 为 null 按 0)时 422,
+     * 欠额({@code Σ <= ton})一律放行, 它表示本行还有一部分没落到订单上。
+     * <p>差值超过 {@link #ALLOCATED_TON_OVERRUN_TOLERANCE} 才拒绝, 消息把合计/本行吨位/超出多少
+     * 都写出来, 让调用方能直接改对。</p>
      * <p>比较用 {@link BigDecimal#compareTo}(忽略标度), 与吨位列 numeric(18,8) 的回读精度差异无关。</p>
      */
-    private static void checkAllocatedTonTotal(BigDecimal allocatedTotal, BigDecimal ton) {
-        BigDecimal expected = ton == null ? BigDecimal.ZERO : ton;
-        BigDecimal gap = allocatedTotal.subtract(expected);
-        if (gap.abs().compareTo(ALLOCATED_TON_TOLERANCE) <= 0) {
+    private static void checkAllocatedTonNotOverTon(BigDecimal allocatedTotal, BigDecimal ton) {
+        BigDecimal reported = ton == null ? BigDecimal.ZERO : ton;
+        BigDecimal over = allocatedTotal.subtract(reported);
+        if (over.compareTo(ALLOCATED_TON_OVERRUN_TOLERANCE) <= 0) {
+            // 欠额或刚好打平: 合法, 不报错
             return;
         }
-        String detail = gap.signum() < 0
-                ? "还缺 " + gap.abs().toPlainString() + " 吨"
-                : "超出 " + gap.toPlainString() + " 吨";
         throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                "关联的采购订单明细行分配吨位合计 " + allocatedTotal.toPlainString()
-                        + " 吨与本行吨位 " + expected.toPlainString() + " 吨不一致, " + detail);
+                "分配吨位合计 " + plain(allocatedTotal) + " 吨已超过本行报单吨位 " + plain(reported)
+                        + " 吨（超出 " + plain(over) + " 吨）");
     }
 
-    /** 订单关联快照: 订单号 + 该订单下有效明细行 id 集合(构建期可变)。 */
-    private record PurchaseOrderLinkSnapshot(String orderNo, Set<Long> itemIds) {
+    /** 消息里的数值统一去掉无意义尾零(130.00000000 → 130), 避免把 numeric 回读标度暴露给用户。 */
+    private static String plain(BigDecimal value) {
+        return value.stripTrailingZeros().toPlainString();
+    }
+
+    /**
+     * 订单关联快照: 订单号 + 该订单下有效明细行 id → 该明细行订货量({@code orderedWeight} 可能为 null,
+     * 表示未知; 构建期可变)。
+     */
+    private record PurchaseOrderLinkSnapshot(String orderNo, Map<Long, BigDecimal> orderedWeights) {
     }
 
     /**
@@ -1155,7 +1178,7 @@ public class QuoteSheetStore {
         Map<Long, PurchaseOrderLinkSnapshot> resolved = new HashMap<>();
         for (PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot snapshot
                 : purchaseOrderOptionQuery.listActiveByIds(orderIds)) {
-            resolved.put(snapshot.id(), new PurchaseOrderLinkSnapshot(snapshot.orderNo(), new HashSet<>()));
+            resolved.put(snapshot.id(), new PurchaseOrderLinkSnapshot(snapshot.orderNo(), new HashMap<>()));
         }
         for (Long orderId : orderIds) {
             if (!resolved.containsKey(orderId)) {
@@ -1168,7 +1191,7 @@ public class QuoteSheetStore {
                     : purchaseOrderOptionQuery.listActiveItemsByIds(itemIds)) {
                 PurchaseOrderLinkSnapshot link = resolved.get(item.purchaseOrderId());
                 if (link != null) {
-                    link.itemIds().add(item.purchaseOrderItemId());
+                    link.orderedWeights().put(item.purchaseOrderItemId(), item.orderedWeight());
                 }
             }
         }

@@ -154,25 +154,69 @@ class QuoteItemMultiPurchaseOrderLinkPostgresTest {
         assertThat(links.get(0).allocatedTon()).isEqualByComparingTo("130");
     }
 
-    /** 分配不变量: ΣallocatedTon 必须等于本行吨位, 不等时 422 且整笔回滚, 不得静默落库。 */
+    /**
+     * 新口径: Σ分配吨位<b>允许少于</b>本行报单吨位 —— 欠额表示"这条报单还有一部分没落到订单上",
+     * 是常见且合法的业务情形(本行报 130 吨、可关联明细行订货量只有 60 吨时, 前端按
+     * {@code min(剩余, 订货量)} 分摊)。必须保存成功, 且 {@code allocated_ton} 原样落库(不补齐)。
+     */
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    void mismatchedAllocationSum_isRejectedAndNothingPersisted() {
+    void underAllocation_isPersistedAsIs() {
         stubPurchaseOrders();
         persistSheet();
         Long version = repository.findByIdAndDeletedFlagFalse(SHEET_ID).orElseThrow().getVersion();
 
-        // 130 吨的行只分配 60 吨: Σ != 本行吨位, 必须明确报错并说明缺口
+        // 130 吨的行只分配 60 吨: 欠额 70 吨, 不是错误
+        QuoteSheetResponse response = store.update(SHEET_ID, request(List.of(
+                new QuoteSheetRequest.ItemPurchaseOrderRequest(PO_1, POI_1, new BigDecimal("60")))), version);
+
+        assertThat(response.items().get(0).purchaseOrderLinks()).hasSize(1);
+        assertThat(response.items().get(0).purchaseOrderLinks().get(0).allocatedTon())
+                .isEqualByComparingTo("60");
+
+        // numeric(18,8) 回读标度不同, 按数值比较; 汇总按分配量计 60 而不是本行吨位 130
+        QuoteSheetResponse reloaded = store.detail(SHEET_ID);
+        assertThat(reloaded.items().get(0).purchaseOrderLinks()).hasSize(1);
+        assertThat(reloaded.items().get(0).purchaseOrderLinks().get(0).allocatedTon())
+                .isEqualByComparingTo("60");
+        assertThat(reloaded.items().get(0).purchaseOrderItemId()).isEqualTo(POI_1);
+        assertThat(tonByItem(POI_1, null)).isEqualByComparingTo("60");
+    }
+
+    /** 超发拦截: ΣallocatedTon > 本行报单吨位 → 422, 消息含合计/本行吨位/超出发数, 且整笔回滚。 */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void overAllocation_isRejectedAndNothingPersisted() {
+        stubPurchaseOrders();
+        persistSheet();
+        Long version = repository.findByIdAndDeletedFlagFalse(SHEET_ID).orElseThrow().getVersion();
+
+        // 130 吨的行分配 200 吨(未超过 POI_1 订货量 200, 只超本行报单吨位)
         assertThatThrownBy(() -> store.update(SHEET_ID, request(List.of(
-                new QuoteSheetRequest.ItemPurchaseOrderRequest(PO_1, POI_1, new BigDecimal("60")))), version))
+                new QuoteSheetRequest.ItemPurchaseOrderRequest(PO_1, POI_1, new BigDecimal("200")))), version))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("不一致")
-                .hasMessageContaining("还缺 70 吨");
+                .hasMessageContaining("分配吨位合计 200 吨已超过本行报单吨位 130 吨（超出 70 吨）");
 
         // 事务回滚: 关联表与旧三列都不得残留
         QuoteSheetResponse reloaded = store.detail(SHEET_ID);
         assertThat(reloaded.items().get(0).purchaseOrderLinks()).isEmpty();
         assertThat(reloaded.items().get(0).purchaseOrderId()).isNull();
+    }
+
+    /** 单条不得超过该明细行订货量: 在订货量 200 的 POI_1 上分配 250 → 422, 消息带明细行/分配量/订货量。 */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void allocatedTonOverOrderedWeight_isRejected() {
+        stubPurchaseOrders();
+        persistSheet();
+        Long version = repository.findByIdAndDeletedFlagFalse(SHEET_ID).orElseThrow().getVersion();
+
+        assertThatThrownBy(() -> store.update(SHEET_ID, request(List.of(
+                new QuoteSheetRequest.ItemPurchaseOrderRequest(PO_1, POI_1, new BigDecimal("250")))), version))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("在明细行 " + POI_1 + " 上分配 250 吨，超过其订货量 200 吨");
+
+        assertThat(store.detail(SHEET_ID).items().get(0).purchaseOrderLinks()).isEmpty();
     }
 
     /**
