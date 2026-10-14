@@ -41,6 +41,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 断言详情与分页在 {@code open-in-view=false} 语义下不会抛 {@code LazyInitializationException},
  * 且集合按 {@code @BatchSize(default_batch_fetch_size=50)} 批量抓取, 分页映射不会产生 N+1。
  * 每个单据含 2 品牌、2 明细、每明细 2 现货价; 以 Hibernate Statistics 的 prepared statement 数作为上界证据。
+ * <p>
+ * 开发库是共享资源(含历史 E2E 单据), 因此所有分页断言只用单据名前缀 {@code pg-fetch-extreme-} 收窄到
+ * 本用例自建的单据, 既不清理他人数据, 也不会被历史数据带成假红。
  */
 @DataJpaTest(properties = {
         "spring.jpa.hibernate.ddl-auto=none",
@@ -55,6 +58,8 @@ class QuoteSheetFetchGraphExtremePostgresTest {
 
     private static final long BASE_ID = 950000000000000000L;
     private static final int SHEET_COUNT = 4;
+    /** 本用例自建单据名/单据号前缀: 共享开发库上的唯一归属标记。 */
+    private static final String NAME_PREFIX = "pg-fetch-extreme-";
 
     @Autowired
     private QuoteSheetStore store;
@@ -102,9 +107,11 @@ class QuoteSheetFetchGraphExtremePostgresTest {
         Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
         statistics.clear();
 
-        Page<QuoteSheetResponse> page = store.page(new PageQuery(0, 20, null, null), null, null, null);
+        Page<QuoteSheetResponse> page = pageCreatedSheets();
 
-        assertThat(page.getContent()).hasSize(SHEET_COUNT);
+        assertThat(createdIdsOf(page))
+                .as("共享开发库上的分页必须只统计本用例自建单据; 历史 E2E 单据不得进入统计")
+                .containsExactlyInAnyOrderElementsOf(createdIds);
         assertThat(page.getContent()).allSatisfy(sheet -> {
             assertThat(sheet.brands()).hasSize(2);
             assertThat(sheet.items()).hasSize(2);
@@ -123,20 +130,33 @@ class QuoteSheetFetchGraphExtremePostgresTest {
         persistSheet(0);
         entityManager.clear();
         statistics.clear();
-        store.page(new PageQuery(0, 20, null, null), null, null, null);
+        Page<QuoteSheetResponse> oneSheetPage = pageCreatedSheets();
         long withOneSheet = statistics.getPrepareStatementCount();
+        assertThat(createdIdsOf(oneSheetPage))
+                .as("收窄后的分页必须真的命中本用例自建单据, 否则 SQL 数相等只是空跑")
+                .containsExactly(createdIds.get(0));
 
         for (int i = 1; i < SHEET_COUNT; i++) {
             persistSheet(i);
         }
         entityManager.clear();
         statistics.clear();
-        store.page(new PageQuery(0, 20, null, null), null, null, null);
+        Page<QuoteSheetResponse> fourSheetsPage = pageCreatedSheets();
         long withFourSheets = statistics.getPrepareStatementCount();
+        assertThat(createdIdsOf(fourSheetsPage)).containsExactlyInAnyOrderElementsOf(createdIds);
 
         assertThat(withFourSheets)
                 .as("按单据数线性增长的 SQL 数意味着 N+1; one=%s four=%s", withOneSheet, withFourSheets)
                 .isEqualTo(withOneSheet);
+    }
+
+    /** 只取本用例自建单据的分页: 用名称前缀把查询收窄在自有数据上, 不依赖(也不清理)共享库的历史数据。 */
+    private Page<QuoteSheetResponse> pageCreatedSheets() {
+        return store.page(new PageQuery(0, 20, null, null), null, null, NAME_PREFIX);
+    }
+
+    private static List<Long> createdIdsOf(Page<QuoteSheetResponse> page) {
+        return page.getContent().stream().map(QuoteSheetResponse::id).toList();
     }
 
     private void persistSheets() {
@@ -153,7 +173,7 @@ class QuoteSheetFetchGraphExtremePostgresTest {
         QuoteSheet sheet = new QuoteSheet();
         sheet.setId(sheetId);
         sheet.setSheetNo("PG-FG-" + sheetId);
-        sheet.setName("pg-fetch-extreme-" + i);
+        sheet.setName(NAME_PREFIX + i);
         sheet.setProjectName("云潮筝鸣府");
         sheet.setOrderDate(orderDate);
         sheet.setRefDate(orderDate);
