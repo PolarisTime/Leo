@@ -11,6 +11,7 @@ import com.leo.erp.system.runtimeconfig.web.dto.RuntimeFeatureConfig;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeStatementConfig;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeUiConfig;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
@@ -29,16 +30,20 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
     private final PageQuerySettings pageQuerySettings;
     private final QuoteRegionCatalog quoteRegionCatalog;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
+    private final boolean customerReceiptAmountZero;
 
     @Autowired
     public RuntimeConfigService(FeatureFlagService featureFlagService,
                                 PageQuerySettings pageQuerySettings,
                                 QuoteRegionCatalog quoteRegionCatalog,
+                                @Value("${leo.statement.customer-receipt-amount-zero:true}")
+                                boolean customerReceiptAmountZero,
                                 @Nullable RedisJsonCacheSupport redisJsonCacheSupport) {
         this.featureFlagService = featureFlagService;
         this.pageQuerySettings = pageQuerySettings;
         this.quoteRegionCatalog = quoteRegionCatalog;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
+        this.customerReceiptAmountZero = customerReceiptAmountZero;
     }
 
     public RuntimeConfigResponse getRuntimeConfig() {
@@ -93,7 +98,7 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
     }
 
     private RuntimeBusinessConfig businessConfig() {
-        RuntimeStatementConfig statement = new RuntimeStatementConfig(true);
+        RuntimeStatementConfig statement = new RuntimeStatementConfig(customerReceiptAmountZero);
         return new RuntimeBusinessConfig(statement, quoteRegionCatalog.listSupportedQuoteRegions());
     }
 

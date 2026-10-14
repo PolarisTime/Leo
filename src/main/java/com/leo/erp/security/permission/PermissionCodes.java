@@ -58,6 +58,7 @@ public final class PermissionCodes {
         public static final String SUPPLIERS = "suppliers";
         public static final String WAREHOUSES = "warehouses";
         public static final String CARRIERS = "carriers";
+        public static final String VALUE_ALIASES = "value-aliases";
         public static final String PROJECTS = "projects";
         public static final String QUOTE_SHEETS = "quote-sheets";
         public static final String STEEL_QUOTES = "steel-quotes";
@@ -226,6 +227,12 @@ public final class PermissionCodes {
     public static final String CARRIERS_CREATE = Resources.CARRIERS + ":" + Actions.CREATE;
     public static final String CARRIERS_UPDATE = Resources.CARRIERS + ":" + Actions.UPDATE;
     public static final String CARRIERS_DELETE = Resources.CARRIERS + ":" + Actions.DELETE;
+
+    // 值映射/别名: md_value_alias 的归一规则维护(V171 已建表并登记权限, 此前缺端点与页面)
+    public static final String VALUE_ALIASES_READ = Resources.VALUE_ALIASES + ":" + Actions.READ;
+    public static final String VALUE_ALIASES_CREATE = Resources.VALUE_ALIASES + ":" + Actions.CREATE;
+    public static final String VALUE_ALIASES_UPDATE = Resources.VALUE_ALIASES + ":" + Actions.UPDATE;
+    public static final String VALUE_ALIASES_DELETE = Resources.VALUE_ALIASES + ":" + Actions.DELETE;
 
     // 项目
     public static final String PROJECTS_READ = Resources.PROJECTS + ":" + Actions.READ;
@@ -414,6 +421,7 @@ public final class PermissionCodes {
             SUPPLIERS_READ, SUPPLIERS_CREATE, SUPPLIERS_UPDATE, SUPPLIERS_DELETE,
             WAREHOUSES_READ, WAREHOUSES_CREATE, WAREHOUSES_UPDATE, WAREHOUSES_DELETE,
             CARRIERS_READ, CARRIERS_CREATE, CARRIERS_UPDATE, CARRIERS_DELETE,
+            VALUE_ALIASES_READ, VALUE_ALIASES_CREATE, VALUE_ALIASES_UPDATE, VALUE_ALIASES_DELETE,
             PROJECTS_READ, PROJECTS_CREATE, PROJECTS_UPDATE, PROJECTS_DELETE,
             QUOTE_SHEETS_READ, QUOTE_SHEETS_CREATE, QUOTE_SHEETS_UPDATE, QUOTE_SHEETS_DELETE,
             STEEL_QUOTES_READ, PURCHASE_ORDERS_READ, PURCHASE_ORDERS_CREATE, PURCHASE_ORDERS_UPDATE, PURCHASE_ORDERS_DELETE,

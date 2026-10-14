@@ -170,6 +170,12 @@ leo:
   pagination:
     # 业务列表和远程候选列表未显式传入分页大小时使用，范围 1 到 200
     default-list-page-size: ${LEO_PAGINATION_DEFAULT_LIST_PAGE_SIZE:30}
+  # 客户对账单业务开关
+  statement:
+    # 客户对账单收款金额为零时, 是否仍从销售订单取值。
+    # V95 曾把同名设置做成数据库可配, 后按「部署期参数不该做成页面可配」移除;
+    # 但移除后该值在 RuntimeConfigService 被写死为 true, 配置能力实际丢失, 这里恢复为可配。
+    customer-receipt-amount-zero: ${LEO_STATEMENT_CUSTOMER_RECEIPT_AMOUNT_ZERO:true}
   setup:
     # 首次初始化写接口凭证，必须是 32 字节 Base64URL；初始化完成后可从运行环境移除
     bootstrap-token: ${LEO_SETUP_BOOTSTRAP_TOKEN:}

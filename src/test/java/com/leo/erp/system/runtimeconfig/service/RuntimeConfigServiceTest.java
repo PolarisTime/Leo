@@ -26,7 +26,7 @@ class RuntimeConfigServiceTest {
         PageQuerySettings pageQuerySettings = mock(PageQuerySettings.class);
         when(pageQuerySettings.getDefaultListPageSize()).thenReturn(20);
         QuoteRegionCatalog quoteRegionCatalog = () -> quoteRegions;
-        return new RuntimeConfigService(featureFlagService, pageQuerySettings, quoteRegionCatalog, null);
+        return new RuntimeConfigService(featureFlagService, pageQuerySettings, quoteRegionCatalog, true, null);
     }
 
     @Test
