@@ -7,6 +7,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import lombok.Getter;
@@ -75,6 +76,8 @@ public class SalesReturn extends AbstractAuditableEntity implements StatusAwareE
     @Column(name = "remark", length = 255)
     private String remark;
 
+    /** 明细行按 {@code line_no} 返回(拖拽重排后按提交数组下标重写)。 */
     @OneToMany(mappedBy = "salesReturn", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("lineNo ASC, id ASC")
     private List<SalesReturnItem> items = new ArrayList<>();
 }

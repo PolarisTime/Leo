@@ -16,6 +16,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -44,6 +45,12 @@ public class DocumentChargeItemService {
     /**
      * 全量同步单据的费用行：请求列表为空时清空现有费用行；
      * 存量行按 id 复用（保留审计轨迹），新行分配新 ID；line_no 按请求顺序重编号。
+     *
+     * <p>行号腾挪: 未删除行内 {@code (module_key, document_id, line_no)} 上有唯一偏索引
+     * ({@code uk_bd_document_charge_item_document_line_active})。拖拽换位(如 1↔2)、
+     * 或新行顶替一条将被软删的旧行行号时, 逐行改号会在同一 flush 内瞬时撞唯一键(500)。
+     * 因此一旦检测到这类腾挪, 先把现有未删除行整体挪到互不冲突的负值占位并 flush,
+     * 再按请求顺序写 1..N。软删行保留占位负号(已被偏索引排除, 且不存在恢复路径)。</p>
      */
     @Transactional
     public void sync(String moduleKey, Long documentId, List<DocumentChargeItemRequest> requests) {
@@ -57,6 +64,40 @@ public class DocumentChargeItemService {
                 .collect(Collectors.toMap(DocumentChargeItem::getId, Function.identity()));
         Set<Long> retainedIds = new HashSet<>();
 
+        // 第一遍: 只做归属校验, 并判断是否必须腾挪(不改任何字段, 避免为无变化的保存产生多余 UPDATE)。
+        Set<Integer> targetLineNos = new HashSet<>();
+        boolean needsVacate = false;
+        int cursor = 0;
+        for (DocumentChargeItemRequest request : safeRequests) {
+            cursor += 1;
+            targetLineNos.add(cursor);
+            DocumentChargeItem item = request.id() == null ? null : existingById.get(request.id());
+            if (item == null) {
+                continue;
+            }
+            requireSameDocument(item, moduleKey, documentId);
+            retainedIds.add(item.getId());
+            if (!Objects.equals(item.getLineNo(), cursor)) {
+                // 复用行改号: 可能与他人换位
+                needsVacate = true;
+            }
+        }
+        for (DocumentChargeItem stale : existing) {
+            if (stale.getId() != null && !retainedIds.contains(stale.getId())
+                    && targetLineNos.contains(stale.getLineNo())) {
+                // 待软删行当前占着某个目标行号: 新行/改号行写入前必须先把它的号腾出来
+                needsVacate = true;
+            }
+        }
+        if (needsVacate) {
+            int tempLineNo = 0;
+            for (DocumentChargeItem item : existing) {
+                item.setLineNo(--tempLineNo);
+            }
+            repository.flush();
+        }
+
+        // 第二遍: 按请求顺序写最终行号。
         int lineNo = 0;
         for (DocumentChargeItemRequest request : safeRequests) {
             lineNo += 1;
@@ -66,9 +107,6 @@ public class DocumentChargeItemService {
                 item.setId(idGenerator.nextId());
                 item.setModuleKey(moduleKey);
                 item.setDocumentId(documentId);
-            } else {
-                requireSameDocument(item, moduleKey, documentId);
-                retainedIds.add(item.getId());
             }
             apply(item, request, lineNo);
             repository.save(item);
@@ -97,7 +135,7 @@ public class DocumentChargeItemService {
         if (documentIds == null || documentIds.isEmpty()) {
             return Map.of();
         }
-        return repository.findByModuleKeyAndDocumentIdInAndDeletedFlagFalse(moduleKey, documentIds)
+        return repository.findByModuleKeyAndDocumentIdInAndDeletedFlagFalseOrderByLineNoAscIdAsc(moduleKey, documentIds)
                 .stream()
                 .collect(Collectors.groupingBy(
                         DocumentChargeItem::getDocumentId,

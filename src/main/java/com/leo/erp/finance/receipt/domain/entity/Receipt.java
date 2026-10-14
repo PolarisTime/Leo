@@ -7,6 +7,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
 import jakarta.persistence.Version;
@@ -95,7 +96,9 @@ public class Receipt extends AbstractAuditableEntity implements StatusAwareEntit
     @Column(name = "remark", length = 255)
     private String remark;
 
+    /** 分配行按 {@code line_no} 返回(拖拽重排后按提交数组下标重写)。 */
     @OneToMany(mappedBy = "receipt", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("lineNo ASC, id ASC")
     private List<ReceiptAllocation> items = new ArrayList<>();
 
     @Transient

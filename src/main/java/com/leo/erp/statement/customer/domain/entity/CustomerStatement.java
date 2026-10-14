@@ -7,6 +7,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import lombok.Getter;
@@ -83,6 +84,8 @@ public class CustomerStatement extends AbstractAuditableEntity implements Status
     @Column(name = "remark", length = 255)
     private String remark;
 
+    /** 明细行按 {@code line_no} 返回(生成时按来源顺序编号, 读取口径必须一致)。 */
     @OneToMany(mappedBy = "customerStatement", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("lineNo ASC, id ASC")
     private List<CustomerStatementItem> items = new ArrayList<>();
 }

@@ -96,7 +96,9 @@ public class FreightBill extends AbstractAuditableEntity implements StatusAwareE
     @Column(name = "remark", length = 255)
     private String remark;
 
+    /** 明细行按 {@code line_no} 返回(拖拽重排后按提交数组下标重写)。 */
     @OneToMany(mappedBy = "freightBill", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("lineNo ASC, id ASC")
     private List<FreightBillItem> items = new ArrayList<>();
 
     @OneToMany(mappedBy = "freightBill", cascade = CascadeType.ALL, orphanRemoval = true)

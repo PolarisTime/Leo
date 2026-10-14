@@ -116,6 +116,12 @@ public class SalesOrder extends AbstractAuditableEntity implements StatusAwareEn
     @Column(name = "price_closed_settle_prev")
     private Boolean priceClosedSettlePrev;
 
+    /**
+     * 明细行按 {@code line_no} 返回: 拖拽调整顺序后服务端按提交数组下标重写 line_no,
+     * 读取必须按同一口径排序, 否则 GET 回来仍是数据库堆顺序(改动前的旧顺序)。
+     * <p>{@code id} 仅作同 line_no 时的兜底, 保证顺序稳定可复现。</p>
+     */
     @OneToMany(mappedBy = "salesOrder", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("lineNo ASC, id ASC")
     private List<SalesOrderItem> items = new ArrayList<>();
 }
