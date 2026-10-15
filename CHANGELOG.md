@@ -1,3 +1,18 @@
+# [13.1.0](https://github.com/PolarisTime/Leo/compare/v13.0.0...v13.1.0) (2026-10-15)
+
+
+### Bug Fixes
+
+* **arch:** 状态写入收敛到 CrudStatusGuard, 值映射契约下沉 master.api ([30252c9](https://github.com/PolarisTime/Leo/commit/30252c9a27ae3230abc3d985654acc0439bd1d44))
+* **build:** 版本信息里的「编译时间」改为构建期真实注入, 修线上显示 1980 年 ([f213e1f](https://github.com/PolarisTime/Leo/commit/f213e1f323bd6d6891d5a4011cdf65d897ced28c))
+
+
+### Features
+
+* **length-premium:** 定尺加价规则下沉到数据库并接入行情匹配 ([928ff8e](https://github.com/PolarisTime/Leo/commit/928ff8ea575c5aa836f781e360b3dc8152baec9c))
+* **quote-region:** 取价地区清单下沉到数据库并接入行情匹配 ([ae2bde5](https://github.com/PolarisTime/Leo/commit/ae2bde595df86713b2a2b16d9114656d35253bdb))
+* **value-alias:** 补齐值映射维护端点并恢复对账单开关配置来源 ([cc22f3c](https://github.com/PolarisTime/Leo/commit/cc22f3c57437c15176376c19dde7ef235c3353de))
+
 # [13.0.0](https://github.com/PolarisTime/Leo/compare/v12.6.2...v13.0.0) (2026-10-14)
 
 
