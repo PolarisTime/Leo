@@ -7,6 +7,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.CrudOperationLogger;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.master.api.ValueAliasDimension;
 import com.leo.erp.master.valuealias.domain.entity.MdValueAlias;
 import com.leo.erp.master.valuealias.repository.MdValueAliasRepository;
 import com.leo.erp.master.valuealias.web.dto.ValueAliasRequest;

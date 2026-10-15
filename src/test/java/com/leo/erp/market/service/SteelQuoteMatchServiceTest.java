@@ -1,9 +1,9 @@
 package com.leo.erp.market.service;
 
 import com.leo.erp.master.api.MaterialQuery;
-import com.leo.erp.master.valuealias.service.ValueAliasDimension;
+import com.leo.erp.master.api.ValueAliasDimension;
+import com.leo.erp.master.api.ValueAliasQuery;
 import com.leo.erp.market.lengthpremium.service.LengthPremiumService;
-import com.leo.erp.master.valuealias.service.ValueAliasLookup;
 import com.leo.erp.market.domain.entity.SteelArticle;
 import com.leo.erp.market.domain.entity.SteelQuote;
 import com.leo.erp.market.mysteel.MysteelProperties;
@@ -55,8 +55,8 @@ class SteelQuoteMatchServiceTest {
     }
 
     /** 归一化查表返回空映射, 使匹配回退到内置默认规则(与改造前行为一致)。 */
-    private ValueAliasLookup emptyAliasLookup() {
-        ValueAliasLookup lookup = mock(ValueAliasLookup.class);
+    private ValueAliasQuery emptyAliasLookup() {
+        ValueAliasQuery lookup = mock(ValueAliasQuery.class);
         lenient().when(lookup.mapping(any())).thenReturn(Map.of());
         return lookup;
     }
@@ -96,7 +96,7 @@ class SteelQuoteMatchServiceTest {
         when(materialQuery.findActiveProducts()).thenReturn(List.of(
                 material(1L, "M001", "万泰", "HRB400E", "直条", "16", "9米")));
 
-        ValueAliasLookup lookup = mock(ValueAliasLookup.class);
+        ValueAliasQuery lookup = mock(ValueAliasQuery.class);
         lenient().when(lookup.mapping(ValueAliasDimension.BRAND)).thenReturn(Map.of("万泰", "表内品牌目标"));
         lenient().when(lookup.mapping(ValueAliasDimension.CATEGORY)).thenReturn(Map.of("直条", "表内品名目标"));
 

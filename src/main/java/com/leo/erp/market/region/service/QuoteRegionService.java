@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.CrudOperationLogger;
+import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.market.region.domain.entity.MdQuoteRegion;
@@ -37,6 +38,14 @@ public class QuoteRegionService {
 
     private static final int MAX_NAME_LENGTH = 32;
     private static final int MAX_SLUG_LENGTH = 64;
+
+    /**
+     * 状态写入的唯一出口：状态门禁只允许 ApplyService / CompletionSyncService /
+     * CrudStatusGuard 写实体状态，服务层直接 {@code setStatus} 会被
+     * {@code ModuleBoundaryVerifier} 判为旁路写。
+     */
+    private static final CrudStatusGuard<MdQuoteRegion> STATUS_GUARD =
+            CrudStatusGuard.forStatusAwareEntities();
 
     private final MdQuoteRegionRepository repository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
@@ -78,7 +87,7 @@ public class QuoteRegionService {
         entity.setRegionName(regionName);
         entity.setSlug(slug);
         entity.setSortOrder(request.sortOrder());
-        entity.setStatus(status);
+        STATUS_GUARD.writeStatus(entity, status);
         entity.setRemark(trimToNull(request.remark()));
         MdQuoteRegion saved = repository.saveAndFlush(entity);
         operationLogger.created(saved, entityId);
@@ -101,7 +110,7 @@ public class QuoteRegionService {
         entity.setRegionName(regionName);
         entity.setSlug(slug);
         entity.setSortOrder(request.sortOrder());
-        entity.setStatus(status);
+        STATUS_GUARD.writeStatus(entity, status);
         entity.setRemark(trimToNull(request.remark()));
         MdQuoteRegion saved = repository.saveAndFlush(entity);
         operationLogger.updated(saved, id);

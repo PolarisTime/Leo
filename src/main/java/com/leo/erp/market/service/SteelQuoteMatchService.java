@@ -1,12 +1,12 @@
 package com.leo.erp.market.service;
 
 import com.leo.erp.master.api.MaterialQuery;
+import com.leo.erp.master.api.ValueAliasDimension;
+import com.leo.erp.master.api.ValueAliasQuery;
 import com.leo.erp.market.domain.entity.SteelArticle;
 import com.leo.erp.market.domain.entity.SteelQuote;
 import com.leo.erp.market.mysteel.MysteelProperties;
-import com.leo.erp.master.valuealias.service.ValueAliasDimension;
 import com.leo.erp.market.lengthpremium.service.LengthPremiumService;
-import com.leo.erp.master.valuealias.service.ValueAliasLookup;
 import com.leo.erp.market.repository.SteelArticleRepository;
 import com.leo.erp.market.repository.SteelQuoteRepository;
 import com.leo.erp.market.web.dto.MaterialPriceMatchResponse;
@@ -51,19 +51,19 @@ public class SteelQuoteMatchService {
     private final SteelArticleRepository articleRepository;
     private final MaterialQuery materialQuery;
     private final MysteelProperties properties;
-    private final ValueAliasLookup valueAliasLookup;
+    private final ValueAliasQuery valueAliasQuery;
     private final LengthPremiumService lengthPremiumService;
 
     public SteelQuoteMatchService(SteelQuoteRepository quoteRepository,
                                   SteelArticleRepository articleRepository,
                                   MaterialQuery materialQuery, MysteelProperties properties,
-                                  ValueAliasLookup valueAliasLookup,
+                                  ValueAliasQuery valueAliasQuery,
                                   LengthPremiumService lengthPremiumService) {
         this.quoteRepository = quoteRepository;
         this.articleRepository = articleRepository;
         this.materialQuery = materialQuery;
         this.properties = properties;
-        this.valueAliasLookup = valueAliasLookup;
+        this.valueAliasQuery = valueAliasQuery;
         this.lengthPremiumService = lengthPremiumService;
     }
 
@@ -74,7 +74,7 @@ public class SteelQuoteMatchService {
      * <p>映射以「同一含义多种写法」为界，不做跨语义合并，因此查不到时原样返回。</p>
      */
     private String resolveAlias(ValueAliasDimension dimension, String raw, Map<String, String> fallback) {
-        Map<String, String> mapping = valueAliasLookup.mapping(dimension);
+        Map<String, String> mapping = valueAliasQuery.mapping(dimension);
         Map<String, String> effective = mapping.isEmpty() ? fallback : mapping;
         return effective.getOrDefault(raw, raw);
     }

@@ -1,6 +1,7 @@
 package com.leo.erp.market.region.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -14,10 +15,14 @@ import jakarta.persistence.Table;
  *
  * <p>注意 slug 并非拼音直拼：无锡=jswuxi、福州=fjfuzhou、台州=zjtaizhou、哈尔滨=haerbin、
  * 成都=chengdo、莱芜=laifu，按拼音"纠正"会直接导致抓取 404。</p>
+ *
+ * <p>状态字段是单据状态门禁（{@code ModuleBoundaryVerifier}）管辖的写入口：实现
+ * {@link StatusAwareEntity} 后由 {@code CrudStatusGuard#writeStatus} 唯一写入，
+ * 服务层不得直接 {@code setStatus}，避免绕过守卫的旁路写。</p>
  */
 @Entity
 @Table(name = "md_quote_region")
-public class MdQuoteRegion extends AbstractAuditableEntity {
+public class MdQuoteRegion extends AbstractAuditableEntity implements StatusAwareEntity {
 
     @Id
     private Long id;

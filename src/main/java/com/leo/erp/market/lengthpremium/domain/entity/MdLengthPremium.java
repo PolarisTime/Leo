@@ -1,6 +1,7 @@
 package com.leo.erp.market.lengthpremium.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -14,10 +15,14 @@ import jakarta.persistence.Table;
  *
  * <p>与 {@code md_value_alias} 的区别：后者做「同一含义多种写法」的文本归一，本表承载
  * 「定尺 → 数值加价」，语义不同故独立建表。</p>
+ *
+ * <p>状态字段是单据状态门禁（{@code ModuleBoundaryVerifier}）管辖的写入口：实现
+ * {@link StatusAwareEntity} 后由 {@code CrudStatusGuard#writeStatus} 唯一写入，
+ * 服务层不得直接 {@code setStatus}，避免绕过守卫的旁路写。</p>
  */
 @Entity
 @Table(name = "md_length_premium")
-public class MdLengthPremium extends AbstractAuditableEntity {
+public class MdLengthPremium extends AbstractAuditableEntity implements StatusAwareEntity {
 
     @Id
     private Long id;

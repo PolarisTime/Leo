@@ -1,4 +1,4 @@
-package com.leo.erp.master.valuealias.service;
+package com.leo.erp.master.api;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -12,6 +12,10 @@ import java.util.Optional;
  *
  * <p>取值与数据库 CHECK 约束 {@code ck_value_alias_dimension} 保持一致；新增维度必须同时
  * 修改约束（新 Flyway 脚本）与这里，否则写入会在数据库层被拒。</p>
+ *
+ * <p>本枚举是跨模块契约的一部分（行情匹配按维度取归一映射），因此与 {@link ValueAliasQuery}
+ * 一起放在 {@code master.api}：放在 {@code master.valuealias.service} 会被 Spring Modulith
+ * 判为「market 依赖 master 未暴露类型」。枚举值本身不随模块内部结构变化。</p>
  */
 public enum ValueAliasDimension {
 

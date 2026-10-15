@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.CrudOperationLogger;
+import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.market.lengthpremium.domain.entity.MdLengthPremium;
@@ -34,6 +35,14 @@ import java.util.Map;
 public class LengthPremiumService {
 
     private static final int MAX_LENGTH_NAME = 32;
+
+    /**
+     * 状态写入的唯一出口：状态门禁只允许 ApplyService / CompletionSyncService /
+     * CrudStatusGuard 写实体状态，服务层直接 {@code setStatus} 会被
+     * {@code ModuleBoundaryVerifier} 判为旁路写。
+     */
+    private static final CrudStatusGuard<MdLengthPremium> STATUS_GUARD =
+            CrudStatusGuard.forStatusAwareEntities();
 
     private final MdLengthPremiumRepository repository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
@@ -71,7 +80,7 @@ public class LengthPremiumService {
         entity.setLengthName(lengthName);
         entity.setPremium(request.premium());
         entity.setSortOrder(request.sortOrder());
-        entity.setStatus(status);
+        STATUS_GUARD.writeStatus(entity, status);
         entity.setRemark(trimToNull(request.remark()));
         MdLengthPremium saved = repository.saveAndFlush(entity);
         operationLogger.created(saved, entityId);
@@ -91,7 +100,7 @@ public class LengthPremiumService {
         entity.setLengthName(lengthName);
         entity.setPremium(request.premium());
         entity.setSortOrder(request.sortOrder());
-        entity.setStatus(status);
+        STATUS_GUARD.writeStatus(entity, status);
         entity.setRemark(trimToNull(request.remark()));
         MdLengthPremium saved = repository.saveAndFlush(entity);
         operationLogger.updated(saved, id);
