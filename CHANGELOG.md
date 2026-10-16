@@ -1,3 +1,10 @@
+# [13.2.0](https://github.com/PolarisTime/Leo/compare/v13.1.0...v13.2.0) (2026-10-16)
+
+
+### Features
+
+* **quotation:** 吨位接口暴露真实已开货与已开完标记 ([783bcc3](https://github.com/PolarisTime/Leo/commit/783bcc3e9c8edfb1890eb16bf0cd4807221b25e0))
+
 # [13.1.0](https://github.com/PolarisTime/Leo/compare/v13.0.0...v13.1.0) (2026-10-15)
 
 
