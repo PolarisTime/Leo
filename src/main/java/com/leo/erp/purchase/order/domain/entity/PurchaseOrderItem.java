@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -87,5 +88,24 @@ public class PurchaseOrderItem {
 
     @Column(name = "actual_weight_ton", precision = 18, scale = 8)
     private BigDecimal actualWeightTon;
+
+    /**
+     * 已开完<b>手动标记</b>(人工裁定"该明细行不用再开了", 不保留任何自动吨位软提示/超量警告)。
+     *
+     * <p>与吨位无关: 由人在该明细行上标记, 比价选单默认隐藏已标记行;
+     * {@link #issuedDoneBy}/{@link #issuedDoneName}/{@link #issuedDoneAt} 是标记留痕(谁/何时),
+     * 取消标记时一并清空。</p>
+     */
+    @Column(name = "issued_done", nullable = false)
+    private boolean issuedDone = false;
+
+    @Column(name = "issued_done_by")
+    private Long issuedDoneBy;
+
+    @Column(name = "issued_done_name", length = 64)
+    private String issuedDoneName;
+
+    @Column(name = "issued_done_at")
+    private LocalDateTime issuedDoneAt;
 
 }

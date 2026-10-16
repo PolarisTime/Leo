@@ -40,7 +40,18 @@ class PurchaseOrderTonnageServiceTest {
                                                          String spec, String orderedWeight) {
         return new PurchaseOrderItemOptionSnapshot(
                 orderId, itemId, orderNo, "沙钢", "螺纹钢", "HRB400E", spec, "9米", "中天",
-                new BigDecimal(orderedWeight), "正常");
+                new BigDecimal(orderedWeight), null, false, "正常");
+    }
+
+    /** 带真实已开货(入库回写值)与手动标记的明细行快照。 */
+    private static PurchaseOrderItemOptionSnapshot shippedItem(long orderId, long itemId, String orderNo,
+                                                               String spec, String orderedWeight,
+                                                               String actualWeightTon, boolean issuedDone) {
+        return new PurchaseOrderItemOptionSnapshot(
+                orderId, itemId, orderNo, "沙钢", "螺纹钢", "HRB400E", spec, "9米", "中天",
+                new BigDecimal(orderedWeight),
+                actualWeightTon == null ? null : new BigDecimal(actualWeightTon),
+                issuedDone, "正常");
     }
 
     @Test
@@ -161,5 +172,46 @@ class PurchaseOrderTonnageServiceTest {
         ArgumentCaptor<Collection<Long>> captor = ArgumentCaptor.forClass(Collection.class);
         verify(purchaseOrderOptionQuery).listActiveItemsByIds(captor.capture());
         assertThat(captor.getValue()).containsExactly(1L, 2L);
+    }
+
+    /**
+     * 「报单占用」与「真实已开货」是两个不同的量, 必须同时下发且不得互相顶替。
+     *
+     * <p>本用例是那次踩坑的回归钉: 报价单只在订单行上"报"了 5 吨(issuedWeight=5), 但该订单行
+     * 真实入库 2.3 吨(actualWeightTon=2.3)。若把已开列接到 issuedWeight 上, 页面就会把
+     * "别家报单量"当成"已经开出去的货"; 反之若把选单额度接到 actualWeightTon 上, 入库为 0
+     * 的行会被无限重复关联。两个出口必须各自取自己的字段。</p>
+     */
+    @Test
+    void summarize_carriesActualWeightAndIssuedDoneSeparatelyFromIssuedWeight() {
+        when(purchaseOrderOptionQuery.listActiveItemsByIds(any()))
+                .thenReturn(List.of(shippedItem(1L, 11L, "PO-1", "12", "32.768", "32.768", true)));
+        when(quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(any(), any()))
+                .thenReturn(List.<Object[]>of(new Object[]{11L, new BigDecimal("17")}));
+
+        PurchaseOrderTonnageResponse result = service().summarize(List.of(11L), null).get(0);
+
+        // 报单占用(选单额度口径): 别家报价单报了多少
+        assertThat(result.issuedWeight()).isEqualByComparingTo("17");
+        assertThat(result.remainingWeight()).isEqualByComparingTo("15.768");
+        // 真实已开货(吨位列口径): 入库回写值, 与报单占用无关
+        assertThat(result.actualWeightTon()).isEqualByComparingTo("32.768");
+        assertThat(result.actualWeightTon()).isNotEqualByComparingTo(result.issuedWeight());
+        // 人工裁定标记原样透传, 不由吨位推导
+        assertThat(result.issuedDone()).isTrue();
+    }
+
+    /** 尚未开货时 actualWeightTon 保持 null(要能区分"开了 0 吨"与"没有任何到货记录")。 */
+    @Test
+    void summarize_keepsActualWeightNullWhenNothingShipped() {
+        when(purchaseOrderOptionQuery.listActiveItemsByIds(any()))
+                .thenReturn(List.of(shippedItem(1L, 11L, "PO-1", "12", "2.3", null, false)));
+        when(quoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds(any(), any()))
+                .thenReturn(List.of());
+
+        PurchaseOrderTonnageResponse result = service().summarize(List.of(11L), null).get(0);
+
+        assertThat(result.actualWeightTon()).isNull();
+        assertThat(result.issuedDone()).isFalse();
     }
 }

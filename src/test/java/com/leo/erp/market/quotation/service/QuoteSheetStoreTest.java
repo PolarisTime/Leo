@@ -1977,7 +1977,7 @@ class QuoteSheetStoreTest {
             linkItemSnapshot(long purchaseOrderId, long purchaseOrderItemId) {
         return new com.leo.erp.purchase.api.PurchaseOrderOptionQuery.PurchaseOrderItemOptionSnapshot(
                 purchaseOrderId, purchaseOrderItemId, "PO-" + purchaseOrderId, "沙钢", "螺纹钢", "HRB400E",
-                "12", "9米", "中天", new BigDecimal("200"), "正常");
+                "12", "9米", "中天", new BigDecimal("200"), null, false, "正常");
     }
 
     /** 明细行 id 真实存在但不属于所关联的订单: 422 并带明细行 id, 不得静默丢弃该条关联。 */

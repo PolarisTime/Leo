@@ -51,6 +51,9 @@ public interface PurchaseOrderOptionQuery {
      * @param length              长度
      * @param brand               品牌(订单明细自带字段, 供比价按规格展示"开了哪个品牌")
      * @param orderedWeight       该明细行订货吨数
+     * @param actualWeightTon     <b>真实已开货吨位</b>(入库审核回写: Σ生效入库单过磅重量, 可为 null = 尚未开货);
+     *                            与 {@code orderedWeight} 同为"订单行级"事实, 供吨位列回答"这条明细行已经开出去多少"
+     * @param issuedDone          人工裁定的「已开完」标记(与吨位无关, 不根据 {@code actualWeightTon} 自动判定)
      * @param status              订单状态
      */
     record PurchaseOrderItemOptionSnapshot(
@@ -64,6 +67,8 @@ public interface PurchaseOrderOptionQuery {
             String length,
             String brand,
             BigDecimal orderedWeight,
+            BigDecimal actualWeightTon,
+            boolean issuedDone,
             String status
     ) {
     }

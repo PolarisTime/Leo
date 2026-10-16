@@ -344,11 +344,11 @@ class QuoteItemMultiPurchaseOrderLinkPostgresTest {
         ));
         when(purchaseOrderOptionQuery.listActiveItemsByIds(any())).thenReturn(List.of(
                 new PurchaseOrderItemOptionSnapshot(PO_1, POI_1, "PO-1", "沙钢", "螺纹钢", "HRB400E", "12",
-                        "9米", "中天", new BigDecimal("200"), "正常"),
+                        "9米", "中天", new BigDecimal("200"), null, false, "正常"),
                 new PurchaseOrderItemOptionSnapshot(PO_2, POI_2, "PO-2", "沙钢", "螺纹钢", "HRB400E", "12",
-                        "9米", "中天", new BigDecimal("200"), "正常"),
+                        "9米", "中天", new BigDecimal("200"), null, false, "正常"),
                 new PurchaseOrderItemOptionSnapshot(PO_1, POI_3, "PO-1", "沙钢", "螺纹钢", "HRB400E", "12",
-                        "9米", "中天", new BigDecimal("200"), "正常")
+                        "9米", "中天", new BigDecimal("200"), null, false, "正常")
         ));
     }
 

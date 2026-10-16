@@ -109,6 +109,10 @@ public class PurchaseOrderTonnageService {
                                                            BigDecimal issuedWeight) {
         BigDecimal orderedWeight = item.orderedWeight() == null ? BigDecimal.ZERO : item.orderedWeight();
         BigDecimal issued = issuedWeight == null ? BigDecimal.ZERO : issuedWeight;
+        /*
+         * 真实已开货直接取订单明细行的 actual_weight_ton(入库审核回写口径: Σ生效入库单过磅重量)。
+         * 这里保持 null 语义(尚未开货), 不用 0 兜底 —— 展示层要区分"开了 0 吨"与"还没有任何到货记录"。
+         */
         return new PurchaseOrderTonnageResponse(
                 item.purchaseOrderId(),
                 item.purchaseOrderItemId(),
@@ -122,6 +126,8 @@ public class PurchaseOrderTonnageService {
                 orderedWeight,
                 issued,
                 orderedWeight.subtract(issued),
+                item.actualWeightTon(),
+                item.issuedDone(),
                 item.status());
     }
 }
