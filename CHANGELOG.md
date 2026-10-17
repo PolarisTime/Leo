@@ -1,3 +1,10 @@
+## [13.2.1](https://github.com/PolarisTime/Leo/compare/v13.2.0...v13.2.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **project:** 取价数据源与地区缺省值显式落库, 不再写 null ([261a820](https://github.com/PolarisTime/Leo/commit/261a820b82ae1a387378ab974b0e17f475d86175))
+
 # [13.2.0](https://github.com/PolarisTime/Leo/compare/v13.1.0...v13.2.0) (2026-10-16)
 
 
