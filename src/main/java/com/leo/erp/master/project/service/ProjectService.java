@@ -60,6 +60,15 @@ public class ProjectService {
     /** 取价数据源常量。 */
     private static final String PRICE_SOURCE_MYSTEEL = "MYSTEEL";
     private static final String PRICE_SOURCE_STEELX = "STEELX";
+    /**
+     * 取价数据源缺省值。
+     *
+     * <p><b>必须显式落库, 不能写成 null</b>: 运行时虽会按 MYSTEEL/杭州 兜底解析取价, 但库里
+     * 留空会让"这个项目到底支不支持网价"没有任何数据依据 —— 项目选项下发时省略 quoteSource,
+     * 前端也就无从判断, 只能表现成"暂无可选/不支持网价"。写入显式默认值后, 取价配置才是可查的。</p>
+     */
+    private static final String DEFAULT_PRICE_SOURCE = PRICE_SOURCE_MYSTEEL;
+    private static final String DEFAULT_QUOTE_REGION = "杭州";
     private static final CrudStatusGuard<Project> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
     private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
@@ -384,17 +393,29 @@ public class ProjectService {
         entity.setPriceFloatValue(TradeItemCalculator.scaleAmount(request.priceFloatValue()));
     }
 
-    /** 归一化取价数据源与地区: 仅允许 MYSTEEL/STEELX; 空视为默认(MYSTEEL/杭州)。 */
+    /**
+     * 归一化取价数据源与地区: 仅允许 MYSTEEL/STEELX。
+     *
+     * <p><b>缺省值显式落库</b>(而不是留 null): 取价解析虽然对空值有运行时兜底, 但"项目支持
+     * 哪个数据源/哪个地区"必须能在库里查到 —— 留空会让项目选项不下发这两个字段, 前端无法
+     * 判断该项目能不能取网价, 只能表现成"暂无可选/不支持网价", 用户也看不出是没配置。</p>
+     */
     private void applyQuoteSource(Project entity, ProjectRequest request) {
         String source = trimToNull(request.quoteSource());
         if (source == null) {
-            entity.setQuoteSource(null);
+            entity.setQuoteSource(DEFAULT_PRICE_SOURCE);
         } else if (PRICE_SOURCE_MYSTEEL.equals(source) || PRICE_SOURCE_STEELX.equals(source)) {
             entity.setQuoteSource(source);
         } else {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "取价数据源仅支持 MYSTEEL 或 STEELX");
         }
-        entity.setQuoteRegion(trimToNull(request.quoteRegion()));
+        String region = trimToNull(request.quoteRegion());
+        /*
+         * MYSTEEL 只按全局市场(默认杭州)报价, 地区对它没有意义; 但把默认地区也落下来, 前端
+         * "取价地区"才有可回显的值, 不会显示成空(空值在界面上读起来像"没配置")。
+         * STEELX 的地区由用户自选, 未选时同样回落默认地区 —— 解析侧本就按默认市场取价。
+         */
+        entity.setQuoteRegion(region == null ? DEFAULT_QUOTE_REGION : region);
     }
 
     private Project saveCreatedProject(Project entity) {

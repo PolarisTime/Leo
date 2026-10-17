@@ -295,6 +295,67 @@ class ProjectServiceTest {
         assertThat(cacheable.unless()).isEqualTo("#result == null || #result.isEmpty()");
     }
 
+    /**
+     * 新建项目时取价数据源/地区必须<b>显式落库</b>(MYSTEEL / 杭州), 不能留 null。
+     *
+     * <p>回归的真实缺陷: 库里 7 个项目的 quote_source/quote_region 全是 NULL, 项目选项
+     * 因此不下发这两个字段, 前端无从判断"该项目支持哪个数据源", 取网价整条链路只能表现成
+     * "暂无可选/不支持网价" —— 用户看不出是没配置。缺省值落库后取价配置才是可查、可回显的。</p>
+     *
+     * <p>反例钉: 若把空值重新写成 null(旧行为), 本用例立即变红。</p>
+     */
+    @Test
+    void create_defaultsQuoteSourceAndRegionWhenAbsent() {
+        Project[] savedHolder = new Project[1];
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L);
+        when(codeIssuanceService.resolve(eq("project"), any(), anyString())).thenReturn("111");
+        when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
+            Project entity = invocation.getArgument(0);
+            savedHolder[0] = entity;
+            return entity;
+        });
+
+        // quoteSource/quoteRegion 都不传(等同于用户在页面上没动这两个字段)
+        service().create(new ProjectRequest("111", "项目A", null, null, null,
+                7L, "C007", null, null, "正常", null, null,
+                null, null,
+                null, null, null, null,
+                null, null, null,
+                null, null, null));
+
+        Project entity = savedHolder[0];
+        assertThat(entity.getQuoteSource()).isEqualTo("MYSTEEL");
+        assertThat(entity.getQuoteRegion()).isEqualTo("杭州");
+    }
+
+    /** 用户显式选择的取价数据源/地区必须原样保留, 不被缺省值覆盖。 */
+    @Test
+    void create_keepsExplicitQuoteSourceAndRegion() {
+        Project[] savedHolder = new Project[1];
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L);
+        when(codeIssuanceService.resolve(eq("project"), any(), anyString())).thenReturn("111");
+        when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
+            Project entity = invocation.getArgument(0);
+            savedHolder[0] = entity;
+            return entity;
+        });
+
+        service().create(new ProjectRequest("111", "项目A", null, null, null,
+                7L, "C007", null, null, "正常", null, null,
+                "STEELX", "嘉兴",
+                null, null, null, null,
+                null, null, null,
+                null, null, null));
+
+        Project entity = savedHolder[0];
+        assertThat(entity.getQuoteSource()).isEqualTo("STEELX");
+        assertThat(entity.getQuoteRegion()).isEqualTo("嘉兴");
+    }
+
     @Test
     void create_persistsPriceFloatAdd() {
         Project[] savedHolder = new Project[1];
