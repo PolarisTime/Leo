@@ -191,7 +191,9 @@ public class QuoteRegionService {
                 entity.getSlug(),
                 entity.getSortOrder(),
                 entity.getStatus(),
-                entity.getRemark()
+                entity.getRemark(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt()
         );
     }
 }

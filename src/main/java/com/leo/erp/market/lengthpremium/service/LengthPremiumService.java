@@ -183,7 +183,9 @@ public class LengthPremiumService {
                 entity.getPremium(),
                 entity.getSortOrder(),
                 entity.getStatus(),
-                entity.getRemark()
+                entity.getRemark(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt()
         );
     }
 }
