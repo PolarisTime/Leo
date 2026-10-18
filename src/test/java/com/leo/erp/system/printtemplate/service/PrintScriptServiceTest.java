@@ -42,6 +42,9 @@ class PrintScriptServiceTest {
     @Mock
     private PrintRuntimeProperties runtimeProperties;
 
+    @Mock
+    private PrintRecordAuthorization recordAuthorization;
+
     @InjectMocks
     private PrintScriptService service;
 

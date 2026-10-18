@@ -51,6 +51,7 @@ public class PrintScriptService {
     private final PrintLayoutLodopRenderer layoutLodopRenderer;
     private final AttachmentRecordAccess recordAccessService;
     private final PrintRuntimeProperties runtimeProperties;
+    private final PrintRecordAuthorization recordAuthorization;
 
     public PrintScriptService(
             PrintTemplateRepository templateRepository,
@@ -59,7 +60,8 @@ public class PrintScriptService {
             PrintRecordLayoutPreparer layoutPreparer,
             PrintLayoutLodopRenderer layoutLodopRenderer,
             AttachmentRecordAccess recordAccessService,
-            PrintRuntimeProperties runtimeProperties
+            PrintRuntimeProperties runtimeProperties,
+            PrintRecordAuthorization recordAuthorization
     ) {
         this.templateRepository = templateRepository;
         this.dataProvider = dataProvider;
@@ -68,6 +70,7 @@ public class PrintScriptService {
         this.layoutLodopRenderer = layoutLodopRenderer;
         this.recordAccessService = recordAccessService;
         this.runtimeProperties = runtimeProperties;
+        this.recordAuthorization = recordAuthorization;
     }
 
     /** Load record + items from DB, return raw template + data for frontend rendering. */
@@ -85,6 +88,8 @@ public class PrintScriptService {
         if (!moduleKey.equals(template.getBillType())) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "打印模板与当前模块不匹配");
         }
+        // 全局打印权限不区分模块: 必须再校验被打印模块的读取权限, 否则可借打印读取无权模块的数据。
+        recordAuthorization.requireReadable(moduleKey);
         dataProvider.requireSupported(moduleKey);
         // loadRecord 内部一次查询完成存在性校验与数据加载，记录不存在时抛 NOT_FOUND
         PrintRecordData recordData = dataProvider.loadRecord(moduleKey, recordId);
@@ -308,6 +313,8 @@ public class PrintScriptService {
     }
 
     public List<PrintRecordItem> listPrintItems(String moduleKey, List<Long> recordIds) {
+        // 预览入口同样只校验全局 print-previews:read; 这里补被预览模块的读取权限。
+        recordAuthorization.requireReadable(moduleKey);
         dataProvider.requireSupported(moduleKey);
         if (recordIds == null || recordIds.isEmpty()) {
             return List.of();
