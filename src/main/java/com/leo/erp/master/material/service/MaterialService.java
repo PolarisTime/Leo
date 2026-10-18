@@ -47,6 +47,7 @@ public class MaterialService {
     private final MaterialIdentityService identityService;
     private final MaterialHistoryRecorder materialHistoryRecorder;
     private final MaterialDictionaryCache materialDictionaryCache;
+    private final MaterialCategoryGuard materialCategoryGuard;
 
     public MaterialService(MaterialRepository materialRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
@@ -55,7 +56,8 @@ public class MaterialService {
                            MasterDataCodeIssuanceService codeIssuanceService,
                            MaterialIdentityService identityService,
                            MaterialHistoryRecorder materialHistoryRecorder,
-                           MaterialDictionaryCache materialDictionaryCache) {
+                           MaterialDictionaryCache materialDictionaryCache,
+                           MaterialCategoryGuard materialCategoryGuard) {
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.materialRepository = materialRepository;
         this.materialMapper = materialMapper;
@@ -64,6 +66,7 @@ public class MaterialService {
         this.identityService = identityService;
         this.materialHistoryRecorder = materialHistoryRecorder;
         this.materialDictionaryCache = materialDictionaryCache;
+        this.materialCategoryGuard = materialCategoryGuard;
     }
 
     @Transactional(readOnly = true)
@@ -181,7 +184,7 @@ public class MaterialService {
         entity.setMaterialType(MaterialRequest.TYPE_PHYSICAL);
         entity.setBrand(requireText(request.brand(), "品牌不能为空"));
         entity.setMaterial(requireText(request.material(), "名称不能为空"));
-        entity.setCategory(requireText(request.category(), "类别不能为空"));
+        entity.setCategory(materialCategoryGuard.requireActive(request.category()));
         entity.setSpec(requireText(request.spec(), "规格不能为空"));
         entity.setLength(trimToNull(request.length()));
         entity.setUnit(requireText(request.unit(), "单位不能为空"));

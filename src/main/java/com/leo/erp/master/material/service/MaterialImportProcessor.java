@@ -6,6 +6,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.master.material.domain.MaterialSnapshot;
+import com.leo.erp.master.material.domain.MaterialTypes;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.repository.MaterialRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -23,15 +24,18 @@ class MaterialImportProcessor {
     private final SnowflakeIdGenerator idGenerator;
     private final MaterialIdentityService identityService;
     private final MaterialHistoryRecorder historyRecorder;
+    private final MaterialCategoryGuard categoryGuard;
 
     MaterialImportProcessor(MaterialRepository materialRepository,
                             SnowflakeIdGenerator idGenerator,
                             MaterialIdentityService identityService,
-                            MaterialHistoryRecorder historyRecorder) {
+                            MaterialHistoryRecorder historyRecorder,
+                            MaterialCategoryGuard categoryGuard) {
         this.materialRepository = materialRepository;
         this.idGenerator = idGenerator;
         this.identityService = identityService;
         this.historyRecorder = historyRecorder;
+        this.categoryGuard = categoryGuard;
     }
 
     ImportSession start(Collection<MaterialIdentityService.Identity> identities) {
@@ -127,7 +131,12 @@ class MaterialImportProcessor {
         material.setMaterialCode(resolveMaterialCode(material.getMaterialCode(), material.getId()));
         material.setBrand(data.brand());
         material.setMaterial(data.material());
-        material.setCategory(data.category());
+        // 类别校验与手工保存同一口径: 物理商品的类别必须存在于分类主数据,
+        // 否则分类上的业务开关(如采购是否需过磅)会因名称拼错而静默失效。
+        // 附加费用类不走分类主数据, 其类别固定为常量, 与 MaterialService.applyExpense 一致。
+        material.setCategory(data.isExpense()
+                ? MaterialTypes.EXPENSE_CATEGORY
+                : categoryGuard.requireActive(data.category()));
         material.setSpec(data.spec());
         material.setLength(data.length());
         material.setUnit(data.unit());

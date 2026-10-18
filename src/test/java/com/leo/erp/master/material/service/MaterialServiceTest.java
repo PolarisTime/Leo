@@ -18,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.Optional;
 
+import static org.mockito.Mockito.lenient;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -49,10 +50,18 @@ class MaterialServiceTest {
     @Mock
     private MaterialDictionaryCache materialDictionaryCache;
 
+    @Mock
+    private MaterialCategoryGuard materialCategoryGuard;
+
     private MaterialService service() {
+        // 物理商品的类别需存在于分类主数据: 本测试只关注商品自身逻辑,
+        // 故让 guard 原样放行传入的类别名。
+        // 与真实 MaterialCategoryGuard 行为一致: 按名称匹配后返回规范化(trim)后的分类名。
+        lenient().when(materialCategoryGuard.requireActive(anyString()))
+                .thenAnswer(invocation -> ((String) invocation.getArgument(0)).trim());
         return new MaterialService(materialRepository, snowflakeIdGenerator, materialMapper,
                 materialReferenceGuard, codeIssuanceService, identityService, materialHistoryRecorder,
-                materialDictionaryCache);
+                materialDictionaryCache, materialCategoryGuard);
     }
 
     private MaterialRequest physicalRequest(String brand) {
