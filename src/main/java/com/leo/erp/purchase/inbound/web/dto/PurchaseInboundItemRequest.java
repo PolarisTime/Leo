@@ -1,6 +1,7 @@
 package com.leo.erp.purchase.inbound.web.dto;
 
 import com.leo.erp.common.support.ValidationMessages;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
@@ -10,8 +11,8 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 public record PurchaseInboundItemRequest(
-        Long id,
-        @NotNull Long materialId,
+        @SnowflakeId Long id,
+        @NotNull @SnowflakeId Long materialId,
         @NotBlank String materialCode,
         @NotBlank String brand,
         @NotBlank String category,
@@ -20,8 +21,8 @@ public record PurchaseInboundItemRequest(
         String length,
         @NotBlank String unit,
         @NotNull(message = "来源采购订单明细不能为空")
-        Long sourcePurchaseOrderItemId,
-        @NotNull Long warehouseId,
+        @SnowflakeId Long sourcePurchaseOrderItemId,
+        @NotNull @SnowflakeId Long warehouseId,
         @NotBlank String warehouseName,
         String settlementMode,
         String batchNo,

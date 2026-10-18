@@ -1,6 +1,7 @@
 package com.leo.erp.master.project.web.dto;
 
 import com.leo.erp.common.support.ValidationMessages;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -18,11 +19,11 @@ public record ProjectRequest(
         String projectAddress,
         String projectManager,
         @Positive(message = "客户ID必须为正整数")
-        Long customerId,
+        @SnowflakeId Long customerId,
         @NotBlank(message = "客户编码不能为空")
         String customerCode,
         @Positive(message = "结算主体ID必须为正整数")
-        Long settlementCompanyId,
+        @SnowflakeId Long settlementCompanyId,
         String settlementCompanyName,
         @NotBlank(message = ValidationMessages.STATUS_REQUIRED)
         String status,

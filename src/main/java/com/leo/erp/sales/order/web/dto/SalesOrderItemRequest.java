@@ -1,6 +1,7 @@
 package com.leo.erp.sales.order.web.dto;
 
 import com.leo.erp.common.support.ValidationMessages;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
@@ -10,8 +11,8 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 public record SalesOrderItemRequest(
-        Long id,
-        Long materialId,
+        @SnowflakeId Long id,
+        @SnowflakeId Long materialId,
         @NotBlank String materialCode,
         @NotBlank String brand,
         @NotBlank String category,
@@ -19,9 +20,9 @@ public record SalesOrderItemRequest(
         @NotBlank String spec,
         String length,
         @NotBlank String unit,
-        Long sourceInboundItemId,
-        Long sourcePurchaseOrderItemId,
-        Long warehouseId,
+        @SnowflakeId Long sourceInboundItemId,
+        @SnowflakeId Long sourcePurchaseOrderItemId,
+        @SnowflakeId Long warehouseId,
         @NotBlank String warehouseName,
         String batchNo,
         @NotNull @Min(0) Integer quantity,

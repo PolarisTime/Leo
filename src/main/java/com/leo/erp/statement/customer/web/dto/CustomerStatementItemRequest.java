@@ -1,6 +1,7 @@
 package com.leo.erp.statement.customer.web.dto;
 
 import jakarta.validation.constraints.NotNull;
+import com.leo.erp.common.validation.SnowflakeId;
 
 import java.math.BigDecimal;
 
@@ -12,9 +13,9 @@ import java.math.BigDecimal;
  * 保留，不参与保存（后端以库值为准）。
  */
 public record CustomerStatementItemRequest(
-        Long id,
+        @SnowflakeId Long id,
         String sourceNo,
-        @NotNull Long sourceSalesOrderItemId,
+        @NotNull @SnowflakeId Long sourceSalesOrderItemId,
         String materialCode,
         String brand,
         String category,
@@ -30,10 +31,10 @@ public record CustomerStatementItemRequest(
         BigDecimal weightTon,
         BigDecimal unitPrice,
         BigDecimal amount,
-        Long customerId,
-        Long projectId,
-        Long materialId,
-        Long warehouseId
+        @SnowflakeId Long customerId,
+        @SnowflakeId Long projectId,
+        @SnowflakeId Long materialId,
+        @SnowflakeId Long warehouseId
 ) {
     public CustomerStatementItemRequest(Long id,
                                         String sourceNo,

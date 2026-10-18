@@ -1,6 +1,7 @@
 package com.leo.erp.sales.returns.web.dto;
 
 import com.leo.erp.common.support.ValidationMessages;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
@@ -16,11 +17,11 @@ import java.math.BigDecimal;
  * {@code sourceFreightBillId} 仅作为来源物流单引用留存，不再做跨模块服务端校验。
  */
 public record SalesReturnItemRequest(
-        Long id,
+        @SnowflakeId Long id,
         @NotNull(message = "来源销售出库明细不能为空")
-        Long sourceSalesOutboundItemId,
-        Long sourceFreightBillId,
-        Long materialId,
+        @SnowflakeId Long sourceSalesOutboundItemId,
+        @SnowflakeId Long sourceFreightBillId,
+        @SnowflakeId Long materialId,
         String materialCode,
         String brand,
         String category,
@@ -28,7 +29,7 @@ public record SalesReturnItemRequest(
         String spec,
         String length,
         String unit,
-        Long warehouseId,
+        @SnowflakeId Long warehouseId,
         String warehouseName,
         String batchNo,
         @NotNull @Min(value = 1, message = "退货数量必须大于0") Integer quantity,

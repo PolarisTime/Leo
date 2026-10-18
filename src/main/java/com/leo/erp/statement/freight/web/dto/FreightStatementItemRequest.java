@@ -1,6 +1,7 @@
 package com.leo.erp.statement.freight.web.dto;
 
 import jakarta.validation.constraints.NotNull;
+import com.leo.erp.common.validation.SnowflakeId;
 
 import java.math.BigDecimal;
 
@@ -12,15 +13,15 @@ import java.math.BigDecimal;
  * 仅为旧客户端兼容保留，不参与保存（后端以库值为准）。
  */
 public record FreightStatementItemRequest(
-        Long id,
+        @SnowflakeId Long id,
         String sourceNo,
-        Long settlementCompanyId,
+        @SnowflakeId Long settlementCompanyId,
         String settlementCompanyName,
-        Long customerId,
+        @SnowflakeId Long customerId,
         String customerName,
-        Long projectId,
+        @SnowflakeId Long projectId,
         String projectName,
-        Long materialId,
+        @SnowflakeId Long materialId,
         String materialCode,
         String materialName,
         String brand,
@@ -34,10 +35,10 @@ public record FreightStatementItemRequest(
         Integer piecesPerBundle,
         String batchNo,
         BigDecimal weightTon,
-        Long warehouseId,
+        @SnowflakeId Long warehouseId,
         String warehouseName,
-        @NotNull Long sourceFreightBillId,
-        @NotNull Long sourceFreightBillItemId,
-        Long sourceSalesOrderItemId
+        @NotNull @SnowflakeId Long sourceFreightBillId,
+        @NotNull @SnowflakeId Long sourceFreightBillItemId,
+        @SnowflakeId Long sourceSalesOrderItemId
 ) {
 }

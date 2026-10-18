@@ -1,6 +1,7 @@
 package com.leo.erp.sales.order.web.dto;
 
 import com.leo.erp.common.charge.api.DocumentChargeItemRequest;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -13,11 +14,11 @@ public record SalesOrderRequest(
         String purchaseInboundNo,
         String purchaseOrderNo,
         String customerCode,
-        @jakarta.validation.constraints.Positive Long customerId,
+        @jakarta.validation.constraints.Positive @SnowflakeId Long customerId,
         @jakarta.validation.constraints.NotBlank String customerName,
-        Long projectId,
+        @SnowflakeId Long projectId,
         @jakarta.validation.constraints.NotBlank String projectName,
-        Long settlementCompanyId,
+        @SnowflakeId Long settlementCompanyId,
         String settlementCompanyName,
         @NotNull LocalDate deliveryDate,
         /** 报单日期(客户报单/落单当天); 取价基准 ORDER 的锚点, 缺省时保留原值/落到当天。 */
@@ -26,7 +27,7 @@ public record SalesOrderRequest(
         String status,
         String remark,
         /** 交付核定所选价格规定ID(可选); 服务端据此按网价赋价并快照。 */
-        Long priceRuleId,
+        @SnowflakeId Long priceRuleId,
         /** 取价基准日(送货日期/报单日期/手工日期); 交付核定解析结果快照。 */
         LocalDate priceTargetDate,
         /** 实际取价日(交易日历回退后)。 */

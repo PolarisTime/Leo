@@ -1,6 +1,7 @@
 package com.leo.erp.logistics.bill.web.dto;
 
 import com.leo.erp.common.charge.api.DocumentChargeItemRequest;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.logistics.bill.domain.enums.FreightSettlementMode;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
@@ -13,12 +14,12 @@ import java.util.List;
 
 public record FreightBillRequest(
         String billNo,
-        Long carrierId,
+        @SnowflakeId Long carrierId,
         String carrierCode,
         @jakarta.validation.constraints.NotBlank String carrierName,
-        Long settlementCompanyId,
+        @SnowflakeId Long settlementCompanyId,
         String settlementCompanyName,
-        Long vehicleId,
+        @SnowflakeId Long vehicleId,
         String vehiclePlate,
         @NotNull LocalDate billTime,
         @NotNull @DecimalMin("0.00") BigDecimal unitPrice,

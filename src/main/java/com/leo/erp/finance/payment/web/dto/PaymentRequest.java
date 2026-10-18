@@ -1,6 +1,7 @@
 package com.leo.erp.finance.payment.web.dto;
 
 import com.leo.erp.common.support.ValidationMessages;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -14,20 +15,20 @@ public record PaymentRequest(
         String paymentNo,
         @jakarta.validation.constraints.NotBlank(message = "业务类型不能为空")
         String counterpartyType,
-        Long counterpartyId,
+        @SnowflakeId Long counterpartyId,
         String paymentPurpose,
         String counterpartyCode,
         @jakarta.validation.constraints.NotBlank(message = "往来单位不能为空")
         String counterpartyName,
-        Long sourceStatementId,
-        Long sourcePurchaseOrderId,
+        @SnowflakeId Long sourceStatementId,
+        @SnowflakeId Long sourcePurchaseOrderId,
         String purchaseOrderNo,
         String supplierCode,
         String supplierName,
-        Long settlementCompanyId,
+        @SnowflakeId Long settlementCompanyId,
         String settlementCompanyName,
         @NotNull(message = "资金账户不能为空")
-        Long accountId,
+        @SnowflakeId Long accountId,
         @NotNull(message = "付款日期不能为空")
         LocalDate paymentDate,
         @jakarta.validation.constraints.NotBlank(message = "付款方式不能为空")

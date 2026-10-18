@@ -1,7 +1,9 @@
 package com.leo.erp.system.company.web.dto;
 
+import com.leo.erp.common.validation.SnowflakeId;
+
 public record CompanySettlementAccountRequest(
-        Long id,
+        @SnowflakeId Long id,
         String accountName,
         String bankName,
         String bankAccount,

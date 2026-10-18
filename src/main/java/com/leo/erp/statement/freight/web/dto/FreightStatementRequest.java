@@ -1,6 +1,7 @@
 package com.leo.erp.statement.freight.web.dto;
 
 import jakarta.validation.Valid;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 
@@ -12,7 +13,7 @@ public record FreightStatementRequest(
         String statementNo,
         String carrierCode,
         String carrierName,
-        Long settlementCompanyId,
+        @SnowflakeId Long settlementCompanyId,
         String settlementCompanyName,
         LocalDate startDate,
         LocalDate endDate,
@@ -24,7 +25,7 @@ public record FreightStatementRequest(
         @Size(max = 500) String attachment,
         @Size(max = 255) String remark,
         @Valid @NotEmpty List<FreightStatementItemRequest> items,
-        Long carrierId,
+        @SnowflakeId Long carrierId,
         boolean audit
 ) {
 }

@@ -1,6 +1,7 @@
 package com.leo.erp.sales.outbound.web.dto;
 
 import com.leo.erp.common.support.ValidationMessages;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
@@ -17,11 +18,11 @@ import java.math.BigDecimal;
  * 仅为旧客户端兼容保留。
  */
 public record SalesOutboundItemRequest(
-        Long id,
+        @SnowflakeId Long id,
         String sourceNo,
         @NotNull(message = "来源销售订单明细不能为空")
-        Long sourceSalesOrderItemId,
-        Long materialId,
+        @SnowflakeId Long sourceSalesOrderItemId,
+        @SnowflakeId Long materialId,
         String materialCode,
         String brand,
         String category,
@@ -29,7 +30,7 @@ public record SalesOutboundItemRequest(
         String spec,
         String length,
         String unit,
-        Long warehouseId,
+        @SnowflakeId Long warehouseId,
         String warehouseName,
         String batchNo,
         @NotNull @Min(0) Integer quantity,

@@ -1,6 +1,7 @@
 package com.leo.erp.statement.customer.web.dto;
 
 import jakarta.validation.Valid;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
@@ -12,9 +13,9 @@ public record CustomerStatementRequest(
         String statementNo,
         String customerCode,
         @jakarta.validation.constraints.NotBlank String customerName,
-        Long projectId,
+        @SnowflakeId Long projectId,
         @jakarta.validation.constraints.NotBlank String projectName,
-        Long settlementCompanyId,
+        @SnowflakeId Long settlementCompanyId,
         String settlementCompanyName,
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
@@ -24,7 +25,7 @@ public record CustomerStatementRequest(
         String status,
         String remark,
         @Valid @NotEmpty List<CustomerStatementItemRequest> items,
-        Long customerId,
+        @SnowflakeId Long customerId,
         boolean audit,
         String direction
 ) {

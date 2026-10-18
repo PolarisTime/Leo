@@ -1,6 +1,7 @@
 package com.leo.erp.finance.receipt.web.dto;
 
 import com.leo.erp.common.support.ValidationMessages;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -13,20 +14,20 @@ import java.util.List;
 public record ReceiptRequest(
         String receiptNo,
         String counterpartyType,
-        Long counterpartyId,
+        @SnowflakeId Long counterpartyId,
         String counterpartyCode,
         String counterpartyName,
         String receiptPurpose,
-        Long customerId,
+        @SnowflakeId Long customerId,
         String customerCode,
         String customerName,
-        Long projectId,
+        @SnowflakeId Long projectId,
         String projectName,
-        Long settlementCompanyId,
+        @SnowflakeId Long settlementCompanyId,
         String settlementCompanyName,
         @NotNull(message = "资金账户不能为空")
-        Long accountId,
-        Long sourceCustomerStatementId,
+        @SnowflakeId Long accountId,
+        @SnowflakeId Long sourceCustomerStatementId,
         @NotNull(message = "收款日期不能为空")
         LocalDate receiptDate,
         @jakarta.validation.constraints.NotBlank(message = "收款方式不能为空")

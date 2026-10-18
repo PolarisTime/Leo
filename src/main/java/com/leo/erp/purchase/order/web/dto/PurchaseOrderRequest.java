@@ -1,6 +1,7 @@
 package com.leo.erp.purchase.order.web.dto;
 
 import com.leo.erp.common.charge.api.DocumentChargeItemRequest;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -10,7 +11,7 @@ import java.util.List;
 
 public record PurchaseOrderRequest(
         String orderNo,
-        Long supplierId,
+        @SnowflakeId Long supplierId,
         String supplierCode,
         @jakarta.validation.constraints.NotBlank(message = "供应商不能为空")
         String supplierName,
@@ -18,7 +19,7 @@ public record PurchaseOrderRequest(
         LocalDateTime orderDate,
         String buyerName,
         @NotNull(message = "采购结算主体不能为空")
-        Long settlementCompanyId,
+        @SnowflakeId Long settlementCompanyId,
         String status,
         String remark,
         @Valid

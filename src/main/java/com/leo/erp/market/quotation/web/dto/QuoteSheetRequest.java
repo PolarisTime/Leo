@@ -1,6 +1,7 @@
 package com.leo.erp.market.quotation.web.dto;
 
 import com.leo.erp.market.quotation.domain.enums.QuoteRowType;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -14,7 +15,7 @@ import java.util.List;
 /** 报价单创建/更新请求。 */
 public record QuoteSheetRequest(
         @NotBlank(message = "单据名称不能为空") @Size(max = 64, message = "单据名称过长") String name,
-        Long projectId,
+        @SnowflakeId Long projectId,
         @Size(max = 200, message = "项目名称过长") String projectName,
         @NotNull(message = "报单日期不能为空") LocalDate orderDate,
         @NotNull(message = "参照日期不能为空") LocalDate refDate,
@@ -40,7 +41,7 @@ public record QuoteSheetRequest(
     public record ItemPriceRequest(
             @NotBlank(message = "品牌名称不能为空") @Size(max = 64, message = "品牌名称过长") String brandName,
             @DecimalMin(value = "0", message = "现货价不能为负") BigDecimal spotPrice,
-            Long supplierId
+            @SnowflakeId Long supplierId
     ) {
     }
 
@@ -49,8 +50,8 @@ public record QuoteSheetRequest(
      * <p>不携带订单号快照 —— 快照由服务端按 {@code purchaseOrderId} 批量解析后写入。</p>
      */
     public record ItemPurchaseOrderRequest(
-            @NotNull(message = "关联的采购订单不能为空") Long purchaseOrderId,
-            @NotNull(message = "关联的采购订单明细行不能为空") Long purchaseOrderItemId,
+            @NotNull(message = "关联的采购订单不能为空") @SnowflakeId Long purchaseOrderId,
+            @NotNull(message = "关联的采购订单明细行不能为空") @SnowflakeId Long purchaseOrderItemId,
             @DecimalMin(value = "0", message = "分配吨位不能为负") BigDecimal allocatedTon
     ) {
     }
@@ -72,8 +73,8 @@ public record QuoteSheetRequest(
                 @Size(max = 255, message = "备注过长") String remark,
                 @DecimalMin(value = "0", message = "吨数不能为负") BigDecimal ton,
                 Boolean locked,
-                Long purchaseOrderId,
-                Long purchaseOrderItemId,
+                @SnowflakeId Long purchaseOrderId,
+                @SnowflakeId Long purchaseOrderItemId,
                 @Valid List<ItemPurchaseOrderRequest> purchaseOrderLinks,
                 @Valid List<ItemPriceRequest> prices
         ) {

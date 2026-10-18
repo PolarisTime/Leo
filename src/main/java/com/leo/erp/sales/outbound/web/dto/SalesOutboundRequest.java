@@ -1,6 +1,7 @@
 package com.leo.erp.sales.outbound.web.dto;
 
 import jakarta.validation.Valid;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
@@ -10,11 +11,11 @@ import java.util.List;
 public record SalesOutboundRequest(
         String outboundNo,
         String salesOrderNo,
-        Long customerId,
+        @SnowflakeId Long customerId,
         @jakarta.validation.constraints.NotBlank String customerName,
-        Long projectId,
+        @SnowflakeId Long projectId,
         @jakarta.validation.constraints.NotBlank String projectName,
-        Long warehouseId,
+        @SnowflakeId Long warehouseId,
         String warehouseName,
         @NotNull LocalDate outboundDate,
         String status,

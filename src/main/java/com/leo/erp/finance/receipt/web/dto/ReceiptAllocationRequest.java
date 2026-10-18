@@ -1,15 +1,16 @@
 package com.leo.erp.finance.receipt.web.dto;
 
 import jakarta.validation.constraints.DecimalMin;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 
 public record ReceiptAllocationRequest(
-        Long id,
+        @SnowflakeId Long id,
         @NotNull(message = "核销对账单不能为空")
-        Long sourceCustomerStatementId,
+        @SnowflakeId Long sourceCustomerStatementId,
         @NotNull(message = "核销金额不能为空")
         @DecimalMin(value = "0.00", message = "核销金额不能小于0")
         @Digits(integer = 12, fraction = 2, message = "核销金额整数位不能超过12位，小数位不能超过2位")

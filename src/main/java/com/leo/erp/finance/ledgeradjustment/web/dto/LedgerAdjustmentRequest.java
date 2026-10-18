@@ -1,6 +1,7 @@
 package com.leo.erp.finance.ledgeradjustment.web.dto;
 
 import com.leo.erp.common.support.ValidationMessages;
+import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
@@ -15,15 +16,15 @@ public record LedgerAdjustmentRequest(
         String direction,
         @NotBlank(message = "往来类型不能为空")
         String counterpartyType,
-        Long counterpartyId,
+        @SnowflakeId Long counterpartyId,
         @NotBlank(message = "往来单位编码不能为空")
         String counterpartyCode,
         @NotBlank(message = "往来单位不能为空")
         String counterpartyName,
         @NotNull(message = "结算主体不能为空")
-        Long settlementCompanyId,
+        @SnowflakeId Long settlementCompanyId,
         String settlementCompanyName,
-        Long projectId,
+        @SnowflakeId Long projectId,
         String projectName,
         @NotNull(message = "调整日期不能为空")
         LocalDate adjustmentDate,

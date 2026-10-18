@@ -1,6 +1,7 @@
 package com.leo.erp.logistics.bill.web.dto;
 
 import jakarta.validation.constraints.NotNull;
+import com.leo.erp.common.validation.SnowflakeId;
 
 import java.math.BigDecimal;
 
@@ -14,15 +15,15 @@ import java.math.BigDecimal;
  * {@code weightTon} 显式给出且大于 0 时按过磅重量采用，否则按「来源件重 × 数量」换算。
  */
 public record FreightBillItemRequest(
-        Long id,
+        @SnowflakeId Long id,
         String sourceNo,
-        Long settlementCompanyId,
+        @SnowflakeId Long settlementCompanyId,
         String settlementCompanyName,
-        Long customerId,
+        @SnowflakeId Long customerId,
         String customerName,
-        Long projectId,
+        @SnowflakeId Long projectId,
         String projectName,
-        Long materialId,
+        @SnowflakeId Long materialId,
         String materialCode,
         String materialName,
         String brand,
@@ -36,10 +37,10 @@ public record FreightBillItemRequest(
         Integer piecesPerBundle,
         String batchNo,
         BigDecimal weightTon,
-        Long warehouseId,
+        @SnowflakeId Long warehouseId,
         String warehouseName,
-        Long sourceFreightBillId,
-        Long sourceFreightBillItemId,
-        @NotNull Long sourceSalesOrderItemId
+        @SnowflakeId Long sourceFreightBillId,
+        @SnowflakeId Long sourceFreightBillItemId,
+        @NotNull @SnowflakeId Long sourceSalesOrderItemId
 ) {
 }
