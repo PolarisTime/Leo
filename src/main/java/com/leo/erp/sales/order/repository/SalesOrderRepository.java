@@ -147,13 +147,10 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
                         )
                         and not exists (
                             select pendingOutboundItem.id
-                            from SalesOutboundItem pendingOutboundItem
-                            where pendingOutboundItem.sourceSalesOrderItemId in (
-                                select pendingSalesItem.id
-                                from SalesOrderItem pendingSalesItem
-                                where pendingSalesItem.salesOrder = salesOrder
-                            )
-                            and pendingOutboundItem.salesOutbound.deletedFlag = false
+                            from SalesOutboundItem pendingOutboundItem, SalesOrderItem pendingSalesItem
+                            where pendingSalesItem.salesOrder = salesOrder
+                              and pendingOutboundItem.sourceSalesOrderItemId = pendingSalesItem.id
+                              and pendingOutboundItem.salesOutbound.deletedFlag = false
                         )
                     )
               )
@@ -172,13 +169,10 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
                             )
                             or exists (
                                 select outboundItem.id
-                                from SalesOutboundItem outboundItem
-                                where outboundItem.sourceSalesOrderItemId in (
-                                    select salesItem.id
-                                    from SalesOrderItem salesItem
-                                    where salesItem.salesOrder = salesOrder
-                                )
-                                and outboundItem.salesOutbound.deletedFlag = false
+                                from SalesOutboundItem outboundItem, SalesOrderItem salesItem
+                                where salesItem.salesOrder = salesOrder
+                                  and outboundItem.sourceSalesOrderItemId = salesItem.id
+                                  and outboundItem.salesOutbound.deletedFlag = false
                             )
                         )
                     )
@@ -194,13 +188,10 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
                         )
                         and not exists (
                             select outboundItem.id
-                            from SalesOutboundItem outboundItem
-                            where outboundItem.sourceSalesOrderItemId in (
-                                select salesItem.id
-                                from SalesOrderItem salesItem
-                                where salesItem.salesOrder = salesOrder
-                            )
-                            and outboundItem.salesOutbound.deletedFlag = false
+                            from SalesOutboundItem outboundItem, SalesOrderItem salesItem
+                            where salesItem.salesOrder = salesOrder
+                              and outboundItem.sourceSalesOrderItemId = salesItem.id
+                              and outboundItem.salesOutbound.deletedFlag = false
                         )
                     )
               )
@@ -218,13 +209,10 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
                         )
                         and not exists (
                             select outboundItem.id
-                            from SalesOutboundItem outboundItem
-                            where outboundItem.sourceSalesOrderItemId in (
-                                select salesItem.id
-                                from SalesOrderItem salesItem
-                                where salesItem.salesOrder = salesOrder
-                            )
-                            and outboundItem.salesOutbound.deletedFlag = false
+                            from SalesOutboundItem outboundItem, SalesOrderItem salesItem
+                            where salesItem.salesOrder = salesOrder
+                              and outboundItem.sourceSalesOrderItemId = salesItem.id
+                              and outboundItem.salesOutbound.deletedFlag = false
                         )
                     )
                     or (
@@ -242,13 +230,10 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
                         :referencedBy = 'sales-outbound'
                         and exists (
                             select outboundItem.id
-                            from SalesOutboundItem outboundItem
-                            where outboundItem.sourceSalesOrderItemId in (
-                                select salesItem.id
-                                from SalesOrderItem salesItem
-                                where salesItem.salesOrder = salesOrder
-                            )
-                            and outboundItem.salesOutbound.deletedFlag = false
+                            from SalesOutboundItem outboundItem, SalesOrderItem salesItem
+                            where salesItem.salesOrder = salesOrder
+                              and outboundItem.sourceSalesOrderItemId = salesItem.id
+                              and outboundItem.salesOutbound.deletedFlag = false
                         )
                     )
               )
