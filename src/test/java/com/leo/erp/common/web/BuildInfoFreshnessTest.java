@@ -68,13 +68,41 @@ class BuildInfoFreshnessTest {
     void versionEndpointExposesTheSameRealBuildTime() throws Exception {
         BuildProperties buildProperties = new BuildProperties(unprefixed(loadBuildInfo()));
         VersionController controller = new VersionController(
-                providerOf(buildProperties), emptyProvider(), "leo");
+                providerOf(buildProperties), emptyProvider(), "leo", false);
 
         String buildTime = controller.version().buildTime();
         assertThat(buildTime).isNotBlank().isEqualTo(buildProperties.getTime().toString());
         assertThat(Instant.parse(buildTime))
                 .as("端点透出的编译时间同样不能是占位值(实测=%s)", buildTime)
                 .isNotIn(PLACEHOLDER_INSTANTS);
+    }
+
+    /**
+     * {@code /version} 是 {@code @PublicAccess} 匿名端点，提交哈希必须默认可关闭。
+     *
+     * <p>背景：该端点原本无条件返回 {@code gitCommit}，匿名即可拿到精确提交哈希，
+     * 攻击者可据此定位该提交之后修复的缺陷（定向利用而非盲扫）。
+     * 现由 {@code leo.surface.version.expose-commit-hash} 控制，默认 false。</p>
+     */
+    @Test
+    void versionEndpointHidesCommitHashByDefault() throws Exception {
+        BuildProperties buildProperties = new BuildProperties(unprefixed(loadBuildInfo()));
+        Properties gitInfo = new Properties();
+        gitInfo.setProperty("commit.id", "0123456789abcdef0123456789abcdef01234567");
+        gitInfo.setProperty("commit.id.abbrev", "0123456");
+        gitInfo.setProperty("branch", "main");
+
+        VersionController hidden = new VersionController(
+                providerOf(buildProperties), gitProviderOf(new GitProperties(gitInfo)), "leo", false);
+        assertThat(hidden.version().gitCommit())
+                .as("默认（生产）不得向匿名端点暴露提交哈希")
+                .isNull();
+
+        VersionController exposed = new VersionController(
+                providerOf(buildProperties), gitProviderOf(new GitProperties(gitInfo)), "leo", true);
+        assertThat(exposed.version().gitCommit())
+                .as("显式开启时（开发/测试环境）应返回短哈希以便排障")
+                .isEqualTo("0123456");
     }
 
     /**
@@ -118,5 +146,11 @@ class BuildInfoFreshnessTest {
 
     private static ObjectProvider<GitProperties> emptyProvider() {
         return new StaticListableBeanFactory().getBeanProvider(GitProperties.class);
+    }
+
+    private static ObjectProvider<GitProperties> gitProviderOf(GitProperties gitProperties) {
+        StaticListableBeanFactory factory = new StaticListableBeanFactory();
+        factory.addBean("gitProperties", gitProperties);
+        return factory.getBeanProvider(GitProperties.class);
     }
 }

@@ -18,13 +18,23 @@ public class VersionController {
     private final ObjectProvider<BuildProperties> buildProperties;
     private final ObjectProvider<GitProperties> gitProperties;
     private final String appName;
+    /**
+     * 是否允许公开精确提交哈希。
+     *
+     * <p>{@code /version} 标注了 {@code @PublicAccess}，匿名即可拿到 {@code gitCommit}。
+     * 提交哈希会把「盲扫」变成「定向利用」：攻击者可据此定位该提交之后修复的缺陷。
+     * 版本号本身通常可接受，哈希不应公开。默认关闭，仅开发/测试环境打开以便排障。</p>
+     */
+    private final boolean exposeCommitHash;
 
     public VersionController(ObjectProvider<BuildProperties> buildProperties,
                              ObjectProvider<GitProperties> gitProperties,
-                             @Value("${spring.application.name:leo}") String appName) {
+                             @Value("${spring.application.name:leo}") String appName,
+                             @Value("${leo.surface.version.expose-commit-hash:false}") boolean exposeCommitHash) {
         this.buildProperties = buildProperties;
         this.gitProperties = gitProperties;
         this.appName = appName;
+        this.exposeCommitHash = exposeCommitHash;
     }
 
     @PublicAccess
@@ -39,7 +49,7 @@ public class VersionController {
         return new VersionResponse(
                 appName,
                 valueOrUnknown(build == null ? null : build.getVersion()),
-                valueOrUnknown(git == null ? null : git.getShortCommitId()),
+                exposeCommitHash && git != null ? valueOrUnknown(git.getShortCommitId()) : null,
                 build == null || build.getTime() == null ? null : build.getTime().toString()
         );
     }
