@@ -21,27 +21,14 @@ public enum DocumentStatus {
 
     // 单据状态
     DRAFT("DRAFT", "草稿"),
-    /** 仅用于识别历史数据，新流程不得写入。 */
-    @Deprecated
-    PRE_OUTBOUND("PRE_OUTBOUND", "预出库"),
     AUDITED("AUDITED", "已审核"),
-    /** 通用已发出态; 销售合同模块已改用 {@link #CONTRACT_ISSUED}(「签发」), 此处仅保留兼容历史单据。 */
-    ISSUED("ISSUED", "已发出"),
     /** 销售合同审核态: 取值「审核」, 与通用单据「已审核」({@link #AUDITED})区分。 */
     CONTRACT_REVIEWED("CONTRACT_REVIEWED", "审核"),
-    /** 销售合同签发态: 取值「签发」, 与通用单据「已发出」({@link #ISSUED})区分。 */
+    /** 销售合同签发态: 取值「签发」，区别于通用「已审核」({@link #AUDITED})。 */
     CONTRACT_ISSUED("CONTRACT_ISSUED", "签发"),
     COMPLETED("COMPLETED", "已完成"),
     /** 销售合同作废: 终态之一, 未被删除但不再计入有效合同额度。 */
     VOIDED("VOIDED", "作废"),
-
-    // 财务状态（历史迁移前数据）
-    /** 仅用于兼容迁移前的付款数据，新流程统一使用 {@link #AUDITED}。 */
-    @Deprecated
-    LEGACY_PAID("LEGACY_PAID", "已付款"),
-    /** 仅用于兼容迁移前的收款数据，新流程统一使用 {@link #AUDITED}。 */
-    @Deprecated
-    LEGACY_RECEIVED("LEGACY_RECEIVED", "已收款"),
 
     // 业务完成状态
     PURCHASE_COMPLETED("PURCHASE_COMPLETED", "完成采购"),

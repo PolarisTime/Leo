@@ -20,13 +20,31 @@ class DocumentStatusTest {
         }
     }
 
+    /**
+     * 已移除的历史状态不得再被解析出来。
+     *
+     * <p>「预出库」「已发出」是旧流程的取值，已确认生产库 37 个 status 列命中 0 处后删除。
+     * 本测试锁住「删除是彻底的」：若有人把它们加回枚举，这里会红。</p>
+     */
+    @Test
+    void removedLegacyStatusesShouldNoLongerResolve() {
+        assertThat(DocumentStatus.fromLabel("预出库")).isEmpty();
+        assertThat(DocumentStatus.fromLabel("已发出")).isEmpty();
+        assertThat(DocumentStatus.fromCode("PRE_OUTBOUND")).isEmpty();
+        assertThat(DocumentStatus.fromCode("ISSUED")).isEmpty();
+        assertThat(DocumentStatus.fromLabel("已付款")).isEmpty();
+        assertThat(DocumentStatus.fromLabel("已收款")).isEmpty();
+        // 字面量仍保留供守卫使用（历史数据若存在必须只读），但不再属于枚举
+        assertThat(StatusConstants.LEGACY_PAID).isEqualTo("已付款");
+        assertThat(StatusConstants.LEGACY_RECEIVED).isEqualTo("已收款");
+    }
+
     @Test
     void shouldCoverAllRequiredBusinessStatuses() {
         assertThat(DocumentStatus.fromLabel(StatusConstants.NORMAL)).contains(DocumentStatus.NORMAL);
         assertThat(DocumentStatus.fromLabel(StatusConstants.DISABLED)).contains(DocumentStatus.DISABLED);
         assertThat(DocumentStatus.fromLabel(StatusConstants.DRAFT)).contains(DocumentStatus.DRAFT);
         assertThat(DocumentStatus.fromLabel(StatusConstants.AUDITED)).contains(DocumentStatus.AUDITED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.ISSUED)).contains(DocumentStatus.ISSUED);
         assertThat(DocumentStatus.fromLabel(StatusConstants.CONTRACT_REVIEWED))
                 .contains(DocumentStatus.CONTRACT_REVIEWED);
         assertThat(DocumentStatus.fromLabel(StatusConstants.CONTRACT_ISSUED))
@@ -36,11 +54,6 @@ class DocumentStatusTest {
         assertThat(DocumentStatus.fromLabel("审核")).contains(DocumentStatus.CONTRACT_REVIEWED);
         assertThat(DocumentStatus.fromLabel("签发")).contains(DocumentStatus.CONTRACT_ISSUED);
         assertThat(DocumentStatus.fromLabel(StatusConstants.COMPLETED)).contains(DocumentStatus.COMPLETED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.PRE_OUTBOUND)).contains(DocumentStatus.PRE_OUTBOUND);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.PAID)).contains(DocumentStatus.LEGACY_PAID);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.RECEIVED)).contains(DocumentStatus.LEGACY_RECEIVED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.LEGACY_PAID)).contains(DocumentStatus.LEGACY_PAID);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.LEGACY_RECEIVED)).contains(DocumentStatus.LEGACY_RECEIVED);
         assertThat(DocumentStatus.fromLabel(StatusConstants.PURCHASE_COMPLETED)).contains(DocumentStatus.PURCHASE_COMPLETED);
         assertThat(DocumentStatus.fromLabel(StatusConstants.SALES_COMPLETED)).contains(DocumentStatus.SALES_COMPLETED);
         assertThat(DocumentStatus.fromLabel(StatusConstants.INBOUND_COMPLETED)).contains(DocumentStatus.INBOUND_COMPLETED);

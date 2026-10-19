@@ -16,29 +16,32 @@ public final class StatusConstants {
 
     // 单据状态
     public static final String DRAFT = DocumentStatus.DRAFT.label();
-    /** 仅用于识别历史数据，新流程不得写入。 */
-    @Deprecated
-    public static final String PRE_OUTBOUND = DocumentStatus.PRE_OUTBOUND.label();
     public static final String AUDITED = DocumentStatus.AUDITED.label();
-    /** 通用已发出态; 销售合同模块已改用 {@link #CONTRACT_ISSUED}(「签发」)。 */
-    public static final String ISSUED = DocumentStatus.ISSUED.label();
     /** 销售合同审核态(取值「审核」): 与通用 {@link #AUDITED}(「已审核」)区分。 */
     public static final String CONTRACT_REVIEWED = DocumentStatus.CONTRACT_REVIEWED.label();
-    /** 销售合同签发态(取值「签发」): 与通用 {@link #ISSUED}(「已发出」)区分。 */
+    /** 销售合同签发态(取值「签发」): 区别于通用 {@link #AUDITED}(「已审核」)。 */
     public static final String CONTRACT_ISSUED = DocumentStatus.CONTRACT_ISSUED.label();
     public static final String COMPLETED = DocumentStatus.COMPLETED.label();
     /** 销售合同作废: 终态只读, 不计入有效合同额度, 不能从作废回到审核。 */
     public static final String VOIDED = DocumentStatus.VOIDED.label();
 
     // 财务状态
-    /** 仅用于兼容迁移前的付款数据，新流程统一使用 {@link #AUDITED}。 */
-    @Deprecated
-    public static final String PAID = DocumentStatus.LEGACY_PAID.label();
-    /** 仅用于兼容迁移前的收款数据，新流程统一使用 {@link #AUDITED}。 */
-    @Deprecated
-    public static final String RECEIVED = DocumentStatus.LEGACY_RECEIVED.label();
-    public static final String LEGACY_PAID = PAID;
-    public static final String LEGACY_RECEIVED = RECEIVED;
+    /**
+     * 历史付款/收款状态字面量（「已付款」「已收款」）。
+     *
+     * <p>这两个值来自迁移前的财务流程，新流程统一写 {@link #AUDITED}。
+     * 已确认生产库全部 status 列命中 0 处，故不再进入 {@link DocumentStatus} 枚举；
+     * 但**保留字面量**用于守卫历史单据：万一某环境仍有残留数据，
+     * {@code PaymentMutationGuardService} 与 {@code ReceiptService} 仍需拒绝其编辑/删除，
+     * 不能因为枚举里没有它就把这类单据当成可改的普通草稿。</p>
+     */
+    public static final String LEGACY_PAID = "已付款";
+    /** 见 {@link #LEGACY_PAID}。 */
+    public static final String LEGACY_RECEIVED = "已收款";
+    /** 对账单结算维度的「已付款」取值，等同于 {@link #LEGACY_PAID}（同一字符串）。 */
+    public static final String PAID = LEGACY_PAID;
+    /** 对账单结算维度的「已收款」取值，等同于 {@link #LEGACY_RECEIVED}（同一字符串）。 */
+    public static final String RECEIVED = LEGACY_RECEIVED;
 
     // 业务完成状态
     public static final String PURCHASE_COMPLETED = DocumentStatus.PURCHASE_COMPLETED.label();
@@ -118,7 +121,6 @@ public final class StatusConstants {
             SALES_COMPLETED,
             CONFIRMED,
             SIGNED,
-            ISSUED,
             ARCHIVED,
             CONTRACT_REVIEWED,
             CONTRACT_ISSUED,
