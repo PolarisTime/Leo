@@ -1,0 +1,4 @@
+# EnvironmentPostProcessor 仍从 spring.factories 加载（仅自动配置改走 META-INF/spring/*.imports）。
+# 生产 CORS 必填校验需要早于任何 Bean 实例化执行，故注册在此。
+org.springframework.boot.env.EnvironmentPostProcessor=\
+com.leo.erp.common.config.ProdCorsEnvironmentPostProcessor
