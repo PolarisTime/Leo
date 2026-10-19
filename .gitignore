@@ -22,3 +22,6 @@ bin/
 scripts/__pycache__/
 __pycache__/
 *.pyc
+
+# Serena LSP 项目配置与缓存(本地工具产物, 不入库)
+.serena/
