@@ -39,8 +39,34 @@ class QuoteProjectConfigStoreTest {
     @Mock
     private EntityManager entityManager;
 
+    @Mock
+    private com.leo.erp.master.api.ProjectProcurementScopeQuery procurementScopeQuery;
+
     private QuoteProjectConfigStore store() {
-        return new QuoteProjectConfigStore(repository, snowflakeIdGenerator, entityManager, null);
+        return new QuoteProjectConfigStore(repository, snowflakeIdGenerator, entityManager, null, null);
+    }
+
+    /** 带采购范围端口的实例：用于验证「参与品牌必须落在项目允许品牌内」。 */
+    private QuoteProjectConfigStore storeWithScope() {
+        return new QuoteProjectConfigStore(
+                repository, snowflakeIdGenerator, entityManager, null, procurementScopeQuery);
+    }
+
+    private static com.leo.erp.master.api.ProjectProcurementScopeQuery.ProjectProcurementScope scope(
+            List<String> allowedBrands) {
+        return new com.leo.erp.master.api.ProjectProcurementScopeQuery.ProjectProcurementScope(
+                88L, "测试项目", allowedBrands, List.of(),
+                com.leo.erp.master.api.ProjectProcurementScopeQuery.Enforcement.WARN,
+                com.leo.erp.master.api.ProjectProcurementScopeQuery.Enforcement.WARN);
+    }
+
+    private static QuoteProjectConfigRequest requestWithBrands(String... brandNames) {
+        List<QuoteProjectConfigRequest.BrandRequest> brands = java.util.Arrays.stream(brandNames)
+                .map(name -> new QuoteProjectConfigRequest.BrandRequest(
+                        name, BigDecimal.ZERO, List.of(), 0))
+                .toList();
+        return new QuoteProjectConfigRequest(
+                BigDecimal.ZERO, false, List.of(), List.of(), null, brands);
     }
 
     @Test
@@ -260,4 +286,37 @@ class QuoteProjectConfigStoreTest {
         config.setHrb400eFallback(false);
         return config;
     }
+
+    /**
+     * 报单比价的参与品牌必须落在项目资料的「允许的品牌」内。
+     *
+     * <p>合并前两处各存一份清单、可以互相矛盾（项目允许 A/B，比价却在用 C）。
+     * 现在项目资料是唯一配置入口，越界品牌在保存时直接拒绝。</p>
+     */
+    @Test
+    void save_rejectsBrandsOutsideProjectAllowedBrands() {
+        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
+        when(procurementScopeQuery.findProcurementScopeById(88L))
+                .thenReturn(Optional.of(scope(List.of("中天", "万泰"))));
+
+        assertThatThrownBy(() -> storeWithScope().save(88L, requestWithBrands("中天", "亚新"), null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("亚新");
+    }
+
+    /** 项目未配置允许品牌（清单为空）= 不限制，任何品牌都应放行。 */
+    @Test
+    void save_allowsAnyBrandWhenProjectScopeIsEmpty() {
+        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
+        when(procurementScopeQuery.findProcurementScopeById(88L))
+                .thenReturn(Optional.of(scope(List.of())));
+        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        QuoteProjectConfigResponse response =
+                storeWithScope().save(88L, requestWithBrands("任意品牌"), null);
+
+        assertThat(response).isNotNull();
+    }
+
 }

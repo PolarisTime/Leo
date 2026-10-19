@@ -36,15 +36,25 @@ public class QuoteProjectConfigStore {
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final EntityManager entityManager;
     private final com.leo.erp.master.api.ProjectQuery projectQuery;
+    /**
+     * 项目采购范围（允许品牌）的跨模块只读端口。
+     *
+     * <p>报单比价的「参与品牌」不再是独立清单：项目资料的允许品牌是它的上限，
+     * 保存时必须落在该范围内，否则同一项目在「项目资料」与「比价配置」两处会给出
+     * 互相矛盾的品牌集合。</p>
+     */
+    private final com.leo.erp.master.api.ProjectProcurementScopeQuery procurementScopeQuery;
 
     public QuoteProjectConfigStore(QuoteProjectConfigRepository repository,
                                    SnowflakeIdGenerator snowflakeIdGenerator,
                                    EntityManager entityManager,
-                                   com.leo.erp.master.api.ProjectQuery projectQuery) {
+                                   com.leo.erp.master.api.ProjectQuery projectQuery,
+                                   com.leo.erp.master.api.ProjectProcurementScopeQuery procurementScopeQuery) {
         this.repository = repository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.entityManager = entityManager;
         this.projectQuery = projectQuery;
+        this.procurementScopeQuery = procurementScopeQuery;
     }
 
     /** 项目取价数据源(MYSTEEL/STEELX)。 */
@@ -79,6 +89,7 @@ public class QuoteProjectConfigStore {
             created.setProjectId(projectId);
             return created;
         });
+        assertBrandsWithinProjectScope(projectId, request.brands());
         boolean scalarChanged = apply(entity, request);
         // 整体替换改的是 mappedBy 反向集合, 仅变更品牌子集合时 Hibernate 不会把父行标脏,
         // 父 @Version 不会递增; 此时对已有配置显式 FORCE_INCREMENT。若标量字段已变更, 父行会被自然标脏、
@@ -136,6 +147,37 @@ public class QuoteProjectConfigStore {
      * 新子行再处理旧子行删除, 从而违反 {@code uk_quote_project_brand(config_id, brand_name)}。
      * 复用同实体可避免任何 INSERT/DELETE, 只产生受控 UPDATE。
      */
+    /**
+     * 校验请求里的品牌是否都在项目的「允许的品牌」范围内。
+     *
+     * <p>语义与项目采购范围一致：清单为空表示不限制；项目把品牌力度设为 {@code OFF}
+     * 时保留清单但不校验。其余情况一律拒绝 —— 比价配置是**配置面**而不是业务单据，
+     * 这里放行会直接制造「项目允许 A/B、比价却在用 C」的脏数据。</p>
+     */
+    private void assertBrandsWithinProjectScope(Long projectId,
+                                                List<QuoteProjectConfigRequest.BrandRequest> requests) {
+        if (projectId == null || procurementScopeQuery == null || requests == null || requests.isEmpty()) {
+            return;
+        }
+        com.leo.erp.master.api.ProjectProcurementScopeQuery.ProjectProcurementScope scope =
+                procurementScopeQuery.findProcurementScopeById(projectId).orElse(null);
+        if (scope == null || !scope.checksBrands()) {
+            return;
+        }
+        List<String> requested = requests.stream()
+                .map(QuoteProjectConfigRequest.BrandRequest::brandName)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(name -> !name.isEmpty())
+                .toList();
+        List<String> violations = scope.brandViolations(requested);
+        if (!violations.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "以下品牌不在项目「允许的品牌」范围内: " + String.join(", ", violations)
+                            + "；请先在项目资料中调整允许品牌");
+        }
+    }
+
     private void replaceBrands(QuoteProjectConfig entity, List<QuoteProjectConfigRequest.BrandRequest> requests) {
         Map<String, QuoteProjectBrand> existingByBrandName = new HashMap<>();
         for (QuoteProjectBrand brand : entity.getBrands()) {
