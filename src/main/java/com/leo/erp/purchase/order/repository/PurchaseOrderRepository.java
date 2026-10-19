@@ -77,9 +77,17 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
     @Query("""
             select purchaseOrder
             from PurchaseOrder purchaseOrder
-            where purchaseOrder.deletedFlag = false
-              and purchaseOrder.status <> :completedStatus
-              and (:status is null or purchaseOrder.status = :status)
+            where purchaseOrder.status <> :completedStatus
+              /*
+               * 状态筛选与 Specification 路径（Specs.documentStatus）保持同一语义：
+               * 「已删除」是 deleted_flag 的条件，不是 status 的取值 —— 删除只置标记、不改 status，
+               * 因此写成 status = '已删除' 恒不成立，会让该筛选在此路径下静默失效。
+               */
+              and (:status is null
+                   or (:status = '已删除' and purchaseOrder.deletedFlag = true)
+                   or (:status <> '已删除' and purchaseOrder.deletedFlag = false
+                       and purchaseOrder.status = :status))
+              and (:status = '已删除' or purchaseOrder.deletedFlag = false)
               and (:supplierId is null or purchaseOrder.supplierId = :supplierId)
               and (:supplierName is null or purchaseOrder.supplierName = :supplierName)
               and (:settlementCompanyId is null
@@ -134,8 +142,11 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
     @Query("""
             select purchaseOrder
             from PurchaseOrder purchaseOrder
-            where purchaseOrder.deletedFlag = false
-              and (:status is null or purchaseOrder.status = :status)
+            where (:status is null
+                   or (:status = '已删除' and purchaseOrder.deletedFlag = true)
+                   or (:status <> '已删除' and purchaseOrder.deletedFlag = false
+                       and purchaseOrder.status = :status))
+              and (:status = '已删除' or purchaseOrder.deletedFlag = false)
               and (:supplierId is null or purchaseOrder.supplierId = :supplierId)
               and (:supplierName is null or purchaseOrder.supplierName = :supplierName)
               and (:settlementCompanyId is null
