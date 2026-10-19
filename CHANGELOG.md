@@ -1,3 +1,19 @@
+## [13.2.2](https://github.com/PolarisTime/Leo/compare/v13.2.1...v13.2.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* **market:** 取价地区与定尺加价响应补上审计时间字段 ([5ac1af7](https://github.com/PolarisTime/Leo/commit/5ac1af70f41a4c79feea535301ce66fbaba5dca9))
+* **master:** 商品类别必须存在于分类主数据 ([f849a8d](https://github.com/PolarisTime/Leo/commit/f849a8d5fa7897840824ba8bbcd03209ae2f96f8))
+* **master:** 基础资料请求字段补齐长度校验并修正车辆级联 ([d5a2a64](https://github.com/PolarisTime/Leo/commit/d5a2a642aa76654d80708248368721bf760b8a8e))
+* **security:** 打印与打印预览补齐被打印模块的读取权限校验 ([014de4a](https://github.com/PolarisTime/Leo/commit/014de4a8c7018d11d47cd0e43d02f5f0eac57830))
+* **validation:** 请求体关联 ID 统一校验为正整数 ([4b8d976](https://github.com/PolarisTime/Leo/commit/4b8d97697fa8708c06759386030531306952e18b))
+
+
+### Performance Improvements
+
+* **sales:** 销售订单下游关联筛选改写为显式关联并补索引 ([2e38360](https://github.com/PolarisTime/Leo/commit/2e3836036b4dcc9d2c2e36e326671101cb9e11b6))
+
 ## [13.2.1](https://github.com/PolarisTime/Leo/compare/v13.2.0...v13.2.1) (2026-10-17)
 
 
