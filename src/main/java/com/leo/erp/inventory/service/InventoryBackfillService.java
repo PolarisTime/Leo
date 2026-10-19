@@ -70,6 +70,8 @@ public class InventoryBackfillService {
     private final InventoryTransactionCommand inventoryCommand;
     /** 每个扫描批次一个独立事务，避免长事务与长持锁（见 backfill 方法注释）。 */
     private final TransactionTemplate transactionTemplate;
+    /** 扫描阶段只读事务：让来源单据的 LAZY 明细集合可初始化（见 scanAndBackfill 注释）。 */
+    private final TransactionTemplate readOnlyTransactionTemplate;
 
     public InventoryBackfillService(PurchaseInboundRepository purchaseInboundRepository,
                                     SalesOutboundRepository salesOutboundRepository,
@@ -85,44 +87,50 @@ public class InventoryBackfillService {
         this.lockService = lockService;
         this.inventoryCommand = inventoryCommand;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.readOnlyTransactionTemplate = new TransactionTemplate(transactionManager);
+        this.readOnlyTransactionTemplate.setReadOnly(true);
     }
 
-    /**
-     * 库存期初回填入口。
-     *
-     * <p><b>为什么不是一个大事务</b>：本方法要扫描并记账全部历史单据，数据量随时间线性增长。
-     * 原实现用 `@Transactional` 套住整个扫描循环，且 {@code lockBackfill()} 是
-     * `pg_advisory_xact_lock`（事务级）—— 于是回填期间那把锁持到全部扫完才释放，
-     * 所有出入库审核走同一把锁都会被排队；同时长事务会持有大量行锁与 undo，
-     * 任一批失败还要整体回滚重来。</p>
-     *
-     * <p>现改为<b>短事务分批提交</b>：每 {@link #SCAN_BATCH_SIZE} 单一个独立事务，
-     * 提交后立刻释放该批的行锁与库存维度锁。安全性由两层保证：</p>
-     * <ol>
-     *   <li><b>数据库唯一约束</b> {@code uk_inv_transaction_source_active}
-     *       (source_document_type, source_item_id, transaction_type) WHERE deleted_flag = false ——
-     *       即便两个回填并发跑到同一来源明细，也只有一条能落库，另一条抛唯一键冲突，
-     *       由 {@link #runBatchInTransaction} 提示重跑（此时其余已提交，重跑只会累加 skipped）。</li>
-     *   <li><b>会话级互斥锁</b> {@code lockService.tryLockBackfill()} —— 用 try-lock 而非等待，
-     *       第二个并发的回填直接快速失败，不会排队占着连接。</li>
-     * </ol>
-     *
-     * @return 各类型新建/跳过的计数
-     */
     public InventoryBackfillResponse backfill() {
         if (!lockService.tryLockBackfill()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR,
                     "已有库存期初回填正在执行，请稍后重试");
         }
         try {
-            Counters counters = new Counters();
-            List<PostedDocument> batch = new ArrayList<>(SCAN_BATCH_SIZE);
+            return scanAndBackfill();
+        } finally {
+            lockService.unlockBackfill();
+        }
+    }
+
+    /**
+     * 扫描阶段与写入阶段**严格分离**：先在只读事务里把来源单据扫描成内存记录
+     * （{@link PostedDocument} 只含值对象，不持有实体引用），事务提交后再逐批写入。
+     *
+     * <p>为什么不把两者套在一起：{@code flushBatch} 需要独立写事务（{@code REQUIRES_NEW}），
+     * 但如果它在一个外层只读事务里被调用，Spring 会**沿用同一个连接**，
+     * 而 PostgreSQL 该连接已是 read-only 模式 → INSERT 直接报
+     * {@code cannot execute INSERT in a read-only transaction}。
+     * 所以只读事务必须**先结束**，写事务才能拿到可写连接。</p>
+     *
+     * <p>内存代价：全部来源单据的 input 一次性驻留。按单均 20 行、行对象约 200 字节估算，
+     * 10 万单约 400MB —— 这是个已知上限。当前数据量（千级单据）远未触及；
+     * 若将来单据量级增长到十万级，应改为「分页扫描 + 分段提交」的游标模式，
+     * 而不是把整轮结果读进内存。</p>
+     */
+    private InventoryBackfillResponse scanAndBackfill() {
+        Counters counters = new Counters();
+
+        // 阶段一：只读事务内扫描，产出纯内存批次列表
+        List<List<PostedDocument>> batches = new ArrayList<>();
+        readOnlyTransactionTemplate.executeWithoutResult(status -> {
             List<SourceStream<PostedDocument>> streams = List.of(
                     purchaseInboundStream(),
                     salesOutboundStream(),
                     salesReturnStream());
+            List<PostedDocument> batch = new ArrayList<>(SCAN_BATCH_SIZE);
 
-            // 三路 keyset 流按 (业务日期, 类型, id) 归并，边归并边分批处理，内存占用与批大小成比例。
+            // 三路 keyset 流按 (业务日期, 类型, id) 归并，边归并边分批，内存与批大小成比例。
             while (true) {
                 SourceStream<PostedDocument> selected = null;
                 PostedDocument next = null;
@@ -142,17 +150,20 @@ public class InventoryBackfillService {
                 selected.poll();
                 batch.add(next);
                 if (batch.size() >= SCAN_BATCH_SIZE) {
-                    runBatchInTransaction(batch, counters);
-                    batch.clear();
+                    batches.add(batch);
+                    batch = new ArrayList<>(SCAN_BATCH_SIZE);
                 }
             }
             if (!batch.isEmpty()) {
-                runBatchInTransaction(batch, counters);
+                batches.add(batch);
             }
-            return counters.toResponse();
-        } finally {
-            lockService.unlockBackfill();
+        });
+
+        // 阶段二：只读事务已结束，逐批在各自的写事务中提交
+        for (List<PostedDocument> batch : batches) {
+            runBatchInTransaction(batch, counters);
         }
+        return counters.toResponse();
     }
 
     /**
