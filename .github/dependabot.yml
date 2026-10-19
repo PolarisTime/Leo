@@ -1,0 +1,136 @@
+# Dependabot 版本更新配置（后端 leo / Maven）。
+#
+# 目标：把「依赖有新版本 / 有已知 CVE」从不可见变成每周一次可见的 PR，
+# 而不是靠人想起来跑 `mvn versions:display-dependency-updates`。
+#
+# 分组策略（重点）：一个依赖一个 PR 会把 PR 列表刷爆，因此按**生态归属**合并：
+#   - spring-boot-platform：Spring Boot BOM 及其直接管理的 Spring 生态。
+#     这组**必须**一起升 —— Spring Boot 的版本管理是「整套对齐」的，
+#     单独升 spring-security 或 tomcat 容易踩到 BOM 约束不一致。
+#   - persistence：JPA / Hibernate / Flyway / PostgreSQL 驱动。
+#     这组牵涉 schema 与 SQL 行为，适合单独 review、单独跑 Flyway 门禁。
+#   - api-docs：springdoc（升级常伴随 OpenAPI 输出变化，单独看）。
+#   - test-and-static-analysis：测试与静态检查工具，风险最低，可批量放行。
+#   - other：兜底，避免漏掉零散依赖。
+#
+# 频率 weekly：daily 对这类「BOM 统一管理」的项目太吵。
+#
+# 注意：**本配置只负责开 PR，不自动合并**。依赖升级可能引发回归，合并仍需人工 review + CI 全绿。
+#
+# 关于 update-types 的取值：groups 内只接受 `minor` / `patch` / `major`（三个裸词），
+# 不接受 `version-update:semver-major` 这种带前缀的写法（那是顶层 ignore 的语法）。
+
+version: 2
+
+updates:
+  # ── Maven：主依赖（含 production 与 test scope）────────────────────────────
+  - package-ecosystem: maven
+    directory: "/"
+    schedule:
+      interval: weekly
+      # 周一凌晨，避免周末堆积；Dependabot 的时区固定为 UTC。
+      day: monday
+      time: "02:00"
+    # 组 PR 也计入此上限：5 个分组 + 少量单独 PR（major 升级不分组）足够，不刷屏。
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - backend
+    commit-message:
+      # Conventional Commits：与仓库现有提交风格一致，且能被 semantic-release 识别。
+      prefix: "chore"
+      include: "scope"
+    groups:
+      # Spring Boot 平台：BOM 整套对齐，绝不拆开升。
+      spring-boot-platform:
+        patterns:
+          - "org.springframework.boot:*"
+          - "org.springframework:*"
+          - "org.springframework.security:*"
+          - "org.springframework.data:*"
+          - "org.springframework.modulith:*"
+          - "org.apache.tomcat.embed:*"
+          - "io.micrometer:*"
+          - "io.opentelemetry:*"
+      # 持久化与数据库迁移：牵涉 schema / SQL 语义，单独 review。
+      persistence:
+        patterns:
+          - "org.hibernate.orm:*"
+          - "org.flywaydb:*"
+          - "org.postgresql:*"
+          - "org.javers:*"
+      # API 文档：升级常改变 OpenAPI 输出，单独看。
+      api-docs:
+        patterns:
+          - "org.springdoc:*"
+      # 测试与静态分析：风险最低，批量处理减少噪音。
+      test-and-static-analysis:
+        patterns:
+          - "org.junit*:*"
+          - "org.mockito:*"
+          - "org.assertj:*"
+          - "com.github.spotbugs:*"
+          - "org.apache.maven.plugins:*"
+      # 其余零散依赖兜底（如 jjwt / poi / tink / unleash / commons-* / mapstruct）。
+      other:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "org.springframework.boot:*"
+          - "org.springframework:*"
+          - "org.springframework.security:*"
+          - "org.springframework.data:*"
+          - "org.springframework.modulith:*"
+          - "org.apache.tomcat.embed:*"
+          - "io.micrometer:*"
+          - "io.opentelemetry:*"
+          - "org.hibernate.orm:*"
+          - "org.flywaydb:*"
+          - "org.postgresql:*"
+          - "org.javers:*"
+          - "org.springdoc:*"
+          - "org.junit*:*"
+          - "org.mockito:*"
+          - "org.assertj:*"
+          - "com.github.spotbugs:*"
+          - "org.apache.maven.plugins:*"
+
+  # ── GitHub Actions：workflow 里 @v4 之类的 action 版本 ────────────────────
+  # 必须与 Maven 分开：不同 ecosystem 不能合并到同一 update 条目。
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "02:00"
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      # action 升级基本无害（security 修复常在这里），合并成一个 PR。
+      github-actions:
+        patterns:
+          - "*"
+
+  # ── Docker：Dockerfile 基础镜像 ──────────────────────────────────────────
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "02:00"
+    open-pull-requests-limit: 2
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      docker-base-images:
+        patterns:
+          - "*"
