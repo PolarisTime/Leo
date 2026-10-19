@@ -1,5 +1,7 @@
 package com.leo.erp.inventory.service;
 
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.inventory.api.InventorySourceDocumentType;
 import com.leo.erp.inventory.api.InventoryTransactionCommand;
@@ -13,9 +15,13 @@ import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.sales.returns.domain.entity.SalesReturn;
 import com.leo.erp.sales.returns.repository.SalesReturnRepository;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.util.ArrayDeque;
@@ -41,6 +47,7 @@ import java.util.stream.Collectors;
  * 每个批次记账前收集全部 (materialId, warehouseId) 维度全局升序加锁，
  * 与常规记账共用同一加锁顺序，消除 AB-BA 死锁。
  */
+@Slf4j
 @Service
 public class InventoryBackfillService {
 
@@ -61,59 +68,110 @@ public class InventoryBackfillService {
     private final InventoryTransactionRepository transactionRepository;
     private final InventoryTransactionLockService lockService;
     private final InventoryTransactionCommand inventoryCommand;
+    /** 每个扫描批次一个独立事务，避免长事务与长持锁（见 backfill 方法注释）。 */
+    private final TransactionTemplate transactionTemplate;
 
     public InventoryBackfillService(PurchaseInboundRepository purchaseInboundRepository,
                                     SalesOutboundRepository salesOutboundRepository,
                                     SalesReturnRepository salesReturnRepository,
                                     InventoryTransactionRepository transactionRepository,
                                     InventoryTransactionLockService lockService,
-                                    InventoryTransactionCommand inventoryCommand) {
+                                    InventoryTransactionCommand inventoryCommand,
+                                    PlatformTransactionManager transactionManager) {
         this.purchaseInboundRepository = purchaseInboundRepository;
         this.salesOutboundRepository = salesOutboundRepository;
         this.salesReturnRepository = salesReturnRepository;
         this.transactionRepository = transactionRepository;
         this.lockService = lockService;
         this.inventoryCommand = inventoryCommand;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
-    @Transactional
+    /**
+     * 库存期初回填入口。
+     *
+     * <p><b>为什么不是一个大事务</b>：本方法要扫描并记账全部历史单据，数据量随时间线性增长。
+     * 原实现用 `@Transactional` 套住整个扫描循环，且 {@code lockBackfill()} 是
+     * `pg_advisory_xact_lock`（事务级）—— 于是回填期间那把锁持到全部扫完才释放，
+     * 所有出入库审核走同一把锁都会被排队；同时长事务会持有大量行锁与 undo，
+     * 任一批失败还要整体回滚重来。</p>
+     *
+     * <p>现改为<b>短事务分批提交</b>：每 {@link #SCAN_BATCH_SIZE} 单一个独立事务，
+     * 提交后立刻释放该批的行锁与库存维度锁。安全性由两层保证：</p>
+     * <ol>
+     *   <li><b>数据库唯一约束</b> {@code uk_inv_transaction_source_active}
+     *       (source_document_type, source_item_id, transaction_type) WHERE deleted_flag = false ——
+     *       即便两个回填并发跑到同一来源明细，也只有一条能落库，另一条抛唯一键冲突，
+     *       由 {@link #runBatchInTransaction} 提示重跑（此时其余已提交，重跑只会累加 skipped）。</li>
+     *   <li><b>会话级互斥锁</b> {@code lockService.tryLockBackfill()} —— 用 try-lock 而非等待，
+     *       第二个并发的回填直接快速失败，不会排队占着连接。</li>
+     * </ol>
+     *
+     * @return 各类型新建/跳过的计数
+     */
     public InventoryBackfillResponse backfill() {
-        lockService.lockBackfill();
-        Counters counters = new Counters();
-        List<PostedDocument> batch = new ArrayList<>(SCAN_BATCH_SIZE);
-        List<SourceStream<PostedDocument>> streams = List.of(
-                purchaseInboundStream(),
-                salesOutboundStream(),
-                salesReturnStream());
+        if (!lockService.tryLockBackfill()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "已有库存期初回填正在执行，请稍后重试");
+        }
+        try {
+            Counters counters = new Counters();
+            List<PostedDocument> batch = new ArrayList<>(SCAN_BATCH_SIZE);
+            List<SourceStream<PostedDocument>> streams = List.of(
+                    purchaseInboundStream(),
+                    salesOutboundStream(),
+                    salesReturnStream());
 
-        // 三路 keyset 流按 (业务日期, 类型, id) 归并，边归并边分批处理，内存占用与批大小成比例。
-        while (true) {
-            SourceStream<PostedDocument> selected = null;
-            PostedDocument next = null;
-            for (SourceStream<PostedDocument> stream : streams) {
-                PostedDocument head = stream.peek();
-                if (head == null) {
-                    continue;
+            // 三路 keyset 流按 (业务日期, 类型, id) 归并，边归并边分批处理，内存占用与批大小成比例。
+            while (true) {
+                SourceStream<PostedDocument> selected = null;
+                PostedDocument next = null;
+                for (SourceStream<PostedDocument> stream : streams) {
+                    PostedDocument head = stream.peek();
+                    if (head == null) {
+                        continue;
+                    }
+                    if (next == null || DOCUMENT_ORDER.compare(head, next) < 0) {
+                        next = head;
+                        selected = stream;
+                    }
                 }
-                if (next == null || DOCUMENT_ORDER.compare(head, next) < 0) {
-                    next = head;
-                    selected = stream;
+                if (selected == null) {
+                    break;
+                }
+                selected.poll();
+                batch.add(next);
+                if (batch.size() >= SCAN_BATCH_SIZE) {
+                    runBatchInTransaction(batch, counters);
+                    batch.clear();
                 }
             }
-            if (selected == null) {
-                break;
+            if (!batch.isEmpty()) {
+                runBatchInTransaction(batch, counters);
             }
-            selected.poll();
-            batch.add(next);
-            if (batch.size() >= SCAN_BATCH_SIZE) {
-                flushBatch(batch, counters);
-                batch.clear();
-            }
+            return counters.toResponse();
+        } finally {
+            lockService.unlockBackfill();
         }
-        if (!batch.isEmpty()) {
-            flushBatch(batch, counters);
+    }
+
+    /**
+     * 在独立事务中处理一个批次。每个批次独立提交，失败只影响该批。
+     *
+     * <p>用 {@code REQUIRES_NEW} 而非默认传播：调用方（Controller）没有外层事务，
+     * 但显式声明新事务可防止将来有人把 {@code backfill()} 包进更大的事务里时
+     * 又退化成「一个巨大事务」——那正是本次要修掉的形态。</p>
+     */
+    private void runBatchInTransaction(List<PostedDocument> batch, Counters counters) {
+        try {
+            transactionTemplate.executeWithoutResult(status -> flushBatch(batch, counters));
+        } catch (DataIntegrityViolationException ex) {
+            // 唯一约束兜底：并发回填抢先落了同一来源明细。
+            // 之前批次已提交，重跑会跳过这些、只补剩余部分，因此提示重试是安全的。
+            log.warn("库存回填批次遇到并发记账冲突（唯一约束兜底），已提交批次不会重复", ex);
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "回填过程中检测到并发记账冲突，已提交的批次不会重复，请重新执行以继续补齐");
         }
-        return counters.toResponse();
     }
 
     /**

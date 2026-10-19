@@ -39,7 +39,7 @@ class InventoryBalanceMaintenanceServiceTest {
 
         assertThat(affected).isEqualTo(7);
         InOrder order = inOrder(lockService, snapshotRepository);
-        order.verify(lockService).lockBackfill();
+        order.verify(lockService).lockBackfillTxScoped();
         order.verify(snapshotRepository).rebuild();
     }
 

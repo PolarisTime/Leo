@@ -31,7 +31,7 @@ public class InventoryBalanceMaintenanceService {
      */
     @Transactional
     public int rebuild() {
-        lockService.lockBackfill();
+        lockService.lockBackfillTxScoped();
         return snapshotRepository.rebuild();
     }
 
