@@ -147,9 +147,4 @@ public record ReceiptRequest(
         this(receiptNo, null, customerCode, customerName, projectId, projectName, null, null,
                 sourceStatementId, receiptDate, payType, amount, status, operatorName, remark, items);
     }
-
-    @Deprecated(forRemoval = false)
-    public Long sourceStatementId() {
-        return sourceCustomerStatementId;
-    }
 }

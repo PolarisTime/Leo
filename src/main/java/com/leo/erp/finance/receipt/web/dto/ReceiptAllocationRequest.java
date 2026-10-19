@@ -15,9 +15,4 @@ public record ReceiptAllocationRequest(
         @DecimalMin(value = "0.00", message = "核销金额不能小于0")
         @Digits(integer = 12, fraction = 2, message = "核销金额整数位不能超过12位，小数位不能超过2位")
         BigDecimal allocatedAmount
-) {
-    @Deprecated(forRemoval = false)
-    public Long sourceStatementId() {
-        return sourceCustomerStatementId;
-    }
-}
+) {}

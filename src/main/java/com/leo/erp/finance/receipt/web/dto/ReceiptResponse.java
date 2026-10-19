@@ -160,9 +160,4 @@ public record ReceiptResponse(
         this(id, receiptNo, null, customerCode, customerName, projectId, projectName, null, null,
                 sourceStatementId, receiptDate, payType, amount, status, false, operatorName, remark, items);
     }
-
-    @Deprecated(forRemoval = false)
-    public Long sourceStatementId() {
-        return sourceCustomerStatementId;
-    }
 }

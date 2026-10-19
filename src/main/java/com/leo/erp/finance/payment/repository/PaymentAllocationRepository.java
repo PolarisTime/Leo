@@ -15,7 +15,7 @@ public interface PaymentAllocationRepository extends JpaRepository<PaymentAlloca
             from PaymentAllocation allocation
             join allocation.payment payment
             where payment.deletedFlag = false
-              and payment.businessType = :businessType
+              and payment.counterpartyType = :businessType
               and payment.status = :status
               and allocation.sourceStatementId = :statementId
             """)
@@ -28,7 +28,7 @@ public interface PaymentAllocationRepository extends JpaRepository<PaymentAlloca
             from PaymentAllocation allocation
             join allocation.payment payment
             where payment.deletedFlag = false
-              and payment.businessType = :businessType
+              and payment.counterpartyType = :businessType
               and payment.status = :status
               and allocation.sourceStatementId = :statementId
               and (:currentPaymentId is null or payment.id <> :currentPaymentId)
@@ -43,7 +43,7 @@ public interface PaymentAllocationRepository extends JpaRepository<PaymentAlloca
             from PaymentAllocation allocation
             join allocation.payment payment
             where payment.deletedFlag = false
-              and payment.businessType = :businessType
+              and payment.counterpartyType = :businessType
               and payment.status = :status
               and allocation.sourceStatementId = :statementId
             """)
@@ -56,7 +56,7 @@ public interface PaymentAllocationRepository extends JpaRepository<PaymentAlloca
             from PaymentAllocation allocation
             join allocation.payment payment
             where payment.deletedFlag = false
-              and payment.businessType = :businessType
+              and payment.counterpartyType = :businessType
               and payment.status = :status
               and allocation.sourceStatementId in :statementIds
             """)

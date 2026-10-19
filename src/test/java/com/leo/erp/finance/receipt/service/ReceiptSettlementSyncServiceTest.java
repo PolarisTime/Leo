@@ -29,10 +29,14 @@ class ReceiptSettlementSyncServiceTest {
         service = new ReceiptSettlementSyncService(statementSettlementSyncCommand);
     }
 
+    /**
+     * 构造分配行。V192 之后实体只剩 source_customer_statement_id 一列，
+     * 原先的 (legacyId, typedId) 双列语义已取消：调用方传两个值时取 typedId（有值优先），
+     * 只传一个值时用该值。
+     */
     private ReceiptAllocation allocation(Long legacyId, Long typedId) {
         ReceiptAllocation allocation = new ReceiptAllocation();
-        allocation.setSourceStatementId(legacyId);
-        allocation.setSourceCustomerStatementId(typedId);
+        allocation.setSourceCustomerStatementId(typedId != null ? typedId : legacyId);
         return allocation;
     }
 

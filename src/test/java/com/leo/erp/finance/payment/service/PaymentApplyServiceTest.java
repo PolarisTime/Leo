@@ -269,7 +269,7 @@ class PaymentApplyServiceTest {
         service.apply(entity, request, NEXT_ID);
 
         assertThat(entity.getPaymentPurpose()).isEqualTo(PaymentPurposes.SUPPLIER_PAYMENT);
-        assertThat(entity.getBusinessType()).isEqualTo("供应商");
+        assertThat(entity.getCounterpartyType()).isEqualTo("供应商");
         assertThat(entity.getCounterpartyType()).isEqualTo("供应商");
         assertThat(entity.getCounterpartyId()).isEqualTo(5L);
         assertThat(entity.getCounterpartyName()).isEqualTo("供应商A");

@@ -249,7 +249,7 @@ class ReceiptApplyServiceTest {
         assertThat(entity.getCustomerId()).isEqualTo(30L);
         assertThat(entity.getProjectId()).isEqualTo(40L);
         assertThat(entity.getCustomerCode()).isEqualTo("C999");
-        assertThat(entity.getSourceStatementId()).isEqualTo(SOURCE_STATEMENT_ID);
+        assertThat(entity.getSourceCustomerStatementId()).isEqualTo(SOURCE_STATEMENT_ID);
         verify(partyIdentityResolver, never()).resolve(any());
     }
 
@@ -294,7 +294,7 @@ class ReceiptApplyServiceTest {
         entity.setCustomerName("旧客户");
         entity.setProjectId(98L);
         entity.setProjectName("旧项目");
-        entity.setSourceStatementId(SOURCE_STATEMENT_ID);
+        entity.setSourceCustomerStatementId(SOURCE_STATEMENT_ID);
         ReceiptRequest request = supplierRequest(StatusConstants.DRAFT, new BigDecimal("200.00"), null, null);
         when(partyIdentityResolver.resolveSupplier(request)).thenReturn(SUPPLIER_SNAPSHOT);
 
@@ -310,7 +310,7 @@ class ReceiptApplyServiceTest {
         assertThat(entity.getCustomerName()).isNull();
         assertThat(entity.getProjectId()).isNull();
         assertThat(entity.getProjectName()).isNull();
-        assertThat(entity.getSourceStatementId()).isNull();
+        assertThat(entity.getSourceCustomerStatementId()).isNull();
         assertThat(entity.getStatus()).isEqualTo(StatusConstants.DRAFT);
         assertThat(entity.getAmount()).isEqualByComparingTo("200.00");
         verify(receiptAllocationService, never()).applyAllocations(any(), any(), any(), any());

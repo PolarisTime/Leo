@@ -51,8 +51,8 @@ public class PaymentApplyService {
         assertStatusNotChangedBySave(entity, nextStatus);
         settlementSyncService.captureOriginalAllocationState(entity);
         entity.setPaymentNo(request.paymentNo());
-        entity.setBusinessType(request.businessType());
-        entity.setCounterpartyType(request.businessType());
+        entity.setCounterpartyType(request.counterpartyType());
+        entity.setCounterpartyType(request.counterpartyType());
         entity.setCounterpartyId(request.counterpartyId());
         entity.setPaymentPurpose(paymentPurpose);
         entity.setPaymentDate(request.paymentDate());
@@ -72,7 +72,7 @@ public class PaymentApplyService {
             applyDirectPayment(entity, request);
             return;
         }
-        if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.businessType())) {
+        if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.counterpartyType())) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
                     "供应商付款已统一为总额付款，不允许关联供应商对账单"
@@ -101,8 +101,8 @@ public class PaymentApplyService {
     }
 
     private void applyDirectPayment(Payment entity, PaymentRequest request) {
-        if (!PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.businessType())
-                && !PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(request.businessType())) {
+        if (!PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.counterpartyType())
+                && !PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(request.counterpartyType())) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "付款往来类型必须为供应商或物流商");
         }
         if (TradeItemCalculator.safeBigDecimal(entity.getAmount()).compareTo(BigDecimal.ZERO) <= 0) {
@@ -126,7 +126,7 @@ public class PaymentApplyService {
         BusinessDocumentValidator.requireSameText(
                 request.settlementCompanyName(), company.getCompanyName(), "结算主体名称与ID不一致"
         );
-        entity.setBusinessType(counterparty.type());
+        entity.setCounterpartyType(counterparty.type());
         entity.setCounterpartyType(counterparty.type());
         entity.setCounterpartyId(counterparty.id());
         entity.setCounterpartyName(counterparty.name());
@@ -146,7 +146,7 @@ public class PaymentApplyService {
     }
 
     private CounterpartySnapshot resolveCounterparty(PaymentRequest request) {
-        if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.businessType())) {
+        if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.counterpartyType())) {
             SupplierQuery.SupplierSnapshot supplier = supplierQuery.findActiveById(request.counterpartyId())
                     .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.SUPPLIER_NOT_FOUND));
             BusinessDocumentValidator.requireSameText(
@@ -202,7 +202,7 @@ public class PaymentApplyService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "付款单往来方ID与来源对账单不一致");
         }
         entity.setCounterpartyType(allocationResult.counterpartyType() == null
-                ? request.businessType()
+                ? request.counterpartyType()
                 : allocationResult.counterpartyType());
         entity.setCounterpartyId(allocationResult.counterpartyId() == null
                 ? request.counterpartyId()

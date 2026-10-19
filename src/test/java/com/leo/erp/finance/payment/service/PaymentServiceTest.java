@@ -63,7 +63,7 @@ class PaymentServiceTest {
         Payment payment = new Payment();
         payment.setId(ID);
         payment.setPaymentNo("PAY001");
-        payment.setBusinessType("供应商");
+        payment.setCounterpartyType("供应商");
         payment.setCounterpartyName("供应商A");
         payment.setPaymentPurpose("STATEMENT_SETTLEMENT");
         payment.setPaymentDate(LocalDate.of(2026, 9, 1));

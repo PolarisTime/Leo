@@ -170,9 +170,4 @@ public record PaymentRequest(
                 false
         );
     }
-
-    @Deprecated(forRemoval = false)
-    public String businessType() {
-        return counterpartyType;
-    }
 }

@@ -78,7 +78,7 @@ class PaymentMutationGuardServiceTest {
     @Test
     void assertUpdateAllowed_shouldRejectLegacySupplierStatementSettlement() {
         Payment payment = payment(DRAFT, "STATEMENT_SETTLEMENT", "供应商");
-        payment.setBusinessType("供应商");
+        payment.setCounterpartyType("供应商");
 
         assertThatThrownBy(() -> service().assertUpdateAllowed(payment, "修改"))
                 .isInstanceOf(BusinessException.class)
@@ -118,7 +118,7 @@ class PaymentMutationGuardServiceTest {
     @Test
     void assertStatusTransitionAllowed_shouldCaptureStateAndValidateForFreightPayment() {
         Payment payment = payment(DRAFT, "STATEMENT_SETTLEMENT", "物流商");
-        payment.setBusinessType("物流商");
+        payment.setCounterpartyType("物流商");
         payment.setCounterpartyId(11L);
         payment.setSettlementCompanyId(30L);
 
@@ -154,7 +154,7 @@ class PaymentMutationGuardServiceTest {
     @Test
     void assertStatusTransitionAllowed_shouldCaptureStateBeforeValidation() {
         Payment payment = payment(DRAFT, "STATEMENT_SETTLEMENT", "物流商");
-        payment.setBusinessType("物流商");
+        payment.setCounterpartyType("物流商");
         payment.setCounterpartyId(11L);
         payment.setSettlementCompanyId(30L);
 
@@ -198,7 +198,7 @@ class PaymentMutationGuardServiceTest {
     @Test
     void assertDeletable_shouldLockStatementsForFreightStatementSettlement() {
         Payment payment = payment(DRAFT, "STATEMENT_SETTLEMENT", "物流商");
-        payment.setBusinessType("物流商");
+        payment.setCounterpartyType("物流商");
         payment.setSourceStatementId(501L);
 
         service().assertDeletable(payment);
@@ -209,7 +209,7 @@ class PaymentMutationGuardServiceTest {
     @Test
     void lockAllocationStatements_shouldCollectSortedDistinctFreightStatementIds() {
         Payment payment = payment(DRAFT, "STATEMENT_SETTLEMENT", "物流商");
-        payment.setBusinessType("物流商");
+        payment.setCounterpartyType("物流商");
         payment.setItems(List.of(
                 allocation(502L, 502L),
                 allocation(501L, null),
@@ -231,7 +231,7 @@ class PaymentMutationGuardServiceTest {
     @Test
     void lockAllocationStatements_shouldSkipPrepaymentAndSupplierTotalPayment() {
         Payment payment = payment(DRAFT, "PURCHASE_PREPAYMENT", "物流商");
-        payment.setBusinessType("物流商");
+        payment.setCounterpartyType("物流商");
         payment.setSourceStatementId(501L);
 
         service().lockAllocationStatements(payment, null);
@@ -249,7 +249,7 @@ class PaymentMutationGuardServiceTest {
     @Test
     void lockAllocationStatements_shouldUseSourceStatementIdWhenNoItems() {
         Payment payment = payment(DRAFT, "STATEMENT_SETTLEMENT", "物流商");
-        payment.setBusinessType("物流商");
+        payment.setCounterpartyType("物流商");
         payment.setItems(List.of());
         payment.setSourceStatementId(501L);
 
@@ -274,7 +274,6 @@ class PaymentMutationGuardServiceTest {
         payment.setStatus(status);
         payment.setPaymentPurpose(paymentPurpose);
         payment.setCounterpartyType(counterpartyType);
-        payment.setBusinessType("供应商");
         return payment;
     }
 

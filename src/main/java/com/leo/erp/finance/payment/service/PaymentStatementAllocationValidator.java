@@ -33,7 +33,7 @@ public class PaymentStatementAllocationValidator {
                                 BigDecimal allocatedAmount,
                                 Map<Long, BigDecimal> requestAllocatedAmountMap,
                                 int lineNo) {
-        if (!PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(request.businessType())) {
+        if (!PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(request.counterpartyType())) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "仅物流商对账单支持付款核销");
         }
         return validateFreightStatement(

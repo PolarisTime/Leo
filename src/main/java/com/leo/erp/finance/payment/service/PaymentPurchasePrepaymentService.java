@@ -89,7 +89,7 @@ public class PaymentPurchasePrepaymentService implements PurchaseOrderPrepayment
         payment.setSupplierName(snapshot.supplierName());
         payment.setSettlementCompanyId(snapshot.settlementCompanyId());
         payment.setSettlementCompanyName(snapshot.settlementCompanyName());
-        payment.setBusinessType(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE);
+        payment.setCounterpartyType(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE);
         payment.setCounterpartyType(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE);
         payment.setCounterpartyId(snapshot.supplierId());
         payment.setCounterpartyCode(snapshot.supplierCode());

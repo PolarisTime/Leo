@@ -39,7 +39,7 @@ class PaymentSettlementSyncServiceTest {
 
     private Payment payment(String businessType, List<PaymentAllocation> items) {
         Payment payment = new Payment();
-        payment.setBusinessType(businessType);
+        payment.setCounterpartyType(businessType);
         payment.setItems(items);
         return payment;
     }

@@ -16,7 +16,7 @@ public interface ReceiptAllocationRepository extends JpaRepository<ReceiptAlloca
             join allocation.receipt receipt
             where receipt.deletedFlag = false
               and receipt.status = :status
-              and allocation.sourceStatementId = :statementId
+              and allocation.sourceCustomerStatementId = :statementId
             """)
     BigDecimal sumAllocatedAmountBySourceStatementIdAndReceiptStatus(@Param("statementId") Long statementId,
                                                                      @Param("status") String status);
@@ -27,7 +27,7 @@ public interface ReceiptAllocationRepository extends JpaRepository<ReceiptAlloca
             join allocation.receipt receipt
             where receipt.deletedFlag = false
               and receipt.status = :status
-              and allocation.sourceStatementId = :statementId
+              and allocation.sourceCustomerStatementId = :statementId
               and (:currentReceiptId is null or receipt.id <> :currentReceiptId)
             """)
     BigDecimal sumAllocatedAmountBySourceStatementIdAndReceiptStatusExcludingReceiptId(@Param("statementId") Long statementId,
@@ -40,7 +40,7 @@ public interface ReceiptAllocationRepository extends JpaRepository<ReceiptAlloca
             join allocation.receipt receipt
             where receipt.deletedFlag = false
               and receipt.status = :status
-              and allocation.sourceStatementId in :statementIds
+              and allocation.sourceCustomerStatementId in :statementIds
             """)
     long countBySourceStatementIdsAndReceiptStatus(@Param("statementIds") Collection<Long> statementIds,
                                                    @Param("status") String status);
@@ -51,7 +51,7 @@ public interface ReceiptAllocationRepository extends JpaRepository<ReceiptAlloca
             join allocation.receipt receipt
             where receipt.deletedFlag = false
               and receipt.status = :status
-              and allocation.sourceStatementId = :statementId
+              and allocation.sourceCustomerStatementId = :statementId
             """)
     long countSettledAllocationsByStatementIdAndStatus(@Param("statementId") Long statementId,
                                                         @Param("status") String status);

@@ -10,9 +10,4 @@ public record ReceiptAllocationResponse(
         String projectName,
         BigDecimal statementBalanceAmount,
         BigDecimal allocatedAmount
-) {
-    @Deprecated(forRemoval = false)
-    public Long sourceStatementId() {
-        return sourceCustomerStatementId;
-    }
-}
+) {}

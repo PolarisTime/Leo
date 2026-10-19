@@ -36,9 +36,6 @@ public class Payment extends AbstractAuditableEntity implements StatusAwareEntit
     @Column(name = "payment_no", nullable = false, unique = true, length = 64)
     private String paymentNo;
 
-    @Column(name = "business_type", nullable = false, length = 32)
-    private String businessType;
-
     @Column(name = "counterparty_type", length = 32)
     private String counterpartyType;
 
@@ -104,10 +101,14 @@ public class Payment extends AbstractAuditableEntity implements StatusAwareEntit
     @Transient
     private Set<Long> originalAllocationStatementIds = new LinkedHashSet<>();
 
+    /**
+     * 变更前的往来单位类型快照（瞬态，仅用于同步场景判断「类型是否改动过」）。
+     * 与已删除的持久化列 {@code business_type} 无关，不要混淆。
+     */
     @Transient
     private String originalBusinessType;
 
     public String getCounterpartyType() {
-        return counterpartyType == null ? businessType : counterpartyType;
+        return counterpartyType;
     }
 }

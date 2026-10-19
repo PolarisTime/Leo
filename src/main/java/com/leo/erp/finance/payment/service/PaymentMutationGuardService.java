@@ -53,7 +53,7 @@ public class PaymentMutationGuardService {
         boolean purchasePrepayment = PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose());
         boolean supplierStatementSettlement = PaymentPurposes.STATEMENT_SETTLEMENT.equals(
                 PaymentPurposes.normalize(entity.getPaymentPurpose())
-        ) && PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(entity.getBusinessType());
+        ) && PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(entity.getCounterpartyType());
         if (purchasePrepayment || supplierStatementSettlement) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
@@ -103,13 +103,13 @@ public class PaymentMutationGuardService {
         if (entity != null
                 && !PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose())
                 && !PaymentPurposes.isSupplierTotalPayment(entity.getPaymentPurpose())
-                && PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(entity.getBusinessType())) {
+                && PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(entity.getCounterpartyType())) {
             freightStatementIds.addAll(existingAllocationStatementIds(entity));
         }
         if (request != null
                 && !PaymentPurposes.isPurchasePrepayment(request.paymentPurpose())
                 && !PaymentPurposes.isSupplierTotalPayment(request.paymentPurpose())
-                && PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(request.businessType())) {
+                && PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(request.counterpartyType())) {
             freightStatementIds.addAll(requestedAllocationStatementIds(request));
         }
         sourceAllocationLockService.lockStatementSources(

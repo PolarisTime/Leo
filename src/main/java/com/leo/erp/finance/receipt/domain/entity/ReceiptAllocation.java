@@ -28,10 +28,14 @@ public class ReceiptAllocation {
     @Column(name = "line_no", nullable = false)
     private Integer lineNo;
 
-    @Column(name = "source_statement_id", nullable = false)
-    private Long sourceStatementId;
-
-    @Column(name = "source_customer_statement_id")
+    /**
+     * 来源客户对账单 id。
+     *
+     * <p>历史上有两列（source_statement_id / source_customer_statement_id）并存，
+     * 前者是早期不带语义前缀的写法。已通过 V192 迁移收敛到本列并删除旧列，
+     * 不要再新增别名访问器 —— 重复声明让「该写哪一列」长期含糊。</p>
+     */
+    @Column(name = "source_customer_statement_id", nullable = false)
     private Long sourceCustomerStatementId;
 
     @Column(name = "allocated_amount", nullable = false, precision = 14, scale = 2)

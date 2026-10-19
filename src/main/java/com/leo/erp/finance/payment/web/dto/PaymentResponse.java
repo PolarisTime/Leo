@@ -200,9 +200,4 @@ public record PaymentResponse(
                 items
         );
     }
-
-    @Deprecated(forRemoval = false)
-    public String businessType() {
-        return counterpartyType;
-    }
 }

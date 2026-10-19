@@ -19,13 +19,13 @@ public class PaymentSettlementSyncService {
     }
 
     void captureOriginalAllocationState(Payment entity) {
-        entity.setOriginalBusinessType(entity.getBusinessType());
-        entity.setOriginalAllocationStatementIds(collectStatementIds(entity.getBusinessType(), entity.getItems()));
+        entity.setOriginalBusinessType(entity.getCounterpartyType());
+        entity.setOriginalAllocationStatementIds(collectStatementIds(entity.getCounterpartyType(), entity.getItems()));
     }
 
     Long resolveLegacySourceStatementId(Payment entity) {
         return entity.getItems().size() == 1
-                ? statementId(entity.getBusinessType(), entity.getItems().get(0))
+                ? statementId(entity.getCounterpartyType(), entity.getItems().get(0))
                 : null;
     }
 
@@ -37,8 +37,8 @@ public class PaymentSettlementSyncService {
         }
         entity.getItems()
                 .forEach(item -> links.add(new StatementLink(
-                        entity.getBusinessType(),
-                        statementId(entity.getBusinessType(), item)
+                        entity.getCounterpartyType(),
+                        statementId(entity.getCounterpartyType(), item)
                 )));
         for (StatementLink link : links) {
             if (link.statementId() == null

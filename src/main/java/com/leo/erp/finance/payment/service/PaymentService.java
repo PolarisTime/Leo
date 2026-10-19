@@ -185,7 +185,7 @@ public class PaymentService {
     protected PaymentRequest normalizeCreateRequest(PaymentRequest request, long entityId) {
         return new PaymentRequest(
                 resolveCreateBusinessNo(entityId),
-                request.businessType(),
+                request.counterpartyType(),
                 request.counterpartyId(),
                 request.paymentPurpose(),
                 request.counterpartyCode(),
@@ -239,7 +239,7 @@ public class PaymentService {
     protected PaymentRequest normalizeUpdateRequest(Payment entity, PaymentRequest request) {
         return new PaymentRequest(
                 entity.getPaymentNo(),
-                request.businessType(),
+                request.counterpartyType(),
                 request.counterpartyId(),
                 request.paymentPurpose(),
                 request.counterpartyCode(),

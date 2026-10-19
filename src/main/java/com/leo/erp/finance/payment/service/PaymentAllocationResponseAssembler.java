@@ -20,7 +20,7 @@ public class PaymentAllocationResponseAssembler {
 
     List<PaymentAllocationResponse> toResponses(Payment entity) {
         return entity.getItems().stream()
-                .map(item -> toResponse(entity.getBusinessType(), item))
+                .map(item -> toResponse(entity.getCounterpartyType(), item))
                 .toList();
     }
 

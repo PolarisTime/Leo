@@ -103,14 +103,4 @@ public class Receipt extends AbstractAuditableEntity implements StatusAwareEntit
 
     @Transient
     private Set<Long> originalAllocationStatementIds = new LinkedHashSet<>();
-
-    @Deprecated(forRemoval = false)
-    public Long getSourceStatementId() {
-        return sourceCustomerStatementId;
-    }
-
-    @Deprecated(forRemoval = false)
-    public void setSourceStatementId(Long sourceStatementId) {
-        this.sourceCustomerStatementId = sourceStatementId;
-    }
 }

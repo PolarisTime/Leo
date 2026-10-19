@@ -40,7 +40,7 @@ public class PaymentAllocationService {
             LongSupplier nextIdSupplier
     ) {
         List<PaymentAllocationRequest> allocationRequests = normalizeAllocationRequests(entity, request);
-        if (!supportsSettlement(request.businessType())) {
+        if (!supportsSettlement(request.counterpartyType())) {
             if (PAYMENT_STATUS_SETTLED.equals(nextStatus)) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核状态必须关联物流商对账单核销");
             }
@@ -69,12 +69,12 @@ public class PaymentAllocationService {
         for (int i = 0; i < allocationRequests.size(); i++) {
             PaymentAllocationRequest source = allocationRequests.get(i);
             int lineNo = i + 1;
-            Long sourceStatementId = resolveSourceStatementId(source, request.businessType(), lineNo);
+            Long sourceStatementId = resolveSourceStatementId(source, request.counterpartyType(), lineNo);
             BigDecimal allocatedAmount = normalizeAllocatedAmount(source.allocatedAmount(), i + 1);
             PaymentAllocation item = items.get(i);
             item.setPayment(entity);
             item.setLineNo(lineNo);
-            applyTypedSource(item, request.businessType(), sourceStatementId);
+            applyTypedSource(item, request.counterpartyType(), sourceStatementId);
             item.setAllocatedAmount(allocatedAmount);
             PaymentStatementAllocationValidator.ValidatedStatement validatedStatement =
                     statementAllocationValidator.validate(
@@ -106,7 +106,7 @@ public class PaymentAllocationService {
         entity.getItems().addAll(items);
         entity.getItems().sort(java.util.Comparator.comparing(PaymentAllocation::getLineNo));
         return new AllocationApplyResult(
-                request.businessType(),
+                request.counterpartyType(),
                 resolvedCounterpartyId,
                 resolvedCounterpartyCode,
                 settlementCompany == null ? null : settlementCompany.id(),
@@ -120,7 +120,7 @@ public class PaymentAllocationService {
         if (!StatusConstants.AUDITED.equals(nextStatus)) {
             return;
         }
-        assertBusinessTypeSupportsSettlement(entity.getBusinessType());
+        assertBusinessTypeSupportsSettlement(entity.getCounterpartyType());
         PaymentRequest request = toStatusOnlyRequest(entity);
         assertSettlementAllocationsComplete(
                 nextStatus,
@@ -134,7 +134,7 @@ public class PaymentAllocationService {
         SettlementCompanySnapshot settlementCompany = null;
         for (int i = 0; i < entity.getItems().size(); i++) {
             PaymentAllocation item = entity.getItems().get(i);
-            Long sourceStatementId = requireExistingSourceStatementId(item, entity.getBusinessType(), i + 1);
+            Long sourceStatementId = requireExistingSourceStatementId(item, entity.getCounterpartyType(), i + 1);
             BigDecimal allocatedAmount = TradeItemCalculator.safeBigDecimal(item.getAllocatedAmount());
             PaymentStatementAllocationValidator.ValidatedStatement validatedStatement =
                     statementAllocationValidator.validate(
@@ -157,7 +157,7 @@ public class PaymentAllocationService {
             settlementCompany = mergeSettlementCompany(settlementCompany, validatedStatement);
         }
         entity.setCounterpartyCode(mergeCounterpartyCode(entity.getCounterpartyCode(), resolvedCounterpartyCode));
-        entity.setCounterpartyType(entity.getBusinessType());
+        entity.setCounterpartyType(entity.getCounterpartyType());
         entity.setCounterpartyId(mergeCounterpartyId(entity.getCounterpartyId(), resolvedCounterpartyId));
         entity.setSettlementCompanyId(settlementCompany == null ? null : settlementCompany.id());
         entity.setSettlementCompanyName(settlementCompany == null ? null : settlementCompany.name());
@@ -188,7 +188,7 @@ public class PaymentAllocationService {
             return List.of();
         }
         return List.of(typedAllocationRequest(
-                request.businessType(),
+                request.counterpartyType(),
                 request.sourceStatementId(),
                 request.amount()
         ));
@@ -316,7 +316,7 @@ public class PaymentAllocationService {
     private PaymentRequest toStatusOnlyRequest(Payment entity) {
         return new PaymentRequest(
                 entity.getPaymentNo(),
-                entity.getBusinessType(),
+                entity.getCounterpartyType(),
                 entity.getCounterpartyCode(),
                 entity.getCounterpartyName(),
                 entity.getSourceStatementId(),

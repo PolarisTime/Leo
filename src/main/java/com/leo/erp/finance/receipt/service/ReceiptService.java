@@ -226,7 +226,7 @@ public class ReceiptService {
                 request.settlementCompanyId(),
                 request.settlementCompanyName(),
                 request.accountId(),
-                request.sourceStatementId(),
+                request.sourceCustomerStatementId(),
                 request.receiptDate(),
                 request.payType(),
                 request.amount(),
@@ -282,7 +282,7 @@ public class ReceiptService {
                 request.settlementCompanyId(),
                 request.settlementCompanyName(),
                 request.accountId(),
-                request.sourceStatementId(),
+                request.sourceCustomerStatementId(),
                 request.receiptDate(),
                 request.payType(),
                 request.amount(),
@@ -366,7 +366,7 @@ public class ReceiptService {
                 response.settlementCompanyId(),
                 response.settlementCompanyName(),
                 response.accountId(),
-                response.sourceStatementId(),
+                response.sourceCustomerStatementId(),
                 response.receiptDate(),
                 response.payType(),
                 response.amount(),
@@ -422,25 +422,25 @@ public class ReceiptService {
     private List<Long> existingAllocationStatementIds(Receipt entity) {
         if (entity.getItems() != null && !entity.getItems().isEmpty()) {
             return entity.getItems().stream()
-                    .map(ReceiptAllocation::getSourceStatementId)
+                    .map(ReceiptAllocation::getSourceCustomerStatementId)
                     .filter(java.util.Objects::nonNull)
                     .toList();
         }
-        return entity.getSourceStatementId() == null
+        return entity.getSourceCustomerStatementId() == null
                 ? List.of()
-                : List.of(entity.getSourceStatementId());
+                : List.of(entity.getSourceCustomerStatementId());
     }
 
     private List<Long> requestedAllocationStatementIds(ReceiptRequest request) {
         if (request.items() != null && !request.items().isEmpty()) {
             return request.items().stream()
-                    .map(ReceiptAllocationRequest::sourceStatementId)
+                    .map(ReceiptAllocationRequest::sourceCustomerStatementId)
                     .filter(java.util.Objects::nonNull)
                     .toList();
         }
-        return request.sourceStatementId() == null
+        return request.sourceCustomerStatementId() == null
                 ? List.of()
-                : List.of(request.sourceStatementId());
+                : List.of(request.sourceCustomerStatementId());
     }
 
     private Receipt requireEntity(Long id) {

@@ -62,7 +62,7 @@ public class ReceiptAllocationService {
                     request,
                     nextStatus,
                     entity.getId(),
-                    source.sourceStatementId(),
+                    source.sourceCustomerStatementId(),
                     allocatedAmount,
                     requestAllocatedAmountMap,
                     i + 1
@@ -75,7 +75,7 @@ public class ReceiptAllocationService {
             ReceiptAllocation item = items.get(i);
             item.setReceipt(entity);
             item.setLineNo(i + 1);
-            item.setSourceStatementId(statement.id());
+            item.setSourceCustomerStatementId(statement.id());
             item.setSourceCustomerStatementId(statement.id());
             item.setAllocatedAmount(allocatedAmount);
             totalAllocatedAmount = totalAllocatedAmount.add(allocatedAmount);
@@ -129,7 +129,7 @@ public class ReceiptAllocationService {
                     request,
                     nextStatus,
                     entity.getId(),
-                    item.getSourceStatementId(),
+                    item.getSourceCustomerStatementId(),
                     TradeItemCalculator.safeBigDecimal(item.getAllocatedAmount()),
                     requestAllocatedAmountMap,
                     i + 1
@@ -180,19 +180,19 @@ public class ReceiptAllocationService {
         if (request.items() != null && !request.items().isEmpty()) {
             return request.items();
         }
-        if (request.sourceStatementId() == null) {
+        if (request.sourceCustomerStatementId() == null) {
             if (request.items() == null && !entity.getItems().isEmpty()) {
                 return entity.getItems().stream()
                         .map(item -> new ReceiptAllocationRequest(
                                 item.getId(),
-                                item.getSourceStatementId(),
+                                item.getSourceCustomerStatementId(),
                                 item.getAllocatedAmount()
                         ))
                         .toList();
             }
             return List.of();
         }
-        return List.of(new ReceiptAllocationRequest(null, request.sourceStatementId(), request.amount()));
+        return List.of(new ReceiptAllocationRequest(null, request.sourceCustomerStatementId(), request.amount()));
     }
 
     private void assertSettlementAllocationsComplete(String nextStatus,
@@ -220,7 +220,7 @@ public class ReceiptAllocationService {
                 entity.getProjectName(),
                 entity.getSettlementCompanyId(),
                 entity.getSettlementCompanyName(),
-                entity.getSourceStatementId(),
+                entity.getSourceCustomerStatementId(),
                 entity.getReceiptDate(),
                 entity.getPayType(),
                 entity.getAmount(),
@@ -230,7 +230,7 @@ public class ReceiptAllocationService {
                 entity.getItems().stream()
                         .map(item -> new ReceiptAllocationRequest(
                                 item.getId(),
-                                item.getSourceStatementId(),
+                                item.getSourceCustomerStatementId(),
                                 item.getAllocatedAmount()
                         ))
                         .toList()

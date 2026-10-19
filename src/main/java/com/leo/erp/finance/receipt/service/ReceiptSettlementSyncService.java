@@ -47,7 +47,7 @@ public class ReceiptSettlementSyncService {
 
     private Long statementId(ReceiptAllocation item) {
         return item.getSourceCustomerStatementId() == null
-                ? item.getSourceStatementId()
+                ? item.getSourceCustomerStatementId()
                 : item.getSourceCustomerStatementId();
     }
 }

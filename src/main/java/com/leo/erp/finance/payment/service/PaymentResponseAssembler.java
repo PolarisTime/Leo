@@ -26,7 +26,7 @@ public class PaymentResponseAssembler {
         return new PaymentResponse(
                 response.id(),
                 response.paymentNo(),
-                response.businessType(),
+                response.counterpartyType(),
                 response.counterpartyId(),
                 response.paymentPurpose(),
                 response.counterpartyCode(),

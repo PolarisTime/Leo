@@ -25,11 +25,11 @@ public class ReceiptAllocationResponseAssembler {
     }
 
     private ReceiptAllocationResponse toResponse(ReceiptAllocation item) {
-        CustomerStatementApi.Snapshot statement = findCustomerStatement(item.getSourceStatementId());
+        CustomerStatementApi.Snapshot statement = findCustomerStatement(item.getSourceCustomerStatementId());
         return new ReceiptAllocationResponse(
                 item.getId(),
                 item.getLineNo(),
-                item.getSourceStatementId(),
+                item.getSourceCustomerStatementId(),
                 statement == null ? null : statement.statementNo(),
                 statement == null ? null : statement.projectName(),
                 statement == null ? BigDecimal.ZERO : statement.closingAmount(),

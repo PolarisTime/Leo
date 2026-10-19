@@ -121,7 +121,7 @@ public class ReceiptApplyService {
         entity.setCounterpartyName(entity.getCustomerName());
         entity.setSettlementCompanyId(partySnapshot.settlementCompanyId());
         entity.setSettlementCompanyName(partySnapshot.settlementCompanyName());
-        entity.setSourceStatementId(settlementSyncService.resolveLegacySourceStatementId(entity));
+        entity.setSourceCustomerStatementId(settlementSyncService.resolveLegacySourceStatementId(entity));
     }
 
     private void applySupplierReceipt(Receipt entity, ReceiptRequest request) {
@@ -131,7 +131,7 @@ public class ReceiptApplyService {
                     "供应商资金收款的往来类型必须为供应商"
             );
         }
-        if (request.sourceStatementId() != null || request.items() != null && !request.items().isEmpty()) {
+        if (request.sourceCustomerStatementId() != null || request.items() != null && !request.items().isEmpty()) {
             throw new com.leo.erp.common.error.BusinessException(
                     com.leo.erp.common.error.ErrorCode.VALIDATION_ERROR,
                     "供应商资金收款不能关联客户对账单"
@@ -149,7 +149,7 @@ public class ReceiptApplyService {
         entity.setCustomerName(null);
         entity.setProjectId(null);
         entity.setProjectName(null);
-        entity.setSourceStatementId(null);
+        entity.setSourceCustomerStatementId(null);
         entity.getItems().clear();
     }
 }
