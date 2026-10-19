@@ -39,12 +39,12 @@
              ClassNotFoundException: ...jpa.autoconfigure.JpaProperties。
              升级 Spring Boot 4 之前不要再抬高此项。 -->
         <javers.version>7.9.0</javers.version>
-        <aws.sdk.version>2.55.6</aws.sdk.version>
-        <tink.version>1.23.0</tink.version>
-        <openfeature.sdk.version>1.22.1</openfeature.sdk.version>
+        <aws.sdk.version>2.56.0</aws.sdk.version>
+        <tink.version>1.24.0</tink.version>
+        <openfeature.sdk.version>1.23.0</openfeature.sdk.version>
         <openfeature.unleash-provider.version>0.1.3-alpha</openfeature.unleash-provider.version>
         <maven.checkstyle.plugin.version>3.6.0</maven.checkstyle.plugin.version>
-        <checkstyle.version>10.26.1</checkstyle.version>
+        <checkstyle.version>14.3.0</checkstyle.version>
         <spotbugs.maven.plugin.version>4.9.3.0</spotbugs.maven.plugin.version>
         <!-- 真实库(PostgreSQL)回归用例开关: 默认 false(不跑真实库);
              以 -Dleo.test.postgres=true 打开 postgres-tests profile, 由该 profile 强制 LEO_TEST_POSTGRES=true
@@ -245,22 +245,22 @@
         <dependency>
             <groupId>com.itextpdf</groupId>
             <artifactId>kernel</artifactId>
-            <version>9.7.1</version>
+            <version>9.8.0</version>
         </dependency>
         <dependency>
             <groupId>com.itextpdf</groupId>
             <artifactId>layout</artifactId>
-            <version>9.7.1</version>
+            <version>9.8.0</version>
         </dependency>
         <dependency>
             <groupId>com.itextpdf</groupId>
             <artifactId>forms</artifactId>
-            <version>9.7.1</version>
+            <version>9.8.0</version>
         </dependency>
         <dependency>
             <groupId>com.itextpdf</groupId>
             <artifactId>font-asian</artifactId>
-            <version>9.7.1</version>
+            <version>9.8.0</version>
         </dependency>
 
         <!-- Test -->
@@ -390,7 +390,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.12</version>
+                <version>0.8.15</version>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
