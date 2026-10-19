@@ -93,12 +93,32 @@ public class FreightBillService {
 
     @Transactional(readOnly = true)
     public Page<FreightBillResponse> page(PageQuery query, PageFilter filter) {
-        return page(query, filter, null);
+        return page(query, filter, null, null);
     }
 
     @Transactional(readOnly = true)
     public Page<FreightBillResponse> page(PageQuery query, PageFilter filter, String carrierCode) {
+        return page(query, filter, carrierCode, null);
+    }
+
+    /**
+     * 物流单列表查询 —— <b>唯一出口</b>。
+     *
+     * <p>上面两个重载只为兼容既有调用方而保留（签名不变），最终都收敛到这里；
+     * 新增筛选条件只改这一处，不要在下沉的重载里各写一份 Specification。</p>
+     *
+     * @param productKeyword 「商品信息」筛选（品牌/材质/规格/长度），按<b>明细行</b>匹配而非单据头。
+     *        字段清单取 {@code Specs.PRODUCT_SEARCH_FIELDS}（唯一来源，已含 length），
+     *        与采购订单/采购入库/销售订单/销售出库/销售退货同一口径，本类不再声明一份。
+     *        单据头关键字（单号/承运商编码/承运商名称）仍走 {@code filter.keyword()} + SEARCH_FIELDS，
+     *        两条条件相互独立：把商品字段混进 SEARCH_FIELDS 会改变单据头筛选语义。
+     */
+    @Transactional(readOnly = true)
+    public Page<FreightBillResponse> page(PageQuery query, PageFilter filter, String carrierCode,
+                                          String productKeyword) {
         Specification<FreightBill> spec = Specs.<FreightBill>keywordLike(filter.keyword(), SEARCH_FIELDS)
+                // 「商品信息」按明细集合匹配: "items" 即 FreightBill.items(FreightBillItem, @OneToMany, 已 LSP 核实)
+                .and(Specs.collectionKeywordLike(productKeyword, "items", Specs.PRODUCT_SEARCH_FIELDS))
                 .and(Specs.equalValueIfPresent("carrierId", filter.carrierId()))
                 .and(Specs.equalIfPresent("carrierCode", carrierCode))
                 .and(Specs.equalIfPresent("carrierName", filter.name()))

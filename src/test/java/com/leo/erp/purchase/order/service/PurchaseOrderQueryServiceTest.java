@@ -62,15 +62,15 @@ class PurchaseOrderQueryServiceTest {
             PageQuery query = new PageQuery(0, 30, null, null);
             PageFilter filter = PageFilter.of(null, null, null, null, null, null);
             when(purchaseOrderRepository.findPending(
-                    any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                    any(), any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                     .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
 
-            service.findPending(query, filter);
+            service.findPending(query, filter, null);
 
             ArgumentCaptor<LocalDateTime> startDate = ArgumentCaptor.forClass(LocalDateTime.class);
             ArgumentCaptor<LocalDateTime> endDateExclusive = ArgumentCaptor.forClass(LocalDateTime.class);
             verify(purchaseOrderRepository).findPending(
-                    any(), any(), any(), any(), any(), startDate.capture(), endDateExclusive.capture(), any(),
+                    any(), any(), any(), any(), any(), startDate.capture(), endDateExclusive.capture(), any(), any(),
                     any(Pageable.class));
             assertThat(startDate.getValue()).isEqualTo(LocalDateTime.of(1, 1, 1, 0, 0));
             assertThat(endDateExclusive.getValue()).isEqualTo(LocalDateTime.of(10000, 1, 1, 0, 0));
@@ -81,14 +81,14 @@ class PurchaseOrderQueryServiceTest {
             PageQuery query = new PageQuery(0, 30, null, null);
             PageFilter filter = PageFilter.of("  AbC  ", "  供应商  ", 7L, " AUDITED ", null, null);
             when(purchaseOrderRepository.findPending(
-                    any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                    any(), any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                     .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
 
-            service.findPending(query, filter);
+            service.findPending(query, filter, null);
 
             verify(purchaseOrderRepository).findPending(
                     eq("abc"), isNull(), eq("供应商"), eq(7L), eq("AUDITED"),
-                    any(), any(), any(), any(Pageable.class));
+                    any(), any(), any(), any(), any(Pageable.class));
         }
 
         @Test
@@ -97,15 +97,15 @@ class PurchaseOrderQueryServiceTest {
             PageFilter filter = PageFilter.of(null, null, null, null,
                     LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 9));
             when(purchaseOrderRepository.findPending(
-                    any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                    any(), any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                     .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
 
-            service.findPending(query, filter);
+            service.findPending(query, filter, null);
 
             ArgumentCaptor<LocalDateTime> startDate = ArgumentCaptor.forClass(LocalDateTime.class);
             ArgumentCaptor<LocalDateTime> endDateExclusive = ArgumentCaptor.forClass(LocalDateTime.class);
             verify(purchaseOrderRepository).findPending(
-                    any(), any(), any(), any(), any(), startDate.capture(), endDateExclusive.capture(), any(),
+                    any(), any(), any(), any(), any(), startDate.capture(), endDateExclusive.capture(), any(), any(),
                     any(Pageable.class));
             assertThat(startDate.getValue()).isEqualTo(LocalDateTime.of(2026, 9, 1, 0, 0));
             assertThat(endDateExclusive.getValue()).isEqualTo(LocalDateTime.of(2026, 9, 10, 0, 0));
@@ -115,12 +115,33 @@ class PurchaseOrderQueryServiceTest {
     @Nested
     class ReferenceFilterQuery {
 
+        /**
+         * 商品信息筛选必须被规范化（trim + 小写）后传给仓储。
+         *
+         * <p>JPQL 用的是 {@code position(:productKeyword in lower(...))}：参数若带大写或首尾空格，
+         * 匹配会静默失败（用户搜「HRB400」搜不到），因此这里锁住规范化行为。</p>
+         */
+        @Test
+        void findByReferenceFilter_shouldNormalizeProductKeyword() {
+            PageQuery query = new PageQuery(0, 30, null, null);
+            PageFilter filter = PageFilter.of(null, null, null, null, null, null);
+            when(purchaseOrderRepository.findByReferenceFilter(
+                    any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
+
+            service.findByReferenceFilter(query, filter, null, null, "none", "  HRB400  ");
+
+            verify(purchaseOrderRepository).findByReferenceFilter(
+                    any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                    eq("hrb400"), any(Pageable.class));
+        }
+
         @Test
         void findByReferenceFilter_shouldRejectUnknownReferencedBy() {
             PageQuery query = new PageQuery(0, 30, null, null);
             PageFilter filter = PageFilter.of(null, null, null, null, null, null);
 
-            assertThatThrownBy(() -> service.findByReferenceFilter(query, filter, null, null, "unknown"))
+            assertThatThrownBy(() -> service.findByReferenceFilter(query, filter, null, null, "unknown", null))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("下游模块关联筛选值");
         }
@@ -130,13 +151,14 @@ class PurchaseOrderQueryServiceTest {
             PageQuery query = new PageQuery(0, 30, null, null);
             PageFilter filter = PageFilter.of(null, null, null, null, null, null);
             when(purchaseOrderRepository.findByReferenceFilter(
-                    any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                    any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                     .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
 
-            service.findByReferenceFilter(query, filter, null, null, "none");
+            service.findByReferenceFilter(query, filter, null, null, "none", null);
 
             verify(purchaseOrderRepository).findByReferenceFilter(
-                    any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), eq("none"), any(Pageable.class));
+                    any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                    eq("none"), any(), any(Pageable.class));
         }
     }
 

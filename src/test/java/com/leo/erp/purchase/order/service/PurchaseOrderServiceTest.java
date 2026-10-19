@@ -73,53 +73,53 @@ class PurchaseOrderServiceTest {
     void page_pendingOnly_shouldDelegateToQueryService() {
         PageQuery query = new PageQuery(0, 30, null, null);
         PageFilter filter = PageFilter.of(null, null, null, null, null, null);
-        when(queryService.findPending(eq(query), eq(filter)))
+        when(queryService.findPending(eq(query), eq(filter), isNull()))
                 .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
         when(queryService.findReferenceStatusByOrderIds(any())).thenReturn(Map.of());
 
         service.page(query, filter, true);
 
-        verify(queryService).findPending(eq(query), eq(filter));
+        verify(queryService).findPending(eq(query), eq(filter), isNull());
     }
 
     @Test
     void page_withReferenceFilter_shouldDelegateToQueryService() {
         PageQuery query = new PageQuery(0, 30, null, null);
         PageFilter filter = PageFilter.of(null, null, null, null, null, null);
-        when(queryService.findByReferenceFilter(eq(query), eq(filter), eq(false), eq(true), isNull()))
+        when(queryService.findByReferenceFilter(eq(query), eq(filter), eq(false), eq(true), isNull(), isNull()))
                 .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
         when(queryService.findReferenceStatusByOrderIds(any())).thenReturn(Map.of());
 
         service.page(query, filter, false, true);
 
-        verify(queryService).findByReferenceFilter(eq(query), eq(filter), eq(false), eq(true), isNull());
+        verify(queryService).findByReferenceFilter(eq(query), eq(filter), eq(false), eq(true), isNull(), isNull());
     }
 
     @Test
     void page_withReferencedByFilter_shouldDelegateToQueryService() {
         PageQuery query = new PageQuery(0, 30, null, null);
         PageFilter filter = PageFilter.of(null, null, null, null, null, null);
-        when(queryService.findByReferenceFilter(eq(query), eq(filter), isNull(), isNull(), eq("purchase-inbound")))
+        when(queryService.findByReferenceFilter(eq(query), eq(filter), isNull(), isNull(), eq("purchase-inbound"), isNull()))
                 .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
         when(queryService.findReferenceStatusByOrderIds(any())).thenReturn(Map.of());
 
         service.page(query, filter, null, null, "purchase-inbound");
 
-        verify(queryService).findByReferenceFilter(eq(query), eq(filter), isNull(), isNull(), eq("purchase-inbound"));
+        verify(queryService).findByReferenceFilter(eq(query), eq(filter), isNull(), isNull(), eq("purchase-inbound"), isNull());
     }
 
     @Test
     void page_default_shouldUseSummarySpecificationAndPageEntities() {
         PageQuery query = new PageQuery(0, 30, null, null);
         PageFilter filter = PageFilter.of(null, null, null, null, null, null);
-        when(queryService.summarySpecification(eq(filter))).thenReturn(null);
+        when(queryService.summarySpecification(eq(filter), isNull())).thenReturn(null);
         when(purchaseOrderRepository.findAll(ArgumentMatchers.<Specification<PurchaseOrder>>any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
         when(queryService.findReferenceStatusByOrderIds(any())).thenReturn(Map.of());
 
         service.page(query, filter);
 
-        verify(queryService).summarySpecification(eq(filter));
+        verify(queryService).summarySpecification(eq(filter), isNull());
         verify(purchaseOrderRepository).findAll(ArgumentMatchers.<Specification<PurchaseOrder>>any(), any(Pageable.class));
         verify(queryService).findReferenceStatusByOrderIds(any());
     }

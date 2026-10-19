@@ -53,6 +53,13 @@ public class V2SalesReturnController {
         this.candidateService = candidateService;
     }
 
+    /**
+     * 分页查询销售退货单。
+     *
+     * <p>{@code productKeyword} 是「商品信息」筛选（品牌/材质/规格/长度），与单据头关键字
+     * {@code keyword} 相互独立：前者穿透到明细行，后者只匹配表头字段。参数名与销售出库
+     * 保持一致，前端可用同一套筛选控件。</p>
+     */
     @GetMapping
     @Operation(summary = "分页查询销售退货单")
     @RequirePermission(PermissionCodes.SALES_RETURNS_READ)
@@ -63,13 +70,15 @@ public class V2SalesReturnController {
             @RequestParam(required = false) String customerName,
             @RequestParam(required = false) Long projectId,
             @RequestParam(required = false) String projectName,
+            @RequestParam(required = false) String productKeyword,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return PageResponse.from(service.page(
                 query,
                 PageFilter.of(keyword, customerName, projectName, null, status, startDate, endDate)
-                        .withIdentity(customerId, projectId, null, null, null)
+                        .withIdentity(customerId, projectId, null, null, null),
+                productKeyword
         ));
     }
 

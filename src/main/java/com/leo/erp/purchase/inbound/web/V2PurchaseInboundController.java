@@ -47,14 +47,22 @@ public class V2PurchaseInboundController {
         this.service = service;
     }
 
+    /**
+     * 分页查询采购入库。
+     *
+     * <p>{@code productKeyword} 是「商品信息」筛选（品牌/材质/规格/长度），与单据头关键字
+     * {@code keyword} 相互独立：前者穿透到明细行，后者只匹配表头字段。参数名与销售出库
+     * 保持一致，前端可用同一套筛选控件。</p>
+     */
     @GetMapping
     @Operation(summary = "分页查询采购入库")
     @RequirePermission(PermissionCodes.PURCHASE_INBOUNDS_READ)
-    public PageResponse<PurchaseInboundResponse> page(@BindPageQuery(sortFieldKey = "purchase-inbound") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long supplierId, @RequestParam(required = false) String supplierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+    public PageResponse<PurchaseInboundResponse> page(@BindPageQuery(sortFieldKey = "purchase-inbound") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long supplierId, @RequestParam(required = false) String supplierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String productKeyword, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return PageResponse.from(service.page(
                 query,
                 PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)
-                        .withIdentity(null, null, supplierId, null, null)
+                        .withIdentity(null, null, supplierId, null, null),
+                productKeyword
         ));
     }
 

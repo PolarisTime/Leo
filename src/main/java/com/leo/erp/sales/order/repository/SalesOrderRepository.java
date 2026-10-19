@@ -97,7 +97,19 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
             """)
     List<Long> findOrderIdsBySourceItemIds(@Param("sourceItemIds") Collection<Long> sourceItemIds);
 
-    /** 按物流单、销售出库等具体下游模块引用状态进行分页筛选。 */
+    /**
+     * 按物流单、销售出库等具体下游模块引用状态进行分页筛选。
+     *
+     * <p>商品信息({@code productKeyword}) 的字段清单必须与
+     * {@link com.leo.erp.common.persistence.Specs#PRODUCT_SEARCH_FIELDS} 保持一致：
+     * JPQL 用不到 Java 常量，因此这里是<b>需要手工同步的第二处</b>。字段为
+     * {@code materialCode / brand / material / spec / length}，改动其一时两边都要改，
+     * 否则会出现「列表搜得到、汇总搜不到」（本仓库销售订单恰好同时存在本 JPQL 路径与
+     * {@code SalesOrderQueryService} 的 Specification 路径）。</p>
+     *
+     * <p>{@code length} 列可空，但 {@code position(... in lower(null))} 求值为 NULL，
+     * 在 {@code or} 链里只会让该行「不匹配」，不会误命中其他关键词，故无需 {@code coalesce}。</p>
+     */
     @Query("""
             select salesOrder
             from SalesOrder salesOrder
@@ -129,6 +141,7 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
                                 or position(:productKeyword in lower(salesItem.brand)) > 0
                                 or position(:productKeyword in lower(salesItem.material)) > 0
                                 or position(:productKeyword in lower(salesItem.spec)) > 0
+                                or position(:productKeyword in lower(salesItem.length)) > 0
                           )
                     )
               )

@@ -63,7 +63,8 @@ public class PurchaseOrderQueryService {
                                               PageFilter filter,
                                               Boolean pendingOnly,
                                               Boolean referenced,
-                                              String referencedBy) {
+                                              String referencedBy,
+                                              String productKeyword) {
         return purchaseOrderRepository.findByReferenceFilter(
                 normalizeContains(filter.keyword()),
                 filter.supplierId(),
@@ -76,11 +77,12 @@ public class PurchaseOrderQueryService {
                 pendingOnly,
                 referenced,
                 validateReferencedBy(referencedBy),
+                normalizeContains(productKeyword),
                 query.toPageable("id")
         );
     }
 
-    Page<PurchaseOrder> findPending(PageQuery query, PageFilter filter) {
+    Page<PurchaseOrder> findPending(PageQuery query, PageFilter filter, String productKeyword) {
         return purchaseOrderRepository.findPending(
                 normalizeContains(filter.keyword()),
                 filter.supplierId(),
@@ -90,12 +92,22 @@ public class PurchaseOrderQueryService {
                 startDate(filter),
                 endDateExclusive(filter),
                 StatusConstants.PURCHASE_COMPLETED,
+                normalizeContains(productKeyword),
                 query.toPageable("id")
         );
     }
 
-    Specification<PurchaseOrder> summarySpecification(PageFilter filter) {
+    /**
+     * 列表汇总/默认分页路径的检索条件。
+     *
+     * <p>{@code productKeyword} 走明细集合的 EXISTS（{@link Specs#collectionKeywordLike}），
+     * 与单据头 keyword 相互独立：前者搜商品（品牌/材质/规格/长度），后者搜单号/供应商。
+     * 这条路径与 {@link #findByReferenceFilter}、{@link #findPending} 的 JPQL 路径必须同时支持，
+     * 否则会出现「默认列表搜得到、带 referencedBy 筛选就搜不到」这类不一致。</p>
+     */
+    Specification<PurchaseOrder> summarySpecification(PageFilter filter, String productKeyword) {
         return Specs.<PurchaseOrder>keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS)
+                .and(Specs.collectionKeywordLike(productKeyword, "items", Specs.PRODUCT_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
                 .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))

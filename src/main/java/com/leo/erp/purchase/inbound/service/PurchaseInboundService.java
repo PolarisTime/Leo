@@ -71,11 +71,21 @@ public class PurchaseInboundService {
     }
 
     @Transactional(readOnly = true)
-    public Page<PurchaseInboundResponse> page(PageQuery query, PageFilter filter) {
+    public Page<PurchaseInboundResponse> page(PageQuery query, PageFilter filter, String productKeyword) {
+        /*
+         * 单据头关键字与「商品信息」是两个独立条件, 不能把商品字段混进 INBOUND_SEARCH_FIELDS:
+         * 前者按单号/供应商等表头字段匹配, 后者必须穿透到明细行(EXISTS 子查询)。混在一起会让
+         * 一个关键字同时命中两类语义, 用户搜「9米」时也会把单号里含「9米」的脏数据带出来。
+         *
+         * 商品字段清单的唯一来源是 Specs.PRODUCT_SEARCH_FIELDS(含 length), 不要在此另声明数组。
+         * 集合字段名 "items" 取自 PurchaseInbound 实体的 @OneToMany(mappedBy = "purchaseInbound"),
+         * 已用 LSP 核实, 不是照抄销售出库。
+         */
         Specification<PurchaseInbound> spec = Specs.<PurchaseInbound>keywordLike(
                         filter.keyword(),
-                        "inboundNo", "purchaseOrderNo", "supplierName"
+                        INBOUND_SEARCH_FIELDS
                 )
+                .and(Specs.collectionKeywordLike(productKeyword, "items", Specs.PRODUCT_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
                 .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))

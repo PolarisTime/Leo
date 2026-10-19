@@ -93,13 +93,23 @@ public class PurchaseOrderService {
                                             Boolean pendingOnly,
                                             Boolean referenced,
                                             String referencedBy) {
+        return page(query, filter, pendingOnly, referenced, referencedBy, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PurchaseOrderResponse> page(PageQuery query,
+                                            PageFilter filter,
+                                            Boolean pendingOnly,
+                                            Boolean referenced,
+                                            String referencedBy,
+                                            String productKeyword) {
         Page<PurchaseOrder> entities;
         if (referenced != null || referencedBy != null) {
-            entities = queryService.findByReferenceFilter(query, filter, pendingOnly, referenced, referencedBy);
+            entities = queryService.findByReferenceFilter(query, filter, pendingOnly, referenced, referencedBy, productKeyword);
         } else if (Boolean.TRUE.equals(pendingOnly)) {
-            entities = queryService.findPending(query, filter);
+            entities = queryService.findPending(query, filter, productKeyword);
         } else {
-            entities = pageEntities(query, queryService.summarySpecification(filter), purchaseOrderRepository);
+            entities = pageEntities(query, queryService.summarySpecification(filter, productKeyword), purchaseOrderRepository);
         }
         Map<Long, PurchaseOrderReferenceQueryRepository.ReferenceStatus> statuses =
                 queryService.findReferenceStatusByOrderIds(

@@ -258,7 +258,7 @@ class SalesReturnServiceTest {
         when(repository.findAll(any(Specification.class), any(org.springframework.data.domain.Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(entity)));
 
-        Page<SalesReturnResponse> result = service.page(query, mock(PageFilter.class));
+        Page<SalesReturnResponse> result = service.page(query, mock(PageFilter.class), null);
 
         assertThat(result.getContent()).containsExactly(response);
     }

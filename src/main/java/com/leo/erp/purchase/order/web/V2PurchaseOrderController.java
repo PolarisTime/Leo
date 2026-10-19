@@ -105,7 +105,8 @@ public class V2PurchaseOrderController {
                         .withIdentity(null, null, criteria.getSupplierId(), null, null),
                 criteria.getPendingOnly(),
                 criteria.getReferenced(),
-                criteria.getReferencedBy()
+                criteria.getReferencedBy(),
+                criteria.getProductKeyword()
         ));
     }
 

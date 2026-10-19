@@ -32,6 +32,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -92,14 +94,30 @@ class V2FreightBillControllerTest {
 
     @Test
     void page_shouldDelegateWithCarrierCode() {
-        when(service.page(any(PageQuery.class), any(PageFilter.class), anyString()))
+        when(service.page(any(PageQuery.class), any(PageFilter.class), eq("C001"), eq("HRB400")))
                 .thenReturn(mock(org.springframework.data.domain.Page.class));
 
         var result = controller.page(mock(PageQuery.class), "kw", 100L, "C001", "承运商A", 30L,
-                "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+                "HRB400", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
 
         assertThat(result).isNotNull();
-        verify(service).page(any(PageQuery.class), any(PageFilter.class), anyString());
+        // productKeyword 是「商品信息」筛选（品牌/材质/规格/长度），必须与 carrierCode 一起原样透传：
+        // 只有断言到具体值，才能防止"加了参数但控制器没传下去"这类静默失效
+        verify(service).page(any(PageQuery.class), any(PageFilter.class), eq("C001"), eq("HRB400"));
+    }
+
+    @Test
+    void page_shouldForwardNullProductKeywordWhenAbsent() {
+        when(service.page(any(PageQuery.class), any(PageFilter.class), eq("C001"), isNull()))
+                .thenReturn(mock(org.springframework.data.domain.Page.class));
+
+        var result = controller.page(mock(PageQuery.class), "kw", 100L, "C001", "承运商A", 30L,
+                null, "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+
+        assertThat(result).isNotNull();
+        // 未传 productKeyword 必须原样透传 null：Service 侧 Specs.collectionKeywordLike(null, ...)
+        // 返回 conjunction（不过滤），既有"只按单据头关键字搜"的行为完全不受影响
+        verify(service).page(any(PageQuery.class), any(PageFilter.class), eq("C001"), isNull());
     }
 
     @Test

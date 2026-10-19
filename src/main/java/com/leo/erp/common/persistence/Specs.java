@@ -14,6 +14,19 @@ public final class Specs {
 
     private static final String DELETED_DOCUMENT_STATUS = "已删除";
 
+    /**
+     * 商品明细搜索字段：商品编码 + 品牌 + 材质 + 规格 + 长度。
+     *
+     * <p><b>唯一来源</b>：采购订单/采购入库/销售订单/销售出库/销售退货/物流单的「商品信息」
+     * 筛选共用本清单，不要在各自 Service 里再声明一份 —— 历史上销售订单与销售出库各写了一份
+     * {@code PRODUCT_SEARCH_FIELDS}，两边同时漏了 {@code length}，改一处漏一处。</p>
+     *
+     * <p>长度({@code length}) 是本次补齐的字段：此前只能搜品牌/材质/规格，用户按「9米」搜不到。</p>
+     */
+    public static final String[] PRODUCT_SEARCH_FIELDS = {
+            "materialCode", "brand", "material", "spec", "length"
+    };
+
     /** LIKE/ILIKE 转义字符，与 {@link #containsLikePatternIgnoreCase(String)} 的转义保持一致。 */
     private static final char LIKE_ESCAPE_CHARACTER = '\\';
 

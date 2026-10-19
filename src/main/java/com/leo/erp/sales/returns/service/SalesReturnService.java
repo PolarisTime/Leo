@@ -52,8 +52,16 @@ public class SalesReturnService {
     }
 
     @Transactional(readOnly = true)
-    public Page<SalesReturnResponse> page(PageQuery query, PageFilter filter) {
+    public Page<SalesReturnResponse> page(PageQuery query, PageFilter filter, String productKeyword) {
+        /*
+         * 商品信息筛选穿透到明细行(EXISTS 子查询), 与单据头关键字 RETURN_SEARCH_FIELDS 相互独立:
+         * 合进同一个数组会让「搜商品」变成「也搜单号」, 两类语义混在一起无法分别解释命中原因。
+         * 商品字段清单唯一来源是 Specs.PRODUCT_SEARCH_FIELDS(含 length), 不要在本类另声明。
+         * 集合字段名 "items" 取自 SalesReturn 实体的 @OneToMany(mappedBy = "salesReturn"),
+         * 已用 LSP 核实, 不是照抄销售出库。
+         */
         Specification<SalesReturn> spec = Specs.<SalesReturn>keywordLike(filter.keyword(), RETURN_SEARCH_FIELDS)
+                .and(Specs.collectionKeywordLike(productKeyword, "items", Specs.PRODUCT_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalIfPresent("projectName", filter.projectName()))
                 .and(Specs.equalValueIfPresent("customerId", filter.customerId()))

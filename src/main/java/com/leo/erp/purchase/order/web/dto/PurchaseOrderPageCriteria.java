@@ -17,6 +17,8 @@ public class PurchaseOrderPageCriteria {
     private Boolean pendingOnly;
     private Boolean referenced;
     private String referencedBy;
+    /** 商品信息模糊搜索（商品编码/品牌/材质/规格/长度），与单据头 keyword 相互独立。 */
+    private String productKeyword;
 
     public String getKeyword() {
         return keyword;
@@ -96,5 +98,13 @@ public class PurchaseOrderPageCriteria {
 
     public void setReferencedBy(String referencedBy) {
         this.referencedBy = referencedBy;
+    }
+
+    public String getProductKeyword() {
+        return productKeyword;
+    }
+
+    public void setProductKeyword(String productKeyword) {
+        this.productKeyword = productKeyword;
     }
 }

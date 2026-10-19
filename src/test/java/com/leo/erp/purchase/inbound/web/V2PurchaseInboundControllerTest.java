@@ -25,6 +25,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -61,15 +62,16 @@ class V2PurchaseInboundControllerTest {
 
     @Test
     void page_shouldDelegateWithFilter() {
-        when(service.page(any(PageQuery.class), any(PageFilter.class))).thenReturn(
+        when(service.page(any(PageQuery.class), any(PageFilter.class), any())).thenReturn(
                 org.mockito.Mockito.mock(org.springframework.data.domain.Page.class));
 
         PageQuery query = mock(PageQuery.class);
-        var result = controller.page(query, "kw", 10L, "供应商A", 30L, "DRAFT",
+        var result = controller.page(query, "kw", 10L, "供应商A", 30L, "品牌X", "DRAFT",
                 LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
 
         assertThat(result).isNotNull();
-        verify(service).page(any(PageQuery.class), any(PageFilter.class));
+        // 「商品信息」关键字必须原样透传到 Service（Controller → Service 链路的唯一验证点）
+        verify(service).page(any(PageQuery.class), any(PageFilter.class), eq("品牌X"));
     }
 
     @Test

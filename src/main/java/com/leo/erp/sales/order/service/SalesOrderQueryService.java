@@ -31,7 +31,6 @@ public class SalesOrderQueryService {
     private static final LocalDate MIN_PENDING_DELIVERY_DATE = LocalDate.of(1, 1, 1);
     private static final LocalDate MAX_PENDING_DELIVERY_DATE = LocalDate.of(9999, 12, 31);
     private static final String[] SALES_ORDER_SEARCH_FIELDS = {"orderNo", "purchaseOrderNo", "customerName", "projectName"};
-    private static final String[] PRODUCT_SEARCH_FIELDS = {"materialCode", "brand", "material", "spec"};
     private static final Set<String> REFERENCED_BY_VALUES =
             Set.of(
                     ModuleKeys.FREIGHT_BILL,
@@ -93,7 +92,8 @@ public class SalesOrderQueryService {
             );
         } else {
             Specification<SalesOrder> spec = Specs.<SalesOrder>keywordLike(filter.keyword(), SALES_ORDER_SEARCH_FIELDS)
-                    .and(Specs.collectionKeywordLike(productKeyword, "items", PRODUCT_SEARCH_FIELDS))
+                    // 商品字段清单的唯一来源：Specs.PRODUCT_SEARCH_FIELDS（含 length）。
+                    .and(Specs.collectionKeywordLike(productKeyword, "items", Specs.PRODUCT_SEARCH_FIELDS))
                     .and(Specs.equalIfPresent("customerName", filter.name()))
                     .and(Specs.equalIfPresent("projectName", filter.projectName()))
                     .and(Specs.equalValueIfPresent("customerId", filter.customerId()))

@@ -33,7 +33,6 @@ import java.util.Set;
 @Service
 public class SalesOutboundService {
 
-    private static final String[] PRODUCT_SEARCH_FIELDS = {"materialCode", "brand", "material", "spec"};
     private static final String[] OUTBOUND_SEARCH_FIELDS = {"outboundNo", "salesOrderNo", "customerName", "projectName"};
     private static final CrudStatusGuard<SalesOutbound> STATUS_GUARD = CrudStatusGuard.forStatusAwareEntities();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
@@ -63,7 +62,8 @@ public class SalesOutboundService {
     @Transactional(readOnly = true)
     public Page<SalesOutboundResponse> page(PageQuery query, PageFilter filter, String productKeyword) {
         Specification<SalesOutbound> spec = Specs.<SalesOutbound>keywordLike(filter.keyword(), OUTBOUND_SEARCH_FIELDS)
-                .and(Specs.collectionKeywordLike(productKeyword, "items", PRODUCT_SEARCH_FIELDS))
+                // 商品字段清单的唯一来源：Specs.PRODUCT_SEARCH_FIELDS（含 length）。
+                .and(Specs.collectionKeywordLike(productKeyword, "items", Specs.PRODUCT_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalIfPresent("projectName", filter.projectName()))
                 .and(Specs.equalValueIfPresent("customerId", filter.customerId()))

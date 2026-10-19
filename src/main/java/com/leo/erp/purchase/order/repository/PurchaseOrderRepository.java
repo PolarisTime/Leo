@@ -91,6 +91,21 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
                     or position(:keyword in lower(purchaseOrder.orderNo)) > 0
                     or position(:keyword in lower(purchaseOrder.supplierName)) > 0
               )
+              and (
+                    :productKeyword = ''
+                    or exists (
+                        select productItem.id
+                        from PurchaseOrderItem productItem
+                        where productItem.purchaseOrder = purchaseOrder
+                          and (
+                              position(:productKeyword in lower(productItem.materialCode)) > 0
+                              or position(:productKeyword in lower(productItem.brand)) > 0
+                              or position(:productKeyword in lower(productItem.material)) > 0
+                              or position(:productKeyword in lower(productItem.spec)) > 0
+                              or position(:productKeyword in lower(productItem.length)) > 0
+                          )
+                    )
+              )
               and not exists (
                     select salesItem.id
                     from SalesOrderItem salesItem
@@ -111,6 +126,7 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
             @Param("startDate") LocalDateTime startDate,
             @Param("endDateExclusive") LocalDateTime endDateExclusive,
             @Param("completedStatus") String completedStatus,
+            @Param("productKeyword") String productKeyword,
             Pageable pageable
     );
 
@@ -130,6 +146,21 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
                     :keyword = ''
                     or position(:keyword in lower(purchaseOrder.orderNo)) > 0
                     or position(:keyword in lower(purchaseOrder.supplierName)) > 0
+              )
+              and (
+                    :productKeyword = ''
+                    or exists (
+                        select productItem.id
+                        from PurchaseOrderItem productItem
+                        where productItem.purchaseOrder = purchaseOrder
+                          and (
+                              position(:productKeyword in lower(productItem.materialCode)) > 0
+                              or position(:productKeyword in lower(productItem.brand)) > 0
+                              or position(:productKeyword in lower(productItem.material)) > 0
+                              or position(:productKeyword in lower(productItem.spec)) > 0
+                              or position(:productKeyword in lower(productItem.length)) > 0
+                          )
+                    )
               )
               and (
                     :pendingOnly is null
@@ -326,6 +357,7 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
             @Param("pendingOnly") Boolean pendingOnly,
             @Param("referenced") Boolean referenced,
             @Param("referencedBy") String referencedBy,
+            @Param("productKeyword") String productKeyword,
             Pageable pageable
     );
 }
