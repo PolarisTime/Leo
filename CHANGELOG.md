@@ -1,3 +1,64 @@
+# [14.0.0](https://github.com/PolarisTime/Leo/compare/v13.2.2...v14.0.0) (2026-10-20)
+
+
+* feat(quotation)!: 参与品牌必须落在项目资料的允许品牌范围内 ([bfff9dd](https://github.com/PolarisTime/Leo/commit/bfff9dd77918524609ae0ee8044e232dcbf6feb1))
+* refactor(finance)!: 移除收款/付款的废弃兼容字段并收敛双列结构 ([eb9c985](https://github.com/PolarisTime/Leo/commit/eb9c985b596347a98b79dacd517dd97000d6e4a4))
+
+
+### Bug Fixes
+
+* **inventory:** 回填改为「只读扫描 + 逐批写事务」两阶段 ([1165098](https://github.com/PolarisTime/Leo/commit/1165098c0e0be0ced25800e07762038e1db4b5a3))
+* **purchase-order:** 修复「已删除」筛选在 JPQL 路径失效并补商品搜索索引 ([ada3e84](https://github.com/PolarisTime/Leo/commit/ada3e84f10ff7d56f56cd2e4e38d1fee48854a10))
+* **security:** /version 默认不再泄露提交哈希 ([c3bdaee](https://github.com/PolarisTime/Leo/commit/c3bdaeedfd7af0a81276981ffde3b96a82279acb))
+* **specs:** 商品搜索字段常量改为不可变 List，修复 SpotBugs 阻断 ([8e5c6a0](https://github.com/PolarisTime/Leo/commit/8e5c6a098b564b8b24713f0558e4ad35244a5b0d))
+
+
+### Features
+
+* **api:** 采购/销售/物流单据支持按商品信息（品牌/材质/规格/长度）搜索 ([1789042](https://github.com/PolarisTime/Leo/commit/1789042caeb2e1935bf82ef42b8f24fb8cd0c1de))
+* **security:** 生产环境 CORS 来源缺失即启动失败 ([77fd411](https://github.com/PolarisTime/Leo/commit/77fd41149e298cbe128c6f167227412022b892a6))
+
+
+### Performance Improvements
+
+* **inventory:** 库存回填改为分批短事务与会话级 try-lock ([0863e85](https://github.com/PolarisTime/Leo/commit/0863e85af92081356274dd99f530a0047d2571e0))
+
+
+### BREAKING CHANGES
+
+* 比价项目配置的保存接口现在会拒绝不在项目允许品牌范围内的品牌；
+若某环境已有越界数据，需先调整项目允许品牌或清理比价品牌后再保存。
+
+mvn clean test 3041 项全绿（0 失败 0 错误，127 跳过）。
+* 删除 Payment.businessType 持久化列、
+ReceiptAllocation.sourceStatementId 持久化列，以及 Receipt/Payment DTO 上
+8 个 @Deprecated(forRemoval=false) 兼容访问器。外部若直接读取响应里的
+sourceStatementId / businessType 字段需改用 sourceCustomerStatementId / counterpartyType。
+
+先做数据核实再动手（P0 教训：不能凭「代码里标了 Deprecated」就删）：
+- 生产库 master_prod_cutover_current_20260713_102500 扫描结果：
+  fm_payment 0 行、fm_receipt_allocation 0 行；
+- 开发库：fm_payment 3 行，business_type 与 counterparty_type 完全一致，无分歧。
+
+改动：
+1. Payment 实体删除 business_type 列，getCounterpartyType() 不再做 null 回退
+   （原先 counterpartyType == null ? businessType : counterpartyType 的双列兜底已无意义）。
+   保留 @Transient originalBusinessType —— 它是「变更前类型快照」，与已删列无关。
+2. ReceiptAllocation 实体双列收敛为 source_customer_statement_id 单列，
+   新增 V192 迁移：搬数据 → 旧列去 NOT NULL → 删旧列 → 新列补 NOT NULL。
+3. 删除 8 个 forRemoval=false 兼容访问器，全部调用点（生产 60 处 + 测试）迁到新名。
+4. 修正 4+4 处 JPQL 属性引用（payment.businessType / allocation.sourceStatementId）——
+   这类引用编译期查不出、只在 Hibernate 启动时炸，已通过实跑启动验证。
+
+过程中我自己引入并修正的两个回归（记录以免重犯）：
+- 批量文本替换把辅助方法里两个不同 setter 合并成同一个，导致后者覆盖前者；
+- 付款侧 sourceStatementId 是**真实业务字段**（供应商对账单），一度被误当成废弃别名替换，
+  已回滚——「同名字段在不同实体上语义不同」是这类批量替换最危险的地方。
+
+验证：mvn clean test 3011 项全绿（0 失败 0 错误，127 跳过与基线一致）；
+后端实跑启动成功（Hibernate 校验 JPQL 通过）；接口回归确认收款单不再下发
+废弃字段、新字段齐全。
+
 ## [13.2.2](https://github.com/PolarisTime/Leo/compare/v13.2.1...v13.2.2) (2026-10-19)
 
 
