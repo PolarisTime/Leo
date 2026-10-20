@@ -228,6 +228,8 @@ jobs:
             -e LEO_JWT_SECRET="$LEO_JWT_SECRET" \
             -e LEO_DATA_ENCRYPTION_KEY="$LEO_DATA_ENCRYPTION_KEY" \
             -e LEO_MACHINE_ID="$LEO_MACHINE_ID" \
+            -e LEO_CORS_ALLOWED_ORIGINS="https://ci-smoke.invalid" \
+            -e LEO_VERSION_EXPOSE_COMMIT_HASH=false \
             leo-backend:ci
           trap 'docker ps -a --filter name=leo-backend-smoke; docker logs leo-backend-smoke --tail 300 || true; docker rm -f leo-backend-smoke || true' EXIT
           timeout 240 bash -c 'until curl --max-time 5 -fsS http://127.0.0.1:11211/api/v2.0/health; do sleep 3; done'
