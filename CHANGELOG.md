@@ -1,3 +1,10 @@
+## [14.0.1](https://github.com/PolarisTime/Leo/compare/v14.0.0...v14.0.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **test:** 补齐 QuoteVersionPostgresTest 缺失的采购范围端口替身 ([44409f8](https://github.com/PolarisTime/Leo/commit/44409f8f685340e86d011c1857ce4d91a0f7fdbf))
+
 # [14.0.0](https://github.com/PolarisTime/Leo/compare/v13.2.2...v14.0.0) (2026-10-20)
 
 
