@@ -14,6 +14,7 @@ import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigResponse;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
+import com.leo.erp.master.api.ProjectProcurementScopeQuery;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.api.SupplierQuery;
 import com.leo.erp.purchase.api.PurchaseOrderOptionQuery;
@@ -246,6 +247,16 @@ class QuoteVersionPostgresTest {
         @Bean
         ProjectQuery projectQuery() {
             return Mockito.mock(ProjectQuery.class);
+        }
+
+        /**
+         * 比价项目配置保存时会校验「参与品牌必须在项目允许品牌内」，
+         * 因此 {@code QuoteProjectConfigStore} 依赖本端口。切片里必须提供替身，
+         * 否则整个 ApplicationContext 起不来（mock 返回 Optional.empty = 不限制）。
+         */
+        @Bean
+        ProjectProcurementScopeQuery projectProcurementScopeQuery() {
+            return Mockito.mock(ProjectProcurementScopeQuery.class);
         }
 
         @Bean
