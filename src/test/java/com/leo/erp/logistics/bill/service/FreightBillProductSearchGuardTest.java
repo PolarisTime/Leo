@@ -148,7 +148,7 @@ class FreightBillProductSearchGuardTest {
         assertThat(headerFields)
                 .as("单据头关键字 SEARCH_FIELDS 混入了商品字段：商品筛选必须走独立的 "
                         + "productKeyword 条件，混进来会让「按单号搜」变成「按商品搜」")
-                .doesNotContainAnyElementsOf(List.of(Specs.PRODUCT_SEARCH_FIELDS));
+                .doesNotContainAnyElementsOf(Specs.PRODUCT_SEARCH_FIELDS);
     }
 
     /** 沿类层次查找字段（实体可能继承映射父类）。 */

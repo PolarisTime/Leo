@@ -8,6 +8,7 @@ import org.hibernate.query.criteria.HibernateCriteriaBuilder;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Locale;
 
 public final class Specs {
@@ -23,9 +24,9 @@ public final class Specs {
      *
      * <p>长度({@code length}) 是本次补齐的字段：此前只能搜品牌/材质/规格，用户按「9米」搜不到。</p>
      */
-    public static final String[] PRODUCT_SEARCH_FIELDS = {
+    public static final List<String> PRODUCT_SEARCH_FIELDS = List.of(
             "materialCode", "brand", "material", "spec", "length"
-    };
+    );
 
     /** LIKE/ILIKE 转义字符，与 {@link #containsLikePatternIgnoreCase(String)} 的转义保持一致。 */
     private static final char LIKE_ESCAPE_CHARACTER = '\\';
@@ -60,7 +61,7 @@ public final class Specs {
     public static <T> Specification<T> collectionKeywordLike(
             String keyword,
             String collectionField,
-            String... fields
+            List<String> fields
     ) {
         return (root, query, criteriaBuilder) -> {
             if (keyword == null || keyword.isBlank()) {
@@ -69,11 +70,11 @@ public final class Specs {
             var subquery = query.subquery(Integer.class);
             var correlatedRoot = subquery.correlate(root);
             var collectionItem = correlatedRoot.join(collectionField);
-            var predicates = new Predicate[fields.length];
-            for (int index = 0; index < fields.length; index++) {
+            var predicates = new Predicate[fields.size()];
+            for (int index = 0; index < fields.size(); index++) {
                 predicates[index] = containsIgnoreCase(
                         criteriaBuilder,
-                        collectionItem.get(fields[index]),
+                        collectionItem.get(fields.get(index)),
                         keyword
                 );
             }
