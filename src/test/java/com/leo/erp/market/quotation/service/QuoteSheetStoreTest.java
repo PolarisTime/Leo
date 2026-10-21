@@ -319,6 +319,41 @@ class QuoteSheetStoreTest {
         verify(entityManager).lock(existing, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
     }
 
+    /**
+     * 配置缺失时的整体替换必须**复用**同名品牌实体（id 不变）。
+     *
+     * <p>回归的真实缺陷：`replaceBrands` 曾用**未规范化**的 {@code getBrandName()} 作 map key
+     * （写侧却 trim），且无条件 clear + addAll。与库里带前后空白的名称匹配不上时会误判为「新增」，
+     * 生成新雪花 ID，同一 flush 内先 INSERT 新子行再删旧子行，撞
+     * {@code uk_quote_sheet_brand(sheet_id, brand_name)}。现在与配置路径共用
+     * {@code reconcileBrands}，同名一律复用实体。</p>
+     */
+    @Test
+    void update_withoutConfig_reusesBrandEntityIdWhenStoredNameHasSurroundingSpaces() {
+        QuoteSheet existing = sheetWithItemMatchingFullRequestHeader(9L);
+        existing.setProjectId(77L);
+        existing.setVersion(5L);
+        // 历史数据: 库里品牌名带前后空白; 请求给的是 trim 后的同一品牌
+        existing.getBrands().get(0).setBrandName(" 中天 ");
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L)).thenReturn(Optional.empty());
+        stubForceIncrement();
+
+        QuoteSheetRequest request = new QuoteSheetRequest(
+                "9月9日报单", 77L, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("30"), false, false, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
+
+        QuoteSheetResponse response = store().update(9L, request, 5L);
+
+        // 复用既有实体: id 仍是 201（若走"新建"路径会用到 snowflakeIdGenerator）
+        assertThat(response.brands()).hasSize(1);
+        assertThat(response.brands().get(0).id()).isEqualTo(201L);
+    }
+
     /** 快照全量协调: 表头-only 写把快照对齐配置(含删除配置已移除的品牌), 且父版本恰好 +1。 */
     @Test
     void update_headerOnly_configOnlyBrand_syncsSnapshotAndIncrementsVersionOnce() {

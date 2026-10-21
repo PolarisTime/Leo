@@ -544,17 +544,24 @@ public class QuoteSheetStore {
     }
 
     /**
-     * 写单据时把 {@code mk_quote_sheet_brand} 快照与项目配置品牌全量对齐:
-     * 按 brandName 同名复用既有实体(仅更新 freight/sortOrder), 配置新增则补建, 配置已删则移除多余品牌。
-     * 以配置为准而非并集, 避免配置删除品牌后单据仍可写该品牌; 仅确有差异时变更集合,
-     * 无差异时不触碰集合、不产生无谓版本自增。
+     * 品牌快照协调的**唯一实现**：把 {@code mk_quote_sheet_brand} 对齐到 desired 描述的品牌集合。
+     *
+     * <p>按 brandName 同名复用既有实体（仅更新 freight/sortOrder，id 不变），缺的补建，多的移除。
+     * 复用实体而不是 clear + 新建是关键：新子实体带新雪花 ID，同一 flush 内会先 INSERT 新子行
+     * 再删除旧子行，违反 {@code uk_quote_sheet_brand(sheet_id, brand_name)}。</p>
+     *
+     * <p>仅确有差异时才重建集合（{@link #sameBrandSequence} 再挡一层），无差异时不触碰集合，
+     * 避免产生无谓的版本自增。</p>
+     *
+     * <p><b>为什么收敛到一处</b>：原先有 {@code syncBrandSnapshot}（配置驱动）与
+     * {@code replaceBrands}（请求驱动）两套并行实现，差异不只是数据来源 —— 后者用**未规范化**
+     * 的 {@code getBrandName()} 作 map key、且**无条件** clear + addAll，既可能与库里带空白的
+     * 历史名称匹配不上而误判为「新增」（新雪花 ID → 撞唯一键），也会在无差异时白重建一次集合。
+     * 现在两个入口只负责把各自来源映射成 {@link DesiredBrand}，协调逻辑共用这一份。</p>
      *
      * @return 是否对快照产生了实际变更
      */
-    private boolean syncBrandSnapshot(QuoteSheet entity, QuoteProjectConfig config) {
-        if (config == null) {
-            return false;
-        }
+    private boolean reconcileBrands(QuoteSheet entity, List<DesiredBrand> desired) {
         Map<String, QuoteSheetBrand> existingByBrandName = new LinkedHashMap<>();
         for (QuoteSheetBrand brand : entity.getBrands()) {
             existingByBrandName.put(normalizeBrandName(brand.getBrandName()), brand);
@@ -562,13 +569,14 @@ public class QuoteSheetStore {
         List<QuoteSheetBrand> reconciled = new ArrayList<>();
         boolean changed = false;
         int index = 0;
-        for (QuoteProjectBrand configBrand : config.getBrands()) {
-            String brandName = normalizeBrandName(configBrand.getBrandName());
+        for (DesiredBrand desiredBrand : desired) {
+            String brandName = normalizeBrandName(desiredBrand.brandName());
             if (brandName.isEmpty()) {
+                // 空名称不占位: 不消耗 index, 也不进入集合(与原先 syncBrandSnapshot 的 continue 一致)
                 continue;
             }
-            BigDecimal freight = configBrand.getFreight() == null ? BigDecimal.ZERO : configBrand.getFreight();
-            Integer sortOrder = configBrand.getSortOrder() == null ? index : configBrand.getSortOrder();
+            BigDecimal freight = desiredBrand.freight() == null ? BigDecimal.ZERO : desiredBrand.freight();
+            Integer sortOrder = desiredBrand.sortOrder() == null ? index : desiredBrand.sortOrder();
             QuoteSheetBrand snapshot = existingByBrandName.remove(brandName);
             if (snapshot == null) {
                 snapshot = new QuoteSheetBrand();
@@ -588,16 +596,36 @@ public class QuoteSheetStore {
             index += 1;
         }
         if (!existingByBrandName.isEmpty()) {
-            // 配置已删除的品牌: 快照中残留的品牌同样移除, 与配置完全对齐。
+            // 目标集合不再包含的品牌: 快照中的残留同样移除, 与目标完全对齐。
             changed = true;
         }
         if (changed && !sameBrandSequence(entity.getBrands(), reconciled)) {
-            // 按 brandName 复用实体后重建集合, 避免 clear + 新雪花 id 造成同一 flush 内
-            // uk_quote_sheet_brand(sheet_id, brand_name) 的 INSERT/DELETE 冲突。
             entity.getBrands().clear();
             entity.getBrands().addAll(reconciled);
         }
         return changed;
+    }
+
+    /** 品牌快照的目标行: 名称 + 运费 + 排序。两个入口（配置 / 请求）都先映射成它。 */
+    private record DesiredBrand(String brandName, BigDecimal freight, Integer sortOrder) {
+    }
+
+    /**
+     * 写单据时把品牌快照与**项目配置**全量对齐（配置为唯一真源）。
+     * 以配置为准而非并集，避免配置删除品牌后单据仍可写该品牌。
+     *
+     * @return 是否对快照产生了实际变更
+     */
+    private boolean syncBrandSnapshot(QuoteSheet entity, QuoteProjectConfig config) {
+        if (config == null) {
+            return false;
+        }
+        List<DesiredBrand> desired = new ArrayList<>();
+        for (QuoteProjectBrand configBrand : config.getBrands()) {
+            desired.add(new DesiredBrand(configBrand.getBrandName(),
+                    configBrand.getFreight(), configBrand.getSortOrder()));
+        }
+        return reconcileBrands(entity, desired);
     }
 
     /** 判断快照集合是否与目标集合成员及顺序完全一致(同一实体引用), 一致时无需重建集合。 */
@@ -789,35 +817,20 @@ public class QuoteSheetStore {
     }
 
     /**
-     * 按品牌名称协调品牌: 同名复用原实体(仅更新运费/排序, id 不变), 新增才创建,
-     * 库中存在但请求未携带的从集合移除。
-     * <p>
-     * 不能 clear + 重新 add: 新子实体带新雪花 ID, 同一 flush 内会先 INSERT 新子行再删除旧子行,
-     * 违反 {@code uk_quote_sheet_brand(sheet_id, brand_name)}。复用同实体避免 INSERT/DELETE。
+     * 写单据时按**请求携带的品牌**协调快照 —— 仅用于「项目配置缺失」的回退路径。
+     *
+     * <p>配置存在时快照完全由 {@link #syncBrandSnapshot} 依配置真源协调，请求品牌不参与，
+     * 避免请求与配置不一致时同名品牌被删后以新雪花 ID 重建（ID 漂移，徒增 DELETE/INSERT）。</p>
+     *
+     * <p>协调逻辑与配置路径共用 {@link #reconcileBrands}，不再各自实现一套。</p>
      */
     private void replaceBrands(QuoteSheet entity, List<QuoteSheetRequest.BrandRequest> requests) {
-        Map<String, QuoteSheetBrand> existingByBrandName = new HashMap<>();
-        for (QuoteSheetBrand brand : entity.getBrands()) {
-            existingByBrandName.put(brand.getBrandName(), brand);
-        }
-        List<QuoteSheetBrand> reconciled = new ArrayList<>();
-        int index = 0;
+        List<DesiredBrand> desired = new ArrayList<>();
         for (QuoteSheetRequest.BrandRequest request : requests) {
-            String brandName = request.brandName().trim();
-            QuoteSheetBrand brand = existingByBrandName.remove(brandName);
-            if (brand == null) {
-                brand = new QuoteSheetBrand();
-                brand.setId(snowflakeIdGenerator.nextId());
-                brand.setSheet(entity);
-                brand.setBrandName(brandName);
-            }
-            brand.setFreight(request.freight() == null ? BigDecimal.ZERO : request.freight());
-            brand.setSortOrder(request.sortOrder() == null ? index : request.sortOrder());
-            reconciled.add(brand);
-            index += 1;
+            desired.add(new DesiredBrand(request.brandName(),
+                    request.freight(), request.sortOrder()));
         }
-        entity.getBrands().clear();
-        entity.getBrands().addAll(reconciled);
+        reconcileBrands(entity, desired);
     }
 
     /**
