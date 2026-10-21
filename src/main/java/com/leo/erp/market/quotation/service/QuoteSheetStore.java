@@ -23,7 +23,6 @@ import com.leo.erp.master.api.SupplierQuery;
 import com.leo.erp.purchase.api.PurchaseOrderOptionQuery;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
-import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -91,8 +90,12 @@ public class QuoteSheetStore {
         this.entityManager = entityManager;
     }
 
-    /** 西本模式虚拟品牌名(无品牌, 按规格一个价)。 */
-    public static final String STEELX_VIRTUAL_BRAND = "基准价";
+    /*
+     * 这里原先还有 `public static final String STEELX_VIRTUAL_BRAND = "基准价";`，
+     * 全仓 0 引用（含测试，测试直接写字面量）。它还是「虚拟品牌名」的第二处声明 ——
+     * 活的那份在 {@code SteelQuoteMatchService.VIRTUAL_BRAND}，本仓库口径是"同一口径只在一处"，
+     * 因此删除而不是保留一个平行常量。
+     */
     private static final String SOURCE_STEELX = "STEELX";
 
     /** 项目取价数据源是否为西本(无品牌)。 */
@@ -185,24 +188,29 @@ public class QuoteSheetStore {
     @Transactional(readOnly = true)
     public Page<QuoteSheetResponse> page(PageQuery query, LocalDate orderDate, Long projectId, String keyword) {
         Pageable pageable = query.toPageable("id");
-        Specification<QuoteSheet> specification = (root, criteriaQuery, builder) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            predicates.add(Specs.notDeletedPredicate(root, builder));
-            if (orderDate != null) {
-                predicates.add(builder.equal(root.get("orderDate"), orderDate));
-            }
-            if (projectId != null) {
-                predicates.add(builder.equal(root.get("projectId"), projectId));
-            }
-            if (keyword != null && !keyword.isBlank()) {
-                String like = "%" + keyword.trim() + "%";
-                predicates.add(builder.or(
-                        builder.like(root.get("name"), like),
-                        builder.like(root.get("sheetNo"), like),
-                        builder.like(root.get("projectName"), like)));
-            }
-            return builder.and(predicates.toArray(new Predicate[0]));
-        };
+        Specification<QuoteSheet> specification = Specs.notDeleted();
+        if (orderDate != null) {
+            specification = specification.and(
+                    (root, criteriaQuery, builder) -> builder.equal(root.get("orderDate"), orderDate));
+        }
+        if (projectId != null) {
+            specification = specification.and(
+                    (root, criteriaQuery, builder) -> builder.equal(root.get("projectId"), projectId));
+        }
+        /*
+         * 关键字必须走 {@link Specs#keywordLike}，不能手搓 `"%"+keyword+"%"`：
+         * 手搓版不转义 LIKE 通配符 —— 用户输入 `100%` 或 `a_b` 时本模块把它当通配符，
+         * 而其它模块（同一口径的 30 处调用点）当字面量，同一个搜索框两套语义；
+         * 且手搓版是 `like` 而非 `ILIKE`，大小写敏感，也与其它列表页不一致。
+         *
+         * 之所以把整个方法从「拼谓词列表」改成「组合 Specification」：
+         * `keywordLike` 返回 Specification（谓词级 API 在 Specs 里是 private），
+         * 混用两者会逼出第二套转义实现——那正是本次要消除的问题。
+         */
+        if (keyword != null && !keyword.isBlank()) {
+            specification = specification.and(
+                    Specs.keywordLike(keyword, "name", "sheetNo", "projectName"));
+        }
         return repository.findAll(specification, pageable).map(this::toResponse);
     }
 
@@ -459,9 +467,12 @@ public class QuoteSheetStore {
      * 未通过时抛 422(VALIDATION_ERROR), 避免落库触发 {@code uk_quote_item_price} 唯一键 409。
      */
     private void validateItemPrices(QuoteSheetRequest.ItemRequest item, Set<String> brandNames) {
-        if (item == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "商品行不能为空");
-        }
+        /*
+         * 这里原先还有一个 `item == null` 判空。它恒假：本方法唯一调用点是
+         * {@link #validateProductRow}，而后者的两个调用点（{@link #validate} 的循环、
+         * {@link #validateRowForWrite}）都在调用前已判过 null。留着会让读者以为
+         * 存在"商品行可为 null"的入口，反而掩盖真实的空值契约。
+         */
         if (item.prices() == null) {
             return;
         }
