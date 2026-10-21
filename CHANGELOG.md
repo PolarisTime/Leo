@@ -1,3 +1,10 @@
+## [14.0.2](https://github.com/PolarisTime/Leo/compare/v14.0.1...v14.0.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* **quotation:** 删死常量、修关键字 LIKE 通配符泄漏、清不可达判空 ([3571f8f](https://github.com/PolarisTime/Leo/commit/3571f8fea683212f265ba712ba701c4aba8af99e))
+
 ## [14.0.1](https://github.com/PolarisTime/Leo/compare/v14.0.0...v14.0.1) (2026-10-20)
 
 
