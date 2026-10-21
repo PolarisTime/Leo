@@ -6,7 +6,6 @@ import com.leo.erp.common.retry.TransientCallException;
 import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.leo.erp.market.QuoteNotPublishedException;
 import com.leo.erp.market.domain.entity.SteelArticle;
-import com.leo.erp.market.repository.SteelArticleRepository;
 import com.leo.erp.market.steelx.SteelxArticleParser;
 import com.leo.erp.market.steelx.SteelxArticleParser.SteelxQuoteRow;
 import com.leo.erp.market.steelx.SteelxFetcher;
@@ -32,17 +31,14 @@ public class SteelxQuoteSyncService {
     private final SteelxProperties properties;
     private final SteelxFetcher fetcher;
     private final SteelQuoteStore steelQuoteStore;
-    private final SteelArticleRepository articleRepository;
     private final SteelQuoteClosedDayService closedDayService;
 
     public SteelxQuoteSyncService(SteelxProperties properties, SteelxFetcher fetcher,
                                   SteelQuoteStore steelQuoteStore,
-                                  SteelArticleRepository articleRepository,
                                   SteelQuoteClosedDayService closedDayService) {
         this.properties = properties;
         this.fetcher = fetcher;
         this.steelQuoteStore = steelQuoteStore;
-        this.articleRepository = articleRepository;
         this.closedDayService = closedDayService;
     }
 
@@ -153,28 +149,21 @@ public class SteelxQuoteSyncService {
         }
     }
 
-    /** 指定地区是否受支持。 */
-    public boolean supportsRegion(String region) {
-        return properties.supportsRegion(region);
-    }
-
+    /*
+     * 地区支持性判断的**唯一出口**。
+     *
+     * <p>原先还有 `public boolean supportsRegion(region)` 与它并存：同一个
+     * `properties.supportsRegion(region)` 判断被写了两份（一份返回布尔、一份抛异常），
+     * 而那个公开版零引用 —— 违反本仓库「同一口径只在一处实现」。已删除。
+     * 同上删除零引用的 `isEnabled()`（其 Javadoc 写"供定时任务"，但
+     * {@code SteelxQuoteScheduledTasks} 实际调的是 {@code properties.isEnabled()}，
+     * 留着只会把排查开关行为的人带偏）与 `latestArticleDate()`。</p>
+     */
     private String requireSupportedRegion(String region) {
         if (!properties.supportsRegion(region)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR,
                     "不支持的地区: " + region + "; 支持: " + String.join("/", properties.supportedRegions()));
         }
         return region.trim();
-    }
-
-    /** 供定时任务: 是否启用。 */
-    public boolean isEnabled() {
-        return properties.isEnabled();
-    }
-
-    /** 供查询: 已入库行情的最新西本文章日期。 */
-    public java.util.Optional<LocalDate> latestArticleDate(String region) {
-        return articleRepository.findFirstBySourceAndMarketAndDeletedFlagFalseOrderByArticleDateDescArticleTimeDesc(
-                        properties.getSource(), region)
-                .map(SteelArticle::getArticleDate);
     }
 }

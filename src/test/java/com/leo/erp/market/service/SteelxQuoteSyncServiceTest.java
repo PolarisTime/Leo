@@ -3,7 +3,6 @@ package com.leo.erp.market.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.retry.TransientCallException;
 import com.leo.erp.market.domain.entity.SteelArticle;
-import com.leo.erp.market.repository.SteelArticleRepository;
 import com.leo.erp.market.steelx.SteelxArticleParser;
 import com.leo.erp.market.steelx.SteelxFetcher;
 import com.leo.erp.market.QuoteNotPublishedException;
@@ -46,9 +45,6 @@ class SteelxQuoteSyncServiceTest {
     private SteelQuoteStore steelQuoteStore;
 
     @Mock
-    private SteelArticleRepository articleRepository;
-
-    @Mock
     private SteelQuoteClosedDayService closedDayService;
 
     private static String page(String rows) {
@@ -61,8 +57,7 @@ class SteelxQuoteSyncServiceTest {
     }
 
     private SteelxQuoteSyncService service() {
-        return new SteelxQuoteSyncService(properties, fetcher, steelQuoteStore, articleRepository,
-                closedDayService);
+        return new SteelxQuoteSyncService(properties, fetcher, steelQuoteStore, closedDayService);
     }
 
     private void stubSupportedRegion() {
