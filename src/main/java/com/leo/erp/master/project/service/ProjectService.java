@@ -111,6 +111,7 @@ public class ProjectService {
     @CacheEvict(value = CacheConfig.CACHE_PROJECT_OPTIONS, allEntries = true)
     public ProjectResponse create(ProjectRequest request) {
         ProjectRequest normalized = normalizeCreateRequest(request);
+        requireSettlementCompany(normalized);
         codeIssuanceService.validate(CODE_MODULE_KEY, normalized.projectCode());
         Project entity = new Project();
         long entityId = snowflakeIdGenerator.nextId();
@@ -127,6 +128,7 @@ public class ProjectService {
         Project entity = requireActiveProject(id);
         String currentName = entity.getProjectName();
         ProjectRequest normalized = normalizeUpdateRequest(entity, request);
+        requireSettlementCompany(normalized);
         apply(entity, normalized);
         String nextName = entity.getProjectName();
         Project saved = projectRepository.save(entity);
@@ -218,7 +220,7 @@ public class ProjectService {
     }
 
     private ProjectRequest normalizeCreateRequest(ProjectRequest request) {
-        return normalizeCustomerIdentity(request, null);
+        return normalizeCustomerIdentity(request);
     }
 
     private ProjectRequest normalizeUpdateRequest(Project entity, ProjectRequest request) {
@@ -240,8 +242,7 @@ public class ProjectService {
                         request.priceDateBasis(), request.priceDateOffsetDays(),
                         request.priceClosedDayPrevSettle(), request.pricePeriodPolicy(),
                         request.pricePeriodFixed(), request.remark()
-                ),
-                entity
+                )
         );
     }
 
@@ -428,9 +429,9 @@ public class ProjectService {
         return projectMapper.toResponse(entity);
     }
 
-    private ProjectRequest normalizeCustomerIdentity(ProjectRequest request, Project existingEntity) {
+    private ProjectRequest normalizeCustomerIdentity(ProjectRequest request) {
         if (customerRepository == null) {
-            return resolveSettlementCompany(request, null, null);
+            return resolveSettlementCompany(request);
         }
         String requestedCustomerCode = trimToNull(request.customerCode());
         if (request.customerId() == null && requestedCustomerCode == null) {
@@ -453,12 +454,11 @@ public class ProjectService {
         if (requestedCustomerCode != null && !requestedCustomerCode.equals(customerCode)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "客户ID与客户编码不一致");
         }
-        Long fallbackSettlementCompanyId = request.settlementCompanyId();
-        String fallbackSettlementCompanyName = request.settlementCompanyName();
-        if (fallbackSettlementCompanyId == null && existingEntity == null) {
-            fallbackSettlementCompanyId = customer.getDefaultSettlementCompanyId();
-            fallbackSettlementCompanyName = customer.getDefaultSettlementCompanyName();
-        }
+        /*
+         * 结算主体不再从客户默认值回退：客户资料已不维护结算主体，且同一客户下的项目
+         * 常分属不同主体，用客户默认值填项目只会制造错误快照。缺失时由 create/update
+         * 的 requireSettlementCompany 统一报「请选择结算主体」。
+         */
         return resolveSettlementCompany(new ProjectRequest(
                 request.projectCode(),
                 request.projectName(),
@@ -467,8 +467,8 @@ public class ProjectService {
                 request.projectManager(),
                 customer.getId(),
                 customerCode,
-                fallbackSettlementCompanyId,
-                fallbackSettlementCompanyName,
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
                 request.status(),
                 request.priceFloatMode(),
                 request.priceFloatValue(),
@@ -484,18 +484,26 @@ public class ProjectService {
                 request.pricePeriodPolicy(),
                 request.pricePeriodFixed(),
                 request.remark()
-        ), customer.getDefaultSettlementCompanyId(), customer.getDefaultSettlementCompanyName());
+        ));
     }
 
-    private ProjectRequest resolveSettlementCompany(ProjectRequest request,
-                                                    Long fallbackId,
-                                                    String fallbackName) {
-        Long settlementCompanyId = request.settlementCompanyId() == null
-                ? fallbackId
-                : request.settlementCompanyId();
-        String settlementCompanyName = request.settlementCompanyName() == null
-                ? fallbackName
-                : request.settlementCompanyName();
+    /** 结算主体必填：缺失时返回 422 语义，而不是静默落空（打印模板按主体绑定，空主体会选不到模板）。 */
+    private void requireSettlementCompany(ProjectRequest request) {
+        if (request.settlementCompanyId() == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "请选择结算主体（结算主体在项目资料中配置，客户资料不再维护默认主体）");
+        }
+    }
+
+    /**
+     * 校验并补全结算主体快照。
+     *
+     * <p>入参已由 {@link #requireSettlementCompany(ProjectRequest)} 保证非空；这里只做
+     * "主体存在且有效"的校验，并把名称快照补成服务端权威值（不信任客户端传来的名称）。</p>
+     */
+    private ProjectRequest resolveSettlementCompany(ProjectRequest request) {
+        Long settlementCompanyId = request.settlementCompanyId();
+        String settlementCompanyName = request.settlementCompanyName();
         if (settlementCompanyId == null || companySettingService == null) {
             return new ProjectRequest(
                     request.projectCode(), request.projectName(), request.projectNameAbbr(),

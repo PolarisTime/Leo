@@ -146,7 +146,7 @@ public class SalesOrderApplyService {
         entity.setDeliveryDate(request.deliveryDate());
         entity.setOrderDate(resolveOrderDate(entity.getOrderDate(), request.orderDate()));
         entity.setSalesName(request.salesName());
-        applyProjectSettlementCompany(entity, request, project, customer);
+        applyProjectSettlementCompany(entity, request, project);
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
     }
@@ -229,10 +229,22 @@ public class SalesOrderApplyService {
         return new ItemTotals(weightTon, amount);
     }
 
+    /**
+     * 销售订单结算主体：**项目资料是唯一来源**。
+     *
+     * <p>历史行为在项目未配置主体时回退到「客户默认结算主体」；该字段已从客户资料下线，
+     * 且同一客户下的项目常分属不同主体，用客户默认值兜底只会生成错误快照（打印模板按主体
+     * 绑定，主体错了就选不到模板）。现在的口径：</p>
+     * <ol>
+     *   <li>项目已配置主体 → 必须与请求一致（请求带主体时校验），落项目快照；</li>
+     *   <li>项目未配置主体但请求显式带了主体 → 用请求值（兼容无项目的单据）；</li>
+     *   <li>项目存在却没配置主体、请求也没带 → 直接 422，提示去项目资料补齐；</li>
+     *   <li>没有项目、也没有请求主体 → 保持空（这类单据只能用通用打印模板）。</li>
+     * </ol>
+     */
     private void applyProjectSettlementCompany(SalesOrder entity,
                                                SalesOrderRequest request,
-                                               ProjectQuery.ProjectSnapshot project,
-                                               CustomerQuery.CustomerSnapshot customer) {
+                                               ProjectQuery.ProjectSnapshot project) {
         if (shouldPreserveExistingSettlementCompany(entity)) {
             return;
         }
@@ -251,13 +263,12 @@ public class SalesOrderApplyService {
             entity.setSettlementCompanyName(requestedSettlementCompany.name());
             return;
         }
-        if (customer == null) {
-            entity.setSettlementCompanyId(null);
-            entity.setSettlementCompanyName(null);
-            return;
+        if (project != null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "所选项目未配置结算主体，请先在项目资料中设置");
         }
-        entity.setSettlementCompanyId(customer.defaultSettlementCompanyId());
-        entity.setSettlementCompanyName(customer.defaultSettlementCompanyName());
+        entity.setSettlementCompanyId(null);
+        entity.setSettlementCompanyName(null);
     }
 
     private boolean shouldPreserveExistingSettlementCompany(SalesOrder entity) {

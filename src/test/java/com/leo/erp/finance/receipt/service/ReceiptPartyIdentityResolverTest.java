@@ -49,7 +49,7 @@ class ReceiptPartyIdentityResolverTest {
                 companySettingRepository
         );
         when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(
-                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null, 30L, "客户主体")
+                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null)
         ));
         when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(
                 new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001", 40L, "项目主体")

@@ -49,12 +49,6 @@ public class Customer extends AbstractAuditableEntity {
     @Column(name = "project_address", length = 255)
     private String projectAddress;
 
-    @Column(name = "default_settlement_company_id")
-    private Long defaultSettlementCompanyId;
-
-    @Column(name = "default_settlement_company_name", length = 128)
-    private String defaultSettlementCompanyName;
-
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 

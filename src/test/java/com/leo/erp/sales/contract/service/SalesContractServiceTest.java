@@ -399,7 +399,7 @@ class SalesContractServiceTest {
     }
 
     private CustomerQuery.CustomerSnapshot customer(Long id, String name) {
-        return new CustomerQuery.CustomerSnapshot(id, "C001", name, "项目乙", null, null);
+        return new CustomerQuery.CustomerSnapshot(id, "C001", name, "项目乙");
     }
 
     private ProjectQuery.ProjectSnapshot project(Long id, String name) {

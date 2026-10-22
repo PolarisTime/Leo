@@ -56,7 +56,7 @@ class MasterDataRequestSizeValidationTest {
     }
 
     private CustomerRequest customer(String name, String phone) {
-        return new CustomerRequest("C-1", name, null, phone, null, null, null, null, null, 1L, "正常", null);
+        return new CustomerRequest("C-1", name, null, phone, null, null, null, null, null, "正常", null);
     }
 
     private SupplierRequest supplier(String name, String shortName) {

@@ -58,6 +58,14 @@ class ProjectServiceTest {
     @Mock
     private ReferenceSnapshotSyncService referenceSnapshotSyncService;
 
+    @org.junit.jupiter.api.BeforeEach
+    void stubSettlementCompany() {
+        org.mockito.Mockito.lenient()
+                .when(companySettingService.requireActiveSettlementCompanySnapshot(org.mockito.ArgumentMatchers.anyLong()))
+                .thenAnswer(invocation -> new SettlementCompanySnapshot(
+                        invocation.getArgument(0), "结算公司A"));
+    }
+
     private ProjectService service() {
         return new ProjectService(snowflakeIdGenerator, projectRepository, projectMapper, referenceGuard,
                 customerRepository, companySettingService, codeIssuanceService, referenceSnapshotSyncService);
@@ -65,23 +73,21 @@ class ProjectServiceTest {
 
     private ProjectRequest request(Long customerId, String customerCode) {
         return new ProjectRequest("111", "项目A", "项A", "地址", "张三",
-                customerId, customerCode, null, null, "正常", "备注");
+                customerId, customerCode, 55L, "结算公司A", "正常", "备注");
     }
 
-    private Customer customer(Long id, String code, Long settlementCompanyId, String settlementCompanyName) {
+    private Customer customer(Long id, String code) {
         Customer customer = new Customer();
         customer.setId(id);
         customer.setCustomerCode(code);
-        customer.setDefaultSettlementCompanyId(settlementCompanyId);
-        customer.setDefaultSettlementCompanyName(settlementCompanyName);
         return customer;
     }
 
     @Test
-    void create_resolvesCustomerIdentityAndDefaultSettlementCompany() {
+    void create_resolvesCustomerIdentityAndSettlementCompanyFromRequest() {
         Project[] savedHolder = new Project[1];
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", 55L, "结算公司A")));
+                .thenReturn(Optional.of(customer(7L, "C007")));
         when(companySettingService.requireActiveSettlementCompanySnapshot(55L))
                 .thenReturn(new SettlementCompanySnapshot(55L, "结算公司A"));
         when(snowflakeIdGenerator.nextId()).thenReturn(100L);
@@ -109,7 +115,7 @@ class ProjectServiceTest {
     @Test
     void create_trimsUserVisibleStrings() {        Project[] savedHolder = new Project[1];
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
         when(snowflakeIdGenerator.nextId()).thenReturn(100L);
         when(codeIssuanceService.resolve(eq("project"), any(), anyString())).thenReturn("111");
         when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
@@ -119,7 +125,7 @@ class ProjectServiceTest {
         });
 
         service().create(new ProjectRequest("  111  ", "  项目A  ", " 项A ", " 地址 ", " 张三 ",
-                7L, " C007 ", null, null, "正常", " 备注 "));
+                7L, " C007 ", 55L, "结算公司A", "正常", " 备注 "));
 
         Project entity = savedHolder[0];
         assertThat(entity.getProjectName()).isEqualTo("项目A");
@@ -144,7 +150,7 @@ class ProjectServiceTest {
     @Test
     void create_customerIdMismatchWithCode_rejected() {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
 
         assertThatThrownBy(() -> service().create(request(7L, "C999")))
                 .isInstanceOf(BusinessException.class)
@@ -156,7 +162,7 @@ class ProjectServiceTest {
     void create_legacyCustomerCode_fallsBackToCustomerLookup() {
         Project[] savedHolder = new Project[1];
         when(customerRepository.findByCustomerCodeAndDeletedFlagFalse("C007"))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
         when(snowflakeIdGenerator.nextId()).thenReturn(100L);
         when(codeIssuanceService.resolve("project", null, "111")).thenReturn("111");
         when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
@@ -170,7 +176,8 @@ class ProjectServiceTest {
         Project entity = savedHolder[0];
         assertThat(entity.getCustomerId()).isEqualTo(7L);
         assertThat(entity.getCustomerCode()).isEqualTo("C007");
-        assertThat(entity.getSettlementCompanyId()).isNull();
+        // 结算主体来自请求（客户资料已不维护默认主体）
+        assertThat(entity.getSettlementCompanyId()).isEqualTo(55L);
     }
 
     @Test
@@ -193,13 +200,15 @@ class ProjectServiceTest {
         entity.setSettlementCompanyName("结算公司B");
         when(projectRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", 55L, "结算公司A")));
+                .thenReturn(Optional.of(customer(7L, "C007")));
         when(companySettingService.requireActiveSettlementCompanySnapshot(66L))
                 .thenReturn(new SettlementCompanySnapshot(66L, "结算公司B"));
         when(codeIssuanceService.resolve("project", "P001", "111")).thenReturn("P001");
         when(projectRepository.save(entity)).thenReturn(entity);
 
-        service().update(5L, request(7L, "C007"));
+        // 请求省略结算主体 → 沿用实体上已配置的主体（不因缺省被清空）
+        service().update(5L, new ProjectRequest("111", "项目A", "项A", "地址", "张三",
+                7L, "C007", null, null, "正常", "备注"));
 
         assertThat(entity.getSettlementCompanyId()).isEqualTo(66L);
         assertThat(entity.getSettlementCompanyName()).isEqualTo("结算公司B");
@@ -213,7 +222,7 @@ class ProjectServiceTest {
         entity.setProjectCode("P001");
         when(projectRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
         when(codeIssuanceService.resolve("project", "P001", "111")).thenReturn("P001");
         when(projectRepository.save(entity)).thenReturn(entity);
 
@@ -308,7 +317,7 @@ class ProjectServiceTest {
     void create_defaultsQuoteSourceAndRegionWhenAbsent() {
         Project[] savedHolder = new Project[1];
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
         when(snowflakeIdGenerator.nextId()).thenReturn(100L);
         when(codeIssuanceService.resolve(eq("project"), any(), anyString())).thenReturn("111");
         when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
@@ -319,7 +328,7 @@ class ProjectServiceTest {
 
         // quoteSource/quoteRegion 都不传(等同于用户在页面上没动这两个字段)
         service().create(new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", null, null, "正常", null, null,
+                7L, "C007", 55L, "结算公司A", "正常", null, null,
                 null, null,
                 null, null, null, null,
                 null, null, null,
@@ -335,7 +344,7 @@ class ProjectServiceTest {
     void create_keepsExplicitQuoteSourceAndRegion() {
         Project[] savedHolder = new Project[1];
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
         when(snowflakeIdGenerator.nextId()).thenReturn(100L);
         when(codeIssuanceService.resolve(eq("project"), any(), anyString())).thenReturn("111");
         when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
@@ -345,7 +354,7 @@ class ProjectServiceTest {
         });
 
         service().create(new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", null, null, "正常", null, null,
+                7L, "C007", 55L, "结算公司A", "正常", null, null,
                 "STEELX", "嘉兴",
                 null, null, null, null,
                 null, null, null,
@@ -360,7 +369,7 @@ class ProjectServiceTest {
     void create_persistsPriceFloatAdd() {
         Project[] savedHolder = new Project[1];
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
         when(snowflakeIdGenerator.nextId()).thenReturn(100L);
         when(codeIssuanceService.resolve(eq("project"), any(), anyString())).thenReturn("111");
         when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
@@ -370,7 +379,7 @@ class ProjectServiceTest {
         });
 
         service().create(new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", null, null, "正常", "ADD",
+                7L, "C007", 55L, "结算公司A", "正常", "ADD",
                 new java.math.BigDecimal("30.00"), null));
 
         Project entity = savedHolder[0];
@@ -382,7 +391,7 @@ class ProjectServiceTest {
     void create_clearsFloatWhenModeAbsent() {
         Project[] savedHolder = new Project[1];
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
         when(snowflakeIdGenerator.nextId()).thenReturn(100L);
         when(codeIssuanceService.resolve(eq("project"), any(), anyString())).thenReturn("111");
         when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
@@ -393,7 +402,7 @@ class ProjectServiceTest {
 
         // 未配置方向时应清空幅度, 避免残留半配置
         service().create(new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", null, null, "正常", null,
+                7L, "C007", 55L, "结算公司A", "正常", null,
                 new java.math.BigDecimal("30.00"), null));
 
         Project entity = savedHolder[0];
@@ -404,10 +413,10 @@ class ProjectServiceTest {
     @Test
     void create_rejectsInvalidFloatMode() {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
 
         assertThatThrownBy(() -> service().create(new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", null, null, "正常", "UP",
+                7L, "C007", 55L, "结算公司A", "正常", "UP",
                 new java.math.BigDecimal("30.00"), null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
@@ -418,10 +427,10 @@ class ProjectServiceTest {
     @Test
     void create_rejectsFloatModeWithoutValue() {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
 
         assertThatThrownBy(() -> service().create(new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", null, null, "正常", "SUBTRACT", null, null)))
+                7L, "C007", 55L, "结算公司A", "正常", "SUBTRACT", null, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.VALIDATION_ERROR);
@@ -459,7 +468,7 @@ class ProjectServiceTest {
     /** 项目下拉要带上允许品牌/材质, 销售订单导入采购订单时才能在前端做匹配预警。 */
     @Test
     void listActiveOptions_splitsAllowedSpecIntoLists() {
-        Customer customer = customer(7L, "C007", null, null);
+        Customer customer = customer(7L, "C007");
         when(customerRepository.findByIdAndDeletedFlagFalse(7L)).thenReturn(Optional.of(customer));
         Project project = new Project();
         project.setId(5L);
@@ -482,7 +491,7 @@ class ProjectServiceTest {
     @Test
     void listActiveOptions_absentAllowedSpec_returnsEmptyLists() {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
         Project project = new Project();
         project.setId(5L);
         project.setProjectCode("P001");
@@ -499,7 +508,7 @@ class ProjectServiceTest {
 
     private void stubCreateSave(Project[] savedHolder) {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
         when(snowflakeIdGenerator.nextId()).thenReturn(100L);
         when(codeIssuanceService.resolve(eq("project"), any(), anyString())).thenReturn("111");
         when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
@@ -518,7 +527,7 @@ class ProjectServiceTest {
                                               String allowedBrandSeverity,
                                               String allowedMaterialSeverity) {
         return new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", null, null, "正常", null, null, null, null,
+                7L, "C007", 55L, "结算公司A", "正常", null, null, null, null,
                 allowedBrands, allowedMaterials, allowedBrandSeverity, allowedMaterialSeverity,
                 null, null, null, null, null, null);
     }
@@ -564,7 +573,7 @@ class ProjectServiceTest {
     @Test
     void create_rejectsUnknownSeverity() {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
 
         assertThatThrownBy(() -> service().create(
                 allowedSpecRequest(List.of("沙钢"), List.of(), "DISABLED", null)))
@@ -650,7 +659,7 @@ class ProjectServiceTest {
     @Test
     void create_fixedPeriodPolicyWithoutPeriod_rejected() {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
 
         assertThatThrownBy(() -> service().create(pricingRequest(null, null, null, "FIXED", null)))
                 .isInstanceOf(BusinessException.class)
@@ -663,7 +672,7 @@ class ProjectServiceTest {
     @Test
     void create_fixedPeriodPolicyWithUnknownPeriod_rejected() {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
 
         assertThatThrownBy(() -> service().create(pricingRequest(null, null, null, "FIXED", "傍晚")))
                 .isInstanceOf(BusinessException.class)
@@ -676,7 +685,7 @@ class ProjectServiceTest {
     @Test
     void create_rejectsUnknownPriceDateBasis() {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
 
         assertThatThrownBy(() -> service().create(pricingRequest("WEEKLY", null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
@@ -689,7 +698,7 @@ class ProjectServiceTest {
     @Test
     void create_rejectsUnknownPricePeriodPolicy() {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
 
         assertThatThrownBy(() -> service().create(pricingRequest(null, null, null, "SOMETIMES", null)))
                 .isInstanceOf(BusinessException.class)
@@ -702,7 +711,7 @@ class ProjectServiceTest {
     @Test
     void create_rejectsOffsetDaysAboveLimit() {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
 
         assertThatThrownBy(() -> service().create(pricingRequest("ORDER", 31, null, null, null)))
                 .isInstanceOf(BusinessException.class)
@@ -720,7 +729,7 @@ class ProjectServiceTest {
     @Test
     void create_offsetOutOfRangeWithNonOrderBasis_isRejected() {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
 
         assertThatThrownBy(() -> service().create(pricingRequest("DELIVERY", 31, null, null, null)))
                 .isInstanceOf(BusinessException.class)
@@ -753,7 +762,7 @@ class ProjectServiceTest {
         entity.setPriceClosedDayPrevSettle(true);
         when(projectRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
         when(codeIssuanceService.resolve("project", "P001", "111")).thenReturn("P001");
         when(projectRepository.save(entity)).thenReturn(entity);
 
@@ -775,7 +784,7 @@ class ProjectServiceTest {
         entity.setPricePeriodFixed("中午");
         when(projectRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
-                .thenReturn(Optional.of(customer(7L, "C007", null, null)));
+                .thenReturn(Optional.of(customer(7L, "C007")));
         when(codeIssuanceService.resolve("project", "P001", "111")).thenReturn("P001");
         when(projectRepository.save(entity)).thenReturn(entity);
 
@@ -789,7 +798,7 @@ class ProjectServiceTest {
                                           Boolean priceClosedDayPrevSettle, String pricePeriodPolicy,
                                           String pricePeriodFixed) {
         return new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", null, null, "正常", null, null, null, null,
+                7L, "C007", 55L, "结算公司A", "正常", null, null, null, null,
                 null, null, null, null,
                 priceDateBasis, priceDateOffsetDays, priceClosedDayPrevSettle,
                 pricePeriodPolicy, pricePeriodFixed, null);

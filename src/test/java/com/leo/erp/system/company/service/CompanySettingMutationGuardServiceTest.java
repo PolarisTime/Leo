@@ -49,7 +49,6 @@ class CompanySettingMutationGuardServiceTest {
                 .toList();
         assertThat(tables).contains(
                 "md_carrier",
-                "md_customer",
                 "md_project",
                 "po_purchase_order",
                 "so_sales_order",
@@ -58,6 +57,8 @@ class CompanySettingMutationGuardServiceTest {
                 "fm_payment",
                 "sys_print_template"
         );
+        // 客户资料已删除默认结算主体列（V193/V194），守卫不能再查 md_customer.default_settlement_company_id
+        assertThat(tables).doesNotContain("md_customer");
     }
 
     @Test

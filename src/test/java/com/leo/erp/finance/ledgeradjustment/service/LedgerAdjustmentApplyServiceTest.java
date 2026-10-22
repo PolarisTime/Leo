@@ -46,7 +46,7 @@ class LedgerAdjustmentApplyServiceTest {
     void apply_shouldFollowProjectSettlementCompany() {
         LedgerAdjustmentApplyService service = service();
         when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(
-                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null, 30L, "客户主体")
+                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null)
         ));
         when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(
                 new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001", 40L, "项目主体")
@@ -66,7 +66,7 @@ class LedgerAdjustmentApplyServiceTest {
     void apply_shouldRejectSettlementCompanyDifferentFromProject() {
         LedgerAdjustmentApplyService service = service();
         when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(
-                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null, 30L, "客户主体")
+                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null)
         ));
         when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(
                 new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001", 40L, "项目主体")
@@ -81,7 +81,7 @@ class LedgerAdjustmentApplyServiceTest {
     void apply_shouldScaleAmountToTwoDecimals() {
         LedgerAdjustmentApplyService service = service();
         when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(
-                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null, 30L, "客户主体")
+                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null)
         ));
         when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(
                 new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001", 40L, "项目主体")
@@ -167,7 +167,7 @@ class LedgerAdjustmentApplyServiceTest {
     void apply_shouldRejectCounterpartySnapshotMismatch() {
         LedgerAdjustmentApplyService service = service();
         when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(
-                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null, 30L, "客户主体")
+                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null)
         ));
 
         assertThatThrownBy(() -> service.apply(new LedgerAdjustment(),
@@ -226,7 +226,7 @@ class LedgerAdjustmentApplyServiceTest {
     void apply_shouldRejectProjectNameWithoutProjectId() {
         LedgerAdjustmentApplyService service = service();
         when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(
-                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null, 30L, "客户主体")
+                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null)
         ));
 
         assertThatThrownBy(() -> service.apply(new LedgerAdjustment(),
@@ -240,7 +240,7 @@ class LedgerAdjustmentApplyServiceTest {
     void apply_shouldRejectProjectBelongingToOtherCustomer() {
         LedgerAdjustmentApplyService service = service();
         when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(
-                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null, 30L, "客户主体")
+                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null)
         ));
         when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(
                 new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 99L, "CUST099", 40L, "项目主体")
@@ -278,7 +278,7 @@ class LedgerAdjustmentApplyServiceTest {
     void apply_shouldTrimOperatorNameAndRemark() {
         LedgerAdjustmentApplyService service = service();
         when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(
-                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null, 30L, "客户主体")
+                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null)
         ));
         when(companySettingService.requireActiveSettlementCompany(30L))
                 .thenReturn(company(30L, "客户主体"));
@@ -295,7 +295,7 @@ class LedgerAdjustmentApplyServiceTest {
     void apply_shouldRejectBlankOperatorName() {
         LedgerAdjustmentApplyService service = service();
         when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(
-                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null, 30L, "客户主体")
+                new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null)
         ));
         when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(
                 new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001", 40L, "项目主体")

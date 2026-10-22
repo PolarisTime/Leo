@@ -1,9 +1,7 @@
 package com.leo.erp.master.customer.web.dto;
 
 import com.leo.erp.common.support.ValidationMessages;
-import com.leo.erp.common.validation.SnowflakeId;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 public record CustomerRequest(
@@ -27,8 +25,6 @@ public record CustomerRequest(
         String projectNameAbbr,
         @Size(max = 255, message = "项目地址长度不能超过255")
         String projectAddress,
-        @NotNull(message = "默认结算主体不能为空")
-        @SnowflakeId Long defaultSettlementCompanyId,
         @NotBlank(message = ValidationMessages.STATUS_REQUIRED)
         @Size(max = 16, message = "状态长度不能超过16")
         String status,

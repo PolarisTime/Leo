@@ -22,7 +22,7 @@ public class CompanySettingMutationGuardService {
         }
         referenceGuard.assertNoReferences("该结算主体", List.of(
                 ReferenceCheck.active("md_carrier", "default_settlement_company_id", entity.getId()),
-                ReferenceCheck.active("md_customer", "default_settlement_company_id", entity.getId()),
+                // md_customer 不再有默认结算主体列（结算主体已收敛到项目资料，见 V193/V194）
                 ReferenceCheck.active("md_project", "settlement_company_id", entity.getId()),
                 ReferenceCheck.active("po_purchase_order", "settlement_company_id", entity.getId()),
                 ReferenceCheck.active("po_purchase_inbound", "settlement_company_id", entity.getId()),

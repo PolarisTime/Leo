@@ -471,7 +471,7 @@ class CustomerStatementSourceServiceTest {
                 .thenReturn(List.of());
         when(customerQuery.findFirstActiveByNameAndProjectNameOrderByCode("客户A", "项目A"))
                 .thenReturn(Optional.of(new CustomerQuery.CustomerSnapshot(
-                        1L, "FALLBACK", "客户A", "项目A", null, null)));
+                        1L, "FALLBACK", "客户A", "项目A")));
         CustomerStatement entity = entity();
         CustomerStatementRequest request = request(null, null, "客户A", "项目A", null, null,
                 List.of(itemRequest(null, 11L)));

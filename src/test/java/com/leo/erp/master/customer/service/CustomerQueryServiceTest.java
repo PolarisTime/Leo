@@ -32,8 +32,6 @@ class CustomerQueryServiceTest {
         customer.setCustomerCode("C001");
         customer.setCustomerName("客户甲");
         customer.setProjectName("项目A");
-        customer.setDefaultSettlementCompanyId(100L);
-        customer.setDefaultSettlementCompanyName("结算公司X");
         return customer;
     }
 
@@ -46,7 +44,7 @@ class CustomerQueryServiceTest {
         Optional<CustomerSnapshot> snapshot = service.findActiveById(1L);
 
         assertThat(snapshot).contains(new CustomerSnapshot(
-                1L, "C001", "客户甲", "项目A", 100L, "结算公司X"
+                1L, "C001", "客户甲", "项目A"
         ));
     }
 
@@ -55,18 +53,6 @@ class CustomerQueryServiceTest {
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.empty());
 
         assertThat(service.findActiveById(1L)).isEmpty();
-    }
-
-    @Test
-    void findActiveById_shouldMapNullableSettlementCompanyWhenPresent() {
-        Customer customer = customer();
-        customer.setDefaultSettlementCompanyId(null);
-        customer.setDefaultSettlementCompanyName(null);
-        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(customer));
-
-        assertThat(service.findActiveById(1L)).contains(new CustomerSnapshot(
-                1L, "C001", "客户甲", "项目A", null, null
-        ));
     }
 
     // ---------- findActiveByCode ----------
@@ -78,7 +64,7 @@ class CustomerQueryServiceTest {
         Optional<CustomerSnapshot> snapshot = service.findActiveByCode("C001");
 
         assertThat(snapshot).contains(new CustomerSnapshot(
-                1L, "C001", "客户甲", "项目A", 100L, "结算公司X"
+                1L, "C001", "客户甲", "项目A"
         ));
     }
 
@@ -101,7 +87,7 @@ class CustomerQueryServiceTest {
                 service.findFirstActiveByNameAndProjectNameOrderByCode("客户甲", "项目A");
 
         assertThat(snapshot).contains(new CustomerSnapshot(
-                1L, "C001", "客户甲", "项目A", 100L, "结算公司X"
+                1L, "C001", "客户甲", "项目A"
         ));
     }
 

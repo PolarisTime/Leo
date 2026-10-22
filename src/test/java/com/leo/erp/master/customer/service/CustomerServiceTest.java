@@ -14,8 +14,6 @@ import com.leo.erp.master.customer.web.dto.CustomerResponse;
 import com.leo.erp.master.project.domain.entity.Project;
 import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.master.service.ReferenceSnapshotSyncService;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
-import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -49,8 +47,6 @@ class CustomerServiceTest {
     @Mock
     private MasterDataReferenceGuard referenceGuard;
     @Mock
-    private CompanySettingService companySettingService;
-    @Mock
     private MasterDataCodeIssuanceService codeIssuanceService;
     @Mock
     private ProjectRepository projectRepository;
@@ -59,29 +55,25 @@ class CustomerServiceTest {
 
     private CustomerService service() {
         return new CustomerService(customerRepository, snowflakeIdGenerator, customerMapper,
-                referenceGuard, companySettingService, codeIssuanceService, projectRepository,
+                referenceGuard, codeIssuanceService, projectRepository,
                 referenceSnapshotSyncService);
     }
 
     private CustomerRequest request(String customerName) {
         return new CustomerRequest("KH001", customerName, "联系人", "13800000000",
-                "上海", "月结", null, null, null, 9L, "正常", "备注");
+                "上海", "月结", null, null, null, "正常", "备注");
     }
 
     private CustomerResponse baseResponse(String customerName) {
         return new CustomerResponse(5L, "KH001", customerName, "联系人", "13800000000",
-                "上海", "月结", null, null, null, 9L, "结算公司C", "正常", "备注", "");
+                "上海", "月结", null, null, null, "正常", "备注", "");
     }
 
     @Test
-    void create_assignsSnowflakeIdResolvesSettlementCompanyAndDefaultsProjectName() {
+    void create_assignsSnowflakeIdAndDefaultsProjectName() {
         Customer[] savedHolder = new Customer[1];
-        CompanySetting company = new CompanySetting();
-        company.setId(9L);
-        company.setCompanyName("结算公司C");
         when(snowflakeIdGenerator.nextId()).thenReturn(77L);
         when(codeIssuanceService.resolve("customer", null, "KH001")).thenReturn("KH001");
-        when(companySettingService.requireActiveSettlementCompany(9L)).thenReturn(company);
         when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> {
             Customer entity = invocation.getArgument(0);
             savedHolder[0] = entity;
@@ -96,8 +88,6 @@ class CustomerServiceTest {
         assertThat(entity.getId()).isEqualTo(77L);
         assertThat(entity.getCustomerCode()).isEqualTo("KH001");
         assertThat(entity.getCustomerName()).isEqualTo("客户A");
-        assertThat(entity.getDefaultSettlementCompanyId()).isEqualTo(9L);
-        assertThat(entity.getDefaultSettlementCompanyName()).isEqualTo("结算公司C");
         assertThat(entity.getProjectName()).isEqualTo("客户A");
         assertThat(entity.getStatus()).isEqualTo("正常");
         verify(codeIssuanceService).validate("customer", "KH001");
@@ -107,12 +97,8 @@ class CustomerServiceTest {
     @Test
     void create_trimsUserVisibleStrings() {
         Customer[] savedHolder = new Customer[1];
-        CompanySetting company = new CompanySetting();
-        company.setId(9L);
-        company.setCompanyName("结算公司C");
         when(snowflakeIdGenerator.nextId()).thenReturn(77L);
         when(codeIssuanceService.resolve(eq("customer"), any(), anyString())).thenReturn("KH001");
-        when(companySettingService.requireActiveSettlementCompany(9L)).thenReturn(company);
         when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> {
             Customer entity = invocation.getArgument(0);
             savedHolder[0] = entity;
@@ -122,7 +108,7 @@ class CustomerServiceTest {
         when(projectRepository.findAllByCustomerIdentity(77L, "KH001")).thenReturn(List.of());
 
         service().create(new CustomerRequest("  KH001  ", "  客户A  ", " 联系人 ", " 138 ", " 上海 ",
-                " 月结 ", "  项目A ", " 项A ", " 地址 ", 9L, "正常", " 备注 "));
+                " 月结 ", "  项目A ", " 项A ", " 地址 ", "正常", " 备注 "));
 
         Customer entity = savedHolder[0];
         assertThat(entity.getCustomerName()).isEqualTo("客户A");
@@ -134,29 +120,6 @@ class CustomerServiceTest {
         assertThat(entity.getProjectNameAbbr()).isEqualTo("项A");
         assertThat(entity.getProjectAddress()).isEqualTo("地址");
         assertThat(entity.getRemark()).isEqualTo("备注");
-    }
-
-    @Test
-    void create_nullSettlementCompanyService_toleratedWithIdOnlySnapshot() {
-        CustomerService nullCollaboratorService = new CustomerService(customerRepository, snowflakeIdGenerator,
-                customerMapper, referenceGuard, null, codeIssuanceService, projectRepository,
-                referenceSnapshotSyncService);
-        Customer[] savedHolder = new Customer[1];
-        when(snowflakeIdGenerator.nextId()).thenReturn(77L);
-        when(codeIssuanceService.resolve("customer", null, "KH001")).thenReturn("KH001");
-        when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> {
-            Customer entity = invocation.getArgument(0);
-            savedHolder[0] = entity;
-            return entity;
-        });
-        when(customerMapper.toResponse(any(Customer.class))).thenReturn(baseResponse("客户A"));
-        when(projectRepository.findAllByCustomerIdentity(77L, "KH001")).thenReturn(List.of());
-
-        nullCollaboratorService.create(request("客户A"));
-
-        assertThat(savedHolder[0].getDefaultSettlementCompanyId()).isEqualTo(9L);
-        assertThat(savedHolder[0].getDefaultSettlementCompanyName()).isNull();
-        verify(companySettingService, never()).requireActiveSettlementCompany(any());
     }
 
     @Test
@@ -182,7 +145,7 @@ class CustomerServiceTest {
         project.setCustomerId(5L);
         when(projectRepository.findAllByCustomerIdentity(5L, "KH001")).thenReturn(List.of(project));
         CustomerResponse base = new CustomerResponse(5L, "KH001", "客户A", null, null,
-                null, null, null, null, null, null, null, "正常", null, null);
+                null, null, null, null, null, "正常", null, null);
         when(customerMapper.toResponse(entity)).thenReturn(base);
 
         CustomerResponse response = service().detail(5L);
@@ -196,10 +159,6 @@ class CustomerServiceTest {
         entity.setId(5L);
         entity.setCustomerName("旧名称");
         entity.setCustomerCode("KH001");
-        CompanySetting company = new CompanySetting();
-        company.setId(9L);
-        company.setCompanyName("结算公司C");
-        when(companySettingService.requireActiveSettlementCompany(9L)).thenReturn(company);
         when(codeIssuanceService.resolve("customer", "KH001", "KH001")).thenReturn("KH001");
         when(customerRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(customerRepository.save(entity)).thenReturn(entity);
@@ -217,10 +176,6 @@ class CustomerServiceTest {
         entity.setId(5L);
         entity.setCustomerName("客户A");
         entity.setCustomerCode("KH001");
-        CompanySetting company = new CompanySetting();
-        company.setId(9L);
-        company.setCompanyName("结算公司C");
-        when(companySettingService.requireActiveSettlementCompany(9L)).thenReturn(company);
         when(codeIssuanceService.resolve("customer", "KH001", "KH001")).thenReturn("KH001");
         when(customerRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(customerRepository.save(entity)).thenReturn(entity);

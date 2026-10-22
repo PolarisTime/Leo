@@ -26,8 +26,6 @@ import com.leo.erp.master.customer.web.dto.CustomerResponse;
 import com.leo.erp.master.project.domain.entity.Project;
 import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.master.service.ReferenceSnapshotSyncService;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
-import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,7 +53,6 @@ public class CustomerService implements RedisCacheHealthCheck {
     private final CustomerRepository customerRepository;
     private final CustomerMapper customerMapper;
     private final MasterDataReferenceGuard referenceGuard;
-    private final CompanySettingService companySettingService;
     private final MasterDataCodeIssuanceService codeIssuanceService;
     private final ProjectRepository projectRepository;
     private final ReferenceSnapshotSyncService referenceSnapshotSyncService;
@@ -66,7 +63,6 @@ public class CustomerService implements RedisCacheHealthCheck {
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            CustomerMapper customerMapper,
                            MasterDataReferenceGuard referenceGuard,
-                           CompanySettingService companySettingService,
                            MasterDataCodeIssuanceService codeIssuanceService,
                            ProjectRepository projectRepository,
                            ReferenceSnapshotSyncService referenceSnapshotSyncService) {
@@ -74,7 +70,6 @@ public class CustomerService implements RedisCacheHealthCheck {
         this.customerRepository = customerRepository;
         this.customerMapper = customerMapper;
         this.referenceGuard = referenceGuard;
-        this.companySettingService = companySettingService;
         this.codeIssuanceService = codeIssuanceService;
         this.projectRepository = projectRepository;
         this.referenceSnapshotSyncService = referenceSnapshotSyncService;
@@ -153,9 +148,7 @@ public class CustomerService implements RedisCacheHealthCheck {
                         c.getCustomerName(),
                         c.getCustomerName(),
                         c.getCustomerCode(),
-                        c.getCustomerName(),
-                        c.getDefaultSettlementCompanyId(),
-                        c.getDefaultSettlementCompanyName()
+                        c.getCustomerName()
                 ))
                 .toList();
     }
@@ -221,9 +214,7 @@ public class CustomerService implements RedisCacheHealthCheck {
         } else if (trimToNull(entity.getProjectName()) == null) {
             entity.setProjectName(requireText(request.customerName(), "客户名称不能为空"));
         }
-        SettlementCompanySnapshot settlementCompany = resolveSettlementCompany(request.defaultSettlementCompanyId());
-        entity.setDefaultSettlementCompanyId(settlementCompany.id());
-        entity.setDefaultSettlementCompanyName(settlementCompany.name());
+        // 结算主体不再挂在客户上：改由项目资料选择（见 md_project.settlement_company_id）。
         entity.setStatus(StatusConstants.normalizeActiveStatus(request.status(), "客户状态"));
         entity.setRemark(trimToNull(request.remark()));
     }
@@ -317,8 +308,6 @@ public class CustomerService implements RedisCacheHealthCheck {
                 response.projectName(),
                 response.projectNameAbbr(),
                 response.projectAddress(),
-                response.defaultSettlementCompanyId(),
-                response.defaultSettlementCompanyName(),
                 response.status(),
                 response.remark(),
                 projectNames
@@ -390,14 +379,4 @@ public class CustomerService implements RedisCacheHealthCheck {
         );
     }
 
-    private SettlementCompanySnapshot resolveSettlementCompany(Long id) {
-        if (companySettingService == null) {
-            return new SettlementCompanySnapshot(id, null);
-        }
-        CompanySetting company = companySettingService.requireActiveSettlementCompany(id);
-        return new SettlementCompanySnapshot(company.getId(), company.getCompanyName());
-    }
-
-    private record SettlementCompanySnapshot(Long id, String name) {
-    }
 }

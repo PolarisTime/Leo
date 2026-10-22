@@ -63,7 +63,7 @@ class SalesOrderApplyServiceTest {
     private SalesOrderApplyService service;
 
     private CustomerQuery.CustomerSnapshot customer() {
-        return new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", "项目A", 30L, "结算公司A");
+        return new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", "项目A");
     }
 
     private ProjectQuery.ProjectSnapshot project() {
@@ -85,7 +85,7 @@ class SalesOrderApplyServiceTest {
 
     private void stubHappyPath() {
         when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(customer()));
-        when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(project()));
+        when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(projectWithSettlementCompany()));
         when(sourceAllocationService.prepareContext(any(), any(), any())).thenReturn(mock(SalesOrderSourceContext.class));
         // request.items 为空时明细级 stub 可能未使用
         MaterialResolver materialResolver = mock(MaterialResolver.class);
@@ -109,12 +109,14 @@ class SalesOrderApplyServiceTest {
         assertThat(entity.getCustomerName()).isEqualTo("客户A");
         assertThat(entity.getProjectId()).isEqualTo(20L);
         assertThat(entity.getProjectName()).isEqualTo("项目A");
-        assertThat(entity.getSettlementCompanyId()).isEqualTo(30L); // 客户默认结算主体
+        // 结算主体只认项目快照（客户资料已不维护默认主体）
+        assertThat(entity.getSettlementCompanyId()).isEqualTo(40L);
+        assertThat(entity.getSettlementCompanyName()).isEqualTo("项目结算公司");
         assertThat(entity.getStatus()).isEqualTo(StatusConstants.DRAFT);
     }
 
     @Test
-    void apply_shouldPreferProjectSettlementCompanyOverCustomerDefault() {
+    void apply_shouldUseProjectSettlementCompany() {
         when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(customer()));
         when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(projectWithSettlementCompany()));
         when(sourceAllocationService.prepareContext(any(), any(), any())).thenReturn(mock(SalesOrderSourceContext.class));
@@ -275,8 +277,10 @@ class SalesOrderApplyServiceTest {
     }
 
     @Test
-    void apply_shouldUseRequestedSettlementCompany() {
-        stubHappyPath();
+    void apply_shouldUseRequestedSettlementCompanyWhenProjectHasNone() {
+        when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(customer()));
+        when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(project()));
+        when(sourceAllocationService.prepareContext(any(), any(), any())).thenReturn(mock(SalesOrderSourceContext.class));
         SalesOrderRequest req = new SalesOrderRequest(
                 "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A", 30L, null,
                 LocalDate.of(2026, 8, 1), "销售员A", null, null, List.of(), List.of(), false);
@@ -291,6 +295,17 @@ class SalesOrderApplyServiceTest {
 
         assertThat(entity.getSettlementCompanyId()).isEqualTo(30L);
         assertThat(entity.getSettlementCompanyName()).isEqualTo("指定结算");
+    }
+
+    @Test
+    void apply_shouldRejectWhenProjectHasNoSettlementCompany() {
+        when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(customer()));
+        when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(project()));
+
+        assertThatThrownBy(() -> service.apply(new SalesOrder(),
+                request(10L, "CUST001", "客户A", 20L, "项目A", null), () -> 100L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("项目资料");
     }
 
     @Test

@@ -44,9 +44,7 @@ public class CustomerQueryService implements CustomerQuery {
                 customer.getId(),
                 customer.getCustomerCode(),
                 customer.getCustomerName(),
-                customer.getProjectName(),
-                customer.getDefaultSettlementCompanyId(),
-                customer.getDefaultSettlementCompanyName()
+                customer.getProjectName()
         );
     }
 }
