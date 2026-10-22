@@ -60,6 +60,7 @@ public final class PermissionCodes {
         public static final String CARRIERS = "carriers";
         public static final String VALUE_ALIASES = "value-aliases";
         public static final String QUOTE_REGIONS = "quote-regions";
+        public static final String SUPPLIER_PRICE_LISTS = "supplier-price-lists";
         public static final String LENGTH_PREMIUMS = "length-premiums";
         public static final String PROJECTS = "projects";
         public static final String QUOTE_SHEETS = "quote-sheets";
@@ -241,6 +242,16 @@ public final class PermissionCodes {
     public static final String QUOTE_REGIONS_CREATE = Resources.QUOTE_REGIONS + ":" + Actions.CREATE;
     public static final String QUOTE_REGIONS_UPDATE = Resources.QUOTE_REGIONS + ":" + Actions.UPDATE;
     public static final String QUOTE_REGIONS_DELETE = Resources.QUOTE_REGIONS + ":" + Actions.DELETE;
+
+    // 供应商价格表(比价一手价): 一个品牌一张表, 供应商做列; 权限归采购
+    public static final String SUPPLIER_PRICE_LISTS_READ =
+            Resources.SUPPLIER_PRICE_LISTS + ":" + Actions.READ;
+    public static final String SUPPLIER_PRICE_LISTS_CREATE =
+            Resources.SUPPLIER_PRICE_LISTS + ":" + Actions.CREATE;
+    public static final String SUPPLIER_PRICE_LISTS_UPDATE =
+            Resources.SUPPLIER_PRICE_LISTS + ":" + Actions.UPDATE;
+    public static final String SUPPLIER_PRICE_LISTS_DELETE =
+            Resources.SUPPLIER_PRICE_LISTS + ":" + Actions.DELETE;
 
     // 定尺加价: md_length_premium 的可维护规则(原为 yml 与 Java 默认值双份定义)
     public static final String LENGTH_PREMIUMS_READ = Resources.LENGTH_PREMIUMS + ":" + Actions.READ;
@@ -437,6 +448,8 @@ public final class PermissionCodes {
             CARRIERS_READ, CARRIERS_CREATE, CARRIERS_UPDATE, CARRIERS_DELETE,
             VALUE_ALIASES_READ, VALUE_ALIASES_CREATE, VALUE_ALIASES_UPDATE, VALUE_ALIASES_DELETE,
             QUOTE_REGIONS_READ, QUOTE_REGIONS_CREATE, QUOTE_REGIONS_UPDATE, QUOTE_REGIONS_DELETE,
+            SUPPLIER_PRICE_LISTS_READ, SUPPLIER_PRICE_LISTS_CREATE,
+            SUPPLIER_PRICE_LISTS_UPDATE, SUPPLIER_PRICE_LISTS_DELETE,
             LENGTH_PREMIUMS_READ, LENGTH_PREMIUMS_CREATE, LENGTH_PREMIUMS_UPDATE, LENGTH_PREMIUMS_DELETE,
             PROJECTS_READ, PROJECTS_CREATE, PROJECTS_UPDATE, PROJECTS_DELETE,
             QUOTE_SHEETS_READ, QUOTE_SHEETS_CREATE, QUOTE_SHEETS_UPDATE, QUOTE_SHEETS_DELETE,
