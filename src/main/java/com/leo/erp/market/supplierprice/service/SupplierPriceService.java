@@ -174,7 +174,53 @@ public class SupplierPriceService {
                                                  String material,
                                                  Integer spec,
                                                  String length) {
-        return repository.findQuotedItemsByProduct(brandName, category, material, spec, length).stream()
+        return pickLowest(
+                repository.findQuotedItemsByProduct(brandName, category, material, spec, length));
+    }
+
+    /**
+     * 批量最低价：按 (品牌, 商品) 各取最低的一家，供报单比价一次填满整张表。
+     *
+     * <p>与 {@link #findLowestQuote} 同一口径（排除无货与未报价、同价按供应商名稳定取第一），
+     * 只是把 N 次单点查询合成一次分组取最小 —— 两者共用 {@link #pickLowest}，
+     * 避免"单点取价"和"批量取价"两套规则日后分叉。</p>
+     *
+     * @param brandName 仅取某个品牌；{@code null} 表示全部品牌
+     */
+    @Transactional(readOnly = true)
+    public List<BrandQuote> lowestQuotes(String brandName) {
+        Map<String, List<SupplierPriceItem>> grouped = new LinkedHashMap<>();
+        for (SupplierPriceItem item : repository.findQuotedItems(brandName)) {
+            String key = item.getList().getBrandName() + "\u0000" + item.getCategory() + "\u0000"
+                    + item.getMaterial() + "\u0000" + item.getSpec() + "\u0000" + item.getLength();
+            grouped.computeIfAbsent(key, ignored -> new ArrayList<>()).add(item);
+        }
+        List<BrandQuote> quotes = new ArrayList<>();
+        for (List<SupplierPriceItem> candidates : grouped.values()) {
+            pickLowest(candidates).ifPresent(lowest -> {
+                SupplierPriceItem sample = candidates.get(0);
+                quotes.add(new BrandQuote(
+                        sample.getList().getBrandName(),
+                        sample.getCategory(),
+                        sample.getMaterial(),
+                        sample.getSpec(),
+                        sample.getLength(),
+                        lowest.price(),
+                        lowest.priceListId(),
+                        lowest.supplierId(),
+                        lowest.supplierName()));
+            });
+        }
+        return quotes;
+    }
+
+    /**
+     * 从候选里挑最低价 —— **取低价的唯一实现**，单点与批量共用。
+     *
+     * <p>同价时按供应商名排序取第一个，保证结果稳定（不随查询顺序漂移）。</p>
+     */
+    private Optional<LowestQuote> pickLowest(List<SupplierPriceItem> candidates) {
+        return candidates.stream()
                 .map(item -> new LowestQuote(
                         item.getList().getId(),
                         item.getList().getSupplierId(),
@@ -184,6 +230,24 @@ public class SupplierPriceService {
                 .min(Comparator.comparing(LowestQuote::price)
                         .thenComparing(LowestQuote::supplierName,
                                 Comparator.nullsLast(Comparator.naturalOrder())));
+    }
+
+    /**
+     * 批量最低价的一行：带商品与品牌，前端可直接落到「品牌列 × 商品行」的格子上。
+     *
+     * <p>与 {@link LowestQuote} 的差别只在"带不带定位信息"：单点查询调用方已经知道商品，
+     * 批量查询必须由服务端告诉它这是哪一格。</p>
+     */
+    public record BrandQuote(
+            String brandName,
+            String category,
+            String material,
+            Integer spec,
+            String length,
+            BigDecimal price,
+            Long priceListId,
+            Long supplierId,
+            String supplierName) {
     }
 
     /** 某品牌某商品的最低报价。 */
@@ -219,7 +283,8 @@ public class SupplierPriceService {
                 list.getSupplierName(),
                 list.getQuotedOn(),
                 list.getUpdatedAt(),
-                list.getWarehouse());
+                list.getWarehouse(),
+                list.getVersion());
     }
 
     /**

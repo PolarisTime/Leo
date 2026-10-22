@@ -27,7 +27,9 @@ public record SupplierPriceGridResponse(
             String supplierName,
             LocalDate quotedOn,
             LocalDateTime updatedAt,
-            String warehouse) {
+            String warehouse,
+            /** 乐观锁版本号：保存该列格子时必须回传，冲突返回 409。 */
+            Long version) {
     }
 
     /** 一行 = 一个商品规格；{@code prices} 缺失该列键表示该供应商不报这个规格。 */

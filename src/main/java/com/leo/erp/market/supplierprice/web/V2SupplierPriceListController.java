@@ -23,6 +23,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 /**
  * 供应商价格表接口（比价一手价）。资源名与权限码资源 {@code supplier-price-lists} 对齐。
  *
@@ -51,6 +53,19 @@ public class V2SupplierPriceListController {
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_READ)
     public SupplierPriceGridResponse grid(@RequestParam String brandName) {
         return service.grid(brandName);
+    }
+
+    /**
+     * 批量最低价：按 (品牌, 商品) 各取最低的一家。
+     *
+     * <p>报单比价一次要填满整张表（品牌列 × 商品行），逐格请求会变成几百次 —— 这是为那次填充
+     * 提供的批量读。{@code brandName} 省略表示全部品牌。</p>
+     */
+    @GetMapping("/lowest-quotes")
+    @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_READ)
+    public List<SupplierPriceService.BrandQuote> lowestQuotes(
+            @RequestParam(required = false) String brandName) {
+        return service.lowestQuotes(brandName);
     }
 
     /** 增加一列：某品牌下接入一家供应商。 */

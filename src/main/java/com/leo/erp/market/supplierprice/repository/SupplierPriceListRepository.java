@@ -30,11 +30,27 @@ public interface SupplierPriceListRepository extends JpaRepository<SupplierPrice
     List<SupplierPriceList> findByIdInAndDeletedFlagFalse(Collection<Long> ids);
 
     /**
-     * 某品牌某商品的全部有效报价（已排除无货与未报价）——「默认取最低价」的唯一数据入口。
+     * 全部有效报价（可按品牌收窄）——「批量取最低价」的数据入口。
      *
-     * <p>过滤放在 SQL 里而不是取回内存再筛：品牌数 9、供应商 34、规格 405，全量拉回来再比
-     * 是 O(全部条目)，而一次取价只需要 O(该商品报价数)。用 {@code join fetch} 连带表头，
-     * 避免访问 {@code item.getList()} 时逐条再查（N+1）。</p>
+     * <p>报单比价一次要填一整张表（品牌列 × 商品行），逐格调用「按商品取价」会变成几百次请求；
+     * 这里一次取回候选集，由服务层按 (品牌, 商品) 分组取最小。</p>
+     */
+    @Query("""
+            select item
+              from SupplierPriceItem item
+              join fetch item.list list
+             where list.deletedFlag = false
+               and item.price is not null
+               and item.priceStatus <> 'OUT_OF_STOCK'
+               and (:brandName is null or list.brandName = :brandName)
+            """)
+    List<SupplierPriceItem> findQuotedItems(@Param("brandName") String brandName);
+
+    /**
+     * 某品牌某商品的全部有效报价（已排除无货与未报价）——「单点取最低价」的数据入口。
+     *
+     * <p>过滤放在 SQL 里而不是取回内存再筛：一次取价只需要 O(该商品报价数)，
+     * 不必把整品牌条目拉回来。用 {@code join fetch} 连带表头，避免 N+1。</p>
      */
     @Query("""
             select item
@@ -50,8 +66,8 @@ public interface SupplierPriceListRepository extends JpaRepository<SupplierPrice
                and item.priceStatus <> 'OUT_OF_STOCK'
             """)
     List<SupplierPriceItem> findQuotedItemsByProduct(@Param("brandName") String brandName,
-                                                     @Param("category") String category,
-                                                     @Param("material") String material,
-                                                     @Param("spec") Integer spec,
-                                                     @Param("length") String length);
+                                                    @Param("category") String category,
+                                                    @Param("material") String material,
+                                                    @Param("spec") Integer spec,
+                                                    @Param("length") String length);
 }
