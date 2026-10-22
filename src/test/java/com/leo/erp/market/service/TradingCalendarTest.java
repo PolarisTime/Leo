@@ -13,8 +13,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 交易日历（{@link TradingCalendar}）的单元测试。
  *
- * <p>重点锁定「逐日向后顺延」这一条：休市/无行情日不进入交易日集合，{@code next}/{@code after}
- * 只跨过它们计数；顺延到日历末端仍不足时返回空（由调用方判定为「行情尚未发布」）。</p>
+ * <p>重点锁定两条对称口径：休市/无行情日不进入交易日集合，
+ * 向后（{@code next}/{@code after}）只跨过它们计数，顺延到日历末端仍不足时返回空
+ * （由调用方判定为「行情尚未发布」）；向前（{@code previous}/{@code before}）同样只数交易日，
+ * 回溯到日历起点仍不足时返回空（由调用方判定为参数错误 422）。</p>
  */
 class TradingCalendarTest {
 
@@ -86,6 +88,35 @@ class TradingCalendarTest {
     }
 
     @Test
+    void before逐日回溯计数且在不足时返回空() {
+        TradingCalendar calendar = holidayThenOpen();
+
+        assertThat(calendar.before(NEXT_TUE, 1)).contains(NEXT_MON);
+        assertThat(calendar.before(NEXT_TUE, 2)).contains(FRI);
+        assertThat(calendar.before(NEXT_TUE, 3)).contains(MON);
+        assertThat(calendar.before(NEXT_TUE, 4)).as("回溯到起点仍不足 4 个交易日").isEmpty();
+        assertThat(calendar.before(MON, 1)).as("周一之前没有交易日").isEmpty();
+        assertThat(calendar.before(null, 1)).isEmpty();
+    }
+
+    @Test
+    void before回溯时跳过中间的休市日() {
+        TradingCalendar calendar = holidayThenOpen();
+
+        // 下周一往前: 周二/周三/周四连续休市, 第 1 个是周五、第 2 个是周一。
+        assertThat(calendar.before(NEXT_MON, 1)).contains(FRI);
+        assertThat(calendar.before(NEXT_MON, 2)).contains(MON);
+    }
+
+    @Test
+    void before的交易日数小于一时按一个交易日处理() {
+        TradingCalendar calendar = holidayThenOpen();
+
+        assertThat(calendar.before(NEXT_TUE, 0)).contains(NEXT_MON);
+        assertThat(calendar.before(NEXT_TUE, -3)).contains(NEXT_MON);
+    }
+
+    @Test
     void previous只取严格早于给定日期的最近交易日() {
         TradingCalendar calendar = holidayThenOpen();
 
@@ -103,6 +134,7 @@ class TradingCalendarTest {
         assertThat(calendar.next(MON)).isEmpty();
         assertThat(calendar.after(MON, 1)).isEmpty();
         assertThat(calendar.previous(MON)).isEmpty();
+        assertThat(calendar.before(MON, 1)).isEmpty();
     }
 
     /** 长假日历：周一有行情，周二/周三/周四连续休市，周五与下周一/下周二有行情。 */

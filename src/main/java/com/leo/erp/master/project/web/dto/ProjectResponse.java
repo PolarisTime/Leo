@@ -31,8 +31,10 @@ public record ProjectResponse(
         String priceDateBasis,
         /** 报单日基准的偏移交易日数(0..30), 仅 ORDER 有意义。 */
         Integer priceDateOffsetDays,
-        /** 报单日为休市日时是否按前一个交易日结算, 仅 ORDER 有意义。 */
-        Boolean priceClosedDayPrevSettle,
+        /** 基准日休市时的位移方向: PREV往前/NEXT延后(DELIVERY与ORDER有效, MANUAL不参与)。 */
+        String priceClosedSettleDirection,
+        /** 基准日休市位移的交易日数(0..30; 0 仅 ORDER+NEXT 有效)。 */
+        Integer priceClosedSettleDays,
         /** 时段策略: AUTO当日最新/FIXED固定时段/MANUAL每次手工选择。 */
         String pricePeriodPolicy,
         /** 固定取价时段(上午/中午/下午), 仅 FIXED 时有值。 */
@@ -50,6 +52,6 @@ public record ProjectResponse(
                            String remark) {
         this(id, projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
                 null, customerCode, null, null, status, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, remark);
+                null, null, null, null, null, null, null, null, remark);
     }
 }

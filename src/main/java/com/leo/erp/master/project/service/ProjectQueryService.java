@@ -2,6 +2,7 @@ package com.leo.erp.master.project.service;
 
 import com.leo.erp.common.support.CsvValues;
 import com.leo.erp.master.api.ProjectPricingBasisQuery;
+import com.leo.erp.master.api.ProjectPricingBasisQuery.ClosedSettleDirection;
 import com.leo.erp.master.api.ProjectProcurementScopeQuery;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.project.domain.entity.Project;
@@ -15,6 +16,9 @@ import java.util.Optional;
 @Service
 @Transactional(readOnly = true)
 public class ProjectQueryService implements ProjectQuery, ProjectProcurementScopeQuery, ProjectPricingBasisQuery {
+
+    /** 休市位移天数缺省值: 与 md_project 列的 DEFAULT 一致(往前 1 个交易日)。 */
+    private static final int DEFAULT_CLOSED_SETTLE_DAYS = 1;
 
     private final ProjectRepository repository;
 
@@ -67,7 +71,10 @@ public class ProjectQueryService implements ProjectQuery, ProjectProcurementScop
                 .map(project -> new PricingBasis(
                         Basis.normalize(project.getPriceDateBasis()),
                         project.getPriceDateOffsetDays() == null ? 0 : project.getPriceDateOffsetDays(),
-                        Boolean.TRUE.equals(project.getPriceClosedDayPrevSettle()),
+                        ClosedSettleDirection.normalize(project.getPriceClosedSettleDirection()),
+                        project.getPriceClosedSettleDays() == null
+                                ? DEFAULT_CLOSED_SETTLE_DAYS
+                                : project.getPriceClosedSettleDays(),
                         PeriodPolicy.normalize(project.getPricePeriodPolicy()),
                         project.getPricePeriodFixed(),
                         project.getQuoteSource(),

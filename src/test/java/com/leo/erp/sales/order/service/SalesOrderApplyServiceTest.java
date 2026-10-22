@@ -327,7 +327,7 @@ class SalesOrderApplyServiceTest {
         return new SalesOrderRequest(
                 "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A",
                 null, null, LocalDate.of(2026, 8, 1), orderDate, "销售员A", "草稿", null, null,
-                null, null, null, null, null, null, List.of(), List.of(), false);
+                null, null, null, null, null, null, null, List.of(), List.of(), false);
     }
 
     /** 请求带报单日期时按请求值落库。 */

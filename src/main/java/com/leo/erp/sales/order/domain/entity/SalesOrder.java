@@ -112,9 +112,13 @@ public class SalesOrder extends AbstractAuditableEntity implements StatusAwareEn
     @Column(name = "price_date_offset_days")
     private Integer priceDateOffsetDays;
 
-    /** 本次生效的「报单日休市按前一交易日结算」开关(快照)。 */
-    @Column(name = "price_closed_settle_prev")
-    private Boolean priceClosedSettlePrev;
+    /** 本次生效的「基准日休市位移方向」(快照): PREV 往前第 X 个交易日 / NEXT 延后第 X 个交易日。 */
+    @Column(name = "price_closed_settle_direction", length = 8)
+    private String priceClosedSettleDirection;
+
+    /** 本次生效的「基准日休市位移交易日数」(快照, 0..30; 0 仅 ORDER+NEXT 有效)。 */
+    @Column(name = "price_closed_settle_days")
+    private Integer priceClosedSettleDays;
 
     /**
      * 明细行按 {@code line_no} 返回: 拖拽调整顺序后服务端按提交数组下标重写 line_no,

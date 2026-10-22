@@ -5,6 +5,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.leo.erp.master.api.ProjectPricingBasisQuery;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.Basis;
+import com.leo.erp.master.api.ProjectPricingBasisQuery.ClosedSettleDirection;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.PeriodPolicy;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.PricingBasis;
 import com.leo.erp.market.mysteel.MysteelProperties;
@@ -34,6 +35,11 @@ import static org.mockito.Mockito.when;
  * <p>日历用桩数据构造：{@code 2026-03-02} 起那一周里周一/周三/周五/下周一/下周二有行情，
  * 周二、周四、周六、周日休市 —— 用来验证「只数交易日，跳过休市与周末」这件事由行情日历口径
  * 决定，而不是由代码推算周末。</p>
+ *
+ * <p>基准日休市时按「方向（PREV 往前 / NEXT 延后）+ X 个交易日」位移，DELIVERY 与 ORDER 共用：
+ * DELIVERY 取价日 = 休市基准日；ORDER 取价日 = {@code after(休市基准日, offsetDays)}，
+ * 只有 ORDER + NEXT + 天数为 0 表示「不做方向位移、直接从报单日向后顺延」（等价旧「关闭」口径）。
+ * MANUAL 不参与。</p>
  *
  * <p>向后取价还会验证「逐日顺延」：后面仍是休市/无行情就继续顺延到下一天；顺延到已发布行情
  * 末端仍不足第 X 个交易日时返回 {@code quoteDate=null}、{@code quoteAvailable=false} 的
@@ -80,6 +86,8 @@ class PricingQuoteResolverTest {
 
         assertThat(response.projectId()).isEqualTo(PROJECT_ID);
         assertThat(response.basis()).isEqualTo("DELIVERY");
+        assertThat(response.priceClosedSettleDirection()).isEqualTo("PREV");
+        assertThat(response.priceClosedSettleDays()).isEqualTo(1);
         assertThat(response.targetDate()).isEqualTo(MON);
         assertThat(response.targetIsTradingDay()).isTrue();
         assertThat(response.quoteDate()).isEqualTo(MON);
@@ -90,7 +98,7 @@ class PricingQuoteResolverTest {
     }
 
     @Test
-    void 送货日休市时回退到最近的前一个交易日() {
+    void 送货日休市时默认按往前第一个交易日结算() {
         PricingQuoteResolutionResponse response = resolve(deliveryProject(), delivery(TUE), week());
 
         assertThat(response.targetDate()).isEqualTo(TUE);
@@ -99,9 +107,50 @@ class PricingQuoteResolverTest {
         assertThat(response.dateFallback().applied()).isTrue();
         assertThat(response.dateFallback().from()).isEqualTo(TUE.toString());
         assertThat(response.dateFallback().to()).isEqualTo(MON.toString());
-        assertThat(response.dateFallback().reason()).contains("按最近的前一个交易日结算");
-        assertThat(response.explanation()).contains("按最近的前一个交易日结算").contains(display(MON));
+        assertThat(response.dateFallback().reason()).contains("按往前第 1 个交易日结算");
+        assertThat(response.explanation()).contains("按往前第 1 个交易日结算").contains(display(MON));
         assertThat(response.quoteAvailable()).isTrue();
+    }
+
+    /** 送货日休市 + 往前第 2 个交易日：跳过周二/周四等休市日只数交易日。 */
+    @Test
+    void 送货日休市时按往前第二个交易日结算() {
+        PricingQuoteResolutionResponse response = resolve(
+                deliveryProject(ClosedSettleDirection.PREV, 2), delivery(SAT), week());
+
+        // 周六之前的交易日依次是 周五(1)、周三(2)。
+        assertThat(response.quoteDate()).isEqualTo(WED);
+        assertThat(response.dateFallback().to()).isEqualTo(WED.toString());
+        assertThat(response.dateFallback().reason()).contains("按往前第 2 个交易日结算");
+    }
+
+    /** 送货日休市 + 延后第 2 个交易日：交货日当天没有行情时也可按业务配置往后取。 */
+    @Test
+    void 送货日休市时按延后第二个交易日结算() {
+        PricingQuoteResolutionResponse response = resolve(
+                deliveryProject(ClosedSettleDirection.NEXT, 2), delivery(TUE), week());
+
+        // 周二之后的交易日依次是 周三(1)、周五(2)。
+        assertThat(response.quoteDate()).isEqualTo(FRI);
+        assertThat(response.targetIsTradingDay()).isFalse();
+        assertThat(response.dateFallback().applied()).isTrue();
+        assertThat(response.dateFallback().reason()).contains("按延后第 2 个交易日结算");
+    }
+
+    /** 延后位移取不足（目标交易日的行情尚未发布）不报错，返回可识别的「行情尚未发布」。 */
+    @Test
+    void 送货日休市且延后取不足时返回行情尚未发布() {
+        PricingQuoteResolutionResponse response = resolve(
+                deliveryProject(ClosedSettleDirection.NEXT, 3), delivery(SAT), week());
+
+        assertThat(response.targetDate()).isEqualTo(SAT);
+        assertThat(response.quoteDate()).isNull();
+        assertThat(response.quoteAvailable()).isFalse();
+        assertThat(response.period()).isNull();
+        assertThat(response.dateFallback()).as("未发布时没有实际换日").isNull();
+        assertThat(response.explanation())
+                .contains("送货日期 " + display(SAT) + " 延后第 3 个交易日的行情尚未发布")
+                .contains("请稍后重试或手工指定取价日期");
     }
 
     @Test
@@ -130,11 +179,35 @@ class PricingQuoteResolverTest {
                 .hasMessageContaining("可用行情范围为空");
     }
 
+    /** 配送日期休市必须换到一个真实交易日：天数为 0（且方向 PREV）是参数错误。 */
+    @Test
+    void 送货日基准方向为往前且天数为零时被拒绝() {
+        stubProject(deliveryProject());
+
+        assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, delivery(TUE, ClosedSettleDirection.PREV, 0)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("休市位移方向为 PREV(往前) 时交易日数必须大于 0");
+    }
+
+    /** 送货日期基准即便方向是 NEXT 也不允许 0 天：否则休市日会被当成取价日。 */
+    @Test
+    void 送货日基准方向为延后且天数为零时被拒绝() {
+        stubProject(deliveryProject());
+
+        assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, delivery(TUE, ClosedSettleDirection.NEXT, 0)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("按送货日期取价时休市位移交易日数必须大于 0(送货日休市必须换到一个真实交易日)");
+    }
+
     // ==================== ORDER ====================
 
     @Test
     void 报单日为交易日且偏移为零时取当日() {
-        PricingQuoteResolutionResponse response = resolve(orderProject(0, false), order(MON), week());
+        PricingQuoteResolutionResponse response = resolve(orderProject(0, ClosedSettleDirection.PREV, 1), order(MON), week());
 
         assertThat(response.basis()).isEqualTo("ORDER");
         assertThat(response.offsetDays()).isZero();
@@ -146,7 +219,8 @@ class PricingQuoteResolverTest {
 
     @Test
     void 报单日为交易日时偏移两个交易日只数交易日并跳过休市与周末() {
-        PricingQuoteResolutionResponse response = resolve(orderProject(2, false), order(MON), week());
+        PricingQuoteResolutionResponse response = resolve(
+                orderProject(2, ClosedSettleDirection.PREV, 1), order(MON), week());
 
         // 周一之后有行情的交易日依次是 周三、周五、下周一、下周二；休市与周末不计数。
         assertThat(response.quoteDate()).isEqualTo(FRI);
@@ -156,8 +230,9 @@ class PricingQuoteResolverTest {
     }
 
     @Test
-    void 报单日休市且按前一交易日结算时偏移为零取前一交易日() {
-        PricingQuoteResolutionResponse response = resolve(orderProject(0, true), order(THU), week());
+    void 报单日休市且按往前第一个交易日结算时偏移为零取前一交易日() {
+        PricingQuoteResolutionResponse response = resolve(
+                orderProject(0, ClosedSettleDirection.PREV, 1), order(THU), week());
 
         assertThat(response.targetDate()).isEqualTo(THU);
         assertThat(response.targetIsTradingDay()).isFalse();
@@ -165,41 +240,145 @@ class PricingQuoteResolverTest {
         assertThat(response.dateFallback().applied()).isTrue();
         assertThat(response.dateFallback().from()).isEqualTo(THU.toString());
         assertThat(response.dateFallback().to()).isEqualTo(WED.toString());
-        assertThat(response.dateFallback().reason()).contains("按前一个交易日结算");
+        assertThat(response.dateFallback().reason()).contains("按往前第 1 个交易日结算");
     }
 
     @Test
-    void 报单日休市且按前一交易日结算时偏移为一取前一日之后的第一个交易日() {
-        PricingQuoteResolutionResponse response = resolve(orderProject(1, true), order(THU), week());
+    void 报单日休市且按往前第一个交易日结算时偏移为一取前一日之后的第一个交易日() {
+        PricingQuoteResolutionResponse response = resolve(
+                orderProject(1, ClosedSettleDirection.PREV, 1), order(THU), week());
 
         assertThat(response.quoteDate()).isEqualTo(FRI);
         assertThat(response.dateFallback().applied()).isTrue();
         assertThat(response.dateFallback().to()).isEqualTo(FRI.toString());
+        assertThat(response.dateFallback().reason()).contains("后再取之后第 1 个交易日");
+    }
+
+    /** 叠加关系（方向相反）：先往前 2 个交易日，再往后顺延 2 个交易日。 */
+    @Test
+    void 报单日休市且按往前第二个交易日后顺延两个交易日() {
+        PricingQuoteResolutionResponse response = resolve(
+                orderProject(2, ClosedSettleDirection.PREV, 2), order(THU), week());
+
+        // 周四往前 2 个交易日 = 周一；周一向后再顺延 2 个交易日 = 周五。
+        assertThat(response.quoteDate()).isEqualTo(FRI);
+        assertThat(response.dateFallback().reason())
+                .contains("按往前第 2 个交易日结算后再取之后第 2 个交易日");
     }
 
     @Test
-    void 报单日休市且不按前一交易日结算时向后取第一个交易日() {
-        PricingQuoteResolutionResponse response = resolve(orderProject(0, false), order(THU), week());
+    void 报单日休市且按延后第一个交易日结算时偏移为零取延后第一个交易日() {
+        PricingQuoteResolutionResponse response = resolve(
+                orderProject(0, ClosedSettleDirection.NEXT, 1), order(THU), week());
 
         assertThat(response.quoteDate()).isEqualTo(FRI);
         assertThat(response.dateFallback().applied()).isTrue();
-        assertThat(response.dateFallback().reason()).contains("按之后第 1 个交易日取价");
-        assertThat(response.explanation()).contains("向后取第 1 个交易日");
+        assertThat(response.dateFallback().reason()).contains("按延后第 1 个交易日结算");
+    }
+
+    /** 叠加关系（方向相同）：先延后 1 个交易日，再往后顺延 2 个交易日 = 更远那个。 */
+    @Test
+    void 报单日休市且按延后第一个交易日后顺延两个交易日() {
+        PricingQuoteResolutionResponse response = resolve(
+                orderProject(2, ClosedSettleDirection.NEXT, 1), order(THU), week());
+
+        // 周四延后 1 个交易日 = 周五；周五再顺延 2 个交易日 = 下周二。
+        assertThat(response.quoteDate()).isEqualTo(NEXT_TUE);
+        assertThat(response.dateFallback().reason())
+                .contains("按延后第 1 个交易日结算后再取之后第 2 个交易日");
+    }
+
+    /** 延后位移本身取不足（休市基准日还没有行情）时返回「行情尚未发布」，不猜日期。 */
+    @Test
+    void 报单日休市且延后位移取不足时返回行情尚未发布() {
+        stubProject(orderProject(0, ClosedSettleDirection.NEXT, 3));
+        when(mysteelProperties.getMarket()).thenReturn(MARKET);
+        when(articleQueryService.calendar(any(), any(), any(), any())).thenReturn(List.of(open(MON, "上午")));
+
+        PricingQuoteResolutionResponse response = resolver().resolve(PROJECT_ID, order(TUE));
+
+        assertThat(response.targetDate()).isEqualTo(TUE);
+        assertThat(response.targetIsTradingDay()).isFalse();
+        assertThat(response.quoteDate()).isNull();
+        assertThat(response.quoteAvailable()).isFalse();
+        assertThat(response.dateFallback()).as("未发布时没有实际换日").isNull();
+        assertThat(response.explanation())
+                .contains("报单日期 " + display(TUE) + " 为休市, 其后第 3 个交易日")
+                .contains("行情尚未发布")
+                .contains("请稍后重试或手工指定取价日期");
+    }
+
+    /** ORDER + NEXT + 天数为 0 = 不做方向位移，直接从报单日向后顺延（旧「关闭」口径）。 */
+    @Test
+    void 报单日休市且方向延后天数为零时从报单日向后顺延() {
+        PricingQuoteResolutionResponse response = resolve(
+                orderProject(0, ClosedSettleDirection.NEXT, 0), order(THU), week());
+
+        assertThat(response.quoteDate()).isEqualTo(FRI);
+        assertThat(response.dateFallback().reason()).contains("不按方向位移").contains("向后取第 1 个交易日");
+    }
+
+    /**
+     * 保精确用例（迁移等价性）：旧实现「关闭休市按前一交易日结算」+ 偏移 2 在周六报单时，
+     * 等价于 {@code after(周六, max(2,1))}；新口径 NEXT + 0 + 偏移 2 必须落到同一天（下周二）。
+     */
+    @Test
+    void 保精确_报单日休市关闭旧开关且偏移为二时与旧实现同日() {
+        PricingQuoteResolutionResponse response = resolve(
+                orderProject(2, ClosedSettleDirection.NEXT, 0), order(SAT), week());
+
+        assertThat(response.quoteDate()).isEqualTo(NEXT_TUE);
+        assertThat(response.offsetDays()).isEqualTo(2);
+        assertThat(response.explanation()).contains("从报单日向后取第 2 个交易日");
+    }
+
+    /** 同上的「行情尚未发布」分支：报单日之后不足 5 个交易日。 */
+    @Test
+    void 报单日休市且方向延后天数为零且顺延不足时返回行情尚未发布() {
+        stubProject(orderProject(5, ClosedSettleDirection.NEXT, 0));
+        when(mysteelProperties.getMarket()).thenReturn(MARKET);
+        when(articleQueryService.calendar(any(), any(), any(), any())).thenReturn(List.of(open(MON, "上午")));
+
+        PricingQuoteResolutionResponse response = resolver().resolve(PROJECT_ID, order(TUE));
+
+        assertThat(response.quoteDate()).isNull();
+        assertThat(response.quoteAvailable()).isFalse();
+        assertThat(response.explanation())
+                .contains("报单日期 " + display(TUE) + " 为休市")
+                .contains("其后第 5 个交易日")
+                .contains("行情尚未发布");
+    }
+
+    /** 项目配置落在「PREV + 0 天」这种非法组合时，解析侧也要当场拒绝（不能靠 DB CHECK 兜）。 */
+    @Test
+    void 报单日基准配置往前方向且天数为零时被拒绝() {
+        stubProject(new PricingBasis(Basis.ORDER, 0, ClosedSettleDirection.PREV, 0,
+                PeriodPolicy.AUTO, null, null, null));
+
+        assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, order(THU)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("休市位移方向为 PREV(往前) 时交易日数必须大于 0");
     }
 
     @Test
-    void 报单日休市且不按前一交易日结算时偏移三日取之后第三个交易日() {
-        PricingQuoteResolutionResponse response = resolve(orderProject(3, false), order(THU), week());
+    void 休市位移交易日数为三十一时被拒绝() {
+        stubProject(deliveryProject());
 
-        // 周四之后有行情的交易日：周五、下周一、下周二。
-        assertThat(response.quoteDate()).isEqualTo(NEXT_TUE);
-        assertThat(response.explanation()).contains("向后取第 3 个交易日");
+        assertThatThrownBy(() -> resolver().resolve(PROJECT_ID,
+                delivery(MON, ClosedSettleDirection.NEXT, 31)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("休市位移交易日数必须在 0 到 30 之间");
     }
 
     @Test
     void 报单日为最新行情日时次日行情尚未发布不以错误中断() {
         // 截图场景: 报单日 2026-10-13 正好是可用行情的最后一天, 次日行情还没发布。
-        PricingQuoteResolutionResponse response = resolve(orderProject(1, false), order(NEXT_TUE), week());
+        PricingQuoteResolutionResponse response = resolve(
+                orderProject(1, ClosedSettleDirection.PREV, 1), order(NEXT_TUE), week());
 
         assertThat(response.basis()).isEqualTo("ORDER");
         assertThat(response.offsetDays()).isEqualTo(1);
@@ -222,7 +401,7 @@ class PricingQuoteResolverTest {
         LocalDate earliest = LocalDate.of(2026, 9, 2);
         LocalDate latest = LocalDate.of(2026, 10, 13);
 
-        stubProject(orderProject(1, false));
+        stubProject(orderProject(1, ClosedSettleDirection.PREV, 1));
         stubMarket();
         when(articleQueryService.calendar(any(), any(), any(), any()))
                 .thenReturn(List.of(open(earliest, "上午"), open(latest, "上午")));
@@ -238,7 +417,7 @@ class PricingQuoteResolverTest {
 
     @Test
     void 偏移交易日数超出已发布范围时返回行情尚未发布() {
-        stubProject(orderProject(30, false));
+        stubProject(orderProject(30, ClosedSettleDirection.PREV, 1));
         stubMarket();
         when(articleQueryService.calendar(any(), any(), any(), any())).thenReturn(week());
 
@@ -255,7 +434,8 @@ class PricingQuoteResolverTest {
     @Test
     void 偏移交易日数正好取到最后一个已发布行情日时正常取价() {
         // 周一之后有行情的是 周三/周五/下周一/下周二: 第 4 个正好是日历末端, 不算未发布。
-        PricingQuoteResolutionResponse response = resolve(orderProject(4, false), order(MON), week());
+        PricingQuoteResolutionResponse response = resolve(
+                orderProject(4, ClosedSettleDirection.PREV, 1), order(MON), week());
 
         assertThat(response.quoteDate()).isEqualTo(NEXT_TUE);
         assertThat(response.quoteAvailable()).isTrue();
@@ -265,7 +445,7 @@ class PricingQuoteResolverTest {
 
     @Test
     void 报单日之后连续休市时逐日顺延到下一个有行情的交易日() {
-        stubProject(orderProject(1, false));
+        stubProject(orderProject(1, ClosedSettleDirection.PREV, 1));
         stubMarket();
         when(articleQueryService.calendar(any(), any(), any(), any())).thenReturn(holidayThenOpen());
 
@@ -279,7 +459,7 @@ class PricingQuoteResolverTest {
 
     @Test
     void 连续休市顺延仍不足偏移交易日数时返回行情尚未发布() {
-        stubProject(orderProject(4, false));
+        stubProject(orderProject(4, ClosedSettleDirection.PREV, 1));
         stubMarket();
         when(articleQueryService.calendar(any(), any(), any(), any())).thenReturn(holidayThenOpen());
 
@@ -291,8 +471,8 @@ class PricingQuoteResolverTest {
     }
 
     @Test
-    void 行情日历为空时报单日取价返回行情尚未发布() {
-        stubProject(orderProject(1, false));
+    void 行情日历为空时报单日向后取价返回行情尚未发布() {
+        stubProject(orderProject(1, ClosedSettleDirection.NEXT, 0));
         stubMarket();
         when(articleQueryService.calendar(any(), any(), any(), any())).thenReturn(List.of());
 
@@ -308,28 +488,8 @@ class PricingQuoteResolverTest {
     }
 
     @Test
-    void 报单日休市向后取价无已发布行情时返回行情尚未发布() {
-        stubProject(orderProject(5, false));
-        when(mysteelProperties.getMarket()).thenReturn(MARKET);
-        when(articleQueryService.calendar(any(), any(), any(), any())).thenReturn(List.of(open(MON, "上午")));
-
-        PricingQuoteResolutionResponse response = resolver().resolve(PROJECT_ID, order(MON.plusDays(1)));
-
-        assertThat(response.targetDate()).isEqualTo(TUE);
-        assertThat(response.targetIsTradingDay()).isFalse();
-        assertThat(response.quoteDate()).isNull();
-        assertThat(response.quoteAvailable()).isFalse();
-        assertThat(response.dateFallback()).as("未发布时没有实际换日").isNull();
-        assertThat(response.explanation())
-                .contains("报单日期 " + display(TUE) + " 为休市")
-                .contains("其后第 5 个交易日")
-                .contains("行情尚未发布")
-                .contains("请稍后重试或手工指定取价日期");
-    }
-
-    @Test
-    void 报单日休市按前一交易日结算但之前没有交易日时仍抛出校验错误() {
-        stubProject(orderProject(0, true));
+    void 报单日休市按往前结算但之前没有交易日时仍抛出校验错误() {
+        stubProject(orderProject(0, ClosedSettleDirection.PREV, 1));
         stubMarket();
         when(articleQueryService.calendar(any(), any(), any(), any()))
                 .thenReturn(List.of(closed(TUE), open(NEXT_MON, "上午")));
@@ -386,6 +546,42 @@ class PricingQuoteResolverTest {
         assertThat(response.suggestedDate()).isNull();
         assertThat(response.quoteAvailable()).isFalse();
         assertThat(response.explanation()).doesNotContain("建议改为");
+    }
+
+    /** MANUAL 不参与休市位移：调用方传了方向/天数也只回显，不改变取价日。 */
+    @Test
+    void 手工基准不参与休市位移() {
+        PricingQuoteResolutionResponse response = resolve(manualProject(), new PricingQuoteResolver.Command(
+                Basis.MANUAL, null, ClosedSettleDirection.NEXT, 5, null, null, THU, null, null), week());
+
+        assertThat(response.quoteDate()).isEqualTo(THU);
+        assertThat(response.suggestedDate()).isEqualTo(WED);
+        assertThat(response.priceClosedSettleDirection()).isEqualTo("NEXT");
+        assertThat(response.priceClosedSettleDays()).isEqualTo(5);
+    }
+
+    /** MANUAL 不参与解析：`PREV + 0` 这类「非适用组合」不拦解析，只有范围校验仍生效。 */
+    @Test
+    void 手工基准的方向与天数为零不被拒绝() {
+        PricingQuoteResolutionResponse response = resolve(manualProject(), new PricingQuoteResolver.Command(
+                Basis.MANUAL, null, ClosedSettleDirection.PREV, 0, null, null, FRI, null, null), week());
+
+        assertThat(response.quoteDate()).isEqualTo(FRI);
+        assertThat(response.priceClosedSettleDirection()).isEqualTo("PREV");
+        assertThat(response.priceClosedSettleDays()).isZero();
+    }
+
+    /** MANUAL 只放宽组合规则，0..30 范围仍然校验。 */
+    @Test
+    void 手工基准的休市位移天数超出范围时被拒绝() {
+        stubProject(manualProject());
+
+        assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, new PricingQuoteResolver.Command(
+                Basis.MANUAL, null, ClosedSettleDirection.NEXT, 31, null, null, FRI, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("休市位移交易日数必须在 0 到 30 之间");
     }
 
     // ==================== 时段 ====================
@@ -453,10 +649,10 @@ class PricingQuoteResolverTest {
 
     @Test
     void 报单日基准缺少报单日期时抛出校验错误() {
-        stubProject(orderProject(0, false));
+        stubProject(orderProject(0, ClosedSettleDirection.PREV, 1));
 
         assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, new PricingQuoteResolver.Command(
-                Basis.ORDER, null, null, null, null, null, null, null)))
+                Basis.ORDER, null, null, null, null, null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -468,7 +664,7 @@ class PricingQuoteResolverTest {
         stubProject(deliveryProject());
 
         assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, new PricingQuoteResolver.Command(
-                Basis.DELIVERY, null, null, null, null, null, null, null)))
+                Basis.DELIVERY, null, null, null, null, null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -480,7 +676,7 @@ class PricingQuoteResolverTest {
         stubProject(manualProject());
 
         assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, new PricingQuoteResolver.Command(
-                Basis.MANUAL, null, null, null, null, null, null, null)))
+                Basis.MANUAL, null, null, null, null, null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -492,7 +688,7 @@ class PricingQuoteResolverTest {
         stubProject(deliveryProject());
 
         assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, new PricingQuoteResolver.Command(
-                null, 31, null, null, null, null, null, MON)))
+                null, 31, null, null, null, null, null, null, MON)))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -504,7 +700,7 @@ class PricingQuoteResolverTest {
         stubProject(deliveryProject());
 
         assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, new PricingQuoteResolver.Command(
-                null, -1, null, null, null, null, null, MON)))
+                null, -1, null, null, null, null, null, null, MON)))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -513,7 +709,8 @@ class PricingQuoteResolverTest {
 
     @Test
     void 固定时段策略缺少时段时抛出校验错误() {
-        stubProject(new PricingBasis(Basis.DELIVERY, 0, false, PeriodPolicy.FIXED, null, null, null));
+        stubProject(new PricingBasis(Basis.DELIVERY, 0, ClosedSettleDirection.PREV, 1,
+                PeriodPolicy.FIXED, null, null, null));
 
         assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, delivery(MON)))
                 .isInstanceOf(BusinessException.class)
@@ -527,7 +724,7 @@ class PricingQuoteResolverTest {
         stubProject(deliveryProject());
 
         assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, new PricingQuoteResolver.Command(
-                null, null, null, null, "傍晚", null, null, MON)))
+                null, null, null, null, null, "傍晚", null, null, MON)))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -556,7 +753,7 @@ class PricingQuoteResolverTest {
 
     @Test
     void 命令为空时按项目配置解析并因缺少日期而报错() {
-        stubProject(orderProject(0, false));
+        stubProject(orderProject(0, ClosedSettleDirection.PREV, 1));
 
         assertThatThrownBy(() -> resolver().resolve(PROJECT_ID, null))
                 .isInstanceOf(BusinessException.class)
@@ -570,7 +767,7 @@ class PricingQuoteResolverTest {
     @Test
     void 调用方基准覆盖项目配置() {
         PricingQuoteResolutionResponse response = resolve(deliveryProject(), new PricingQuoteResolver.Command(
-                Basis.ORDER, null, null, null, null, null, MON, null), week());
+                Basis.ORDER, null, null, null, null, null, null, MON, null), week());
 
         assertThat(response.basis()).isEqualTo("ORDER");
         assertThat(response.targetDate()).isEqualTo(MON);
@@ -580,27 +777,29 @@ class PricingQuoteResolverTest {
 
     @Test
     void 调用方偏移覆盖项目配置() {
-        PricingQuoteResolutionResponse response = resolve(orderProject(0, false), new PricingQuoteResolver.Command(
-                null, 2, null, null, null, null, MON, null), week());
+        PricingQuoteResolutionResponse response = resolve(orderProject(0, ClosedSettleDirection.PREV, 1),
+                new PricingQuoteResolver.Command(
+                        null, 2, null, null, null, null, null, MON, null), week());
 
         assertThat(response.offsetDays()).isEqualTo(2);
         assertThat(response.quoteDate()).isEqualTo(FRI);
     }
 
     @Test
-    void 调用方休市结算开关覆盖项目配置() {
-        PricingQuoteResolutionResponse response = resolve(orderProject(0, false), new PricingQuoteResolver.Command(
-                null, null, true, null, null, null, THU, null), week());
+    void 调用方休市位移方向与天数覆盖项目配置() {
+        PricingQuoteResolutionResponse response = resolve(deliveryProject(), new PricingQuoteResolver.Command(
+                null, null, ClosedSettleDirection.NEXT, 2, null, null, null, null, TUE), week());
 
-        assertThat(response.settlePrevOnClosed()).isTrue();
-        assertThat(response.quoteDate()).isEqualTo(WED);
+        assertThat(response.priceClosedSettleDirection()).isEqualTo("NEXT");
+        assertThat(response.priceClosedSettleDays()).isEqualTo(2);
+        assertThat(response.quoteDate()).isEqualTo(FRI);
         assertThat(response.dateFallback().applied()).isTrue();
     }
 
     @Test
     void 调用方时段策略覆盖项目配置() {
         PricingQuoteResolutionResponse response = resolve(deliveryProject(), new PricingQuoteResolver.Command(
-                null, null, null, PeriodPolicy.FIXED, "中午", null, null, MON), week());
+                null, null, null, null, PeriodPolicy.FIXED, "中午", null, null, MON), week());
 
         assertThat(response.periodPolicy()).isEqualTo("FIXED");
         assertThat(response.requestedPeriod()).isEqualTo("中午");
@@ -610,8 +809,8 @@ class PricingQuoteResolverTest {
 
     @Test
     void 西本数据源使用项目地区作为市场() {
-        PricingBasis project = new PricingBasis(Basis.DELIVERY, 0, false, PeriodPolicy.AUTO,
-                null, "STEELX", "南京");
+        PricingBasis project = new PricingBasis(Basis.DELIVERY, 0, ClosedSettleDirection.PREV, 1,
+                PeriodPolicy.AUTO, null, "STEELX", "南京");
         when(projectPricingBasisQuery.findPricingBasisById(PROJECT_ID)).thenReturn(Optional.of(project));
         when(articleQueryService.calendar(any(), any(), any(), any())).thenReturn(week());
 
@@ -680,34 +879,46 @@ class PricingQuoteResolverTest {
     }
 
     private static PricingBasis deliveryProject() {
-        return new PricingBasis(Basis.DELIVERY, 0, false, PeriodPolicy.AUTO, null, null, null);
+        return deliveryProject(ClosedSettleDirection.PREV, 1);
     }
 
-    private static PricingBasis orderProject(int offsetDays, boolean settlePrevOnClosed) {
-        return new PricingBasis(Basis.ORDER, offsetDays, settlePrevOnClosed, PeriodPolicy.AUTO, null, null, null);
+    private static PricingBasis deliveryProject(ClosedSettleDirection direction, int days) {
+        return new PricingBasis(Basis.DELIVERY, 0, direction, days, PeriodPolicy.AUTO, null, null, null);
+    }
+
+    private static PricingBasis orderProject(int offsetDays, ClosedSettleDirection direction, int days) {
+        return new PricingBasis(Basis.ORDER, offsetDays, direction, days, PeriodPolicy.AUTO, null, null, null);
     }
 
     private static PricingBasis manualProject() {
-        return new PricingBasis(Basis.MANUAL, 0, false, PeriodPolicy.AUTO, null, null, null);
+        return new PricingBasis(Basis.MANUAL, 0, ClosedSettleDirection.PREV, 1,
+                PeriodPolicy.AUTO, null, null, null);
     }
 
     private static PricingBasis fixedProject(String period) {
-        return new PricingBasis(Basis.DELIVERY, 0, false, PeriodPolicy.FIXED, period, null, null);
+        return new PricingBasis(Basis.DELIVERY, 0, ClosedSettleDirection.PREV, 1,
+                PeriodPolicy.FIXED, period, null, null);
     }
 
     private static PricingBasis manualFixedProject(String period) {
-        return new PricingBasis(Basis.MANUAL, 0, false, PeriodPolicy.FIXED, period, null, null);
+        return new PricingBasis(Basis.MANUAL, 0, ClosedSettleDirection.PREV, 1,
+                PeriodPolicy.FIXED, period, null, null);
     }
 
     private static PricingQuoteResolver.Command delivery(LocalDate deliveryDate) {
-        return new PricingQuoteResolver.Command(null, null, null, null, null, null, null, deliveryDate);
+        return new PricingQuoteResolver.Command(null, null, null, null, null, null, null, null, deliveryDate);
+    }
+
+    private static PricingQuoteResolver.Command delivery(LocalDate deliveryDate,
+                                                         ClosedSettleDirection direction, Integer days) {
+        return new PricingQuoteResolver.Command(null, null, direction, days, null, null, null, null, deliveryDate);
     }
 
     private static PricingQuoteResolver.Command order(LocalDate orderDate) {
-        return new PricingQuoteResolver.Command(null, null, null, null, null, null, orderDate, null);
+        return new PricingQuoteResolver.Command(null, null, null, null, null, null, null, orderDate, null);
     }
 
     private static PricingQuoteResolver.Command manual(LocalDate quoteDate) {
-        return new PricingQuoteResolver.Command(null, null, null, null, null, quoteDate, null, null);
+        return new PricingQuoteResolver.Command(null, null, null, null, null, null, quoteDate, null, null);
     }
 }

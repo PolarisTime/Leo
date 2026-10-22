@@ -85,7 +85,8 @@ class SalesOrderResponseTest {
         assertThat(rebuilt.priceQuotePeriod()).isEqualTo(source.priceQuotePeriod());
         assertThat(rebuilt.priceDateBasis()).isEqualTo(source.priceDateBasis());
         assertThat(rebuilt.priceDateOffsetDays()).isEqualTo(source.priceDateOffsetDays());
-        assertThat(rebuilt.priceClosedSettlePrev()).isEqualTo(source.priceClosedSettlePrev());
+        assertThat(rebuilt.priceClosedSettleDirection()).isEqualTo(source.priceClosedSettleDirection());
+        assertThat(rebuilt.priceClosedSettleDays()).isEqualTo(source.priceClosedSettleDays());
         assertThat(rebuilt.items()).isSameAs(source.items());
         assertThat(rebuilt.chargeItems()).isSameAs(source.chargeItems());
     }
@@ -121,7 +122,8 @@ class SalesOrderResponseTest {
                 "中午",
                 "ORDER",
                 3,
-                false,
+                "NEXT",
+                0,
                 List.of(),
                 List.of(),
                 false,

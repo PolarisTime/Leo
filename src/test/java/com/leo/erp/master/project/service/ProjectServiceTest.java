@@ -332,7 +332,7 @@ class ProjectServiceTest {
                 null, null,
                 null, null, null, null,
                 null, null, null,
-                null, null, null));
+                null, null, null, null));
 
         Project entity = savedHolder[0];
         assertThat(entity.getQuoteSource()).isEqualTo("MYSTEEL");
@@ -358,7 +358,7 @@ class ProjectServiceTest {
                 "STEELX", "嘉兴",
                 null, null, null, null,
                 null, null, null,
-                null, null, null));
+                null, null, null, null));
 
         Project entity = savedHolder[0];
         assertThat(entity.getQuoteSource()).isEqualTo("STEELX");
@@ -529,7 +529,7 @@ class ProjectServiceTest {
         return new ProjectRequest("111", "项目A", null, null, null,
                 7L, "C007", 55L, "结算公司A", "正常", null, null, null, null,
                 allowedBrands, allowedMaterials, allowedBrandSeverity, allowedMaterialSeverity,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
     }
 
     /** 清单非空但未指定力度时落到 WARN: V176 已配置的项目升级后行为必须不变。 */
@@ -586,49 +586,55 @@ class ProjectServiceTest {
 
     // ==================== 取价基准(按日期自动取价)配置 ====================
 
-    /** 未配置时落到默认: 送货日期当天 + 偏移 0 + 不按休市前结算 + 自动取当日最新时段。 */
+    /** 未配置时落到默认: 送货日期当天 + 偏移 0 + 往前 1 个交易日 + 自动取当日最新时段。 */
     @Test
     void create_pricingBasisAbsent_defaultsToDeliveryAuto() {
         Project[] savedHolder = new Project[1];
         stubCreateSave(savedHolder);
 
-        service().create(pricingRequest(null, null, null, null, null));
+        service().create(pricingRequest(null, null, null, null, null, null));
 
         Project entity = savedHolder[0];
         assertThat(entity.getPriceDateBasis()).isEqualTo("DELIVERY");
         assertThat(entity.getPriceDateOffsetDays()).isZero();
-        assertThat(entity.getPriceClosedDayPrevSettle()).isFalse();
+        assertThat(entity.getPriceClosedSettleDirection()).isEqualTo("PREV");
+        assertThat(entity.getPriceClosedSettleDays()).isEqualTo(1);
         assertThat(entity.getPricePeriodPolicy()).isEqualTo("AUTO");
         assertThat(entity.getPricePeriodFixed()).isNull();
     }
 
-    /** 报单日基准下偏移与「休市按前一交易日结算」开关都要落库; 取值大小写不敏感。 */
+    /** 报单日基准下偏移与「休市位移方向/天数」都要落库; 取值大小写不敏感, ORDER+NEXT 允许 0。 */
     @Test
-    void create_orderBasis_persistsOffsetAndClosedDaySettleSwitch() {
+    void create_orderBasis_persistsOffsetAndClosedSettleDirectionDays() {
         Project[] savedHolder = new Project[1];
         stubCreateSave(savedHolder);
 
-        service().create(pricingRequest("order", 2, true, null, null));
+        service().create(pricingRequest("order", 2, "next", 0, null, null));
 
         Project entity = savedHolder[0];
         assertThat(entity.getPriceDateBasis()).isEqualTo("ORDER");
         assertThat(entity.getPriceDateOffsetDays()).isEqualTo(2);
-        assertThat(entity.getPriceClosedDayPrevSettle()).isTrue();
+        assertThat(entity.getPriceClosedSettleDirection()).isEqualTo("NEXT");
+        assertThat(entity.getPriceClosedSettleDays()).isZero();
         assertThat(entity.getPricePeriodPolicy()).isEqualTo("AUTO");
     }
 
-    /** 非报单日基准时偏移与休市开关必须复位, 避免切换基准后残留旧值继续影响取价。 */
+    /**
+     * 非报单日基准只复位偏移; 休市位移方向/天数对 DELIVERY 同样有效, 必须原样保留 ——
+     * 复位会让「送货日休市往前第 3 个交易日」这类配置在保存后静默变成默认值。
+     */
     @Test
-    void create_nonOrderBasis_resetsOffsetAndSettleSwitch() {
+    void create_nonOrderBasis_resetsOffsetButKeepsClosedSettle() {
         Project[] savedHolder = new Project[1];
         stubCreateSave(savedHolder);
 
-        service().create(pricingRequest("DELIVERY", 5, true, null, null));
+        service().create(pricingRequest("DELIVERY", 5, "PREV", 3, null, null));
 
         Project entity = savedHolder[0];
         assertThat(entity.getPriceDateBasis()).isEqualTo("DELIVERY");
         assertThat(entity.getPriceDateOffsetDays()).isZero();
-        assertThat(entity.getPriceClosedDayPrevSettle()).isFalse();
+        assertThat(entity.getPriceClosedSettleDirection()).isEqualTo("PREV");
+        assertThat(entity.getPriceClosedSettleDays()).isEqualTo(3);
     }
 
     @Test
@@ -636,7 +642,7 @@ class ProjectServiceTest {
         Project[] savedHolder = new Project[1];
         stubCreateSave(savedHolder);
 
-        service().create(pricingRequest(null, null, null, "fixed", "下午"));
+        service().create(pricingRequest(null, null, null, null, "fixed", "下午"));
 
         Project entity = savedHolder[0];
         assertThat(entity.getPricePeriodPolicy()).isEqualTo("FIXED");
@@ -649,7 +655,7 @@ class ProjectServiceTest {
         Project[] savedHolder = new Project[1];
         stubCreateSave(savedHolder);
 
-        service().create(pricingRequest(null, null, null, "MANUAL", "下午"));
+        service().create(pricingRequest(null, null, null, null, "MANUAL", "下午"));
 
         Project entity = savedHolder[0];
         assertThat(entity.getPricePeriodPolicy()).isEqualTo("MANUAL");
@@ -661,7 +667,7 @@ class ProjectServiceTest {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
                 .thenReturn(Optional.of(customer(7L, "C007")));
 
-        assertThatThrownBy(() -> service().create(pricingRequest(null, null, null, "FIXED", null)))
+        assertThatThrownBy(() -> service().create(pricingRequest(null, null, null, null, "FIXED", null)))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -674,7 +680,7 @@ class ProjectServiceTest {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
                 .thenReturn(Optional.of(customer(7L, "C007")));
 
-        assertThatThrownBy(() -> service().create(pricingRequest(null, null, null, "FIXED", "傍晚")))
+        assertThatThrownBy(() -> service().create(pricingRequest(null, null, null, null, "FIXED", "傍晚")))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -687,7 +693,7 @@ class ProjectServiceTest {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
                 .thenReturn(Optional.of(customer(7L, "C007")));
 
-        assertThatThrownBy(() -> service().create(pricingRequest("WEEKLY", null, null, null, null)))
+        assertThatThrownBy(() -> service().create(pricingRequest("WEEKLY", null, null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -700,7 +706,7 @@ class ProjectServiceTest {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
                 .thenReturn(Optional.of(customer(7L, "C007")));
 
-        assertThatThrownBy(() -> service().create(pricingRequest(null, null, null, "SOMETIMES", null)))
+        assertThatThrownBy(() -> service().create(pricingRequest(null, null, null, null, "SOMETIMES", null)))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -713,7 +719,7 @@ class ProjectServiceTest {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
                 .thenReturn(Optional.of(customer(7L, "C007")));
 
-        assertThatThrownBy(() -> service().create(pricingRequest("ORDER", 31, null, null, null)))
+        assertThatThrownBy(() -> service().create(pricingRequest("ORDER", 31, null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -731,7 +737,7 @@ class ProjectServiceTest {
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
                 .thenReturn(Optional.of(customer(7L, "C007")));
 
-        assertThatThrownBy(() -> service().create(pricingRequest("DELIVERY", 31, null, null, null)))
+        assertThatThrownBy(() -> service().create(pricingRequest("DELIVERY", 31, null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -745,32 +751,37 @@ class ProjectServiceTest {
         Project[] savedHolder = new Project[1];
         stubCreateSave(savedHolder);
 
-        service().create(pricingRequest("DELIVERY", 5, null, null, null));
+        service().create(pricingRequest("DELIVERY", 5, null, null, null, null));
 
         assertThat(savedHolder[0].getPriceDateOffsetDays()).isZero();
     }
 
-    /** 项目从报单日基准切走时, 偏移与休市开关必须随之一并复位。 */
+    /**
+     * 项目从报单日基准切走时偏移必须复位（它只在 ORDER 有意义）；请求未携带的新字段
+     * 落回「往前 1 个交易日」默认值，不能留着 ORDER 时的 NEXT/0 造成隐性半配置。
+     */
     @Test
-    void update_switchingAwayFromOrderBasis_resetsOffsetAndSettleSwitch() {
+    void update_switchingAwayFromOrderBasis_resetsOffsetAndClosedSettleDefaults() {
         Project entity = new Project();
         entity.setId(5L);
         entity.setProjectName("项目A");
         entity.setProjectCode("P001");
         entity.setPriceDateBasis("ORDER");
         entity.setPriceDateOffsetDays(2);
-        entity.setPriceClosedDayPrevSettle(true);
+        entity.setPriceClosedSettleDirection("NEXT");
+        entity.setPriceClosedSettleDays(0);
         when(projectRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(customerRepository.findByIdAndDeletedFlagFalse(7L))
                 .thenReturn(Optional.of(customer(7L, "C007")));
         when(codeIssuanceService.resolve("project", "P001", "111")).thenReturn("P001");
         when(projectRepository.save(entity)).thenReturn(entity);
 
-        service().update(5L, pricingRequest("DELIVERY", null, null, null, null));
+        service().update(5L, pricingRequest("DELIVERY", null, null, null, null, null));
 
         assertThat(entity.getPriceDateBasis()).isEqualTo("DELIVERY");
         assertThat(entity.getPriceDateOffsetDays()).isZero();
-        assertThat(entity.getPriceClosedDayPrevSettle()).isFalse();
+        assertThat(entity.getPriceClosedSettleDirection()).isEqualTo("PREV");
+        assertThat(entity.getPriceClosedSettleDays()).isEqualTo(1);
     }
 
     /** 项目从固定时段策略切走时, 固定时段必须清空。 */
@@ -788,19 +799,149 @@ class ProjectServiceTest {
         when(codeIssuanceService.resolve("project", "P001", "111")).thenReturn("P001");
         when(projectRepository.save(entity)).thenReturn(entity);
 
-        service().update(5L, pricingRequest(null, null, null, "AUTO", null));
+        service().update(5L, pricingRequest(null, null, null, null, "AUTO", null));
 
         assertThat(entity.getPricePeriodPolicy()).isEqualTo("AUTO");
         assertThat(entity.getPricePeriodFixed()).isNull();
     }
 
+    // ==================== 基准日休市位移(方向 + X 个交易日) ====================
+
+    /** 非法方向 422: 方向和天数是同一条规则的两半, 写错方向必须当场拒绝而不是回落默认值。 */
+    @Test
+    void create_rejectsUnknownClosedSettleDirection() {
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007")));
+
+        assertThatThrownBy(() -> service().create(
+                pricingRequest("ORDER", 2, "SIDEWAYS", 1, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("休市位移方向仅支持 PREV(往前)/NEXT(延后)");
+        verify(projectRepository, never()).save(any(Project.class));
+    }
+
+    /** 方向 PREV 必须 ≥1 个交易日: 往前位移 0 天没有意义, 覆盖 ORDER 与 DELIVERY 两种基准。 */
+    @Test
+    void create_closedSettleDaysZeroWithPrevDirection_rejected() {
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007")));
+
+        assertThatThrownBy(() -> service().create(
+                pricingRequest("ORDER", 2, "PREV", 0, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("休市位移方向为 PREV(往前) 时交易日数必须大于 0");
+        verify(projectRepository, never()).save(any(Project.class));
+    }
+
+    /** DELIVERY 必须 ≥1: 送货日休市时必须换到一个真实交易日, 不能「原地不动」。 */
+    @Test
+    void create_closedSettleDaysZeroWithDeliveryBasis_rejected() {
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007")));
+
+        assertThatThrownBy(() -> service().create(
+                pricingRequest("DELIVERY", null, "NEXT", 0, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("按送货日期取价时休市位移交易日数必须大于 0(送货日休市必须换到一个真实交易日)");
+        verify(projectRepository, never()).save(any(Project.class));
+    }
+
+    @Test
+    void create_closedSettleDaysAboveLimit_rejected() {
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007")));
+
+        assertThatThrownBy(() -> service().create(
+                pricingRequest("ORDER", 2, "NEXT", 31, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("休市位移交易日数必须在 0 到 30 之间");
+        verify(projectRepository, never()).save(any(Project.class));
+    }
+
+    /** ORDER + NEXT + 0 是「不做方向位移」的合法配置（等价旧「关闭休市按前一交易日结算」）。 */
+    @Test
+    void create_orderNextWithZeroDays_isAllowed() {
+        Project[] savedHolder = new Project[1];
+        stubCreateSave(savedHolder);
+
+        service().create(pricingRequest("ORDER", 0, "NEXT", 0, null, null));
+
+        assertThat(savedHolder[0].getPriceClosedSettleDirection()).isEqualTo("NEXT");
+        assertThat(savedHolder[0].getPriceClosedSettleDays()).isZero();
+    }
+
+    /**
+     * MANUAL 不参与解析，只做 0..30 范围校验：`PREV + 0` 这类「非适用组合」不该拦住保存 ——
+     * MANUAL 下这两个字段是禁用态，用户根本改不了，用组合规则卡住只会让项目无法保存。
+     */
+    @Test
+    void create_manualBasisOnlyChecksRange_notDirectionCombo() {
+        Project[] savedHolder = new Project[1];
+        stubCreateSave(savedHolder);
+
+        service().create(pricingRequest("MANUAL", null, "PREV", 0, null, null));
+
+        Project entity = savedHolder[0];
+        assertThat(entity.getPriceDateBasis()).isEqualTo("MANUAL");
+        assertThat(entity.getPriceClosedSettleDirection()).isEqualTo("PREV");
+        assertThat(entity.getPriceClosedSettleDays()).isZero();
+    }
+
+    /** 项目从 ORDER+NEXT+0 切到 MANUAL：表单字段禁用、值原样回传，保存必须通过且不清空。 */
+    @Test
+    void update_switchingFromOrderNextZeroToManual_isAllowed() {
+        Project entity = new Project();
+        entity.setId(5L);
+        entity.setProjectName("项目A");
+        entity.setProjectCode("P001");
+        entity.setPriceDateBasis("ORDER");
+        entity.setPriceDateOffsetDays(2);
+        entity.setPriceClosedSettleDirection("NEXT");
+        entity.setPriceClosedSettleDays(0);
+        when(projectRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007")));
+        when(codeIssuanceService.resolve("project", "P001", "111")).thenReturn("P001");
+        when(projectRepository.save(entity)).thenReturn(entity);
+
+        service().update(5L, pricingRequest("MANUAL", 2, "NEXT", 0, null, null));
+
+        assertThat(entity.getPriceDateBasis()).isEqualTo("MANUAL");
+        assertThat(entity.getPriceDateOffsetDays()).as("非 ORDER 基准的偏移仍复位").isZero();
+        assertThat(entity.getPriceClosedSettleDirection()).isEqualTo("NEXT");
+        assertThat(entity.getPriceClosedSettleDays()).isZero();
+    }
+
+    /** MANUAL 只放宽组合规则，范围仍然校验：31 天必须拒。 */
+    @Test
+    void create_manualBasisDaysAboveLimit_rejected() {
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(customer(7L, "C007")));
+
+        assertThatThrownBy(() -> service().create(
+                pricingRequest("MANUAL", null, "NEXT", 31, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("休市位移交易日数必须在 0 到 30 之间");
+        verify(projectRepository, never()).save(any(Project.class));
+    }
+
     private ProjectRequest pricingRequest(String priceDateBasis, Integer priceDateOffsetDays,
-                                          Boolean priceClosedDayPrevSettle, String pricePeriodPolicy,
-                                          String pricePeriodFixed) {
+                                          String priceClosedSettleDirection, Integer priceClosedSettleDays,
+                                          String pricePeriodPolicy, String pricePeriodFixed) {
         return new ProjectRequest("111", "项目A", null, null, null,
                 7L, "C007", 55L, "结算公司A", "正常", null, null, null, null,
                 null, null, null, null,
-                priceDateBasis, priceDateOffsetDays, priceClosedDayPrevSettle,
+                priceDateBasis, priceDateOffsetDays, priceClosedSettleDirection, priceClosedSettleDays,
                 pricePeriodPolicy, pricePeriodFixed, null);
     }
 }

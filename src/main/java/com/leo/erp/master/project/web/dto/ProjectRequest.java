@@ -51,8 +51,11 @@ public record ProjectRequest(
         /** 报单日基准的偏移交易日数(0..30), 仅 ORDER 有意义; 空表示 0。 */
         @PositiveOrZero(message = "取价偏移交易日数不能为负")
         Integer priceDateOffsetDays,
-        /** 报单日为休市日时是否按前一个交易日结算, 仅 ORDER 有意义; 空表示否。 */
-        Boolean priceClosedDayPrevSettle,
+        /** 基准日休市时的位移方向: PREV往前/NEXT延后(DELIVERY与ORDER有效); 空表示 PREV。 */
+        String priceClosedSettleDirection,
+        /** 基准日休市位移的交易日数(0..30; 0 仅 ORDER+NEXT 有效); 空表示 1。 */
+        @PositiveOrZero(message = "休市位移交易日数不能为负")
+        Integer priceClosedSettleDays,
         /** 时段策略: AUTO当日最新/FIXED固定时段/MANUAL每次手工选择; 空表示 AUTO。 */
         String pricePeriodPolicy,
         /** 固定取价时段(上午/中午/下午), 仅 FIXED 时必填。 */
@@ -69,7 +72,7 @@ public record ProjectRequest(
                           String remark) {
         this(projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
                 null, customerCode, null, null, status, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, remark);
+                null, null, null, null, null, null, null, null, null, null, remark);
     }
 
     /** 兼容旧调用方: 未携带取价数据源。 */
@@ -89,7 +92,7 @@ public record ProjectRequest(
         this(projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
                 customerId, customerCode, settlementCompanyId, settlementCompanyName,
                 status, priceFloatMode, priceFloatValue, null, null, null, null, null, null,
-                null, null, null, null, null, remark);
+                null, null, null, null, null, null, remark);
     }
 
     /** 兼容旧调用方: 未携带网价浮动。 */
@@ -107,7 +110,7 @@ public record ProjectRequest(
         this(projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
                 customerId, customerCode, settlementCompanyId, settlementCompanyName,
                 status, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, remark);
+                null, null, null, null, null, null, remark);
     }
 
     /** 兼容旧调用方: 未携带允许品牌/材质的处理方式。 */
@@ -132,6 +135,6 @@ public record ProjectRequest(
                 customerId, customerCode, settlementCompanyId, settlementCompanyName,
                 status, priceFloatMode, priceFloatValue, quoteSource, quoteRegion,
                 allowedBrands, allowedMaterials, null, null,
-                null, null, null, null, null, remark);
+                null, null, null, null, null, null, remark);
     }
 }

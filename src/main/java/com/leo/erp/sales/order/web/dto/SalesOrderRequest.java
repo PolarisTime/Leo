@@ -38,8 +38,10 @@ public record SalesOrderRequest(
         String priceDateBasis,
         /** 本次生效的偏移交易日数(0..30)。 */
         Integer priceDateOffsetDays,
-        /** 本次生效的「报单日休市按前一交易日结算」开关。 */
-        Boolean priceClosedSettlePrev,
+        /** 本次生效的「基准日休市位移方向」: PREV往前/NEXT延后(DELIVERY与ORDER有效); 空表示 PREV。 */
+        String priceClosedSettleDirection,
+        /** 本次生效的「基准日休市位移交易日数」(0..30; 0 仅 ORDER+NEXT 有效); 空表示 1。 */
+        Integer priceClosedSettleDays,
         @Valid @NotEmpty List<SalesOrderItemRequest> items,
         @Valid List<DocumentChargeItemRequest> chargeItems,
         boolean audit
@@ -71,7 +73,7 @@ public record SalesOrderRequest(
                              boolean audit) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, status, remark,
-                null, null, null, null, null, null, null, items, chargeItems, audit);
+                null, null, null, null, null, null, null, null, items, chargeItems, audit);
     }
     public SalesOrderRequest(String orderNo,
                              String purchaseInboundNo,
@@ -88,7 +90,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
-                settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, items,
+                settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, null, items,
                 List.of(), false);
     }
 
@@ -105,7 +107,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
-                null, null, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
+                null, null, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, null, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -120,7 +122,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, null, customerCode, null, customerName, projectId, projectName,
-                null, null, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
+                null, null, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, null, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -133,7 +135,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, null, null, null, customerName, null, projectName,
-                null, null, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
+                null, null, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, null, items, List.of(), false);
     }
 
     public SalesOrderRequest(String orderNo,
@@ -147,7 +149,7 @@ public record SalesOrderRequest(
                              String remark,
                              List<SalesOrderItemRequest> items) {
         this(orderNo, purchaseInboundNo, purchaseOrderNo, null, null, customerName, null, projectName,
-                null, null, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, items, List.of(), false);
+                null, null, deliveryDate, null, salesName, status, remark, null, null, null, null, null, null, null, null, items, List.of(), false);
     }
 
 }

@@ -23,6 +23,10 @@ import java.util.Optional;
  * <p>向后取价一律逐日顺延：{@link #next(LocalDate)} / {@link #after(LocalDate, int)} 只把
  * 有行情的日期当作交易日计数，中间的休市/无行情日照常跳过；顺延到日历末端仍不足所需个数时
  * 返回空，调用方据此给出「行情尚未发布」而不是报错。</p>
+ *
+ * <p>向前取价与向后对称：{@link #previous(LocalDate)} / {@link #before(LocalDate, int)} 只把
+ * 有行情的日期当作交易日计数，回溯到日历起点仍不足所需个数时返回空，调用方据此给出「可用行情
+ * 范围内找不到更早的交易日」(参数错误 422) —— 与「行情尚未发布」的可重试语义区分开。</p>
  */
 final class TradingCalendar {
 
@@ -62,11 +66,36 @@ final class TradingCalendar {
         return date != null && periodsByDate.containsKey(date);
     }
 
-    /** 严格早于给定日期的最近交易日。 */
+    /** 严格早于给定日期的最近交易日（= {@link #before(LocalDate, int)} 取 1 个）。 */
     Optional<LocalDate> previous(LocalDate date) {
+        return before(date, 1);
+    }
+
+    /**
+     * 严格早于给定日期的第 {@code n} 个交易日；{@code n < 1} 视为 1（与 {@link #after(LocalDate, int)} 对称）。
+     *
+     * <p>逐日向前回溯：中间仍是休市/无行情（不进入交易日集合）就继续往前走，直到凑满 {@code n} 个；
+     * 回溯到日历起点仍不足时返回空 —— 由调用方判定为「可用行情范围内找不到更早的交易日」(422)，
+     * 而不是猜一个日期。</p>
+     */
+    Optional<LocalDate> before(LocalDate date, int n) {
         if (date == null) {
             return Optional.empty();
         }
+        int remaining = Math.max(n, 1);
+        Optional<LocalDate> cursor = Optional.of(date);
+        while (remaining > 0) {
+            cursor = cursor.flatMap(this::nearestBefore);
+            if (cursor.isEmpty()) {
+                return Optional.empty();
+            }
+            remaining--;
+        }
+        return cursor;
+    }
+
+    /** 单步回溯：严格早于给定日期的最近交易日（{@link #previous} / {@link #before} 的唯一扫描实现）。 */
+    private Optional<LocalDate> nearestBefore(LocalDate date) {
         LocalDate found = null;
         for (LocalDate day : tradingDays) {
             if (day.isBefore(date)) {

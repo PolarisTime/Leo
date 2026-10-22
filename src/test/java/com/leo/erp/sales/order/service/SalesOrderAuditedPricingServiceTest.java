@@ -95,7 +95,7 @@ class SalesOrderAuditedPricingServiceTest {
         return new SalesOrderRequest(
                 "SO001", "IB001", "PO001", "CUST001", 10L, "客户A", 20L, "项目A", null, null,
                 deliveryDate, orderDate, "销售员A", status, null,
-                null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
                 items, List.of(), false);
     }
 

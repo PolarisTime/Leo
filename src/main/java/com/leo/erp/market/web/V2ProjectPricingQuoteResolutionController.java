@@ -4,6 +4,7 @@ import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.Basis;
+import com.leo.erp.master.api.ProjectPricingBasisQuery.ClosedSettleDirection;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.PeriodPolicy;
 import com.leo.erp.market.service.PricingQuoteResolver;
 import com.leo.erp.market.web.dto.PricingQuoteResolutionResponse;
@@ -40,10 +41,11 @@ public class V2ProjectPricingQuoteResolutionController {
     }
 
     @Operation(summary = "解析项目取价基准",
-            description = "按项目配置(或调用方覆盖)与单据日期解析实际取价日与时段; 休市/缺时段会回退并在响应中说明, "
-                    + "手工基准不自动替换只给建议日期; 报单日基准向后逐日顺延(跳过休市/无行情), "
-                    + "顺延到已发布行情末端仍不足第 N 个交易日时返回 200 且 quoteAvailable=false(行情尚未发布), "
-                    + "由界面提示稍后重试或手工指定取价日期")
+            description = "按项目配置(或调用方覆盖)与单据日期解析实际取价日与时段; 基准日休市时按"
+                    + "「方向(priceClosedSettleDirection=PREV往前/NEXT延后) + priceClosedSettleDays 个交易日」"
+                    + "位移到休市基准日, 送货日期基准直接取该日、报单日期基准再叠加顺延天数; "
+                    + "顺延到已发布行情末端仍不足时返回 200 且 quoteAvailable=false(行情尚未发布), "
+                    + "由界面提示稍后重试或手工指定取价日期; 手工基准不自动替换只给建议日期")
     @GetMapping
     @RequirePermission(PermissionCodes.MATERIAL_PRICE_MATCHES_READ)
     public PricingQuoteResolutionResponse resolve(
@@ -52,20 +54,34 @@ public class V2ProjectPricingQuoteResolutionController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate deliveryDate,
             @RequestParam(required = false) String basis,
             @RequestParam(required = false) Integer offsetDays,
-            @RequestParam(required = false) Boolean settlePrevOnClosed,
+            @RequestParam(required = false) String priceClosedSettleDirection,
+            @RequestParam(required = false) Integer priceClosedSettleDays,
             @RequestParam(required = false) String periodPolicy,
             @RequestParam(required = false) String period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate quoteDate) {
         PricingQuoteResolver.Command command = new PricingQuoteResolver.Command(
                 parseBasis(basis),
                 offsetDays,
-                settlePrevOnClosed,
+                parseClosedSettleDirection(priceClosedSettleDirection),
+                priceClosedSettleDays,
                 parsePeriodPolicy(periodPolicy),
                 period,
                 quoteDate,
                 orderDate,
                 deliveryDate);
         return pricingQuoteResolver.resolve(projectId, command);
+    }
+
+    private ClosedSettleDirection parseClosedSettleDirection(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        ClosedSettleDirection parsed = ClosedSettleDirection.parse(value);
+        if (parsed == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "休市位移方向仅支持 PREV(往前)/NEXT(延后)");
+        }
+        return parsed;
     }
 
     private Basis parseBasis(String value) {

@@ -91,9 +91,18 @@ public class Project extends AbstractAuditableEntity {
     @Column(name = "price_date_offset_days", nullable = false)
     private Integer priceDateOffsetDays;
 
-    /** 报单日为休市日时是否按前一个交易日结算, 仅 ORDER 有意义。 */
-    @Column(name = "price_closed_day_prev_settle", nullable = false)
-    private Boolean priceClosedDayPrevSettle;
+    /**
+     * 基准日(送货日/报单日)休市时的位移方向: PREV 往前第 X 个交易日 / NEXT 延后第 X 个交易日。
+     *
+     * <p>与 {@link #priceClosedSettleDays} 一起构成休市结算的唯一口径; MANUAL 基准不参与。
+     * 旧列 {@code price_closed_day_prev_settle} 已由 V195 置为 deprecated, 不再映射到实体。</p>
+     */
+    @Column(name = "price_closed_settle_direction", nullable = false, length = 8)
+    private String priceClosedSettleDirection;
+
+    /** 基准日休市位移的交易日数(0..30): 0 仅 ORDER+NEXT 有效(不做方向位移, 直接向后顺延取价)。 */
+    @Column(name = "price_closed_settle_days", nullable = false)
+    private Integer priceClosedSettleDays;
 
     /** 时段策略: AUTO 当日最新 / FIXED 固定 / MANUAL 每次手工选择。 */
     @Column(name = "price_period_policy", nullable = false, length = 16)

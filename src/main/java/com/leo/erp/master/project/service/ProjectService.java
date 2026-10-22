@@ -5,7 +5,9 @@ import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.master.api.ProjectPricingBasisQuery;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.Basis;
+import com.leo.erp.master.api.ProjectPricingBasisQuery.ClosedSettleDirection;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.PeriodPolicy;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.QuotePeriod;
 import com.leo.erp.common.error.ErrorCode;
@@ -50,6 +52,8 @@ public class ProjectService {
 
     /** 取价偏移交易日上限: 与 md_project 的 CHECK 约束一致。 */
     private static final int MAX_PRICE_DATE_OFFSET_DAYS = 30;
+    /** 休市位移交易日数缺省值: 与 md_project 列的 DEFAULT 及前端默认一致(往前 1 个交易日)。 */
+    private static final int DEFAULT_CLOSED_SETTLE_DAYS = 1;
 
     private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
     private static final String CODE_MODULE_KEY = ModuleKeys.PROJECT;
@@ -240,7 +244,8 @@ public class ProjectService {
                         request.allowedBrands(), request.allowedMaterials(),
                         request.allowedBrandSeverity(), request.allowedMaterialSeverity(),
                         request.priceDateBasis(), request.priceDateOffsetDays(),
-                        request.priceClosedDayPrevSettle(), request.pricePeriodPolicy(),
+                        request.priceClosedSettleDirection(), request.priceClosedSettleDays(),
+                        request.pricePeriodPolicy(),
                         request.pricePeriodFixed(), request.remark()
                 )
         );
@@ -286,8 +291,12 @@ public class ProjectService {
     /**
      * 归一化取价基准配置。
      *
-     * <p>非适用字段一律复位（偏移与休市开关只在报单日基准有意义，固定时段只在 FIXED 有意义）：
+     * <p>非适用字段一律复位（偏移只在报单日基准有意义，固定时段只在 FIXED 有意义）：
      * 否则会出现「切回自动策略却仍带着旧固定时段」这类半配置状态，脏值又会被取价解析当成有效输入。</p>
+     *
+     * <p>「基准日休市位移」方向/天数对 DELIVERY 与 ORDER <b>都有效</b>（只有 MANUAL 不参与），因此不做
+     * 复位；校验统一走 {@link ProjectPricingBasisQuery#requireValidClosedSettle}，与交付核定快照、
+     * 取价解析同一口径（PREV 必须 ≥1、DELIVERY 必须 ≥1、只有 ORDER+NEXT 允许 0）。</p>
      */
     private void applyPricingBasis(Project entity, ProjectRequest request) {
         Basis basis = resolvePricingBasis(request.priceDateBasis());
@@ -295,14 +304,36 @@ public class ProjectService {
         // 传了非法值说明调用方有 bug, 不该被「非 ORDER 就复位」顺带吞掉。
         int requestedOffsetDays = resolvePriceOffsetDays(request.priceDateOffsetDays());
         int offsetDays = basis == Basis.ORDER ? requestedOffsetDays : 0;
-        boolean settlePrev = basis == Basis.ORDER && Boolean.TRUE.equals(request.priceClosedDayPrevSettle());
+        ClosedSettleDirection direction = resolveClosedSettleDirection(request.priceClosedSettleDirection());
+        int closedSettleDays = resolveClosedSettleDays(basis, direction, request.priceClosedSettleDays());
         PeriodPolicy policy = resolvePricePeriodPolicy(request.pricePeriodPolicy());
         String fixedPeriod = policy == PeriodPolicy.FIXED ? requireFixedPeriod(request.pricePeriodFixed()) : null;
         entity.setPriceDateBasis(basis.name());
         entity.setPriceDateOffsetDays(offsetDays);
-        entity.setPriceClosedDayPrevSettle(settlePrev);
+        entity.setPriceClosedSettleDirection(direction.name());
+        entity.setPriceClosedSettleDays(closedSettleDays);
         entity.setPricePeriodPolicy(policy.name());
         entity.setPricePeriodFixed(fixedPeriod);
+    }
+
+    /** 休市位移方向: 空表示默认 PREV(往前); 非法值 422。 */
+    private ClosedSettleDirection resolveClosedSettleDirection(String requested) {
+        String normalized = trimToNull(requested);
+        if (normalized == null) {
+            return ClosedSettleDirection.PREV;
+        }
+        ClosedSettleDirection parsed = ClosedSettleDirection.parse(normalized);
+        if (parsed == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "休市位移方向仅支持 PREV(往前)/NEXT(延后)");
+        }
+        return parsed;
+    }
+
+    /** 休市位移交易日数: 空表示默认 1; 范围与方向/基准的组合规则走唯一口径校验。 */
+    private int resolveClosedSettleDays(Basis basis, ClosedSettleDirection direction, Integer requested) {
+        int days = requested == null ? DEFAULT_CLOSED_SETTLE_DAYS : requested;
+        return ProjectPricingBasisQuery.requireValidClosedSettle(basis, direction, days);
     }
 
     /** 取价基准: 空表示送货日期当天(默认)。 */
@@ -480,7 +511,8 @@ public class ProjectService {
                 request.allowedMaterialSeverity(),
                 request.priceDateBasis(),
                 request.priceDateOffsetDays(),
-                request.priceClosedDayPrevSettle(),
+                request.priceClosedSettleDirection(),
+                request.priceClosedSettleDays(),
                 request.pricePeriodPolicy(),
                 request.pricePeriodFixed(),
                 request.remark()
@@ -514,7 +546,8 @@ public class ProjectService {
                     request.allowedBrands(), request.allowedMaterials(),
                     request.allowedBrandSeverity(), request.allowedMaterialSeverity(),
                     request.priceDateBasis(), request.priceDateOffsetDays(),
-                    request.priceClosedDayPrevSettle(), request.pricePeriodPolicy(),
+                    request.priceClosedSettleDirection(), request.priceClosedSettleDays(),
+                    request.pricePeriodPolicy(),
                     request.pricePeriodFixed(), request.remark()
             );
         }
@@ -529,7 +562,8 @@ public class ProjectService {
                 request.allowedBrands(), request.allowedMaterials(),
                 request.allowedBrandSeverity(), request.allowedMaterialSeverity(),
                 request.priceDateBasis(), request.priceDateOffsetDays(),
-                request.priceClosedDayPrevSettle(), request.pricePeriodPolicy(),
+                request.priceClosedSettleDirection(), request.priceClosedSettleDays(),
+                request.pricePeriodPolicy(),
                 request.pricePeriodFixed(), request.remark()
         );
     }

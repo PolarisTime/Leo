@@ -420,7 +420,8 @@ public class SalesOrderService {
                 request.priceQuotePeriod(),
                 request.priceDateBasis(),
                 request.priceDateOffsetDays(),
-                request.priceClosedSettlePrev(),
+                request.priceClosedSettleDirection(),
+                request.priceClosedSettleDays(),
                 request.items(),
                 request.chargeItems(),
                 request.audit()
@@ -463,7 +464,8 @@ public class SalesOrderService {
                 request.priceQuotePeriod(),
                 request.priceDateBasis(),
                 request.priceDateOffsetDays(),
-                request.priceClosedSettlePrev(),
+                request.priceClosedSettleDirection(),
+                request.priceClosedSettleDays(),
                 request.items(),
                 request.chargeItems(),
                 request.audit()
@@ -494,7 +496,8 @@ public class SalesOrderService {
                 request.priceQuotePeriod(),
                 request.priceDateBasis(),
                 request.priceDateOffsetDays(),
-                request.priceClosedSettlePrev(),
+                request.priceClosedSettleDirection(),
+                request.priceClosedSettleDays(),
                 request.items(),
                 request.chargeItems(),
                 request.audit()

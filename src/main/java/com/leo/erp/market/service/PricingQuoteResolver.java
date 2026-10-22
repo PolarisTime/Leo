@@ -5,6 +5,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.leo.erp.master.api.ProjectPricingBasisQuery;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.Basis;
+import com.leo.erp.master.api.ProjectPricingBasisQuery.ClosedSettleDirection;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.PeriodPolicy;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.PricingBasis;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.QuotePeriod;
@@ -17,24 +18,35 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 取价基准解析：把「项目配置 + 单据日期」换算成实际取价日与实际取价时段。
  *
  * <p>业务口径（详见 {@code docs/specs/2026-10-11-project-pricing-basis-rules-draft.md}）：
+ * 基准日是交易日时一切都与原先一致；基准日休市时由「方向 + X 个交易日」决定休市基准日，
+ * 这套规则对送货日期（DELIVERY）与报单日期（ORDER）<b>同样适用</b>：
  * <ul>
- *   <li>{@code DELIVERY}：送货日期当天；该日无行情时回退到<b>最近的前一个交易日</b>
- *       （货已按当日行情议定，往前找最近一次报价才是结算惯例）；</li>
- *   <li>{@code ORDER}：报单日期之后第 X 个交易日（X=0 表示报单日当天）；
- *       报单日本身休市时，{@code settlePrevOnClosed=true} 按前一个交易日结算，
- *       否则向后取第 max(X,1) 个交易日（当天没有行情，只能向后）。
- *       <b>向后取是逐日顺延的</b>：后面的日子仍是休市/无行情，就继续顺延到下一天，
- *       直到取到第 X 个有行情的交易日；若顺延到可用行情末端仍不足 X 个交易日
- *       （通常是目标交易日的行情尚未发布），<b>不再报错</b>，返回
- *       {@code quoteDate=null}、{@code quoteAvailable=false} 的「行情尚未发布」结果，
+ *   <li>{@code DELIVERY}：送货日期当天即为取价日；送货日休市/无行情时，
+ *       休市基准日 = {@code move(送货日, direction, days)}（PREV 往前第 X 个交易日 / NEXT 延后第 X 个交易日），
+ *       取价日 = 休市基准日；</li>
+ *   <li>{@code ORDER}：报单日之后第 {@code offsetDays} 个交易日（0 表示报单日当天）；
+ *       报单日休市时先算休市基准日：
+ *       <ul>
+ *         <li>PREV：{@code base = before(报单日, days)}；</li>
+ *         <li>NEXT 且 {@code days >= 1}：{@code base = after(报单日, days)}；</li>
+ *         <li>NEXT 且 {@code days == 0}：{@code base = 报单日}（不做方向位移，等价旧「关闭」口径）；</li>
+ *       </ul>
+ *       再取 {@code quoteDate = after(base, offsetDays)}；base 仍是休市日（只有 NEXT + days=0 会这样）
+ *       时由 after 自然向后顺延。<b>向后取是逐日顺延的</b>：后面的日子仍是休市/无行情，就继续顺延到下一天，
+ *       直到取到第 X 个有行情的交易日；若顺延到可用行情末端仍不足（通常是目标交易日的行情尚未发布），
+ *       <b>不再报错</b>，返回 {@code quoteDate=null}、{@code quoteAvailable=false} 的「行情尚未发布」结果，
  *       由界面提示稍后重试或手工指定取价日期；</li>
- *   <li>{@code MANUAL}：弹窗手工指定日期，<b>不做自动替换</b>，只回传建议日期与可用时段。</li>
+ *   <li>{@code MANUAL}：弹窗手工指定日期，<b>不做自动替换</b>，只回传建议日期与可用时段；方向/天数不参与。</li>
  * </ul>
+ *
+ * <p>叠加关系：DELIVERY 只有「方向位移」一段；ORDER 是「方向位移 + 顺延」两段，方向与顺延同向（NEXT）
+ * 时等价于取更远的那个交易日，方向相反（PREV）时先往前再往后。</p>
  *
  * <p>时段：AUTO 取当日最后一个可用时段；FIXED/MANUAL 取目标时段，当日缺该时段时回退到
  * 不晚于它的最后一个可用时段，并在响应里回显 requested/actual 与回退原因（绝不静默换时段）。</p>
@@ -76,17 +88,20 @@ public class PricingQuoteResolver {
 
         Basis basis = cmd.basis() != null ? cmd.basis() : project.basis();
         int offsetDays = cmd.offsetDays() != null ? cmd.offsetDays() : project.offsetDays();
-        boolean settlePrevOnClosed = cmd.settlePrevOnClosed() != null
-                ? cmd.settlePrevOnClosed()
-                : project.settlePrevOnClosed();
+        ClosedSettleDirection closedSettleDirection = cmd.closedSettleDirection() != null
+                ? cmd.closedSettleDirection()
+                : project.closedSettleDirection();
+        int closedSettleDays = cmd.closedSettleDays() != null
+                ? cmd.closedSettleDays()
+                : project.closedSettleDays();
         PeriodPolicy periodPolicy = cmd.periodPolicy() != null ? cmd.periodPolicy() : project.periodPolicy();
         String requestedPeriod = trimToNull(cmd.period()) != null ? cmd.period().trim() : project.fixedPeriod();
 
-        validate(basis, offsetDays, periodPolicy, requestedPeriod, cmd);
+        validate(basis, offsetDays, closedSettleDirection, closedSettleDays, periodPolicy, requestedPeriod, cmd);
 
         LocalDate anchor = anchorDate(basis, cmd);
         TradingCalendar calendar = loadCalendar(anchor, project);
-        ResolvedDate resolvedDate = resolveDate(basis, calendar, cmd, offsetDays, settlePrevOnClosed);
+        ResolvedDate resolvedDate = resolveDate(basis, calendar, cmd, offsetDays, closedSettleDirection, closedSettleDays);
         // 行情尚未发布时没有实际取价日, 也就没有可用时段(不落地空壳日期去取价)
         ResolvedPeriod resolvedPeriod = resolvedDate.pending()
                 ? new ResolvedPeriod(null, null, List.of())
@@ -96,7 +111,8 @@ public class PricingQuoteResolver {
                 projectId,
                 basis.name(),
                 offsetDays,
-                settlePrevOnClosed,
+                closedSettleDirection.name(),
+                closedSettleDays,
                 periodPolicy.name(),
                 requestedPeriod,
                 resolvedDate.targetDate(),
@@ -105,18 +121,20 @@ public class PricingQuoteResolver {
                 resolvedPeriod.period(),
                 resolvedPeriod.period() != null,
                 resolvedDate.suggestedDate(),
-                explanation(basis, resolvedDate, resolvedPeriod, offsetDays, settlePrevOnClosed),
+                explanation(basis, resolvedDate, resolvedPeriod, offsetDays),
                 resolvedDate.fallback(),
                 resolvedPeriod.fallback(),
                 resolvedPeriod.availablePeriods());
     }
 
-    private void validate(Basis basis, int offsetDays, PeriodPolicy periodPolicy,
-                          String requestedPeriod, Command cmd) {
+    private void validate(Basis basis, int offsetDays, ClosedSettleDirection closedSettleDirection,
+                          int closedSettleDays, PeriodPolicy periodPolicy, String requestedPeriod, Command cmd) {
         if (offsetDays < 0 || offsetDays > MAX_OFFSET_DAYS) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR,
                     "取价偏移交易日数必须在 0 到 " + MAX_OFFSET_DAYS + " 之间");
         }
+        // 方向/天数的唯一校验口径(与项目配置写入、交付核定快照共用)
+        ProjectPricingBasisQuery.requireValidClosedSettle(basis, closedSettleDirection, closedSettleDays);
         if (basis == Basis.ORDER && cmd.orderDate() == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "按报单日期取价需要提供报单日期");
         }
@@ -160,37 +178,54 @@ public class PricingQuoteResolver {
         return TradingCalendar.of(rows);
     }
 
-    private ResolvedDate resolveDate(Basis basis, TradingCalendar calendar, Command cmd,
-                                     int offsetDays, boolean settlePrevOnClosed) {
+    private ResolvedDate resolveDate(Basis basis, TradingCalendar calendar, Command cmd, int offsetDays,
+                                     ClosedSettleDirection closedSettleDirection, int closedSettleDays) {
         return switch (basis) {
-            case DELIVERY -> resolveDelivery(calendar, cmd.deliveryDate());
-            case ORDER -> resolveOrder(calendar, cmd.orderDate(), offsetDays, settlePrevOnClosed);
+            case DELIVERY -> resolveDelivery(calendar, cmd.deliveryDate(), closedSettleDirection, closedSettleDays);
+            case ORDER -> resolveOrder(calendar, cmd.orderDate(), offsetDays, closedSettleDirection, closedSettleDays);
             case MANUAL -> resolveManual(calendar, cmd.quoteDate());
         };
     }
 
-    /** 送货日期：当天有行情即当天；否则按前一个交易日结算。 */
-    private ResolvedDate resolveDelivery(TradingCalendar calendar, LocalDate deliveryDate) {
+    /**
+     * 送货日期：当天有行情即当天；休市时按「方向 + X 个交易日」位移到休市基准日，取价日即该日。
+     *
+     * <p>PREV 回溯到可用行情起点仍不足是参数错误（422，只能人工指定）；
+     * NEXT 顺延到可用行情末端仍不足是「行情尚未发布」（不报错，等行情发布后重新解析）。</p>
+     */
+    private ResolvedDate resolveDelivery(TradingCalendar calendar, LocalDate deliveryDate,
+                                         ClosedSettleDirection direction, int days) {
         if (calendar.isTradingDay(deliveryDate)) {
             return ResolvedDate.of(deliveryDate, deliveryDate, null, null);
         }
-        LocalDate previous = calendar.previous(deliveryDate)
-                .orElseThrow(() -> noTradingDay("送货日期 " + displayDate(deliveryDate)
-                        + " 无行情, 且在可用行情范围内找不到之前的交易日", calendar));
-        return ResolvedDate.of(deliveryDate, previous, null,
-                Fallback.of(deliveryDate.toString(), previous.toString(),
-                        "送货日期 " + displayDate(deliveryDate)
-                                + " 无行情(休市或未发布), 按最近的前一个交易日结算"));
+        if (direction == ClosedSettleDirection.PREV) {
+            LocalDate base = calendar.before(deliveryDate, days)
+                    .orElseThrow(() -> noTradingDay("送货日期 " + displayDate(deliveryDate)
+                            + " 无行情, 且在可用行情范围内找不到之前的交易日", calendar));
+            return ResolvedDate.of(deliveryDate, base, null,
+                    Fallback.of(deliveryDate.toString(), base.toString(),
+                            "送货日期 " + displayDate(deliveryDate) + " 无行情(休市或未发布), 按往前第 "
+                                    + days + " 个交易日结算"));
+        }
+        return calendar.after(deliveryDate, days)
+                .map(quoteDate -> ResolvedDate.of(deliveryDate, quoteDate, null,
+                        Fallback.of(deliveryDate.toString(), quoteDate.toString(),
+                                "送货日期 " + displayDate(deliveryDate) + " 无行情(休市或未发布), 按延后第 "
+                                        + days + " 个交易日结算")))
+                .orElseGet(() -> ResolvedDate.pending(deliveryDate, unpublished(
+                        "送货日期 " + displayDate(deliveryDate) + " 延后第 " + days + " 个交易日", calendar)));
     }
 
     /**
-     * 报单日期：报单日之后第 X 个交易日；报单日休市时按开关决定向前结算还是向后取。
+     * 报单日期：报单日之后第 X 个交易日；报单日休市时先按「方向 + X 个交易日」位移到休市基准日，
+     * 再对休市基准日叠加顺延天数。
      *
-     * <p>向后取一律逐日顺延：休市/无行情的日子不计数、继续往后推；推到可用行情末端仍不足
-     * X 个交易日时返回「行情尚未发布」结果，而不是报错。</p>
+     * <p>NEXT 且天数为 0 是「不做方向位移」：直接从报单日向后顺延（等价旧「关闭休市按前一交易日结算」）。
+     * 向后取一律逐日顺延：休市/无行情的日子不计数、继续往后推；推到可用行情末端仍不足时返回
+     * 「行情尚未发布」结果，而不是报错。</p>
      */
-    private ResolvedDate resolveOrder(TradingCalendar calendar, LocalDate orderDate,
-                                      int offsetDays, boolean settlePrevOnClosed) {
+    private ResolvedDate resolveOrder(TradingCalendar calendar, LocalDate orderDate, int offsetDays,
+                                      ClosedSettleDirection direction, int days) {
         if (calendar.isTradingDay(orderDate)) {
             if (offsetDays == 0) {
                 return ResolvedDate.of(orderDate, orderDate, null, null);
@@ -200,35 +235,74 @@ public class PricingQuoteResolver {
                     .orElseGet(() -> ResolvedDate.pending(orderDate, unpublished(
                             "报单日期 " + displayDate(orderDate) + " 之后第 " + offsetDays + " 个交易日", calendar)));
         }
-        if (settlePrevOnClosed) {
-            LocalDate base = calendar.previous(orderDate)
+        LocalDate base;
+        boolean shifted;
+        if (direction == ClosedSettleDirection.PREV) {
+            // 往前位移: 回溯不到足够的交易日是参数错误(422), 不猜日期
+            base = calendar.before(orderDate, days)
                     .orElseThrow(() -> noTradingDay("报单日期 " + displayDate(orderDate)
                             + " 无行情, 且在可用行情范围内找不到之前的交易日", calendar));
-            if (offsetDays == 0) {
-                return ResolvedDate.of(orderDate, base, null,
-                        Fallback.of(orderDate.toString(), base.toString(),
-                                "报单日期 " + displayDate(orderDate) + " 为休市, 按前一个交易日结算"));
+            shifted = true;
+        } else if (days == 0) {
+            // 不做方向位移: 报单日本身就是休市基准日, 由 after 自然向后顺延
+            base = orderDate;
+            shifted = false;
+        } else {
+            Optional<LocalDate> moved = calendar.after(orderDate, days);
+            if (moved.isEmpty()) {
+                // 延后取不足: 目标交易日的行情尚未发布(不是参数错误)
+                return ResolvedDate.pending(orderDate, unpublished(
+                        "报单日期 " + displayDate(orderDate) + " 为休市, 其后第 " + days + " 个交易日", calendar));
             }
-            return calendar.after(base, offsetDays)
-                    .map(quoteDate -> ResolvedDate.of(orderDate, quoteDate, null,
-                            Fallback.of(orderDate.toString(), quoteDate.toString(),
-                                    "报单日期 " + displayDate(orderDate) + " 为休市, 按前一个交易日结算")))
-                    .orElseGet(() -> ResolvedDate.pending(orderDate, unpublished(
-                            "报单日期 " + displayDate(orderDate) + " 的前一个交易日 " + displayDate(base)
-                                    + " 之后第 " + offsetDays + " 个交易日", calendar)));
+            base = moved.get();
+            shifted = true;
         }
-        int effectiveOffset = Math.max(offsetDays, 1);
-        return calendar.after(orderDate, effectiveOffset)
+        // 休市基准日是交易日时, 顺延天数为 0 表示直接取该日; 否则按交易日向后数(不足 1 按 1 计)
+        int step = offsetDays;
+        if (step == 0 && calendar.isTradingDay(base)) {
+            return ResolvedDate.of(orderDate, base, null,
+                    Fallback.of(orderDate.toString(), base.toString(),
+                            orderMoveReason(orderDate, direction, days, 0, shifted)));
+        }
+        if (step == 0) {
+            // base 仍是休市日(只有 NEXT + days=0): 至少向后数 1 个交易日
+            step = 1;
+        }
+        int forward = step;
+        return calendar.after(base, forward)
                 .map(quoteDate -> ResolvedDate.of(orderDate, quoteDate, null,
                         Fallback.of(orderDate.toString(), quoteDate.toString(),
-                                "报单日期 " + displayDate(orderDate) + " 为休市, 按之后第 "
-                                        + effectiveOffset + " 个交易日取价")))
+                                orderMoveReason(orderDate, direction, days, forward, shifted))))
                 .orElseGet(() -> ResolvedDate.pending(orderDate, unpublished(
-                        "报单日期 " + displayDate(orderDate) + " 为休市, 其后第 " + effectiveOffset
-                                + " 个交易日", calendar)));
+                        orderForwardTarget(orderDate, base, forward, shifted), calendar)));
     }
 
-    /** 手工指定：不自动替换，只给建议日期与可用时段。 */
+    /** 「行情尚未发布」说明里的目标口径：未做方向位移时直接从报单日算，位移过则从休市基准日算。 */
+    private String orderForwardTarget(LocalDate orderDate, LocalDate base, int forward, boolean shifted) {
+        if (!shifted) {
+            return "报单日期 " + displayDate(orderDate) + " 为休市, 其后第 " + forward + " 个交易日";
+        }
+        return "报单日期 " + displayDate(orderDate) + " 的休市基准日 " + displayDate(base)
+                + " 之后第 " + forward + " 个交易日";
+    }
+
+    /**
+     * 休市位移的中文原因。
+     *
+     * @param shifted   是否发生了「方向位移」（NEXT + 天数为 0 时为 false）
+     * @param forward   方向位移之后再顺延的交易日数（0 表示不再顺延）
+     */
+    private String orderMoveReason(LocalDate orderDate, ClosedSettleDirection direction, int days,
+                                   int forward, boolean shifted) {
+        String head = "报单日期 " + displayDate(orderDate) + " 为休市, ";
+        if (!shifted) {
+            return head + "不按方向位移, 从报单日向后取第 " + Math.max(forward, 1) + " 个交易日";
+        }
+        String move = "按" + direction.label() + "第 " + days + " 个交易日结算";
+        return forward == 0 ? head + move : head + move + "后再取之后第 " + forward + " 个交易日";
+    }
+
+    /** 手工指定：不自动替换，只给建议日期与可用时段；方向/天数不参与。 */
     private ResolvedDate resolveManual(TradingCalendar calendar, LocalDate quoteDate) {
         if (calendar.isTradingDay(quoteDate)) {
             return ResolvedDate.of(quoteDate, quoteDate, null, null);
@@ -261,7 +335,7 @@ public class PricingQuoteResolver {
     }
 
     private String explanation(Basis basis, ResolvedDate resolvedDate, ResolvedPeriod resolvedPeriod,
-                               int offsetDays, boolean settlePrevOnClosed) {
+                              int offsetDays) {
         if (resolvedDate.pending()) {
             return resolvedDate.pendingReason();
         }
@@ -274,9 +348,7 @@ public class PricingQuoteResolver {
                             ? "报单日期 " + displayDate(resolvedDate.targetDate()) + " 为交易日, 取当日行情"
                             : "报单日期 " + displayDate(resolvedDate.targetDate()) + " 为交易日, 取之后第 "
                                     + offsetDays + " 个交易日 " + displayDate(resolvedDate.quoteDate()))
-                    : resolvedDate.fallback().reason() + ", 实际取价日 " + displayDate(resolvedDate.quoteDate())
-                            + (settlePrevOnClosed ? "" : "(报单日为休市, 向后取第 "
-                                    + Math.max(offsetDays, 1) + " 个交易日)");
+                    : resolvedDate.fallback().reason() + ", 实际取价日 " + displayDate(resolvedDate.quoteDate());
             case MANUAL -> resolvedPeriod.period() == null
                     ? "手工指定取价日期 " + displayDate(resolvedDate.targetDate()) + " 当日无行情"
                             + (resolvedDate.suggestedDate() == null
@@ -329,7 +401,8 @@ public class PricingQuoteResolver {
     /** 解析入参：单据日期必传（按基准取用），其余为可选的单据级覆盖。 */
     public record Command(Basis basis,
                           Integer offsetDays,
-                          Boolean settlePrevOnClosed,
+                          ClosedSettleDirection closedSettleDirection,
+                          Integer closedSettleDays,
                           PeriodPolicy periodPolicy,
                           String period,
                           LocalDate quoteDate,
@@ -337,7 +410,7 @@ public class PricingQuoteResolver {
                           LocalDate deliveryDate) {
 
         public static Command empty() {
-            return new Command(null, null, null, null, null, null, null, null);
+            return new Command(null, null, null, null, null, null, null, null, null);
         }
     }
 
