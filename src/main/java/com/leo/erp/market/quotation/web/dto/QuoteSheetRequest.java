@@ -37,12 +37,22 @@ public record QuoteSheetRequest(
     ) {
     }
 
-    /** 行×品牌现货价, 可标识来源供应商。 */
+    /** 行×品牌现货价, 可标识来源供应商与「代取来源材质」。 */
     public record ItemPriceRequest(
             @NotBlank(message = "品牌名称不能为空") @Size(max = 64, message = "品牌名称过长") String brandName,
             @DecimalMin(value = "0", message = "现货价不能为负") BigDecimal spotPrice,
-            @SnowflakeId Long supplierId
+            @SnowflakeId Long supplierId,
+            /**
+             * 该现货价实际取自的材质（代取时填替代牌号：行材质 HRB400、用 HRB400E 的价则填 HRB400E）；
+             * 为空 = 就是本行材质的价。服务端会再归一一次：等于本行材质、或价格被清空时落库为 null。
+             */
+            @Size(max = 16, message = "来源材质过长") String sourceMaterial
     ) {
+
+        /** 兼容既有调用方（不携带代取来源）。 */
+        public ItemPriceRequest(String brandName, BigDecimal spotPrice, Long supplierId) {
+            this(brandName, spotPrice, supplierId, null);
+        }
     }
 
     /**

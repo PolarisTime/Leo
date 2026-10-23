@@ -167,10 +167,59 @@ class QuoteSheetDtoJsonContractTest {
         assertThat(json).contains("\"purchaseOrderId\":\"88\"");
         assertThat(json).contains("\"purchaseOrderNo\":\"PO-88\"");
     }
+    /** 请求体可携带「代取来源材质」（前端 substituteMaterialOf 算出后下发）。 */
+    @Test
+    void request_deserializesPriceSourceMaterial() throws Exception {
+        String json = "{\"name\":\"9月9日报单\",\"orderDate\":\"2026-09-09\",\"refDate\":\"2026-09-10\","
+                + "\"refPeriod\":\"9:30 上午\",\"brands\":[{\"brandName\":\"中天\",\"freight\":30}],"
+                + "\"items\":[{\"category\":\"螺纹钢\",\"material\":\"HRB400\",\"spec\":12,\"length\":\"9米\","
+                + "\"ton\":10,\"prices\":[{\"brandName\":\"中天\",\"spotPrice\":3280,"
+                + "\"sourceMaterial\":\"HRB400E\"}]}]}";
+
+        QuoteSheetRequest request = objectMapper.readValue(json, QuoteSheetRequest.class);
+
+        assertThat(request.items().get(0).prices().get(0).sourceMaterial()).isEqualTo("HRB400E");
+    }
+
+    /** 响应体字段名锁死为 spotSourceMaterial —— 前端角标直接依赖该名字。 */
+    @Test
+    void response_serializesSpotSourceMaterial() throws Exception {
+        QuoteSheetResponse response = new QuoteSheetResponse(
+                1L, "1", "报单", null, null,
+                LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30.00"),
+                false, false, "报价", null, List.of(),
+                List.of(new QuoteSheetResponse.ItemResponse(2L, 1, QuoteRowType.PRODUCT, "螺纹钢",
+                        "HRB400", 12, "9米", null, new BigDecimal("10.00000000"),
+                        List.of(new QuoteSheetResponse.ItemPriceResponse(
+                                3L, "中天", new BigDecimal("3280.00"), null, null, "HRB400E")))),
+                null, null, 1L);
+
+        String json = objectMapper.writeValueAsString(response);
+
+        assertThat(json).contains("\"spotSourceMaterial\":\"HRB400E\"");
+    }
+
+    /** 未代取时必须明确输出 null（不是缺字段），前端据此判定"无角标"。 */
+    @Test
+    void response_serializesNullSpotSourceMaterialForExactEntry() throws Exception {
+        QuoteSheetResponse response = new QuoteSheetResponse(
+                1L, "1", "报单", null, null,
+                LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30.00"),
+                false, false, "报价", null, List.of(),
+                List.of(new QuoteSheetResponse.ItemResponse(2L, 1, QuoteRowType.PRODUCT, "螺纹钢",
+                        "HRB400E", 12, "9米", null, new BigDecimal("10.00000000"),
+                        List.of(new QuoteSheetResponse.ItemPriceResponse(
+                                3L, "中天", new BigDecimal("3280.00"), null, null, null)))),
+                null, null, 1L);
+
+        String json = objectMapper.writeValueAsString(response);
+
+        assertThat(json).contains("\"spotSourceMaterial\":null");
+    }
+
     /** 行顺序请求: 雪花 ID 只接受十进制字符串。 */
     @Test
-    void itemOrderRequest_acceptsDecimalStringIds() throws Exception {
-        QuoteSheetItemOrderRequest request = objectMapper.readValue(
+    void itemOrderRequest_acceptsDecimalStringIds() throws Exception {        QuoteSheetItemOrderRequest request = objectMapper.readValue(
                 "{\"itemIds\":[\"9223372036854775807\",\"301\"]}", QuoteSheetItemOrderRequest.class);
 
         assertThat(request.itemIds()).containsExactly(9223372036854775807L, 301L);

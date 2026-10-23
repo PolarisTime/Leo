@@ -20,6 +20,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -925,6 +926,81 @@ class QuoteSheetStoreTest {
         QuoteSheetResponse.ItemPriceResponse price = response.items().get(0).prices().get(0);
         assertThat(price.supplierId()).isEqualTo(77L);
         assertThat(price.supplierName()).isEqualTo("杭州物资");
+    }
+
+    // ------------------------------------------- 现货价「抗震牌号代取」来源材质落库
+
+    /** 行材质 HRB400 用 HRB400E 的价代取 → 落库并回读 source_material。 */
+    @Test
+    void create_persistsSubstitutedSourceMaterial() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 202L, 301L);
+        ArgumentCaptor<QuoteSheet> saved = ArgumentCaptor.forClass(QuoteSheet.class);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = store().create(
+                requestWithPrice("HRB400", new BigDecimal("3280"), "HRB400E"));
+
+        // 回读：前端据此打「代取」角标
+        assertThat(response.items().get(0).prices().get(0).spotSourceMaterial()).isEqualTo("HRB400E");
+        // 落库：追溯用
+        verify(repository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getItems().get(0).getPrices().get(0).getSourceMaterial())
+                .isEqualTo("HRB400E");
+    }
+
+    /** 手工精确填写（未传来源）→ 必须为空，不能把本行材质写进去冒充代取。 */
+    @Test
+    void create_keepsSourceMaterialNullForExactEntry() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 202L, 301L);
+        ArgumentCaptor<QuoteSheet> saved = ArgumentCaptor.forClass(QuoteSheet.class);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = store().create(
+                requestWithPrice("HRB400", new BigDecimal("3280"), null));
+
+        assertThat(response.items().get(0).prices().get(0).spotSourceMaterial()).isNull();
+        verify(repository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getItems().get(0).getPrices().get(0).getSourceMaterial()).isNull();
+    }
+
+    /** 清除价格时必须一并清空来源，否则会留下「有来源没价格」的脏行。 */
+    @Test
+    void create_clearsSourceMaterialWhenPriceCleared() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 202L, 301L);
+        ArgumentCaptor<QuoteSheet> saved = ArgumentCaptor.forClass(QuoteSheet.class);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = store().create(
+                requestWithPrice("HRB400", null, "HRB400E"));
+
+        assertThat(response.items().get(0).prices().get(0).spotSourceMaterial()).isNull();
+        verify(repository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getItems().get(0).getPrices().get(0).getSourceMaterial()).isNull();
+    }
+
+    /** 来源材质与本行材质相同（忽略大小写/空格）= 等于没代取 → 归一为 null。 */
+    @Test
+    void create_normalizesSourceMaterialEqualToRowMaterial() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 202L, 301L);
+        ArgumentCaptor<QuoteSheet> saved = ArgumentCaptor.forClass(QuoteSheet.class);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+
+        QuoteSheetResponse response = store().create(
+                requestWithPrice("HRB400E", new BigDecimal("3280"), " hrb400e "));
+
+        assertThat(response.items().get(0).prices().get(0).spotSourceMaterial()).isNull();
+        verify(repository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getItems().get(0).getPrices().get(0).getSourceMaterial()).isNull();
+    }
+
+    private QuoteSheetRequest requestWithPrice(String rowMaterial, BigDecimal spotPrice, String sourceMaterial) {
+        return new QuoteSheetRequest(
+                "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
+                new BigDecimal("30"), false, false, "报价", null,
+                List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
+                List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", rowMaterial, 12, "9米", new BigDecimal("10"),
+                        List.of(new QuoteSheetRequest.ItemPriceRequest(
+                                "中天", spotPrice, null, sourceMaterial)))));
     }
 
     @Test

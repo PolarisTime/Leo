@@ -39,8 +39,21 @@ public record QuoteSheetResponse(
     public record BrandResponse(Long id, String brandName, BigDecimal freight, Integer sortOrder) {
     }
 
+    /**
+     * 行×品牌现货价。
+     *
+     * @param spotSourceMaterial 该现货价**实际取自**的材质（代取时非空，如 HRB400 行取了 HRB400E 的价）；
+     *                           null 表示就是本行材质的价。前端据此打「代取」角标。
+     */
     public record ItemPriceResponse(Long id, String brandName, BigDecimal spotPrice,
-                                    Long supplierId, String supplierName) {
+                                    Long supplierId, String supplierName,
+                                    String spotSourceMaterial) {
+
+        /** 兼容既有调用方（不含代取来源）。 */
+        public ItemPriceResponse(Long id, String brandName, BigDecimal spotPrice,
+                                 Long supplierId, String supplierName) {
+            this(id, brandName, spotPrice, supplierId, supplierName, null);
+        }
     }
 
     /** 行级关联的采购订单明细行(可多条): allocatedTon 是本次在该明细行开出的吨位。 */

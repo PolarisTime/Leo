@@ -946,6 +946,8 @@ public class QuoteSheetStore {
                 price.setSupplierId(priceRequest.supplierId());
                 price.setSupplierName(priceRequest.supplierId() == null
                         ? null : supplierNames.get(priceRequest.supplierId()));
+                price.setSourceMaterial(normalizeSourceMaterial(
+                        priceRequest.sourceMaterial(), item.getMaterial(), priceRequest.spotPrice()));
                 reconciled.add(price);
             }
         }
@@ -1251,7 +1253,31 @@ public class QuoteSheetStore {
                 item.getPrices().stream()
                         .map(price -> new QuoteSheetResponse.ItemPriceResponse(
                                 price.getId(), price.getBrandName(), price.getSpotPrice(),
-                                price.getSupplierId(), price.getSupplierName()))
+                                price.getSupplierId(), price.getSupplierName(),
+                                price.getSourceMaterial()))
                         .toList());
+    }
+
+    /**
+     * 归一「现货价实际取自的材质」。
+     *
+     * <p>只有**真正的代取**才落值，其余一律 null，避免这一列退化成「随便填的备注」：</p>
+     * <ul>
+     *   <li>价格被清空 → null（清价必须一并清来源，否则会留下"有来源没价格"的脏行）；</li>
+     *   <li>空白 → null（手工精确填写）；</li>
+     *   <li>与本行材质相同（忽略大小写/空格）→ null（等于没代取，落值只会误导角标）；</li>
+     *   <li>其余 → trim 后保留（如行材质 HRB400、取 HRB400E 的价 → "HRB400E"）。</li>
+     * </ul>
+     */
+    private static String normalizeSourceMaterial(String sourceMaterial, String rowMaterial, BigDecimal spotPrice) {
+        if (spotPrice == null || sourceMaterial == null) {
+            return null;
+        }
+        String normalized = sourceMaterial.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        String row = rowMaterial == null ? "" : rowMaterial.trim();
+        return normalized.equalsIgnoreCase(row) ? null : normalized;
     }
 }
