@@ -1,8 +1,10 @@
 package com.leo.erp.logistics.bill.web;
 
+import com.leo.erp.common.api.ApiProblemFactory;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.exception.GlobalExceptionHandler;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.logistics.bill.domain.enums.FreightSettlementMode;
@@ -15,12 +17,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -35,8 +40,12 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * V2FreightBillController 极端情况测试。
@@ -86,10 +95,63 @@ class V2FreightBillControllerTest {
         when(candidateResponseAssembler.toPageResponse(any(PageResponse.class))).thenReturn(expected);
 
         PageResponse<FreightBillSalesOrderCandidateResponse> result = controller.salesOrderCandidates(
-                mock(PageQuery.class), "kw", 10L, "客户A", 20L, "项目A", 30L,
+                mock(PageQuery.class), "kw", 10L, "客户A", 20L, "项目A", 30L, null,
                 LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), 5L);
 
         assertThat(result).isSameAs(expected);
+    }
+
+    @Test
+    void salesOrderCandidates_shouldForwardStatusIntoFilter() {
+        @SuppressWarnings("unchecked")
+        PageResponse<com.leo.erp.sales.api.SalesOrderSourceSnapshot> page =
+                (PageResponse<com.leo.erp.sales.api.SalesOrderSourceSnapshot>) mock(PageResponse.class);
+        when(candidateService.page(any(PageQuery.class), any(PageFilter.class))).thenReturn(page);
+        when(candidateResponseAssembler.toPageResponse(any(PageResponse.class)))
+                .thenReturn(mock(PageResponse.class));
+
+        controller.salesOrderCandidates(
+                mock(PageQuery.class), null, null, null, null, null, null,
+                " " + StatusConstants.AUDITED + " ", null, null, null);
+
+        // 必须断言到 PageFilter.status()：只断言「参数被接收」会漏掉「收了但没往下传」的静默失效
+        ArgumentCaptor<PageFilter> captor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(candidateService).page(any(PageQuery.class), captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(StatusConstants.AUDITED);
+    }
+
+    @Test
+    void salesOrderCandidates_shouldForwardNullWhenStatusBlank() {
+        @SuppressWarnings("unchecked")
+        PageResponse<com.leo.erp.sales.api.SalesOrderSourceSnapshot> page =
+                (PageResponse<com.leo.erp.sales.api.SalesOrderSourceSnapshot>) mock(PageResponse.class);
+        when(candidateService.page(any(PageQuery.class), any(PageFilter.class))).thenReturn(page);
+        when(candidateResponseAssembler.toPageResponse(any(PageResponse.class)))
+                .thenReturn(mock(PageResponse.class));
+
+        controller.salesOrderCandidates(
+                mock(PageQuery.class), null, null, null, null, null, null, "   ", null, null, null);
+
+        ArgumentCaptor<PageFilter> captor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(candidateService).page(any(PageQuery.class), captor.capture());
+        // 前端 opt-out 时传空串：必须归一化成 null(不加状态条件)，而不是查 status = ''
+        assertThat(captor.getValue().status()).isNull();
+    }
+
+    @Test
+    void salesOrderCandidates_shouldReturn422WhenStatusOutsideCandidatePool() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler(new ApiProblemFactory("Asia/Shanghai")))
+                .build();
+
+        mockMvc.perform(get("/v2.0/freight-bills/sales-order-candidates")
+                        .param("status", StatusConstants.DRAFT))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value(4000));
+
+        // 非法状态必须在进入查询前就被拒绝，不能把空结果伪装成「该状态没有候选」
+        verify(candidateService, never()).page(any(PageQuery.class), any(PageFilter.class));
     }
 
     @Test

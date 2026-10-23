@@ -18,11 +18,12 @@ import java.util.Set;
 @Repository
 public class FreightBillSalesOrderCandidateQueryRepository {
 
-    private static final Set<String> ALLOWED_STATUSES = Set.of(
-            StatusConstants.AUDITED,
-            StatusConstants.DELIVERY_VERIFICATION,
-            StatusConstants.SALES_COMPLETED
-    );
+    /**
+     * 候选池状态：由 {@link StatusConstants#ALLOWED_SALES_ORDER_CANDIDATE_STATUS} 单一维护，
+     * 本类只引用不另立一份；入参校验同样复用
+     * {@link StatusConstants#normalizeOptionalSalesOrderCandidateStatus}。
+     */
+    private static final Set<String> ALLOWED_STATUSES = StatusConstants.ALLOWED_SALES_ORDER_CANDIDATE_STATUS;
 
     private static final Map<String, String> SORT_COLUMNS = Map.ofEntries(
             Map.entry("id", "id"),
@@ -54,6 +55,7 @@ public class FreightBillSalesOrderCandidateQueryRepository {
                 FROM so_sales_order sales_order
                 WHERE sales_order.deleted_flag = FALSE
                   AND sales_order.status IN (:allowedStatuses)
+                  AND (:status IS NULL OR sales_order.status = :status)
                   AND (:customerId IS NULL OR sales_order.customer_id = :customerId)
                   AND (:customerName IS NULL OR sales_order.customer_name = :customerName)
                   AND (:projectId IS NULL OR sales_order.project_id = :projectId)
@@ -112,6 +114,7 @@ public class FreightBillSalesOrderCandidateQueryRepository {
     private MapSqlParameterSource parameters(PageQuery query, PageFilter filter) {
         return new MapSqlParameterSource()
                 .addValue("allowedStatuses", ALLOWED_STATUSES)
+                .addValue("status", filter.status(), Types.VARCHAR)
                 .addValue("keyword", Specs.containsLikePatternIgnoreCase(filter.keyword()), Types.VARCHAR)
                 .addValue("customerId", filter.customerId(), Types.BIGINT)
                 .addValue("customerName", normalize(filter.name()), Types.VARCHAR)

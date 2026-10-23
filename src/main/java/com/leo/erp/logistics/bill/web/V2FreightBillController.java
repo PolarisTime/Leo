@@ -55,11 +55,21 @@ public class V2FreightBillController {
     }
 
     @GetMapping("/sales-order-candidates")
+    @Operation(summary = "分页查询物流单的销售订单来源候选")
     @RequirePermission(PermissionCodes.FREIGHT_BILLS_READ)
-    public PageResponse<FreightBillSalesOrderCandidateResponse> salesOrderCandidates(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Long currentRecordId) {
+    public PageResponse<FreightBillSalesOrderCandidateResponse> salesOrderCandidates(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Long currentRecordId) {
         return candidateResponseAssembler.toPageResponse(candidateService.page(
                 query,
-                PageFilter.of(keyword, customerName, projectName, settlementCompanyId, null, startDate, endDate)
+                PageFilter.of(
+                                keyword,
+                                customerName,
+                                projectName,
+                                settlementCompanyId,
+                                // 空白 = 前端已 opt-out 该筛选项 → null(不额外过滤); 池外状态 → 422
+                                StatusConstants.normalizeOptionalSalesOrderCandidateStatus(status, "status"),
+                                startDate,
+                                endDate
+                        )
                         .withIdentity(customerId, projectId, null, null, currentRecordId)
         ));
     }

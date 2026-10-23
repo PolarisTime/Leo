@@ -3,6 +3,7 @@ package com.leo.erp.common.support;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 
+import java.util.List;
 import java.util.Set;
 
 public final class StatusConstants {
@@ -103,6 +104,24 @@ public final class StatusConstants {
     public static final Set<String> ALLOWED_FREIGHT_STATEMENT_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_SIGN_STATUS = Set.of(UNSIGNED, SIGNED);
     public static final Set<String> ALLOWED_FREIGHT_BILL_STATUS = Set.of(DRAFT, AUDITED);
+    /**
+     * 「物流单从销售订单导入」候选池允许的状态：已审核 / 送货核验 / 销售完成。
+     *
+     * <p>候选池状态的**唯一来源**：{@code FreightBillSalesOrderCandidateQueryRepository} 用它拼
+     * {@code status IN (...)}，控制器用 {@link #normalizeOptionalSalesOrderCandidateStatus} 据此校验入参。
+     * 草稿态订单不能作为物流单来源，故不在池内。</p>
+     */
+    public static final Set<String> ALLOWED_SALES_ORDER_CANDIDATE_STATUS = Set.of(
+            AUDITED,
+            DELIVERY_VERIFICATION,
+            SALES_COMPLETED
+    );
+    /** {@link #ALLOWED_SALES_ORDER_CANDIDATE_STATUS} 的稳定展示顺序(用于报错文案, 避免 Set 迭代顺序漂移)。 */
+    public static final List<String> ALLOWED_SALES_ORDER_CANDIDATE_STATUS_LABELS = List.of(
+            AUDITED,
+            DELIVERY_VERIFICATION,
+            SALES_COMPLETED
+    );
     public static final Set<String> ALLOWED_PAYMENT_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_RECEIPT_STATUS = Set.of(DRAFT, AUDITED);
 
@@ -203,6 +222,31 @@ public final class StatusConstants {
         }
         if (!ALLOWED_ACTIVE_STATUS.contains(normalized)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, fieldName + "不合法");
+        }
+        return normalized;
+    }
+
+    /**
+     * 归一化「物流单销售订单候选」的 status 过滤参数。
+     *
+     * <p>空/空白视为「前端已 opt-out 该筛选项」→ 返回 {@code null}（不额外过滤）；
+     * 非空则必须落在 {@link #ALLOWED_SALES_ORDER_CANDIDATE_STATUS} 内，否则抛
+     * {@link ErrorCode#VALIDATION_ERROR}（HTTP 422）。</p>
+     *
+     * <p>为什么池外状态要报错而不是静默返回 0 条：候选池本就限定三态，传「草稿」在语义上
+     * 是无效查询；静默空结果会让前端以为「该状态下没有候选」，把参数错误伪装成业务事实。</p>
+     */
+    public static String normalizeOptionalSalesOrderCandidateStatus(String value, String fieldName) {
+        String normalized = normalizeOptional(value);
+        if (normalized == null) {
+            return null;
+        }
+        if (!ALLOWED_SALES_ORDER_CANDIDATE_STATUS.contains(normalized)) {
+            throw new BusinessException(
+                    ErrorCode.VALIDATION_ERROR,
+                    fieldName + "不合法: " + normalized
+                            + "（候选仅支持 " + String.join(" / ", ALLOWED_SALES_ORDER_CANDIDATE_STATUS_LABELS) + "）"
+            );
         }
         return normalized;
     }
