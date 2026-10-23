@@ -319,4 +319,29 @@ class QuoteProjectConfigStoreTest {
         assertThat(response).isNotNull();
     }
 
+    /** 回退读路径只需要品牌名，且必须保持 sort_order（@OrderBy）顺序。 */
+    @Test
+    void brandNamesOf_shouldReturnNamesInStoredOrder() {
+        QuoteProjectConfig config = new QuoteProjectConfig();
+        config.setProjectId(88L);
+        config.setBrands(new java.util.ArrayList<>(List.of(brand("中天"), brand("萍钢"), brand("亚新"))));
+        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.of(config));
+
+        assertThat(store().brandNamesOf(88L)).containsExactly("中天", "萍钢", "亚新");
+    }
+
+    @Test
+    void brandNamesOf_shouldReturnEmptyWhenProjectNotConfigured() {
+        when(repository.findByProjectIdAndDeletedFlagFalse(99L)).thenReturn(Optional.empty());
+
+        assertThat(store().brandNamesOf(99L)).isEmpty();
+    }
+
+    private static QuoteProjectBrand brand(String name) {
+        QuoteProjectBrand brand = new QuoteProjectBrand();
+        brand.setBrandName(name);
+        brand.setFreight(BigDecimal.ZERO);
+        return brand;
+    }
+
 }

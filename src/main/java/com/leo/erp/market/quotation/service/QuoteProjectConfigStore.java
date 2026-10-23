@@ -77,10 +77,25 @@ public class QuoteProjectConfigStore {
                         quoteSourceOf(projectId)));
     }
 
+    /**
+     * 该项目比价配置里的品牌名（按 {@code sort_order}；未配置返回空列表）。
+     *
+     * <p>供 {@link QuoteProjectEffectiveBrandsService} 在「项目资料未限制品牌」时做**只读回退**。
+     * 单独开一个方法而不是复用 {@link #find}：后者还会查项目取价数据源、并把品牌映射成带运费/品种的
+     * DTO，而回退只需要品牌名，少一次跨模块查询。</p>
+     */
+    @Transactional(readOnly = true)
+    public List<String> brandNamesOf(Long projectId) {
+        return repository.findByProjectIdAndDeletedFlagFalse(projectId)
+                .map(config -> config.getBrands().stream()
+                        .map(QuoteProjectBrand::getBrandName)
+                        .toList())
+                .orElseGet(List::of);
+    }
+
     /** 保存项目配置(不存在则创建, 存在则整体替换)。每次调用开启独立事务。 */
     @Transactional
-    public QuoteProjectConfigResponse save(Long projectId, QuoteProjectConfigRequest request, Long expectedVersion) {
-        Optional<QuoteProjectConfig> existing = repository.findByProjectIdAndDeletedFlagFalse(projectId);
+    public QuoteProjectConfigResponse save(Long projectId, QuoteProjectConfigRequest request, Long expectedVersion) {        Optional<QuoteProjectConfig> existing = repository.findByProjectIdAndDeletedFlagFalse(projectId);
         Long currentVersion = existing.map(QuoteProjectConfig::getVersion).orElse(0L);
         checkVersion(currentVersion, expectedVersion);
         QuoteProjectConfig entity = existing.orElseGet(() -> {

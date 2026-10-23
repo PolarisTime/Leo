@@ -3,8 +3,10 @@ package com.leo.erp.market.quotation.web;
 import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.market.quotation.QuotationProperties;
 import com.leo.erp.market.quotation.service.QuoteProjectConfigService;
+import com.leo.erp.market.quotation.service.QuoteProjectEffectiveBrandsService;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigResponse;
+import com.leo.erp.market.quotation.web.dto.QuoteProjectEffectiveBrandsResponse;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,10 +34,14 @@ public class V2QuoteProjectConfigController {
             "也接受兼容别名 If-Match(非标准: 数据库版本号是弱验证器, 不符合 RFC 9110 强比较要求)。";
 
     private final QuoteProjectConfigService service;
+    private final QuoteProjectEffectiveBrandsService effectiveBrandsService;
     private final QuotationProperties properties;
 
-    public V2QuoteProjectConfigController(QuoteProjectConfigService service, QuotationProperties properties) {
+    public V2QuoteProjectConfigController(QuoteProjectConfigService service,
+                                          QuoteProjectEffectiveBrandsService effectiveBrandsService,
+                                          QuotationProperties properties) {
         this.service = service;
+        this.effectiveBrandsService = effectiveBrandsService;
         this.properties = properties;
     }
 
@@ -44,6 +50,17 @@ public class V2QuoteProjectConfigController {
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_READ)
     public QuoteProjectConfigResponse find(@PathVariable Long projectId) {
         return service.find(projectId);
+    }
+
+    @Operation(
+            summary = "查询项目用于报单比价的有效品牌集合",
+            description = "品牌事实唯一来源是项目资料(md_project.allowed_brands); 资料为空/不限制时"
+                    + "回退到比价配置的品牌, 并在 fallback 标记为 true。回退只读, 不会写回项目资料。"
+                    + "占位品牌「基准价」不计入结果。")
+    @GetMapping("/{projectId}/effective-brands")
+    @RequirePermission(PermissionCodes.QUOTE_SHEETS_READ)
+    public QuoteProjectEffectiveBrandsResponse effectiveBrands(@PathVariable Long projectId) {
+        return effectiveBrandsService.effectiveBrands(projectId);
     }
 
     @Operation(summary = "保存项目比价配置",
