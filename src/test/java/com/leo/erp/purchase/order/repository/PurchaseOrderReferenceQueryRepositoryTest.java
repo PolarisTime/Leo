@@ -46,6 +46,18 @@ class PurchaseOrderReferenceQueryRepositoryTest {
     }
 
     @Test
+    void referencedBySalesOrder_shouldIgnoreSoftDeletedInbound() {
+        String sql = captureSql();
+
+        // 列表筛选(JPQL)在「采购订单→采购入库→销售订单」这条间接链上排除已删除入库;
+        // 行上的引用徽标必须同口径, 否则同一张单会出现「筛选选不到、行上却显示已被引用」。
+        assertThat(sql).contains("AND pi.deleted_flag = FALSE");
+        assertThat(sql).contains("JOIN po_purchase_inbound pi");
+        // 直接链(销售明细直接带 source_purchase_order_item_id)不受影响。
+        assertThat(sql).contains("soi.source_purchase_order_item_id = poi.id");
+    }
+
+    @Test
     void actualAmount_shouldRoundEachLineToCentsBeforeSumming() {
         String sql = captureSql();
 

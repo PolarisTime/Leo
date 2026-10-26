@@ -35,6 +35,9 @@ public class PurchaseOrderReferenceQueryRepository {
                           AND so.deleted_flag = FALSE
                         WHERE poi.order_id = po.id
                    )
+                   -- 间接链(采购订单 → 采购入库 → 销售订单)必须排除已删除入库:
+                   -- 列表筛选的 JPQL 分支就是这么判的, 两处口径必须一致, 否则会出现
+                   -- 「筛选 selected 不出来的单子, 行上却亮着『已被销售订单引用』」。
                    OR EXISTS (
                        SELECT 1
                          FROM so_sales_order_item soi
@@ -43,6 +46,9 @@ public class PurchaseOrderReferenceQueryRepository {
                           AND so.deleted_flag = FALSE
                          JOIN po_purchase_inbound_item pii
                            ON pii.id = soi.source_inbound_item_id
+                         JOIN po_purchase_inbound pi
+                           ON pi.id = pii.inbound_id
+                          AND pi.deleted_flag = FALSE
                          JOIN po_purchase_order_item poi
                            ON poi.id = pii.source_purchase_order_item_id
                         WHERE poi.order_id = po.id
