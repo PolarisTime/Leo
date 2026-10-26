@@ -7,8 +7,7 @@ import com.leo.erp.market.supplierprice.domain.entity.SupplierPriceList;
 import com.leo.erp.market.supplierprice.repository.SupplierPriceListRepository;
 import com.leo.erp.market.supplierprice.web.dto.SupplierPriceGridResponse;
 import com.leo.erp.market.supplierprice.web.dto.SupplierPriceListRequests;
-import com.leo.erp.master.supplier.domain.entity.Supplier;
-import com.leo.erp.master.supplier.repository.SupplierRepository;
+import com.leo.erp.master.api.SupplierQuery;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -33,10 +32,10 @@ import static org.mockito.Mockito.when;
 class SupplierPriceServiceTest {
 
     private final SupplierPriceListRepository repository = mock(SupplierPriceListRepository.class);
-    private final SupplierRepository supplierRepository = mock(SupplierRepository.class);
+    private final SupplierQuery supplierQuery = mock(SupplierQuery.class);
     private final SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
     private final SupplierPriceService service =
-            new SupplierPriceService(repository, supplierRepository, idGenerator);
+            new SupplierPriceService(repository, supplierQuery, idGenerator);
 
     private static SupplierPriceList list(String supplierName, String price) {
         SupplierPriceList list = new SupplierPriceList();
@@ -86,10 +85,8 @@ class SupplierPriceServiceTest {
     @Test
     /** 同品牌同供应商重复接入返回 409，且不写库（库里有唯一索引兜底，这里先探测给可读文案）。 */
     void addColumn_rejectsDuplicateSupplierInSameBrand() {
-        Supplier supplier = new Supplier();
-        supplier.setId(11L);
-        supplier.setSupplierName("物产中大");
-        when(supplierRepository.findById(11L)).thenReturn(Optional.of(supplier));
+        when(supplierQuery.findActiveNormalById(11L)).thenReturn(Optional.of(
+                new SupplierQuery.SupplierSnapshot(11L, "SUP-011", "物产中大", "物产中大")));
         when(repository.findBySupplierIdAndBrandNameAndDeletedFlagFalse(11L, "中天"))
                 .thenReturn(Optional.of(list("物产中大", "3390")));
 

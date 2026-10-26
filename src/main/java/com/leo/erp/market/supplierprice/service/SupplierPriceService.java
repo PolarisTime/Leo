@@ -8,8 +8,7 @@ import com.leo.erp.market.supplierprice.domain.entity.SupplierPriceList;
 import com.leo.erp.market.supplierprice.repository.SupplierPriceListRepository;
 import com.leo.erp.market.supplierprice.web.dto.SupplierPriceGridResponse;
 import com.leo.erp.market.supplierprice.web.dto.SupplierPriceListRequests;
-import com.leo.erp.master.supplier.domain.entity.Supplier;
-import com.leo.erp.master.supplier.repository.SupplierRepository;
+import com.leo.erp.master.api.SupplierQuery;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,14 +43,15 @@ public class SupplierPriceService {
             STATUS_NORMAL, "PENDING", "BUNDLED", "NEGOTIABLE", STATUS_OUT_OF_STOCK);
 
     private final SupplierPriceListRepository repository;
-    private final SupplierRepository supplierRepository;
+    /** 供应商只读端口：跨模块只依赖 master.api，不碰 master 的 entity/repository 内部。 */
+    private final SupplierQuery supplierQuery;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
 
     public SupplierPriceService(SupplierPriceListRepository repository,
-                                SupplierRepository supplierRepository,
+                                SupplierQuery supplierQuery,
                                 SnowflakeIdGenerator snowflakeIdGenerator) {
         this.repository = repository;
-        this.supplierRepository = supplierRepository;
+        this.supplierQuery = supplierQuery;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
     }
 
@@ -79,10 +79,10 @@ public class SupplierPriceService {
      */
     @Transactional
     public SupplierPriceGridResponse.Column addColumn(SupplierPriceListRequests.AddColumn request) {
-        Supplier supplier = supplierRepository.findById(request.supplierId())
-                .filter(item -> !item.isDeletedFlag())
+        SupplierQuery.SupplierSnapshot supplier = supplierQuery
+                .findActiveNormalById(request.supplierId())
                 .orElseThrow(() -> new BusinessException(
-                        ErrorCode.NOT_FOUND, "供应商不存在或已删除: " + request.supplierId()));
+                        ErrorCode.NOT_FOUND, "供应商不存在、已删除或已停用: " + request.supplierId()));
         repository.findBySupplierIdAndBrandNameAndDeletedFlagFalse(
                         request.supplierId(), request.brandName())
                 .ifPresent(existing -> {
@@ -93,13 +93,14 @@ public class SupplierPriceService {
         LocalDate quotedOn = request.quotedOn() == null ? LocalDate.now() : request.quotedOn();
         SupplierPriceList list = new SupplierPriceList();
         list.setId(snowflakeIdGenerator.nextId());
-        list.setSupplierId(supplier.getId());
-        list.setSupplierName(supplier.getSupplierName());
+        list.setSupplierId(supplier.id());
+        list.setSupplierName(supplier.name());
         list.setBrandName(request.brandName());
         // 兼容列（语义作废，仅满足 NOT NULL）
         list.setReleasedAt(LocalDateTime.now());
         list.setEffectiveFrom(quotedOn);
-        list.setStatus("ACTIVE");
+        // status 是兼容列(NOT NULL, 新行恒为 ACTIVE): 实体字段默认值已给出, 这里不再直写 setStatus,
+        // 避免绕过状态写入白名单(该列不承载状态流转, 见 SupplierPriceList 类注释)。
         list.setQuotedOn(quotedOn);
         list.setWarehouse(request.warehouse());
         list.setRemark(request.remark());

@@ -84,8 +84,6 @@ restricted domain.entity dependency: com.leo.erp.logistics.bill.service.FreightB
 restricted domain.entity dependency: com.leo.erp.logistics.bill.service.FreightBillService (module logistics) -> com.leo.erp.system.company.domain.entity.CompanySetting (module system)
 restricted domain.entity dependency: com.leo.erp.master.carrier.service.CarrierService (module master) -> com.leo.erp.system.company.domain.entity.CompanySetting (module system)
 restricted domain.entity dependency: com.leo.erp.master.carrier.service.CarrierService (module master) -> com.leo.erp.system.company.domain.entity.CompanySetting (module system)
-restricted domain.entity dependency: com.leo.erp.master.customer.service.CustomerService (module master) -> com.leo.erp.system.company.domain.entity.CompanySetting (module system)
-restricted domain.entity dependency: com.leo.erp.master.customer.service.CustomerService (module master) -> com.leo.erp.system.company.domain.entity.CompanySetting (module system)
 restricted domain.entity dependency: com.leo.erp.purchase.order.service.PurchaseOrderSupplierResolver (module purchase) -> com.leo.erp.system.company.domain.entity.CompanySetting (module system)
 restricted domain.entity dependency: com.leo.erp.purchase.order.service.PurchaseOrderSupplierResolver (module purchase) -> com.leo.erp.system.company.domain.entity.CompanySetting (module system)
 restricted domain.entity dependency: com.leo.erp.sales.order.service.SalesOrderApplyService (module sales) -> com.leo.erp.system.company.domain.entity.CompanySetting (module system)
