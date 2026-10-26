@@ -1,3 +1,20 @@
+# [16.0.0](https://github.com/PolarisTime/Leo/compare/v15.0.0...v16.0.0) (2026-10-26)
+
+
+* feat(purchase-order)!: 下线「下游引用」标记与筛选，保留派生聚合 ([16190ce](https://github.com/PolarisTime/Leo/commit/16190ce872e3bd0d227c335242b8c98d5518233c))
+
+
+### Bug Fixes
+
+* **purchase-order:** 引用徽标与列表筛选对已删除入库口径不一致 ([e3bcdbc](https://github.com/PolarisTime/Leo/commit/e3bcdbc9681045a86e451795b9d6f8ba634efba1))
+
+
+### BREAKING CHANGES
+
+* 采购/销售订单响应不再返回 referencedBySalesOrder /
+referencedByPurchaseInbound / referencedByFreightBill / referencedBySalesOutbound，
+列表接口不再接受 referenced / referencedBy 查询参数。前后端需同批上线。
+
 # [15.0.0](https://github.com/PolarisTime/Leo/compare/v14.0.2...v15.0.0) (2026-10-26)
 
 
