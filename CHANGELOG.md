@@ -1,3 +1,33 @@
+# [15.0.0](https://github.com/PolarisTime/Leo/compare/v14.0.2...v15.0.0) (2026-10-26)
+
+
+* feat(master-data)!: 结算主体收敛到项目资料，下线客户默认结算主体 ([694592a](https://github.com/PolarisTime/Leo/commit/694592adffd44f81b8c9b92ae83a7a0a4884bbfe))
+* feat(pricing)!: 休市取价改为「方向 + 交易日数」，送到日期基准同样生效 ([03dc92a](https://github.com/PolarisTime/Leo/commit/03dc92aecfea200f4e2f0f25d6b442329fc83167))
+
+
+### Bug Fixes
+
+* **market:** 供应商价格表改走 SupplierQuery 端口，修复架构边界违规 ([86c2bd7](https://github.com/PolarisTime/Leo/commit/86c2bd78c7aa8aa04a8c5e06d107aeaf5fa3fbb1))
+
+
+### Features
+
+* **freight-bill:** 销售订单候选支持 status 筛选 ([ed98bfa](https://github.com/PolarisTime/Leo/commit/ed98bfa87d6525beb396abc0efda9d85a889b0f8))
+* **quote:** 报单比价品牌改为「项目资料优先 + 配置回退」并回填配置 project_id ([f911e9f](https://github.com/PolarisTime/Leo/commit/f911e9f0f958af5fb678a2a4d930825a3feceeed))
+* **quote:** 现货价「抗震牌号代取」来源落库并可追溯 ([b442730](https://github.com/PolarisTime/Leo/commit/b4427301274005865077e5632380cef8d79a7018))
+* **supplier-price:** 品牌价格表后端落地——一个品牌一张表、供应商做列 ([88a5167](https://github.com/PolarisTime/Leo/commit/88a5167ebf6b3ce75508f4a1c17a130e823cc932))
+* **supplier-price:** 补批量最低价接口，收口「取低价」唯一实现 ([678a079](https://github.com/PolarisTime/Leo/commit/678a079a43b65c4522f4747d56318eae6a93bc8e))
+
+
+### BREAKING CHANGES
+
+* 项目与取价解析接口移除 priceClosedDayPrevSettle / settlePrevOnClosed，
+改为 priceClosedSettleDirection + priceClosedSettleDays；销售订单快照移除
+priceClosedSettlePrev。前后端需同批上线，旧前端提交的旧字段会被忽略。
+* 客户创建/更新接口不再接受 defaultSettlementCompanyId，
+客户响应与客户下拉选项不再返回 defaultSettlementCompanyId/Name；
+项目创建/更新缺失 settlementCompanyId 时由原先的客户默认回退改为 422。
+
 ## [14.0.2](https://github.com/PolarisTime/Leo/compare/v14.0.1...v14.0.2) (2026-10-21)
 
 
