@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 采购订单下游引用状态批量查询，避免列表页按行查询产生 N+1。
+ * 采购订单派生聚合批量查询(入库进度 / 实际货值 / 差额), 避免列表页按行查询产生 N+1。
  *
  * <p>「实际货值」按明细逐行四舍五入到分后求和, 与暂定金额同口径: total_amount 是各行
  * amount(numeric(14,2)) 之和再加费用, 若实际货值改为整单原始乘积求和, 同一批重量会因
@@ -21,48 +21,10 @@ import java.util.Map;
  * 否则一行都未入库的订单会显示成"退掉整单暂定金额"(实为已付预付款, 并非退款)。</p>
  */
 @Repository
-public class PurchaseOrderReferenceQueryRepository {
+public class PurchaseOrderDerivedQueryRepository {
 
     private static final String SQL = """
             SELECT po.id,
-                   EXISTS (
-                       SELECT 1
-                         FROM po_purchase_order_item poi
-                         JOIN so_sales_order_item soi
-                           ON soi.source_purchase_order_item_id = poi.id
-                         JOIN so_sales_order so
-                           ON so.id = soi.order_id
-                          AND so.deleted_flag = FALSE
-                        WHERE poi.order_id = po.id
-                   )
-                   -- 间接链(采购订单 → 采购入库 → 销售订单)必须排除已删除入库:
-                   -- 列表筛选的 JPQL 分支就是这么判的, 两处口径必须一致, 否则会出现
-                   -- 「筛选 selected 不出来的单子, 行上却亮着『已被销售订单引用』」。
-                   OR EXISTS (
-                       SELECT 1
-                         FROM so_sales_order_item soi
-                         JOIN so_sales_order so
-                           ON so.id = soi.order_id
-                          AND so.deleted_flag = FALSE
-                         JOIN po_purchase_inbound_item pii
-                           ON pii.id = soi.source_inbound_item_id
-                         JOIN po_purchase_inbound pi
-                           ON pi.id = pii.inbound_id
-                          AND pi.deleted_flag = FALSE
-                         JOIN po_purchase_order_item poi
-                           ON poi.id = pii.source_purchase_order_item_id
-                        WHERE poi.order_id = po.id
-                   ) AS referenced_by_sales_order,
-                   EXISTS (
-                       SELECT 1
-                         FROM po_purchase_order_item poi
-                         JOIN po_purchase_inbound_item pii
-                           ON pii.source_purchase_order_item_id = poi.id
-                         JOIN po_purchase_inbound inbound
-                           ON inbound.id = pii.inbound_id
-                          AND inbound.deleted_flag = FALSE
-                        WHERE poi.order_id = po.id
-                   ) AS referenced_by_purchase_inbound,
                    -- 强制结单: 剩余未入库件数已作废, 对外按 0 返回(不再作为待入库量展示)
                    CASE WHEN po.force_closed THEN 0 ELSE COALESCE((
                        SELECT SUM(GREATEST(poi.quantity - COALESCE((
@@ -108,26 +70,24 @@ public class PurchaseOrderReferenceQueryRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
-    public PurchaseOrderReferenceQueryRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+    public PurchaseOrderDerivedQueryRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public Map<Long, ReferenceStatus> findByOrderIds(Collection<Long> orderIds) {
+    public Map<Long, DerivedStatus> findByOrderIds(Collection<Long> orderIds) {
         if (orderIds == null || orderIds.isEmpty()) {
             return Map.of();
         }
         MapSqlParameterSource parameters = new MapSqlParameterSource("ids", orderIds);
-        List<ReferenceStatus> statuses = jdbcTemplate.query(SQL, parameters, (resultSet, rowNum) ->
-                new ReferenceStatus(
+        List<DerivedStatus> statuses = jdbcTemplate.query(SQL, parameters, (resultSet, rowNum) ->
+                new DerivedStatus(
                         resultSet.getLong("id"),
-                        resultSet.getBoolean("referenced_by_sales_order"),
-                        resultSet.getBoolean("referenced_by_purchase_inbound"),
                         saturateToInt(resultSet.getLong("unreceived_quantity")),
                         saturateToInt(resultSet.getLong("received_quantity")),
                         resultSet.getBigDecimal("actual_amount"),
                         resultSet.getBigDecimal("amount_difference")
                 ));
-        Map<Long, ReferenceStatus> result = new HashMap<>(statuses.size());
+        Map<Long, DerivedStatus> result = new HashMap<>(statuses.size());
         statuses.forEach(status -> result.put(status.orderId(), status));
         return result;
     }
@@ -140,10 +100,13 @@ public class PurchaseOrderReferenceQueryRepository {
         return value < 0 ? 0 : (int) value;
     }
 
-    public record ReferenceStatus(
+    /**
+     * 单个采购订单的派生聚合: 未入库件数 / 已入库件数 / 实际货值 / 差额。
+     *
+     * <p>入库进度、实际货值与差额的唯一来源: 列表与详情都取这份聚合结果。</p>
+     */
+    public record DerivedStatus(
             Long orderId,
-            boolean referencedBySalesOrder,
-            boolean referencedByPurchaseInbound,
             int unreceivedQuantity,
             int receivedQuantity,
             BigDecimal actualAmount,

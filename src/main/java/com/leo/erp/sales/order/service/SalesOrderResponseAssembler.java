@@ -124,8 +124,6 @@ public class SalesOrderResponseAssembler {
                 response.priceClosedSettleDays(),
                 items,
                 chargeItems,
-                response.referencedByFreightBill(),
-                response.referencedBySalesOutbound(),
                 deliveredQuantity,
                 returnedQuantity,
                 deliveredQuantity - returnedQuantity

@@ -150,7 +150,7 @@ class SalesOrderServiceTest {
         PageQuery query = new PageQuery(0, 30, null, null);
         PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
         Page<SalesOrderResponse> expected = mock(Page.class);
-        when(queryService.page(query, filter, null, null, null, null)).thenReturn(expected);
+        when(queryService.page(query, filter, null, null)).thenReturn(expected);
 
         Page<SalesOrderResponse> result = service.page(query, filter, null);
 
@@ -158,13 +158,13 @@ class SalesOrderServiceTest {
     }
 
     @Test
-    void page_withPendingOnlyAndReferenceFilters_shouldPassThroughAllArguments() {
+    void page_withPendingOnlyFilter_shouldPassThroughAllArguments() {
         PageQuery query = new PageQuery(0, 30, null, null);
         PageFilter filter = PageFilter.of(null, null, null, null, null, null, null);
         Page<SalesOrderResponse> expected = mock(Page.class);
-        when(queryService.page(query, filter, "kw", true, true, "freight-bill")).thenReturn(expected);
+        when(queryService.page(query, filter, "kw", true)).thenReturn(expected);
 
-        Page<SalesOrderResponse> result = service.page(query, filter, "kw", true, true, "freight-bill");
+        Page<SalesOrderResponse> result = service.page(query, filter, "kw", true);
 
         assertThat(result).isSameAs(expected);
     }

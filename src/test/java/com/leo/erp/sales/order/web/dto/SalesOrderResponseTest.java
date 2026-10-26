@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * {@link SalesOrderResponse} 的「重建」方法回归测试。
  *
- * <p>{@code withReferenceFlags} / {@code withDerivedQuantities} 会用规范构造器逐字段重建记录，
+ * <p>{@code withDerivedQuantities} 会用规范构造器逐字段重建记录，
  * 参数位置一错就会把某个字段静默清空（历史上 {@code orderDate} 就被传成 null，导致列表接口
  * 返回 null、前端 strict 契约校验直接失败）。这里对全部字段逐一断言，任何位置错位都会立刻暴露。</p>
  */
@@ -35,24 +35,11 @@ class SalesOrderResponseTest {
     }
 
     @Test
-    @DisplayName("withReferenceFlags 只替换引用标记, 其余字段(含报单日期)必须原样保留")
-    void withReferenceFlags_shouldPreserveEveryOtherField() {
-        SalesOrderResponse source = sample();
-
-        SalesOrderResponse rebuilt = source.withReferenceFlags(true, true);
-
-        assertCoreFieldsPreserved(source, rebuilt);
-        assertThat(rebuilt.referencedByFreightBill()).isTrue();
-        assertThat(rebuilt.referencedBySalesOutbound()).isTrue();
-    }
-
-    @Test
     @DisplayName("报单日期是取价基准 ORDER 的锚点, 任何重建都不得把它清空")
     void rebuiltResponses_shouldKeepOrderDate() {
         SalesOrderResponse source = sample();
 
         assertThat(source.withDerivedQuantities(0, 0, 0).orderDate()).isEqualTo(ORDER_DATE);
-        assertThat(source.withReferenceFlags(false, false).orderDate()).isEqualTo(ORDER_DATE);
     }
 
     /** 逐字段比对：重建后除被替换项外必须完全一致（漏字段 / 传错位置都会在这里失败）。 */
@@ -126,8 +113,6 @@ class SalesOrderResponseTest {
                 0,
                 List.of(),
                 List.of(),
-                false,
-                false,
                 null,
                 null,
                 null);

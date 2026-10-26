@@ -47,8 +47,6 @@ class SalesOrderCriteriaBindingTest {
         request.setParameter("startDate", "2026-08-01");
         request.setParameter("endDate", "2026-08-31");
         request.setParameter("pendingOnly", "true");
-        request.setParameter("referenced", "false");
-        request.setParameter("referencedBy", "sales-outbound");
 
         SalesOrderPageCriteria criteria = bind(new SalesOrderPageCriteria(), request);
 
@@ -63,8 +61,6 @@ class SalesOrderCriteriaBindingTest {
         assertThat(criteria.getStartDate()).isEqualTo(LocalDate.of(2026, 8, 1));
         assertThat(criteria.getEndDate()).isEqualTo(LocalDate.of(2026, 8, 31));
         assertThat(criteria.getPendingOnly()).isTrue();
-        assertThat(criteria.getReferenced()).isFalse();
-        assertThat(criteria.getReferencedBy()).isEqualTo("sales-outbound");
     }
 
     @Test
@@ -82,8 +78,6 @@ class SalesOrderCriteriaBindingTest {
         assertThat(criteria.getStartDate()).isNull();
         assertThat(criteria.getEndDate()).isNull();
         assertThat(criteria.getPendingOnly()).isNull();
-        assertThat(criteria.getReferenced()).isNull();
-        assertThat(criteria.getReferencedBy()).isNull();
     }
 
     @Test

@@ -20,19 +20,19 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 采购订单引用/货值聚合口径测试。
+ * 采购订单派生聚合(入库进度/实际货值/差额)口径测试。
  *
  * <p>本仓库未引入 H2/Testcontainers, 无法执行 PostgreSQL 相关子查询, 故此处对生成的 SQL
  * 做结构断言; 逐行取整的行为另以真实数据核对(暂定重量与实测重量一致时差额必须为 0)。</p>
  */
 @ExtendWith(MockitoExtension.class)
-class PurchaseOrderReferenceQueryRepositoryTest {
+class PurchaseOrderDerivedQueryRepositoryTest {
 
     @Mock
     private NamedParameterJdbcTemplate jdbcTemplate;
 
     @InjectMocks
-    private PurchaseOrderReferenceQueryRepository repository;
+    private PurchaseOrderDerivedQueryRepository repository;
 
     private String captureSql() {
         when(jdbcTemplate.query(anyString(), any(SqlParameterSource.class), any(RowMapper.class)))
@@ -43,18 +43,6 @@ class PurchaseOrderReferenceQueryRepositoryTest {
         ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
         verify(jdbcTemplate).query(sqlCaptor.capture(), any(SqlParameterSource.class), any(RowMapper.class));
         return sqlCaptor.getValue();
-    }
-
-    @Test
-    void referencedBySalesOrder_shouldIgnoreSoftDeletedInbound() {
-        String sql = captureSql();
-
-        // 列表筛选(JPQL)在「采购订单→采购入库→销售订单」这条间接链上排除已删除入库;
-        // 行上的引用徽标必须同口径, 否则同一张单会出现「筛选选不到、行上却显示已被引用」。
-        assertThat(sql).contains("AND pi.deleted_flag = FALSE");
-        assertThat(sql).contains("JOIN po_purchase_inbound pi");
-        // 直接链(销售明细直接带 source_purchase_order_item_id)不受影响。
-        assertThat(sql).contains("soi.source_purchase_order_item_id = poi.id");
     }
 
     @Test

@@ -15,8 +15,6 @@ public class PurchaseOrderPageCriteria {
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate endDate;
     private Boolean pendingOnly;
-    private Boolean referenced;
-    private String referencedBy;
     /** 商品信息模糊搜索（商品编码/品牌/材质/规格/长度），与单据头 keyword 相互独立。 */
     private String productKeyword;
 
@@ -82,22 +80,6 @@ public class PurchaseOrderPageCriteria {
 
     public void setPendingOnly(Boolean pendingOnly) {
         this.pendingOnly = pendingOnly;
-    }
-
-    public Boolean getReferenced() {
-        return referenced;
-    }
-
-    public void setReferenced(Boolean referenced) {
-        this.referenced = referenced;
-    }
-
-    public String getReferencedBy() {
-        return referencedBy;
-    }
-
-    public void setReferencedBy(String referencedBy) {
-        this.referencedBy = referencedBy;
     }
 
     public String getProductKeyword() {

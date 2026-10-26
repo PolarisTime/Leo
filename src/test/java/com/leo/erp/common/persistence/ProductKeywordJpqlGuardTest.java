@@ -50,9 +50,11 @@ class ProductKeywordJpqlGuardTest {
      */
     @Test
     void guard_itself_shouldFindAtLeastOneProductKeywordQueryPerRepository() {
+        // 采购订单仓储目前只剩 findPending 一条商品关键字 JPQL（原 findByReferenceFilter 已随
+        // 「下游引用」筛选下线删除）；数量写死是为了在「JPQL 被整条误删」时立刻变红。
         assertThat(productKeywordQueries(PurchaseOrderRepository.class))
                 .as("采购订单仓储应有带 :productKeyword 的查询，否则守卫形同虚设")
-                .hasSize(2);
+                .hasSize(1);
         assertThat(productKeywordQueries(SalesOrderRepository.class))
                 .as("销售订单仓储应有带 :productKeyword 的查询")
                 .isNotEmpty();

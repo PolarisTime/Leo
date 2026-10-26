@@ -55,8 +55,6 @@ public class PurchaseOrderResponseAssembler {
                 response.remark(),
                 itemResponses,
                 documentChargeItemService.list(ModuleKeys.PURCHASE_ORDER, order.getId()),
-                response.referencedBySalesOrder(),
-                response.referencedByPurchaseInbound(),
                 totalRemainingQuantity(itemResponses),
                 null,
                 null,

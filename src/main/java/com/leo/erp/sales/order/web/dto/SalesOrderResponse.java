@@ -53,8 +53,6 @@ public record SalesOrderResponse(
         Integer priceClosedSettleDays,
         List<SalesOrderItemResponse> items,
         List<DocumentChargeItemResponse> chargeItems,
-        boolean referencedByFreightBill,
-        boolean referencedBySalesOutbound,
         Integer deliveredQuantity,
         Integer returnedQuantity,
         Integer deliveredNetQuantity
@@ -83,20 +81,7 @@ public record SalesOrderResponse(
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, totalWeight,
                 totalAmount, status, deletedFlag, remark, null, null, null, null, null, null, null, null, null, null, null,
-                items, chargeItems, false, false, null, null, null);
-    }
-
-    public SalesOrderResponse withReferenceFlags(boolean referencedByFreightBill,
-                                                  boolean referencedBySalesOutbound) {
-        return new SalesOrderResponse(
-                id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
-                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, orderDate, salesName,
-                totalWeight, totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
-                priceFloatValue, priceTargetDate, priceQuoteDate, priceQuotePeriod, priceDateBasis,
-                priceDateOffsetDays, priceClosedSettleDirection, priceClosedSettleDays, items, chargeItems,
-                referencedByFreightBill,
-                referencedBySalesOutbound, deliveredQuantity, returnedQuantity, deliveredNetQuantity
-        );
+                items, chargeItems, null, null, null);
     }
 
     public SalesOrderResponse withDerivedQuantities(Integer deliveredQuantity,
@@ -108,8 +93,7 @@ public record SalesOrderResponse(
                 totalWeight, totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
                 priceFloatValue, priceTargetDate, priceQuoteDate, priceQuotePeriod, priceDateBasis,
                 priceDateOffsetDays, priceClosedSettleDirection, priceClosedSettleDays, items, chargeItems,
-                referencedByFreightBill,
-                referencedBySalesOutbound, deliveredQuantity, returnedQuantity, deliveredNetQuantity
+                deliveredQuantity, returnedQuantity, deliveredNetQuantity
         );
     }
 
@@ -135,7 +119,7 @@ public record SalesOrderResponse(
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, totalWeight,
                 totalAmount, status, deletedFlag, remark, null, null, null, null, null, null, null, null, null,
-                null, null, items, List.of(), false, false, null, null, null);
+                null, null, items, List.of(), null, null, null);
     }
 
     public SalesOrderResponse(Long id,

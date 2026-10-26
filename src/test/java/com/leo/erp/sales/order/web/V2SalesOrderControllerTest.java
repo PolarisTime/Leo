@@ -88,43 +88,31 @@ class V2SalesOrderControllerTest {
 
     @Test
     void page_shouldDelegate() {
-        when(service.page(any(PageQuery.class), any(PageFilter.class), any(), isNull(), isNull(), isNull()))
+        when(service.page(any(PageQuery.class), any(PageFilter.class), any(), isNull()))
                 .thenReturn(mock(org.springframework.data.domain.Page.class));
 
         var result = controller.page(mock(PageQuery.class), criteria("kw", 10L, "客户A", 20L, "项目A", 30L,
-                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), null, null, null));
+                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), null));
 
         assertThat(result).isNotNull();
     }
 
     @Test
-    void page_shouldForwardReferenceFilter() {
-        when(service.page(any(PageQuery.class), any(PageFilter.class), anyString(), any(), any(), any()))
+    void page_shouldForwardPendingOnlyFilter() {
+        when(service.page(any(PageQuery.class), any(PageFilter.class), anyString(), any()))
                 .thenReturn(mock(org.springframework.data.domain.Page.class));
 
         var result = controller.page(mock(PageQuery.class), criteria("kw", 10L, "客户A", 20L, "项目A", 30L,
-                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), false, true, null));
+                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), true));
 
         assertThat(result).isNotNull();
-        verify(service).page(any(PageQuery.class), any(PageFilter.class), anyString(), eq(false), eq(true), isNull());
-    }
-
-    @Test
-    void page_shouldForwardReferencedByFilter() {
-        when(service.page(any(PageQuery.class), any(PageFilter.class), anyString(), any(), any(), any()))
-                .thenReturn(mock(org.springframework.data.domain.Page.class));
-
-        var result = controller.page(mock(PageQuery.class), criteria("kw", 10L, "客户A", 20L, "项目A", 30L,
-                "M001", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), null, null, "sales-outbound"));
-
-        assertThat(result).isNotNull();
-        verify(service).page(any(PageQuery.class), any(PageFilter.class), anyString(), isNull(), isNull(), eq("sales-outbound"));
+        verify(service).page(any(PageQuery.class), any(PageFilter.class), anyString(), eq(true));
     }
 
     private SalesOrderPageCriteria criteria(String keyword, Long customerId, String customerName,
                                             Long projectId, String projectName, Long settlementCompanyId,
                                             String productKeyword, String status, LocalDate startDate, LocalDate endDate,
-                                            Boolean pendingOnly, Boolean referenced, String referencedBy) {
+                                            Boolean pendingOnly) {
         SalesOrderPageCriteria criteria = new SalesOrderPageCriteria();
         criteria.setKeyword(keyword);
         criteria.setCustomerId(customerId);
@@ -137,8 +125,6 @@ class V2SalesOrderControllerTest {
         criteria.setStartDate(startDate);
         criteria.setEndDate(endDate);
         criteria.setPendingOnly(pendingOnly);
-        criteria.setReferenced(referenced);
-        criteria.setReferencedBy(referencedBy);
         return criteria;
     }
 

@@ -87,27 +87,12 @@ public class SalesOrderService {
 
     @Transactional(readOnly = true)
     public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter, String productKeyword) {
-        return page(query, filter, productKeyword, null, null, null);
+        return page(query, filter, productKeyword, null);
     }
 
     @Transactional(readOnly = true)
     public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter, String productKeyword, Boolean pendingOnly) {
-        return page(query, filter, productKeyword, pendingOnly, null, null);
-    }
-
-    @Transactional(readOnly = true)
-    public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter, String productKeyword, Boolean pendingOnly, Boolean referenced) {
-        return page(query, filter, productKeyword, pendingOnly, referenced, null);
-    }
-
-    @Transactional(readOnly = true)
-    public Page<SalesOrderResponse> page(PageQuery query,
-                                         PageFilter filter,
-                                         String productKeyword,
-                                         Boolean pendingOnly,
-                                         Boolean referenced,
-                                         String referencedBy) {
-        return queryService.page(query, filter, productKeyword, pendingOnly, referenced, referencedBy);
+        return queryService.page(query, filter, productKeyword, pendingOnly);
     }
 
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)

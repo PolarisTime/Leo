@@ -2,10 +2,9 @@ package com.leo.erp.purchase.order.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
+import com.leo.erp.purchase.order.repository.PurchaseOrderDerivedQueryRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderInboundCandidateQueryRepository;
-import com.leo.erp.purchase.order.repository.PurchaseOrderReferenceQueryRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import org.junit.jupiter.api.Nested;
@@ -26,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -40,7 +38,7 @@ class PurchaseOrderQueryServiceTest {
     private PurchaseOrderRepository purchaseOrderRepository;
 
     @Mock
-    private PurchaseOrderReferenceQueryRepository referenceQueryRepository;
+    private PurchaseOrderDerivedQueryRepository derivedQueryRepository;
 
     @Mock
     private PurchaseOrderResponseAssembler responseAssembler;
@@ -113,56 +111,6 @@ class PurchaseOrderQueryServiceTest {
     }
 
     @Nested
-    class ReferenceFilterQuery {
-
-        /**
-         * 商品信息筛选必须被规范化（trim + 小写）后传给仓储。
-         *
-         * <p>JPQL 用的是 {@code position(:productKeyword in lower(...))}：参数若带大写或首尾空格，
-         * 匹配会静默失败（用户搜「HRB400」搜不到），因此这里锁住规范化行为。</p>
-         */
-        @Test
-        void findByReferenceFilter_shouldNormalizeProductKeyword() {
-            PageQuery query = new PageQuery(0, 30, null, null);
-            PageFilter filter = PageFilter.of(null, null, null, null, null, null);
-            when(purchaseOrderRepository.findByReferenceFilter(
-                    any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
-                    .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
-
-            service.findByReferenceFilter(query, filter, null, null, "none", "  HRB400  ");
-
-            verify(purchaseOrderRepository).findByReferenceFilter(
-                    any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                    eq("hrb400"), any(Pageable.class));
-        }
-
-        @Test
-        void findByReferenceFilter_shouldRejectUnknownReferencedBy() {
-            PageQuery query = new PageQuery(0, 30, null, null);
-            PageFilter filter = PageFilter.of(null, null, null, null, null, null);
-
-            assertThatThrownBy(() -> service.findByReferenceFilter(query, filter, null, null, "unknown", null))
-                    .isInstanceOf(BusinessException.class)
-                    .hasMessageContaining("下游模块关联筛选值");
-        }
-
-        @Test
-        void findByReferenceFilter_shouldAcceptKnownReferencedByValues() {
-            PageQuery query = new PageQuery(0, 30, null, null);
-            PageFilter filter = PageFilter.of(null, null, null, null, null, null);
-            when(purchaseOrderRepository.findByReferenceFilter(
-                    any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
-                    .thenReturn(new PageImpl<>(List.of(), query.toPageable("id"), 0));
-
-            service.findByReferenceFilter(query, filter, null, null, "none", null);
-
-            verify(purchaseOrderRepository).findByReferenceFilter(
-                    any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                    eq("none"), any(), any(Pageable.class));
-        }
-    }
-
-    @Nested
     class InboundImportCandidates {
 
         @Test
@@ -181,11 +129,11 @@ class PurchaseOrderQueryServiceTest {
     }
 
     @Nested
-    class ReferenceStatusEnrichment {
+    class DerivedValueEnrichment {
 
         @Test
-        void findReferenceStatusByOrderIds_shouldReturnEmptyMapWhenRepositoryMissing() {
-            PurchaseOrderQueryService serviceWithoutReferenceRepository = new PurchaseOrderQueryService(
+        void findDerivedStatusByOrderIds_shouldReturnEmptyMapWhenRepositoryMissing() {
+            PurchaseOrderQueryService serviceWithoutDerivedRepository = new PurchaseOrderQueryService(
                     purchaseOrderRepository,
                     null,
                     responseAssembler,
@@ -193,13 +141,13 @@ class PurchaseOrderQueryServiceTest {
                     inboundCandidateQueryRepository
             );
 
-            assertThat(serviceWithoutReferenceRepository.findReferenceStatusByOrderIds(List.of(1L)))
+            assertThat(serviceWithoutDerivedRepository.findDerivedStatusByOrderIds(List.of(1L)))
                     .isEmpty();
         }
 
         @Test
         void toDetailResponse_shouldReturnAssemblerResponseWhenRepositoryMissing() {
-            PurchaseOrderQueryService serviceWithoutReferenceRepository = new PurchaseOrderQueryService(
+            PurchaseOrderQueryService serviceWithoutDerivedRepository = new PurchaseOrderQueryService(
                     purchaseOrderRepository,
                     null,
                     responseAssembler,
@@ -210,25 +158,23 @@ class PurchaseOrderQueryServiceTest {
             order.setId(1L);
             when(responseAssembler.toDetailResponse(order)).thenReturn(null);
 
-            assertThat(serviceWithoutReferenceRepository.toDetailResponse(order)).isNull();
+            assertThat(serviceWithoutDerivedRepository.toDetailResponse(order)).isNull();
         }
 
         @Test
-        void applyReferenceFlags_shouldCarryUnreceivedQuantityOntoResponse() {
+        void applyDerivedValues_shouldCarryUnreceivedQuantityOntoResponse() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
                     null, null, "已审核", false, null, List.of()
             );
 
-            PurchaseOrderResponse enriched = service.applyReferenceFlags(
+            PurchaseOrderResponse enriched = service.applyDerivedValues(
                     base,
-                    new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
-                            1L, true, false, 7, 3,
+                    new PurchaseOrderDerivedQueryRepository.DerivedStatus(
+                            1L, 7, 3,
                             new BigDecimal("1200.50"), new BigDecimal("200.50"))
             );
 
-            assertThat(enriched.referencedBySalesOrder()).isTrue();
-            assertThat(enriched.referencedByPurchaseInbound()).isFalse();
             assertThat(enriched.totalRemainingQuantity()).isEqualTo(7);
             assertThat(enriched.totalReceivedQuantity()).isEqualTo(3);
             assertThat(enriched.totalActualAmount()).isEqualByComparingTo("1200.50");
@@ -236,16 +182,16 @@ class PurchaseOrderQueryServiceTest {
         }
 
         @Test
-        void applyReferenceFlags_shouldCarryPositiveReceivedQuantityOntoResponse() {
+        void applyDerivedValues_shouldCarryPositiveReceivedQuantityOntoResponse() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
                     null, null, "已审核", false, null, List.of()
             );
 
-            PurchaseOrderResponse enriched = service.applyReferenceFlags(
+            PurchaseOrderResponse enriched = service.applyDerivedValues(
                     base,
-                    new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
-                            1L, false, true, 2, 5,
+                    new PurchaseOrderDerivedQueryRepository.DerivedStatus(
+                            1L, 2, 5,
                             BigDecimal.ZERO, BigDecimal.ZERO)
             );
 
@@ -253,16 +199,16 @@ class PurchaseOrderQueryServiceTest {
         }
 
         @Test
-        void applyReferenceFlags_shouldCarryZeroReceivedQuantityOntoResponse() {
+        void applyDerivedValues_shouldCarryZeroReceivedQuantityOntoResponse() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
                     null, null, "已审核", false, null, List.of()
             );
 
-            PurchaseOrderResponse enriched = service.applyReferenceFlags(
+            PurchaseOrderResponse enriched = service.applyDerivedValues(
                     base,
-                    new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
-                            1L, false, false, 0, 0,
+                    new PurchaseOrderDerivedQueryRepository.DerivedStatus(
+                            1L, 0, 0,
                             BigDecimal.ZERO, BigDecimal.ZERO)
             );
 
@@ -271,16 +217,16 @@ class PurchaseOrderQueryServiceTest {
 
         /** actual_weight_ton 全为 NULL 时 SQL 兜底为 0，差额等于负的暂定金额。 */
         @Test
-        void applyReferenceFlags_shouldCarryZeroActualAmountAndNegativeDifference() {
+        void applyDerivedValues_shouldCarryZeroActualAmountAndNegativeDifference() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
                     null, new BigDecimal("800.00"), "已审核", false, null, List.of()
             );
 
-            PurchaseOrderResponse enriched = service.applyReferenceFlags(
+            PurchaseOrderResponse enriched = service.applyDerivedValues(
                     base,
-                    new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
-                            1L, false, false, 0, 0,
+                    new PurchaseOrderDerivedQueryRepository.DerivedStatus(
+                            1L, 0, 0,
                             BigDecimal.ZERO, new BigDecimal("-800.00"))
             );
 
@@ -289,16 +235,16 @@ class PurchaseOrderQueryServiceTest {
         }
 
         @Test
-        void applyReferenceFlags_shouldCarryPositiveDifferenceWhenActualExceedsTentative() {
+        void applyDerivedValues_shouldCarryPositiveDifferenceWhenActualExceedsTentative() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
                     null, new BigDecimal("500.00"), "已审核", false, null, List.of()
             );
 
-            PurchaseOrderResponse enriched = service.applyReferenceFlags(
+            PurchaseOrderResponse enriched = service.applyDerivedValues(
                     base,
-                    new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
-                            1L, false, false, 0, 0,
+                    new PurchaseOrderDerivedQueryRepository.DerivedStatus(
+                            1L, 0, 0,
                             new BigDecimal("700.00"), new BigDecimal("200.00"))
             );
 
@@ -306,16 +252,16 @@ class PurchaseOrderQueryServiceTest {
         }
 
         @Test
-        void applyReferenceFlags_shouldCarryZeroDifference() {
+        void applyDerivedValues_shouldCarryZeroDifference() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
                     null, new BigDecimal("500.00"), "已审核", false, null, List.of()
             );
 
-            PurchaseOrderResponse enriched = service.applyReferenceFlags(
+            PurchaseOrderResponse enriched = service.applyDerivedValues(
                     base,
-                    new PurchaseOrderReferenceQueryRepository.ReferenceStatus(
-                            1L, false, false, 0, 0,
+                    new PurchaseOrderDerivedQueryRepository.DerivedStatus(
+                            1L, 0, 0,
                             new BigDecimal("500.00"), BigDecimal.ZERO)
             );
 
@@ -340,13 +286,13 @@ class PurchaseOrderQueryServiceTest {
         }
 
         @Test
-        void applyReferenceFlags_shouldLeaveResponseUntouchedWhenStatusMissing() {
+        void applyDerivedValues_shouldLeaveResponseUntouchedWhenStatusMissing() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
                     null, null, "已审核", false, null, List.of()
             );
 
-            assertThat(service.applyReferenceFlags(base, null)).isSameAs(base);
+            assertThat(service.applyDerivedValues(base, null)).isSameAs(base);
         }
     }
 }

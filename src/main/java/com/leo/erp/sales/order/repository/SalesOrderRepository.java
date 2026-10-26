@@ -98,7 +98,7 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
     List<Long> findOrderIdsBySourceItemIds(@Param("sourceItemIds") Collection<Long> sourceItemIds);
 
     /**
-     * 按物流单、销售出库等具体下游模块引用状态进行分页筛选。
+     * 「待处理」分页筛选用查询：{@code pendingOnly=true} 时排除已有物流单或销售出库的订单。
      *
      * <p>商品信息({@code productKeyword}) 的字段清单必须与
      * {@link com.leo.erp.common.persistence.Specs#PRODUCT_SEARCH_FIELDS} 保持一致：
@@ -167,89 +167,6 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
                         )
                     )
               )
-              and (
-                    :referenced is null
-                    or (
-                        :referenced = true
-                        and (
-                            exists (
-                                select relation.id
-                                from FreightBillSourceOrder relation
-                                where relation.sourceSalesOrderId = salesOrder.id
-                                  and relation.activeFlag = true
-                                  and relation.deletedFlag = false
-                                  and relation.freightBill.deletedFlag = false
-                            )
-                            or exists (
-                                select outboundItem.id
-                                from SalesOutboundItem outboundItem, SalesOrderItem salesItem
-                                where salesItem.salesOrder = salesOrder
-                                  and outboundItem.sourceSalesOrderItemId = salesItem.id
-                                  and outboundItem.salesOutbound.deletedFlag = false
-                            )
-                        )
-                    )
-                    or (
-                        :referenced = false
-                        and not exists (
-                            select relation.id
-                            from FreightBillSourceOrder relation
-                            where relation.sourceSalesOrderId = salesOrder.id
-                              and relation.activeFlag = true
-                              and relation.deletedFlag = false
-                              and relation.freightBill.deletedFlag = false
-                        )
-                        and not exists (
-                            select outboundItem.id
-                            from SalesOutboundItem outboundItem, SalesOrderItem salesItem
-                            where salesItem.salesOrder = salesOrder
-                              and outboundItem.sourceSalesOrderItemId = salesItem.id
-                              and outboundItem.salesOutbound.deletedFlag = false
-                        )
-                    )
-              )
-              and (
-                    :referencedBy is null
-                    or (
-                        :referencedBy = 'none'
-                        and not exists (
-                            select relation.id
-                            from FreightBillSourceOrder relation
-                            where relation.sourceSalesOrderId = salesOrder.id
-                              and relation.activeFlag = true
-                              and relation.deletedFlag = false
-                              and relation.freightBill.deletedFlag = false
-                        )
-                        and not exists (
-                            select outboundItem.id
-                            from SalesOutboundItem outboundItem, SalesOrderItem salesItem
-                            where salesItem.salesOrder = salesOrder
-                              and outboundItem.sourceSalesOrderItemId = salesItem.id
-                              and outboundItem.salesOutbound.deletedFlag = false
-                        )
-                    )
-                    or (
-                        :referencedBy = 'freight-bill'
-                        and exists (
-                            select relation.id
-                            from FreightBillSourceOrder relation
-                            where relation.sourceSalesOrderId = salesOrder.id
-                              and relation.activeFlag = true
-                              and relation.deletedFlag = false
-                              and relation.freightBill.deletedFlag = false
-                        )
-                    )
-                    or (
-                        :referencedBy = 'sales-outbound'
-                        and exists (
-                            select outboundItem.id
-                            from SalesOutboundItem outboundItem, SalesOrderItem salesItem
-                            where salesItem.salesOrder = salesOrder
-                              and outboundItem.sourceSalesOrderItemId = salesItem.id
-                              and outboundItem.salesOutbound.deletedFlag = false
-                        )
-                    )
-              )
             """)
     Page<SalesOrder> findByReferenceFilter(
             @Param("keyword") String keyword,
@@ -264,8 +181,6 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
             @Param("endDate") LocalDate endDate,
             @Param("completedStatus") String completedStatus,
             @Param("pendingOnly") Boolean pendingOnly,
-            @Param("referenced") Boolean referenced,
-            @Param("referencedBy") String referencedBy,
             Pageable pageable
     );
 }

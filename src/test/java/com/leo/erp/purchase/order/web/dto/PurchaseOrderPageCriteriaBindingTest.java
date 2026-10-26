@@ -32,8 +32,6 @@ class PurchaseOrderPageCriteriaBindingTest {
         request.setParameter("startDate", "2026-08-01");
         request.setParameter("endDate", "2026-08-31");
         request.setParameter("pendingOnly", "true");
-        request.setParameter("referenced", "false");
-        request.setParameter("referencedBy", "purchase-inbound");
 
         ServletRequestDataBinder binder = new ServletRequestDataBinder(new PurchaseOrderPageCriteria(), "criteria");
         binder.setConversionService(conversionService);
@@ -51,8 +49,6 @@ class PurchaseOrderPageCriteriaBindingTest {
         assertThat(criteria.getStartDate()).isEqualTo(LocalDate.of(2026, 8, 1));
         assertThat(criteria.getEndDate()).isEqualTo(LocalDate.of(2026, 8, 31));
         assertThat(criteria.getPendingOnly()).isTrue();
-        assertThat(criteria.getReferenced()).isFalse();
-        assertThat(criteria.getReferencedBy()).isEqualTo("purchase-inbound");
     }
 
     @Test
@@ -72,8 +68,6 @@ class PurchaseOrderPageCriteriaBindingTest {
         assertThat(criteria.getStartDate()).isNull();
         assertThat(criteria.getEndDate()).isNull();
         assertThat(criteria.getPendingOnly()).isNull();
-        assertThat(criteria.getReferenced()).isNull();
-        assertThat(criteria.getReferencedBy()).isNull();
     }
 
     @Test
@@ -107,8 +101,7 @@ class PurchaseOrderPageCriteriaBindingTest {
     @Test
     void booleanBindingAcceptsTrueFalseStrings() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setParameter("pendingOnly", "true");
-        request.setParameter("referenced", "TRUE");
+        request.setParameter("pendingOnly", "TRUE");
 
         ServletRequestDataBinder binder = new ServletRequestDataBinder(new PurchaseOrderPageCriteria(), "criteria");
         binder.setConversionService(conversionService);
@@ -116,6 +109,5 @@ class PurchaseOrderPageCriteriaBindingTest {
 
         PurchaseOrderPageCriteria criteria = (PurchaseOrderPageCriteria) binder.getTarget();
         assertThat(criteria.getPendingOnly()).isTrue();
-        assertThat(criteria.getReferenced()).isTrue();
     }
 }

@@ -15,7 +15,7 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
-import com.leo.erp.purchase.order.repository.PurchaseOrderReferenceQueryRepository;
+import com.leo.erp.purchase.order.repository.PurchaseOrderDerivedQueryRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
@@ -74,47 +74,29 @@ public class PurchaseOrderService {
 
     @Transactional(readOnly = true)
     public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter) {
-        return page(query, filter, null, null, null);
+        return page(query, filter, null);
     }
 
     @Transactional(readOnly = true)
     public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter, Boolean pendingOnly) {
-        return page(query, filter, pendingOnly, null, null);
-    }
-
-    @Transactional(readOnly = true)
-    public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter, Boolean pendingOnly, Boolean referenced) {
-        return page(query, filter, pendingOnly, referenced, null);
+        return page(query, filter, pendingOnly, null);
     }
 
     @Transactional(readOnly = true)
     public Page<PurchaseOrderResponse> page(PageQuery query,
                                             PageFilter filter,
                                             Boolean pendingOnly,
-                                            Boolean referenced,
-                                            String referencedBy) {
-        return page(query, filter, pendingOnly, referenced, referencedBy, null);
-    }
-
-    @Transactional(readOnly = true)
-    public Page<PurchaseOrderResponse> page(PageQuery query,
-                                            PageFilter filter,
-                                            Boolean pendingOnly,
-                                            Boolean referenced,
-                                            String referencedBy,
                                             String productKeyword) {
         Page<PurchaseOrder> entities;
-        if (referenced != null || referencedBy != null) {
-            entities = queryService.findByReferenceFilter(query, filter, pendingOnly, referenced, referencedBy, productKeyword);
-        } else if (Boolean.TRUE.equals(pendingOnly)) {
+        if (Boolean.TRUE.equals(pendingOnly)) {
             entities = queryService.findPending(query, filter, productKeyword);
         } else {
             entities = pageEntities(query, queryService.summarySpecification(filter, productKeyword), purchaseOrderRepository);
         }
-        Map<Long, PurchaseOrderReferenceQueryRepository.ReferenceStatus> statuses =
-                queryService.findReferenceStatusByOrderIds(
+        Map<Long, PurchaseOrderDerivedQueryRepository.DerivedStatus> statuses =
+                queryService.findDerivedStatusByOrderIds(
                         entities.getContent().stream().map(PurchaseOrder::getId).toList());
-        return entities.map(order -> queryService.applyReferenceFlags(
+        return entities.map(order -> queryService.applyDerivedValues(
                 toResponse(order),
                 statuses.get(order.getId())
         ));

@@ -24,8 +24,6 @@ public record PurchaseOrderResponse(
         String remark,
         List<PurchaseOrderItemResponse> items,
         List<DocumentChargeItemResponse> chargeItems,
-        boolean referencedBySalesOrder,
-        boolean referencedByPurchaseInbound,
         Integer totalRemainingQuantity,
         BigDecimal totalActualAmount,
         BigDecimal totalAmountDifference,
@@ -77,17 +75,7 @@ public record PurchaseOrderResponse(
                                  List<DocumentChargeItemResponse> chargeItems) {
         this(id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                false, false, null, null, null, null, null);
-    }
-
-    public PurchaseOrderResponse withReferenceFlags(boolean referencedBySalesOrder,
-                                                     boolean referencedByPurchaseInbound) {
-        return new PurchaseOrderResponse(
-                id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
-                settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity,
-                totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
-        );
+                null, null, null, null, null);
     }
 
     /** 覆盖强制结单留痕(实体派生), 其余字段保持不变。 */
@@ -95,8 +83,7 @@ public record PurchaseOrderResponse(
         return new PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity,
-                totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
+                totalRemainingQuantity, totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
         );
     }
 
@@ -104,8 +91,7 @@ public record PurchaseOrderResponse(
         return new PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity,
-                totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
+                totalRemainingQuantity, totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
         );
     }
 
@@ -113,8 +99,7 @@ public record PurchaseOrderResponse(
         return new PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity,
-                totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
+                totalRemainingQuantity, totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
         );
     }
 
@@ -122,8 +107,7 @@ public record PurchaseOrderResponse(
         return new PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                referencedBySalesOrder, referencedByPurchaseInbound, totalRemainingQuantity,
-                totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
+                totalRemainingQuantity, totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
         );
     }
 
@@ -144,7 +128,7 @@ public record PurchaseOrderResponse(
                                  List<PurchaseOrderItemResponse> items) {
         this(id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, List.of(),
-                false, false, null, null, null, null, null);
+                null, null, null, null, null);
     }
 
     public PurchaseOrderResponse(Long id,

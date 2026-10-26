@@ -18,8 +18,6 @@ public class SalesOrderPageCriteria {
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate endDate;
     private Boolean pendingOnly;
-    private Boolean referenced;
-    private String referencedBy;
 
     public String getKeyword() {
         return keyword;
@@ -107,21 +105,5 @@ public class SalesOrderPageCriteria {
 
     public void setPendingOnly(Boolean pendingOnly) {
         this.pendingOnly = pendingOnly;
-    }
-
-    public Boolean getReferenced() {
-        return referenced;
-    }
-
-    public void setReferenced(Boolean referenced) {
-        this.referenced = referenced;
-    }
-
-    public String getReferencedBy() {
-        return referencedBy;
-    }
-
-    public void setReferencedBy(String referencedBy) {
-        this.referencedBy = referencedBy;
     }
 }

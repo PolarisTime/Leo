@@ -95,9 +95,7 @@ public class V2SalesOrderController {
                 PageFilter.of(criteria.getKeyword(), criteria.getCustomerName(), criteria.getProjectName(), criteria.getSettlementCompanyId(), criteria.getStatus(), criteria.getStartDate(), criteria.getEndDate())
                         .withIdentity(criteria.getCustomerId(), criteria.getProjectId(), null, null, null),
                 criteria.getProductKeyword(),
-                criteria.getPendingOnly(),
-                criteria.getReferenced(),
-                criteria.getReferencedBy()
+                criteria.getPendingOnly()
         ));
     }
 

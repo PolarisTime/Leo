@@ -24,7 +24,7 @@ class PurchaseOrderResponseSerializationTest {
         return new PurchaseOrderResponse(
                 1L, "PO-1", null, null, "供应商", null, null, null, null,
                 null, null, "完成采购", false, null, null, null,
-                false, false, 0, null, null, null, forceClose
+                0, null, null, null, forceClose
         );
     }
 

@@ -104,8 +104,6 @@ public class V2PurchaseOrderController {
                 PageFilter.of(criteria.getKeyword(), criteria.getSupplierName(), criteria.getSettlementCompanyId(), criteria.getStatus(), criteria.getStartDate(), criteria.getEndDate())
                         .withIdentity(null, null, criteria.getSupplierId(), null, null),
                 criteria.getPendingOnly(),
-                criteria.getReferenced(),
-                criteria.getReferencedBy(),
                 criteria.getProductKeyword()
         ));
     }

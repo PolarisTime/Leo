@@ -1,15 +1,12 @@
 package com.leo.erp.purchase.order.service;
 
-import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
+import com.leo.erp.purchase.order.repository.PurchaseOrderDerivedQueryRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderInboundCandidateQueryRepository;
-import com.leo.erp.purchase.order.repository.PurchaseOrderReferenceQueryRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
@@ -18,7 +15,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
@@ -34,52 +30,23 @@ public class PurchaseOrderQueryService {
 
     private static final LocalDateTime MIN_PENDING_ORDER_DATE = LocalDateTime.of(1, 1, 1, 0, 0);
     private static final LocalDateTime MAX_PENDING_ORDER_DATE_EXCLUSIVE = LocalDateTime.of(10000, 1, 1, 0, 0);
-    private static final Set<String> REFERENCED_BY_VALUES =
-            Set.of(
-                    ModuleKeys.SALES_ORDER,
-                    ModuleKeys.PURCHASE_INBOUND,
-                    "none"
-            );
 
     private final PurchaseOrderRepository purchaseOrderRepository;
-    private final PurchaseOrderReferenceQueryRepository referenceQueryRepository;
+    private final PurchaseOrderDerivedQueryRepository derivedQueryRepository;
     private final PurchaseOrderResponseAssembler responseAssembler;
     private final PurchaseOrderAvailabilityService availabilityService;
     private final PurchaseOrderInboundCandidateQueryRepository inboundCandidateQueryRepository;
 
     public PurchaseOrderQueryService(PurchaseOrderRepository purchaseOrderRepository,
-                                     PurchaseOrderReferenceQueryRepository referenceQueryRepository,
+                                     PurchaseOrderDerivedQueryRepository derivedQueryRepository,
                                      PurchaseOrderResponseAssembler responseAssembler,
                                      PurchaseOrderAvailabilityService availabilityService,
                                      PurchaseOrderInboundCandidateQueryRepository inboundCandidateQueryRepository) {
         this.purchaseOrderRepository = purchaseOrderRepository;
-        this.referenceQueryRepository = referenceQueryRepository;
+        this.derivedQueryRepository = derivedQueryRepository;
         this.responseAssembler = responseAssembler;
         this.availabilityService = availabilityService;
         this.inboundCandidateQueryRepository = inboundCandidateQueryRepository;
-    }
-
-    Page<PurchaseOrder> findByReferenceFilter(PageQuery query,
-                                              PageFilter filter,
-                                              Boolean pendingOnly,
-                                              Boolean referenced,
-                                              String referencedBy,
-                                              String productKeyword) {
-        return purchaseOrderRepository.findByReferenceFilter(
-                normalizeContains(filter.keyword()),
-                filter.supplierId(),
-                normalizeExact(filter.name()),
-                filter.settlementCompanyId(),
-                normalizeExact(filter.status()),
-                startDate(filter),
-                endDateExclusive(filter),
-                StatusConstants.PURCHASE_COMPLETED,
-                pendingOnly,
-                referenced,
-                validateReferencedBy(referencedBy),
-                normalizeContains(productKeyword),
-                query.toPageable("id")
-        );
     }
 
     Page<PurchaseOrder> findPending(PageQuery query, PageFilter filter, String productKeyword) {
@@ -102,8 +69,8 @@ public class PurchaseOrderQueryService {
      *
      * <p>{@code productKeyword} 走明细集合的 EXISTS（{@link Specs#collectionKeywordLike}），
      * 与单据头 keyword 相互独立：前者搜商品（品牌/材质/规格/长度），后者搜单号/供应商。
-     * 这条路径与 {@link #findByReferenceFilter}、{@link #findPending} 的 JPQL 路径必须同时支持，
-     * 否则会出现「默认列表搜得到、带 referencedBy 筛选就搜不到」这类不一致。</p>
+     * 这条路径与 {@link #findPending} 的 JPQL 路径必须同时支持，
+     * 否则会出现「默认列表搜得到、走待入库筛选就搜不到」这类不一致。</p>
      */
     Specification<PurchaseOrder> summarySpecification(PageFilter filter, String productKeyword) {
         return Specs.<PurchaseOrder>keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS)
@@ -115,23 +82,24 @@ public class PurchaseOrderQueryService {
                 .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
     }
 
-    Map<Long, PurchaseOrderReferenceQueryRepository.ReferenceStatus> findReferenceStatusByOrderIds(
+    Map<Long, PurchaseOrderDerivedQueryRepository.DerivedStatus> findDerivedStatusByOrderIds(
             List<Long> orderIds) {
-        return referenceQueryRepository == null
+        return derivedQueryRepository == null
                 ? Map.of()
-                : referenceQueryRepository.findByOrderIds(orderIds);
+                : derivedQueryRepository.findByOrderIds(orderIds);
     }
 
-    PurchaseOrderResponse applyReferenceFlags(PurchaseOrderResponse response,
-                                              PurchaseOrderReferenceQueryRepository.ReferenceStatus status) {
+    /**
+     * 应用派生聚合: 入库进度(未入库/已入库件数)、实际货值与差额。
+     *
+     * <p>这些列是派生值, 不随单据保存, 只在读取时补齐; 同一份聚合也只在这里落进响应。</p>
+     */
+    PurchaseOrderResponse applyDerivedValues(PurchaseOrderResponse response,
+                                             PurchaseOrderDerivedQueryRepository.DerivedStatus status) {
         if (status == null) {
             return response;
         }
         return response
-                .withReferenceFlags(
-                        status.referencedBySalesOrder(),
-                        status.referencedByPurchaseInbound()
-                )
                 .applyTotalRemainingQuantity(status.unreceivedQuantity())
                 .applyDifference(status.actualAmount(), status.amountDifference())
                 .applyReceivedQuantity(status.receivedQuantity());
@@ -139,10 +107,10 @@ public class PurchaseOrderQueryService {
 
     PurchaseOrderResponse toDetailResponse(PurchaseOrder order) {
         PurchaseOrderResponse response = responseAssembler.toDetailResponse(order);
-        PurchaseOrderReferenceQueryRepository.ReferenceStatus status = referenceQueryRepository == null
+        PurchaseOrderDerivedQueryRepository.DerivedStatus status = derivedQueryRepository == null
                 ? null
-                : referenceQueryRepository.findByOrderIds(List.of(order.getId())).get(order.getId());
-        return applyReferenceFlags(response, status);
+                : derivedQueryRepository.findByOrderIds(List.of(order.getId())).get(order.getId());
+        return applyDerivedValues(response, status);
     }
 
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
@@ -186,14 +154,6 @@ public class PurchaseOrderQueryService {
         return filter.endDate() == null
                 ? MAX_PENDING_ORDER_DATE_EXCLUSIVE
                 : filter.endDate().plusDays(1).atStartOfDay();
-    }
-
-    /** 校验下游模块引用筛选取值，非法取值直接拒绝请求。 */
-    private static String validateReferencedBy(String referencedBy) {
-        if (referencedBy == null || REFERENCED_BY_VALUES.contains(referencedBy)) {
-            return referencedBy;
-        }
-        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的下游模块关联筛选值: " + referencedBy);
     }
 
     private static String normalizeContains(String value) {

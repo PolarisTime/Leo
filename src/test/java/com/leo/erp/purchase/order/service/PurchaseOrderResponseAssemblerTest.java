@@ -162,7 +162,7 @@ class PurchaseOrderResponseAssemblerTest {
                 .isEqualTo(Integer.MAX_VALUE);
     }
 
-    /** 便捷构造默认不带实际货值与差额，交由 applyReferenceFlags 链路补齐。 */
+    /** 便捷构造默认不带实际货值与差额，交由 applyDerivedValues 链路补齐。 */
     @Test
     void convenienceConstructor_shouldDefaultDifferenceFieldsToNull() {
         PurchaseOrderResponse response = new PurchaseOrderResponse(
