@@ -14,5 +14,7 @@ public interface SalesOrderMapper {
     @Mapping(target = "deliveredQuantity", ignore = true)
     @Mapping(target = "returnedQuantity", ignore = true)
     @Mapping(target = "deliveredNetQuantity", ignore = true)
+    // projectNameAbbr 由查询侧 ProjectNameAbbrResolver 批量回填, 映射层不参与。
+    @Mapping(target = "projectNameAbbr", ignore = true)
     SalesOrderResponse toResponse(SalesOrder order);
 }

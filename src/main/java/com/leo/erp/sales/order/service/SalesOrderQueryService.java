@@ -4,6 +4,8 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.master.api.ProjectNameAbbrResolver;
+import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.repository.SalesOrderOutboundCandidateQueryRepository;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
@@ -31,15 +33,18 @@ public class SalesOrderQueryService {
     private final SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository;
     private final SalesOrderResponseAssembler responseAssembler;
     private final SalesOrderDerivedQuantityService derivedQuantityService;
+    private final ProjectQuery projectQuery;
 
     public SalesOrderQueryService(SalesOrderRepository repository,
                                   SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository,
                                   SalesOrderResponseAssembler responseAssembler,
-                                  SalesOrderDerivedQuantityService derivedQuantityService) {
+                                  SalesOrderDerivedQuantityService derivedQuantityService,
+                                  ProjectQuery projectQuery) {
         this.repository = repository;
         this.outboundCandidateQueryRepository = outboundCandidateQueryRepository;
         this.responseAssembler = responseAssembler;
         this.derivedQuantityService = derivedQuantityService;
+        this.projectQuery = projectQuery;
     }
 
     @Transactional(readOnly = true)
@@ -88,7 +93,7 @@ public class SalesOrderQueryService {
         Map<Long, SalesOrderDerivedQuantityService.Quantities> quantities =
                 derivedQuantityService.orderQuantities(
                         entities.getContent().stream().map(SalesOrder::getId).toList());
-        return entities.map(order -> {
+        Page<SalesOrderResponse> responses = entities.map(order -> {
             SalesOrderResponse response = responseAssembler.toSummaryResponse(order);
             SalesOrderDerivedQuantityService.Quantities quantity = quantities
                     .getOrDefault(order.getId(), SalesOrderDerivedQuantityService.Quantities.ZERO);
@@ -97,6 +102,12 @@ public class SalesOrderQueryService {
                     quantity.returnedQuantity(),
                     quantity.deliveredNetQuantity());
         });
+        // 「项目简称」批量填充：整页只查一次项目，禁止逐行查询（N+1）。
+        return ProjectNameAbbrResolver.fill(
+                responses,
+                projectQuery,
+                SalesOrderResponse::projectId,
+                SalesOrderResponse::withProjectNameAbbr);
     }
 
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
@@ -114,19 +125,33 @@ public class SalesOrderQueryService {
                 .toList();
         // 页级批量装配：本页全部明细的派生数量/占用与附加费用一次性聚合，避免逐单 N+1。
         List<SalesOrderResponse> candidates = responseAssembler.toDetailResponses(ordered);
-        return new PageImpl<>(
+        // 「项目简称」同样整页只查一次项目。
+        List<SalesOrderResponse> filled = ProjectNameAbbrResolver.fill(
                 candidates,
+                projectQuery,
+                SalesOrderResponse::projectId,
+                SalesOrderResponse::withProjectNameAbbr);
+        return new PageImpl<>(
+                filled,
                 candidateIds.getPageable(),
                 candidateIds.getTotalElements()
         );
     }
 
     public SalesOrderResponse toSummaryResponse(SalesOrder entity) {
-        return responseAssembler.toSummaryResponse(entity);
+        return ProjectNameAbbrResolver.fillOne(
+                responseAssembler.toSummaryResponse(entity),
+                projectQuery,
+                SalesOrderResponse::projectId,
+                SalesOrderResponse::withProjectNameAbbr);
     }
 
     public SalesOrderResponse toDetailResponse(SalesOrder entity) {
-        return responseAssembler.toDetailResponse(entity);
+        return ProjectNameAbbrResolver.fillOne(
+                responseAssembler.toDetailResponse(entity),
+                projectQuery,
+                SalesOrderResponse::projectId,
+                SalesOrderResponse::withProjectNameAbbr);
     }
 
     private static String normalizeContains(String value) {

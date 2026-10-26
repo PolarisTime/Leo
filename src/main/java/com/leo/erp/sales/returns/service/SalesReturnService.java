@@ -13,6 +13,8 @@ import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
+import com.leo.erp.master.api.ProjectNameAbbrResolver;
+import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.sales.returns.domain.entity.SalesReturn;
 import com.leo.erp.sales.returns.repository.SalesReturnRepository;
 import com.leo.erp.sales.returns.web.dto.SalesReturnRequest;
@@ -40,15 +42,18 @@ public class SalesReturnService {
     private final SalesReturnRepository repository;
     private final SalesReturnResponseAssembler responseAssembler;
     private final SalesReturnWorkflowService workflowService;
+    private final ProjectQuery projectQuery;
 
     public SalesReturnService(SalesReturnRepository repository,
                               SnowflakeIdGenerator idGenerator,
                               SalesReturnResponseAssembler responseAssembler,
-                              SalesReturnWorkflowService workflowService) {
+                              SalesReturnWorkflowService workflowService,
+                              ProjectQuery projectQuery) {
         this.idGenerator = idGenerator;
         this.repository = repository;
         this.responseAssembler = responseAssembler;
         this.workflowService = workflowService;
+        this.projectQuery = projectQuery;
     }
 
     @Transactional(readOnly = true)
@@ -68,7 +73,12 @@ public class SalesReturnService {
                 .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("returnDate", filter.startDate(), filter.endDate()));
-        return pageEntities(query, spec).map(this::toResponse);
+        // 「项目简称」批量填充：整页只查一次项目，禁止逐行查询（N+1）。
+        return ProjectNameAbbrResolver.fill(
+                pageEntities(query, spec).map(this::toResponse),
+                projectQuery,
+                SalesReturnResponse::projectId,
+                SalesReturnResponse::withProjectNameAbbr);
     }
 
     @Transactional(readOnly = true)
@@ -272,7 +282,11 @@ public class SalesReturnService {
     }
 
     private SalesReturnResponse toDetailResponse(SalesReturn entity) {
-        return responseAssembler.toDetailResponse(entity);
+        return ProjectNameAbbrResolver.fillOne(
+                responseAssembler.toDetailResponse(entity),
+                projectQuery,
+                SalesReturnResponse::projectId,
+                SalesReturnResponse::withProjectNameAbbr);
     }
 
     private SalesReturnResponse toSavedResponse(SalesReturn entity) {

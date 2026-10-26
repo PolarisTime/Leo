@@ -10,5 +10,7 @@ import org.mapstruct.Mapping;
 public interface SalesOutboundMapper {
 
     @Mapping(target = "items", ignore = true)
+    // projectNameAbbr 由查询侧 ProjectNameAbbrResolver 批量回填, 映射层不参与。
+    @Mapping(target = "projectNameAbbr", ignore = true)
     SalesOutboundResponse toResponse(SalesOutbound outbound);
 }

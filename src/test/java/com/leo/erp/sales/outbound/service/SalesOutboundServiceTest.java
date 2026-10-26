@@ -5,6 +5,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
@@ -21,15 +22,18 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -54,6 +58,9 @@ class SalesOutboundServiceTest {
 
     @Mock
     private SalesOutboundDeleteRollbackService deleteRollbackService;
+
+    @Mock
+    private ProjectQuery projectQuery;
 
     @InjectMocks
     private SalesOutboundService service;
@@ -343,5 +350,48 @@ class SalesOutboundServiceTest {
                 service.page(query, mock(PageFilter.class), null);
 
         assertThat(result.getContent()).containsExactly(response);
+    }
+
+    @Test
+    void page_shouldFillProjectNameAbbrWithSingleBatchQuery() {
+        PageQuery query = mock(PageQuery.class);
+        when(query.toPageable("id")).thenReturn(org.springframework.data.domain.PageRequest.of(0, 10));
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
+        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
+        when(response.projectId()).thenReturn(20L);
+        when(responseAssembler.toSummaryResponse(outbound)).thenReturn(response);
+        when(repository.findAll(any(org.springframework.data.jpa.domain.Specification.class),
+                any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(outbound)));
+        when(projectQuery.findActiveByIds(anyCollection())).thenReturn(Map.of(
+                20L, new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001")));
+
+        org.springframework.data.domain.Page<SalesOutboundResponse> result =
+                service.page(query, mock(PageFilter.class), null);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).projectNameAbbr()).isEqualTo("项A");
+        verify(projectQuery, times(1)).findActiveByIds(anyCollection());
+    }
+
+    @Test
+    void page_shouldLeaveProjectNameAbbrNullWhenProjectDeletedOrMissing() {
+        PageQuery query = mock(PageQuery.class);
+        when(query.toPageable("id")).thenReturn(org.springframework.data.domain.PageRequest.of(0, 10));
+        SalesOutbound outbound = entity(StatusConstants.DRAFT);
+        SalesOutboundResponse response = mock(SalesOutboundResponse.class);
+        when(response.projectId()).thenReturn(20L);
+        when(responseAssembler.toSummaryResponse(outbound)).thenReturn(response);
+        when(repository.findAll(any(org.springframework.data.jpa.domain.Specification.class),
+                any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(outbound)));
+        when(projectQuery.findActiveByIds(anyCollection())).thenReturn(Map.of());
+
+        org.springframework.data.domain.Page<SalesOutboundResponse> result =
+                service.page(query, mock(PageFilter.class), null);
+
+        assertThat(result.getContent()).containsExactly(response);
+        assertThat(result.getContent().get(0).projectNameAbbr()).isNull();
+        verify(projectQuery, times(1)).findActiveByIds(anyCollection());
     }
 }

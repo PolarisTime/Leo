@@ -6,6 +6,7 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.sales.api.SalesOrderLogisticsSourceQuery;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
@@ -38,17 +39,20 @@ import org.springframework.data.jpa.domain.Specification;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -87,6 +91,9 @@ class CustomerStatementServiceTest {
 
     @Mock
     private StatementSettlementMutationGuard settlementMutationGuard;
+
+    @Mock
+    private ProjectQuery projectQuery;
 
     @InjectMocks
     private CustomerStatementService service;
@@ -192,6 +199,46 @@ class CustomerStatementServiceTest {
 
         assertThat(result.getContent()).containsExactly(response);
         assertThat(result.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    void page_shouldFillProjectNameAbbrWithSingleBatchQuery() {
+        PageQuery query = mock(PageQuery.class);
+        when(query.toPageable("id")).thenReturn(PageRequest.of(0, 10));
+        CustomerStatement entity = new CustomerStatement();
+        CustomerStatementResponse response = mock(CustomerStatementResponse.class);
+        when(response.projectId()).thenReturn(20L);
+        when(responseAssembler.toSummaryResponse(entity)).thenReturn(response);
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(entity), PageRequest.of(0, 10), 1));
+        when(projectQuery.findActiveByIds(anyCollection())).thenReturn(Map.of(
+                20L, new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001")));
+
+        Page<CustomerStatementResponse> result = service.page(query, mock(PageFilter.class));
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).projectNameAbbr()).isEqualTo("项A");
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        verify(projectQuery, times(1)).findActiveByIds(anyCollection());
+    }
+
+    @Test
+    void page_shouldLeaveProjectNameAbbrNullWhenProjectMissing() {
+        PageQuery query = mock(PageQuery.class);
+        when(query.toPageable("id")).thenReturn(PageRequest.of(0, 10));
+        CustomerStatement entity = new CustomerStatement();
+        CustomerStatementResponse response = mock(CustomerStatementResponse.class);
+        when(response.projectId()).thenReturn(20L);
+        when(responseAssembler.toSummaryResponse(entity)).thenReturn(response);
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(entity), PageRequest.of(0, 10), 1));
+        when(projectQuery.findActiveByIds(anyCollection())).thenReturn(Map.of());
+
+        Page<CustomerStatementResponse> result = service.page(query, mock(PageFilter.class));
+
+        assertThat(result.getContent()).containsExactly(response);
+        assertThat(result.getContent().get(0).projectNameAbbr()).isNull();
+        verify(projectQuery, times(1)).findActiveByIds(anyCollection());
     }
 
     // ---------- 单号唯一性 ----------

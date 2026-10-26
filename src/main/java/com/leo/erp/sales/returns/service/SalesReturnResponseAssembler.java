@@ -44,7 +44,9 @@ public class SalesReturnResponseAssembler {
                 entity.getRemark(),
                 entity.getItems().stream()
                         .map(item -> toItemResponse(item, outboundMap))
-                        .toList()
+                        .toList(),
+                // 项目简称由查询侧 ProjectNameAbbrResolver 统一回填, 装配层不查库。
+                null
         );
     }
 
@@ -67,6 +69,8 @@ public class SalesReturnResponseAssembler {
                 entity.getStatus(),
                 entity.isDeletedFlag(),
                 entity.getRemark(),
+                null,
+                // 项目简称由查询侧 ProjectNameAbbrResolver 统一回填, 装配层不查库。
                 null
         );
     }

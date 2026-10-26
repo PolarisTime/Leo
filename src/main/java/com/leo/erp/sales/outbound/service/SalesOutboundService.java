@@ -13,6 +13,8 @@ import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
+import com.leo.erp.master.api.ProjectNameAbbrResolver;
+import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
@@ -44,19 +46,22 @@ public class SalesOutboundService {
     private final SalesOutboundWorkflowService workflowService;
     private final SalesOutboundDeleteRollbackService deleteRollbackService;
     private final SalesOutboundImportedUpdatePolicy importedUpdatePolicy;
+    private final ProjectQuery projectQuery;
 
     @Autowired
     public SalesOutboundService(SalesOutboundRepository repository,
                                 SnowflakeIdGenerator idGenerator,
                                 SalesOutboundResponseAssembler responseAssembler,
                                 SalesOutboundWorkflowService workflowService,
-                                SalesOutboundDeleteRollbackService deleteRollbackService) {
+                                SalesOutboundDeleteRollbackService deleteRollbackService,
+                                ProjectQuery projectQuery) {
         this.idGenerator = idGenerator;
         this.repository = repository;
         this.responseAssembler = responseAssembler;
         this.workflowService = workflowService;
         this.deleteRollbackService = deleteRollbackService;
         this.importedUpdatePolicy = new SalesOutboundImportedUpdatePolicy();
+        this.projectQuery = projectQuery;
     }
 
     @Transactional(readOnly = true)
@@ -71,7 +76,12 @@ public class SalesOutboundService {
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("outboundDate", filter.startDate(), filter.endDate()));
-        return pageEntities(query, spec).map(this::toResponse);
+        // 「项目简称」批量填充：整页只查一次项目，禁止逐行查询（N+1）。
+        return ProjectNameAbbrResolver.fill(
+                pageEntities(query, spec).map(this::toResponse),
+                projectQuery,
+                SalesOutboundResponse::projectId,
+                SalesOutboundResponse::withProjectNameAbbr);
     }
 
     @Transactional(readOnly = true)
@@ -343,7 +353,11 @@ public class SalesOutboundService {
     }
 
     protected SalesOutboundResponse toDetailResponse(SalesOutbound entity) {
-        return responseAssembler.toDetailResponse(entity);
+        return ProjectNameAbbrResolver.fillOne(
+                responseAssembler.toDetailResponse(entity),
+                projectQuery,
+                SalesOutboundResponse::projectId,
+                SalesOutboundResponse::withProjectNameAbbr);
     }
 
     protected SalesOutboundResponse toSavedResponse(SalesOutbound entity) {

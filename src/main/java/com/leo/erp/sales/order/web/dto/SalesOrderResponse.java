@@ -55,7 +55,9 @@ public record SalesOrderResponse(
         List<DocumentChargeItemResponse> chargeItems,
         Integer deliveredQuantity,
         Integer returnedQuantity,
-        Integer deliveredNetQuantity
+        Integer deliveredNetQuantity,
+        /** 项目简称(取自 md_project.project_name_abbr); 项目缺失/已删除/简称为空 → null, 由前端回退显示全称。 */
+        String projectNameAbbr
 ) {
 
     public SalesOrderResponse(Long id,
@@ -81,7 +83,7 @@ public record SalesOrderResponse(
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, totalWeight,
                 totalAmount, status, deletedFlag, remark, null, null, null, null, null, null, null, null, null, null, null,
-                items, chargeItems, null, null, null);
+                items, chargeItems, null, null, null, null);
     }
 
     public SalesOrderResponse withDerivedQuantities(Integer deliveredQuantity,
@@ -93,7 +95,28 @@ public record SalesOrderResponse(
                 totalWeight, totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
                 priceFloatValue, priceTargetDate, priceQuoteDate, priceQuotePeriod, priceDateBasis,
                 priceDateOffsetDays, priceClosedSettleDirection, priceClosedSettleDays, items, chargeItems,
-                deliveredQuantity, returnedQuantity, deliveredNetQuantity
+                deliveredQuantity, returnedQuantity, deliveredNetQuantity, projectNameAbbr
+        );
+    }
+
+    /**
+     * 补「项目简称」: 由查询侧 {@code ProjectNameAbbrResolver} 统一回填, 不参与 MapStruct 映射。
+     *
+     * <p>刻意声明为 static: 单参实例方法会被 MapStruct 识别为"流式 setter"并要求提供映射目标,
+     * 而这个字段恰恰只能由查询侧填, 映射层必须忽略它。</p>
+     */
+    public static SalesOrderResponse withProjectNameAbbr(SalesOrderResponse source, String projectNameAbbr) {
+        return new SalesOrderResponse(
+                source.id(), source.orderNo(), source.purchaseInboundNo(), source.purchaseOrderNo(),
+                source.customerCode(), source.customerId(), source.customerName(), source.projectId(),
+                source.projectName(), source.settlementCompanyId(), source.settlementCompanyName(),
+                source.deliveryDate(), source.orderDate(), source.salesName(), source.totalWeight(),
+                source.totalAmount(), source.status(), source.deletedFlag(), source.remark(), source.priceRuleId(),
+                source.priceRuleName(), source.priceFloatMode(), source.priceFloatValue(), source.priceTargetDate(),
+                source.priceQuoteDate(), source.priceQuotePeriod(), source.priceDateBasis(),
+                source.priceDateOffsetDays(), source.priceClosedSettleDirection(), source.priceClosedSettleDays(),
+                source.items(), source.chargeItems(), source.deliveredQuantity(), source.returnedQuantity(),
+                source.deliveredNetQuantity(), projectNameAbbr
         );
     }
 
@@ -119,7 +142,7 @@ public record SalesOrderResponse(
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, totalWeight,
                 totalAmount, status, deletedFlag, remark, null, null, null, null, null, null, null, null, null,
-                null, null, items, List.of(), null, null, null);
+                null, null, items, List.of(), null, null, null, null);
     }
 
     public SalesOrderResponse(Long id,

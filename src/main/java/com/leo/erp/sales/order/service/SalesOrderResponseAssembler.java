@@ -126,7 +126,8 @@ public class SalesOrderResponseAssembler {
                 chargeItems,
                 deliveredQuantity,
                 returnedQuantity,
-                deliveredQuantity - returnedQuantity
+                deliveredQuantity - returnedQuantity,
+                response.projectNameAbbr()
         );
     }
 

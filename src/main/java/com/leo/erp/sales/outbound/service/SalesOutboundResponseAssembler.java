@@ -46,7 +46,8 @@ public class SalesOutboundResponseAssembler {
                 response.remark(),
                 entity.getItems().stream()
                         .map(item -> toItemResponse(item, sourceSalesOrderItemMap))
-                        .toList()
+                        .toList(),
+                response.projectNameAbbr()
         );
     }
 

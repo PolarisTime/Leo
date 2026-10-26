@@ -42,8 +42,28 @@ class SalesOrderResponseTest {
         assertThat(source.withDerivedQuantities(0, 0, 0).orderDate()).isEqualTo(ORDER_DATE);
     }
 
+    @Test
+    @DisplayName("withProjectNameAbbr 只替换项目简称, 其余字段(含派生数量)必须原样保留")
+    void withProjectNameAbbr_shouldOnlyReplaceAbbreviatedName() {
+        SalesOrderResponse source = sample().withDerivedQuantities(7, 2, 5);
+
+        SalesOrderResponse rebuilt = SalesOrderResponse.withProjectNameAbbr(source, "新简称");
+
+        assertCoreFieldsPreserved(source, rebuilt, "新简称");
+        assertThat(rebuilt.projectNameAbbr()).isEqualTo("新简称");
+        assertThat(rebuilt.deliveredQuantity()).isEqualTo(7);
+        assertThat(rebuilt.returnedQuantity()).isEqualTo(2);
+        assertThat(rebuilt.deliveredNetQuantity()).isEqualTo(5);
+    }
+
     /** 逐字段比对：重建后除被替换项外必须完全一致（漏字段 / 传错位置都会在这里失败）。 */
     private void assertCoreFieldsPreserved(SalesOrderResponse source, SalesOrderResponse rebuilt) {
+        assertCoreFieldsPreserved(source, rebuilt, source.projectNameAbbr());
+    }
+
+    private void assertCoreFieldsPreserved(SalesOrderResponse source,
+                                          SalesOrderResponse rebuilt,
+                                          String expectedProjectNameAbbr) {
         assertThat(rebuilt.id()).isEqualTo(source.id());
         assertThat(rebuilt.orderNo()).isEqualTo(source.orderNo());
         assertThat(rebuilt.purchaseInboundNo()).isEqualTo(source.purchaseInboundNo());
@@ -76,6 +96,7 @@ class SalesOrderResponseTest {
         assertThat(rebuilt.priceClosedSettleDays()).isEqualTo(source.priceClosedSettleDays());
         assertThat(rebuilt.items()).isSameAs(source.items());
         assertThat(rebuilt.chargeItems()).isSameAs(source.chargeItems());
+        assertThat(rebuilt.projectNameAbbr()).isEqualTo(expectedProjectNameAbbr);
     }
 
     /** 全字段样本：金额用可区分的数值，便于发现参数错位。 */
@@ -115,6 +136,7 @@ class SalesOrderResponseTest {
                 List.of(),
                 null,
                 null,
-                null);
+                null,
+                "项A");
     }
 }

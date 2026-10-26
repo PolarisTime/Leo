@@ -14,6 +14,8 @@ import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
+import com.leo.erp.master.api.ProjectNameAbbrResolver;
+import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.sales.api.SalesOrderLogisticsSourceQuery;
 import com.leo.erp.sales.api.SalesOrderSourceSnapshot;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
@@ -57,6 +59,7 @@ public class CustomerStatementService {
     private final SalesOrderLogisticsSourceQuery salesOrderSourceQuery;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final StatementSettlementMutationGuard settlementMutationGuard;
+    private final ProjectQuery projectQuery;
 
     @Autowired
     public CustomerStatementService(CustomerStatementRepository repository,
@@ -67,7 +70,8 @@ public class CustomerStatementService {
                                     CustomerStatementApplyService applyService,
                                     SalesOrderLogisticsSourceQuery salesOrderSourceQuery,
                                     SourceAllocationLockService sourceAllocationLockService,
-                                    StatementSettlementMutationGuard settlementMutationGuard) {
+                                    StatementSettlementMutationGuard settlementMutationGuard,
+                                    ProjectQuery projectQuery) {
         this.idGenerator = idGenerator;
         this.repository = repository;
         this.summaryQueryRepository = summaryQueryRepository;
@@ -77,6 +81,7 @@ public class CustomerStatementService {
         this.salesOrderSourceQuery = salesOrderSourceQuery;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.settlementMutationGuard = settlementMutationGuard;
+        this.projectQuery = projectQuery;
     }
 
     @Transactional(readOnly = true)
@@ -86,8 +91,13 @@ public class CustomerStatementService {
 
     @Transactional(readOnly = true)
     public Page<CustomerStatementResponse> page(PageQuery query, PageFilter filter, String billDirection) {
-        return pageEntities(query, pageSpecification(filter, normalizeBillDirection(billDirection)))
-                .map(this::toResponse);
+        // 「项目简称」批量填充：整页只查一次项目，禁止逐行查询（N+1）。
+        return ProjectNameAbbrResolver.fill(
+                pageEntities(query, pageSpecification(filter, normalizeBillDirection(billDirection)))
+                        .map(this::toResponse),
+                projectQuery,
+                CustomerStatementResponse::projectId,
+                CustomerStatementResponse::withProjectNameAbbr);
     }
 
     @Transactional(readOnly = true)
@@ -236,7 +246,11 @@ public class CustomerStatementService {
     }
 
     protected CustomerStatementResponse toDetailResponse(CustomerStatement entity) {
-        return responseAssembler.toDetailResponse(entity);
+        return ProjectNameAbbrResolver.fillOne(
+                responseAssembler.toDetailResponse(entity),
+                projectQuery,
+                CustomerStatementResponse::projectId,
+                CustomerStatementResponse::withProjectNameAbbr);
     }
 
     protected CustomerStatementResponse toSavedResponse(CustomerStatement entity) {

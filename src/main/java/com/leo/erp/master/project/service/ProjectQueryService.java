@@ -10,8 +10,15 @@ import com.leo.erp.master.project.repository.ProjectRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -40,6 +47,28 @@ public class ProjectQueryService implements ProjectQuery, ProjectProcurementScop
                 customerCode,
                 projectName
         ).stream().map(this::toSnapshot).toList();
+    }
+
+    /**
+     * 批量查询启用中的项目: 一次 IN 查询取回整页项目, 供列表页「项目简称」批量填充使用。
+     * 刻意不复用 {@link #findActiveById(Long)} 逐条查, 否则列表页会退化成 N+1。
+     */
+    @Override
+    public Map<Long, ProjectSnapshot> findActiveByIds(Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Map.of();
+        }
+        Set<Long> distinctIds = ids.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (distinctIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, ProjectSnapshot> snapshots = new LinkedHashMap<>();
+        repository.findAllById(distinctIds).stream()
+                .filter(project -> !project.isDeletedFlag())
+                .forEach(project -> snapshots.put(project.getId(), toSnapshot(project)));
+        return snapshots.isEmpty() ? Map.of() : snapshots;
     }
 
     @Override

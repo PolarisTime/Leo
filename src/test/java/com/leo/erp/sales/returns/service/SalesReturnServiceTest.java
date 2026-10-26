@@ -5,6 +5,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.sales.returns.domain.entity.SalesReturn;
 import com.leo.erp.sales.returns.repository.SalesReturnRepository;
 import com.leo.erp.sales.returns.web.dto.SalesReturnItemRequest;
@@ -24,16 +25,19 @@ import org.springframework.data.jpa.domain.Specification;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -54,6 +58,9 @@ class SalesReturnServiceTest {
 
     @Mock
     private SalesReturnWorkflowService workflowService;
+
+    @Mock
+    private ProjectQuery projectQuery;
 
     @InjectMocks
     private SalesReturnService service;
@@ -261,5 +268,44 @@ class SalesReturnServiceTest {
         Page<SalesReturnResponse> result = service.page(query, mock(PageFilter.class), null);
 
         assertThat(result.getContent()).containsExactly(response);
+    }
+
+    @Test
+    void page_shouldFillProjectNameAbbrWithSingleBatchQuery() {
+        PageQuery query = mock(PageQuery.class);
+        when(query.toPageable("id")).thenReturn(PageRequest.of(0, 10));
+        SalesReturn entity = entity(StatusConstants.DRAFT);
+        SalesReturnResponse response = mock(SalesReturnResponse.class);
+        when(response.projectId()).thenReturn(20L);
+        when(responseAssembler.toSummaryResponse(entity)).thenReturn(response);
+        when(repository.findAll(any(Specification.class), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(entity)));
+        when(projectQuery.findActiveByIds(anyCollection())).thenReturn(Map.of(
+                20L, new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001")));
+
+        Page<SalesReturnResponse> result = service.page(query, mock(PageFilter.class), null);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).projectNameAbbr()).isEqualTo("项A");
+        verify(projectQuery, times(1)).findActiveByIds(anyCollection());
+    }
+
+    @Test
+    void page_shouldLeaveProjectNameAbbrNullWhenProjectMissing() {
+        PageQuery query = mock(PageQuery.class);
+        when(query.toPageable("id")).thenReturn(PageRequest.of(0, 10));
+        SalesReturn entity = entity(StatusConstants.DRAFT);
+        SalesReturnResponse response = mock(SalesReturnResponse.class);
+        when(response.projectId()).thenReturn(20L);
+        when(responseAssembler.toSummaryResponse(entity)).thenReturn(response);
+        when(repository.findAll(any(Specification.class), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(entity)));
+        when(projectQuery.findActiveByIds(anyCollection())).thenReturn(Map.of());
+
+        Page<SalesReturnResponse> result = service.page(query, mock(PageFilter.class), null);
+
+        assertThat(result.getContent()).containsExactly(response);
+        assertThat(result.getContent().get(0).projectNameAbbr()).isNull();
+        verify(projectQuery, times(1)).findActiveByIds(anyCollection());
     }
 }

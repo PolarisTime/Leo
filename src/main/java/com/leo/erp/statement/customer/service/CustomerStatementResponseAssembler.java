@@ -60,7 +60,8 @@ public class CustomerStatementResponseAssembler {
                 entity.getCustomerId(),
                 response.direction(),
                 response.sourceSalesReturnId(),
-                response.sourceSalesReturnNo()
+                response.sourceSalesReturnNo(),
+                response.projectNameAbbr()
         );
     }
 

@@ -225,7 +225,7 @@ class V2SalesReturnControllerTest {
                 List.of(new SalesReturnItemResponse(
                         9007199254740999L, 1, 9007199254741001L, "OB001", 9007199254741003L, "SO001",
                         null, null, null, null, null, "M001", "品牌", "型钢", "螺纹钢", "HRB400", "12m",
-                        "吨", null, "库房A", null, null, 5, "件", null, null, null, null, null)));
+                        "吨", null, "库房A", null, null, 5, "件", null, null, null, null, null)), null);
 
         String json = mapper.writeValueAsString(response);
 

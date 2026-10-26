@@ -2,6 +2,7 @@ package com.leo.erp.sales.order.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.repository.SalesOrderOutboundCandidateQueryRepository;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
@@ -23,8 +24,10 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -46,6 +49,9 @@ class SalesOrderQueryServiceTest {
 
     @Mock
     private SalesOrderDerivedQuantityService derivedQuantityService;
+
+    @Mock
+    private ProjectQuery projectQuery;
 
     @InjectMocks
     private SalesOrderQueryService service;
@@ -166,6 +172,68 @@ class SalesOrderQueryServiceTest {
 
         assertThat(result.getContent()).containsExactly(response);
         assertThat(result.getTotalElements()).isEqualTo(1);
+    }
+
+    // ---------- 项目简称填充 ----------
+
+    @Test
+    void page_shouldFillProjectNameAbbrWithSingleBatchQueryPerPage() {
+        PageQuery query = query();
+        SalesOrder first = entity();
+        SalesOrder second = new SalesOrder();
+        second.setId(6L);
+        when(repository.findAll(any(org.springframework.data.jpa.domain.Specification.class),
+                any(Pageable.class))).thenReturn(new PageImpl<>(List.of(first, second)));
+        SalesOrderResponse firstSummary = mock(SalesOrderResponse.class);
+        SalesOrderResponse secondSummary = mock(SalesOrderResponse.class);
+        when(firstSummary.projectId()).thenReturn(20L);
+        when(secondSummary.projectId()).thenReturn(21L);
+        when(responseAssembler.toSummaryResponse(first)).thenReturn(firstSummary);
+        when(responseAssembler.toSummaryResponse(second)).thenReturn(secondSummary);
+        when(derivedQuantityService.orderQuantities(List.of(5L, 6L))).thenReturn(Map.of());
+        when(firstSummary.withDerivedQuantities(0, 0, 0)).thenReturn(firstSummary);
+        when(secondSummary.withDerivedQuantities(0, 0, 0)).thenReturn(secondSummary);
+        when(projectQuery.findActiveByIds(anyCollection())).thenReturn(Map.of(
+                20L, new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001"),
+                21L, new ProjectQuery.ProjectSnapshot(21L, "项目B", "项B", 10L, "CUST001")));
+
+        Page<SalesOrderResponse> result = service.page(query, filter(), null, null);
+
+        assertThat(result.getContent()).extracting(SalesOrderResponse::projectNameAbbr)
+                .containsExactly("项A", "项B");
+        verify(projectQuery, times(1)).findActiveByIds(anyCollection());
+    }
+
+    @Test
+    void page_shouldLeaveProjectNameAbbrNullWhenProjectMissing() {
+        PageQuery query = query();
+        SalesOrder order = entity();
+        when(repository.findAll(any(org.springframework.data.jpa.domain.Specification.class),
+                any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
+        SalesOrderResponse summary = mock(SalesOrderResponse.class);
+        when(summary.projectId()).thenReturn(99L);
+        when(responseAssembler.toSummaryResponse(order)).thenReturn(summary);
+        when(derivedQuantityService.orderQuantities(List.of(5L))).thenReturn(Map.of());
+        when(summary.withDerivedQuantities(0, 0, 0)).thenReturn(summary);
+        when(projectQuery.findActiveByIds(anyCollection())).thenReturn(Map.of());
+
+        Page<SalesOrderResponse> result = service.page(query, filter(), null, null);
+
+        assertThat(result.getContent()).containsExactly(summary);
+        assertThat(result.getContent().get(0).projectNameAbbr()).isNull();
+        verify(projectQuery, times(1)).findActiveByIds(anyCollection());
+    }
+
+    @Test
+    void toDetailResponse_shouldFillProjectNameAbbr() {
+        SalesOrder order = entity();
+        SalesOrderResponse detail = mock(SalesOrderResponse.class);
+        when(detail.projectId()).thenReturn(20L);
+        when(responseAssembler.toDetailResponse(order)).thenReturn(detail);
+        when(projectQuery.findActiveByIds(anyCollection())).thenReturn(Map.of(
+                20L, new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001")));
+
+        assertThat(service.toDetailResponse(order).projectNameAbbr()).isEqualTo("项A");
     }
 
     // ---------- 响应装配 ----------
