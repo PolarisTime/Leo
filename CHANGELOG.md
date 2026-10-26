@@ -1,3 +1,10 @@
+# [16.1.0](https://github.com/PolarisTime/Leo/compare/v16.0.0...v16.1.0) (2026-10-26)
+
+
+### Features
+
+* **master-data:** 业务单据响应补充项目简称，供列表显示「简称（全称）」 ([6433f09](https://github.com/PolarisTime/Leo/commit/6433f09bcae37cc0170322bd765cd396f4eb990a))
+
 # [16.0.0](https://github.com/PolarisTime/Leo/compare/v15.0.0...v16.0.0) (2026-10-26)
 
 
