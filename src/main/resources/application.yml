@@ -578,11 +578,6 @@ leo:
     docs:
       # 是否允许匿名访问 OpenAPI / Swagger 文档；默认仅登录账号可访问
       public-access-enabled: ${LEO_DOCS_PUBLIC_ACCESS_ENABLED:false}
-    version:
-      # /version 是匿名端点。是否在其中返回精确 git 提交哈希。
-      # 默认 false：提交哈希可让攻击者据此定位该提交后修复的缺陷（定向利用）。
-      # 开发/测试环境可打开以便排障；生产保持关闭。
-      expose-commit-hash: ${LEO_VERSION_EXPOSE_COMMIT_HASH:false}
   security:
     web:
       cors:

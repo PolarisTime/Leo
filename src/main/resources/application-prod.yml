@@ -16,10 +16,6 @@ leo:
     docs:
       # 生产环境默认不向匿名请求暴露 OpenAPI / Swagger 文档
       public-access-enabled: ${LEO_DOCS_PUBLIC_ACCESS_ENABLED:false}
-    version:
-      # 生产环境不返回精确提交哈希：/version 是匿名端点，
-      # 哈希可让攻击者定位该提交之后修复的缺陷（定向利用而非盲扫）
-      expose-commit-hash: ${LEO_VERSION_EXPOSE_COMMIT_HASH:false}
   security:
     web:
       cors:

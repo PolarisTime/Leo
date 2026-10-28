@@ -28,7 +28,7 @@
 | `GET /api/v2/runtime-config` | 运行时配置与初始化状态（只读） |
 | `POST /api/v2/setup/account` | 首次初始化账号（受 setup token 与一次性状态保护，初始化完成后 403） |
 | `GET /api/v2/health` | 健康检查 |
-| `GET /api/v2/version` | 版本信息 |
+| `GET /api/v2/version` | 版本信息（**需登录**；返回提交哈希，匿名请求在安全链被拒绝） |
 
 首次初始化端点的额外防线：请求须携带 `X-Setup-Token`（`InitialSetupTokenFilter` 校验），
 且服务端以行锁 + 二次状态校验保证只允许创建一个账号。

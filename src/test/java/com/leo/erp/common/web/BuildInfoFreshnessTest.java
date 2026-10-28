@@ -68,7 +68,7 @@ class BuildInfoFreshnessTest {
     void versionEndpointExposesTheSameRealBuildTime() throws Exception {
         BuildProperties buildProperties = new BuildProperties(unprefixed(loadBuildInfo()));
         VersionController controller = new VersionController(
-                providerOf(buildProperties), emptyProvider(), "leo", false);
+                providerOf(buildProperties), emptyProvider(), "leo");
 
         String buildTime = controller.version().buildTime();
         assertThat(buildTime).isNotBlank().isEqualTo(buildProperties.getTime().toString());
@@ -78,31 +78,39 @@ class BuildInfoFreshnessTest {
     }
 
     /**
-     * {@code /version} 是 {@code @PublicAccess} 匿名端点，提交哈希必须默认可关闭。
+     * 提交哈希必须返回：{@code /version} 已改为登录可见，拿到响应的都是已认证用户。
      *
-     * <p>背景：该端点原本无条件返回 {@code gitCommit}，匿名即可拿到精确提交哈希，
-     * 攻击者可据此定位该提交之后修复的缺陷（定向利用而非盲扫）。
-     * 现由 {@code leo.surface.version.expose-commit-hash} 控制，默认 false。</p>
+     * <p>背景：该端点原本是 {@code @PublicAccess} 匿名端点，无条件返回 {@code gitCommit} 会让
+     * 攻击者据此定位该提交之后修复的缺陷；后来用 {@code expose-commit-hash} 默认关闭隐藏哈希。
+     * 现在改为「要求登录 + 始终返回短哈希」：安全边界放在鉴权上，排障信息不再被牺牲。</p>
      */
     @Test
-    void versionEndpointHidesCommitHashByDefault() throws Exception {
+    void versionEndpointExposesCommitHash() throws Exception {
         BuildProperties buildProperties = new BuildProperties(unprefixed(loadBuildInfo()));
         Properties gitInfo = new Properties();
         gitInfo.setProperty("commit.id", "0123456789abcdef0123456789abcdef01234567");
         gitInfo.setProperty("commit.id.abbrev", "0123456");
         gitInfo.setProperty("branch", "main");
 
-        VersionController hidden = new VersionController(
-                providerOf(buildProperties), gitProviderOf(new GitProperties(gitInfo)), "leo", false);
-        assertThat(hidden.version().gitCommit())
-                .as("默认（生产）不得向匿名端点暴露提交哈希")
-                .isNull();
+        VersionController controller = new VersionController(
+                providerOf(buildProperties), gitProviderOf(new GitProperties(gitInfo)), "leo");
 
-        VersionController exposed = new VersionController(
-                providerOf(buildProperties), gitProviderOf(new GitProperties(gitInfo)), "leo", true);
-        assertThat(exposed.version().gitCommit())
-                .as("显式开启时（开发/测试环境）应返回短哈希以便排障")
+        assertThat(controller.version().gitCommit())
+                .as("登录后才能访问，提交哈希应直接返回以便排障")
                 .isEqualTo("0123456");
+    }
+
+    /**
+     * 守卫：{@code /version} 不得再被标成匿名端点。
+     *
+     * <p>匿名可见 + 返回提交哈希 = 定向利用情报；安全边界靠 {@code @PublicAccess} 的有无决定，
+     * 所以这里用反射把它钉住，避免后续有人为了「方便做探针」把注解加回来。</p>
+     */
+    @Test
+    void versionEndpointIsNotPublic() throws Exception {
+        assertThat(VersionController.class.getMethod("version").getAnnotation(PublicAccess.class))
+                .as("/version 返回提交哈希，必须登录后访问")
+                .isNull();
     }
 
     /**
