@@ -39,6 +39,9 @@ class SteelArticleQueryServiceTest {
     @Mock
     private SteelQuoteClosedDayService closedDayService;
 
+    @Mock
+    private MarketTradingDayCalendarService tradingDayCalendarService;
+
     @InjectMocks
     private SteelArticleQueryService service;
 
@@ -239,5 +242,52 @@ class SteelArticleQueryServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).closed()).isTrue();
+    }
+
+    /**
+     * 年度交易日日历是"主动"来源: 从没同步过的国庆假期也必须显示成休市, 而不是缺失。
+     * 否则用户会去点一个必然失败的格子, 覆盖统计的"缺失数"也会虚高。
+     */
+    @Test
+    void calendar_法定节假日按休市返回_即使从未同步过() {
+        LocalDate holiday = LocalDate.of(2026, 10, 1);
+        LocalDate normal = LocalDate.of(2026, 9, 29);
+        when(quoteRepository.countQuotesByDateAndPeriod(normal, holiday, null, null))
+                .thenReturn(List.<Object[]>of(aggregate(normal, "上午", 12)));
+        when(closedDayService.closedDays(null, null, normal, holiday)).thenReturn(List.of());
+        when(tradingDayCalendarService.closedDates(normal, holiday))
+                .thenReturn(java.util.Map.of(holiday, "国庆节"));
+        when(tradingDayCalendarService.openDates(normal, holiday)).thenReturn(java.util.Set.of());
+
+        List<SteelQuoteCalendarResponse> result = service.calendar(normal, holiday);
+
+        assertThat(result).anySatisfy(row -> {
+            assertThat(row.quoteDate()).isEqualTo(holiday);
+            assertThat(row.closed()).isTrue();
+            assertThat(row.tradingDay()).isFalse();
+            assertThat(row.periods()).isEmpty();
+        });
+    }
+
+    /**
+     * 调休上班的周六日必须显式返回 tradingDay=true: 前端「周末即休市」的兜底规则
+     * 会把它算成休市, 那天的行情就永远补不进来。
+     */
+    @Test
+    void calendar_调休上班日返回交易日标记() {
+        LocalDate workday = LocalDate.of(2026, 10, 10);
+        when(quoteRepository.countQuotesByDateAndPeriod(workday, workday, null, null))
+                .thenReturn(List.of());
+        when(closedDayService.closedDays(null, null, workday, workday)).thenReturn(List.of());
+        when(tradingDayCalendarService.closedDates(workday, workday)).thenReturn(java.util.Map.of());
+        when(tradingDayCalendarService.openDates(workday, workday))
+                .thenReturn(java.util.Set.of(workday));
+
+        List<SteelQuoteCalendarResponse> result = service.calendar(workday, workday);
+
+        assertThat(result).singleElement().satisfies(row -> {
+            assertThat(row.tradingDay()).isTrue();
+            assertThat(row.closed()).isFalse();
+        });
     }
 }

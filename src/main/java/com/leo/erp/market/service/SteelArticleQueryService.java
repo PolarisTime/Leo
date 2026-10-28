@@ -28,13 +28,16 @@ public class SteelArticleQueryService {
     private final SteelArticleRepository articleRepository;
     private final SteelQuoteRepository quoteRepository;
     private final SteelQuoteClosedDayService closedDayService;
+    private final MarketTradingDayCalendarService tradingDayCalendarService;
 
     public SteelArticleQueryService(SteelArticleRepository articleRepository,
                                     SteelQuoteRepository quoteRepository,
-                                    SteelQuoteClosedDayService closedDayService) {
+                                    SteelQuoteClosedDayService closedDayService,
+                                    MarketTradingDayCalendarService tradingDayCalendarService) {
         this.articleRepository = articleRepository;
         this.quoteRepository = quoteRepository;
         this.closedDayService = closedDayService;
+        this.tradingDayCalendarService = tradingDayCalendarService;
     }
 
     /** 同步记录分页(按文章日期倒序)。 */
@@ -91,23 +94,46 @@ public class SteelArticleQueryService {
             result.add(SteelQuoteCalendarResponse.of(entry.getKey(), periods,
                     rowsByDate.getOrDefault(entry.getKey(), Map.of())));
         }
-        // 追加休市日: 这些日期没有行情是正常的(节假日/周末), 前端据此显示「休市」而不是「缺失」。
-        // 有行情的日期不会同时是休市日 —— 抓到行情时休市标记已被撤销(自愈)。
-        appendClosedDays(result, periodsByDate, from, to, source, market);
+        // 追加交易日例外: 节假日显示「休市」、调休上班的周六日显示「缺失(可同步)」。
+        // 有行情的日期不会重复出现 —— 有行情时 periods 非空, 这里直接跳过。
+        appendTradingDayOverrides(result, periodsByDate, from, to, source, market);
         result.sort(Comparator.comparing(SteelQuoteCalendarResponse::quoteDate));
         return result;
     }
 
-    /** 把区间内已记录的休市日并入日历结果(有行情的日期不重复添加)。 */
-    private void appendClosedDays(List<SteelQuoteCalendarResponse> result,
-                                  Map<LocalDate, List<String>> periodsByDate,
-                                  LocalDate from, LocalDate to, String source, String market) {
+    /**
+     * 把区间内的交易日例外并入日历结果(有行情的日期不重复添加)。
+     *
+     * <p>两类来源取并集:</p>
+     * <ol>
+     *   <li><b>被动</b> {@code mk_steel_quote_closed_day}: 同步/补数时站点明确未发布;</li>
+     *   <li><b>主动</b> {@code mk_market_trading_day_override}: 年度法定节假日与调休上班日,
+     *       由迁移脚本写入 —— 没同步过的节假日靠它才不会显示成"缺失"。</li>
+     * </ol>
+     * <p>调休上班日必须显式返回 {@code tradingDay=true}: 它是周六日, 前端只按周末判断会算成休市。</p>
+     */
+    private void appendTradingDayOverrides(List<SteelQuoteCalendarResponse> result,
+                                           Map<LocalDate, List<String>> periodsByDate,
+                                           LocalDate from, LocalDate to, String source, String market) {
         for (SteelQuoteClosedDay closedDay : closedDayService.closedDays(
                 normalizeFilter(source), normalizeFilter(market), from, to)) {
             if (periodsByDate.containsKey(closedDay.getQuoteDate())) {
                 continue;
             }
             result.add(SteelQuoteCalendarResponse.closed(closedDay.getQuoteDate()));
+        }
+        for (LocalDate holiday : tradingDayCalendarService.closedDates(from, to).keySet()) {
+            if (periodsByDate.containsKey(holiday)) {
+                continue;
+            }
+            result.add(SteelQuoteCalendarResponse.holiday(holiday));
+        }
+        for (LocalDate workingDay : tradingDayCalendarService.openDates(from, to)) {
+            // 调休上班日若真有行情, 上面已经带了真实 periods, 不要覆盖成空时段
+            if (periodsByDate.containsKey(workingDay)) {
+                continue;
+            }
+            result.add(SteelQuoteCalendarResponse.workingDay(workingDay));
         }
     }
 
