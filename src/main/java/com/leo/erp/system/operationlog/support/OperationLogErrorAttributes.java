@@ -23,13 +23,21 @@ public final class OperationLogErrorAttributes {
     private OperationLogErrorAttributes() {
     }
 
-    /** 记录异常对应的错误码与错误信息; 多次解析同一请求时以最后一次为准。 */
-    public static void capture(HttpServletRequest request, Exception ex) {
+    /**
+     * 记录异常对应的错误码与错误信息; 多次解析同一请求时以最后一次为准。
+     *
+     * <p>返回写入的错误码而不是 void: SpotBugs 的 {@code UC_USELESS_VOID_METHOD} 只看方法体内
+     * 调用的"无副作用方法", 而 {@code HttpServletRequest#setAttribute} 是接口方法、它推不出副作用,
+     * 于是把整个方法判成无用(实测 CI 因此红)。返回错误码既消掉这个误判, 也让调用方在需要时能直接拿到码。</p>
+     */
+    public static String capture(HttpServletRequest request, Exception ex) {
         if (request == null || ex == null) {
-            return;
+            return null;
         }
-        request.setAttribute(CODE_ATTRIBUTE, truncate(codeOf(ex), MAX_CODE_LENGTH));
+        String code = truncate(codeOf(ex), MAX_CODE_LENGTH);
+        request.setAttribute(CODE_ATTRIBUTE, code);
         request.setAttribute(MESSAGE_ATTRIBUTE, truncate(messageOf(ex), MAX_MESSAGE_LENGTH));
+        return code;
     }
 
     /** 优先取异常解析阶段记录的 attribute, 没有时回退到未解析的异常本身。 */
