@@ -1,3 +1,26 @@
+# [17.0.0](https://github.com/PolarisTime/Leo/compare/v16.1.0...v17.0.0) (2026-10-28)
+
+
+* feat(version)!: /version 改为登录可见并始终返回提交哈希 ([a327400](https://github.com/PolarisTime/Leo/commit/a3274007a77647ea6e8498ee12b34e8ca9c479df))
+
+
+### Bug Fixes
+
+* **ci:** 修掉 spotbugs 误判，恢复 backend-ci / backend-release ([a286b06](https://github.com/PolarisTime/Leo/commit/a286b0675dcb12f040c1dca93d9072b85f572554))
+
+
+### Features
+
+* **market:** 增加年度交易日日历，节假日自动显示休市、调休上班日算交易日 ([6a3afee](https://github.com/PolarisTime/Leo/commit/6a3afee6b0ea6dbebfa8ae0c0e9cecfaf59c16bc))
+* **operation-log:** 审计日志补齐耗时/状态码/UA/错误与脱敏请求体，并去噪去重 ([1a16925](https://github.com/PolarisTime/Leo/commit/1a169254777a9a129c80cf7564362b3ecda87ec5))
+* **supplier-price:** 新增供应商品牌基价加价规则表与接口 ([c79c12a](https://github.com/PolarisTime/Leo/commit/c79c12a37fdb9cd2a419f8278bb057f25a338da6))
+
+
+### BREAKING CHANGES
+
+* GET /api/v2/version 不再允许匿名访问，未携带 token 的调用会返回 401；
+返回体 gitCommit 恢复为短哈希（不再受 expose-commit-hash 控制）。
+
 # [16.1.0](https://github.com/PolarisTime/Leo/compare/v16.0.0...v16.1.0) (2026-10-26)
 
 
