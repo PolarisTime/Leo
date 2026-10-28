@@ -26,7 +26,7 @@ public final class PageSortFieldCatalog {
             Map.entry(ModuleKeys.PAYMENT, Set.of("id", "paymentNo", "businessType", "counterpartyCode", "counterpartyName", "paymentDate", "payType", "amount", "status", "operatorName")),
             Map.entry(ModuleKeys.LEDGER_ADJUSTMENT, Set.of("id", "adjustmentNo", "direction", "counterpartyType", "counterpartyCode", "counterpartyName", "projectName", "adjustmentDate", "amount", "adjustmentType", "effect", "status", "operatorName")),
             Map.entry("company-setting", Set.of("id", "companyName", "taxNo", "bankName", "bankAccount", "status")),
-            Map.entry("operation-log", Set.of("id", "logNo", "operatorName", "loginName", "moduleName", "actionType", "businessNo", "requestMethod", "requestPath", "clientIp", "resultStatus", "operationTime")),
+            Map.entry("operation-log", Set.of("id", "logNo", "operatorName", "loginName", "moduleName", "actionType", "businessNo", "requestMethod", "requestPath", "clientIp", "resultStatus", "statusCode", "durationMs", "operationCategory", "operationTime")),
             Map.entry(ModuleKeys.CASH_LEDGER, Set.of("businessDate")),
             Map.entry(ModuleKeys.FINANCE_OVERVIEW, Set.of("counterpartyName", "recognizedAmount", "settledAmount", "outstandingAmount", "advanceAmount")),
             Map.entry(ModuleKeys.PROJECT, Set.of("id", "projectCode", "projectName", "projectNameAbbr", "customerCode", "projectManager", "status")),

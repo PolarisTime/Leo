@@ -11,6 +11,12 @@ public class OperationLogInterceptor implements HandlerInterceptor {
 
     static final String METADATA_ATTRIBUTE = OperationLogInterceptor.class.getName() + ".metadata";
 
+    /**
+     * 请求开始时间(nanoTime) 的 request attribute: preHandle 写入, afterCompletion 计算毫秒耗时。
+     * 用 nanoTime 而不是 currentTimeMillis, 避免系统时钟回拨导致负耗时。
+     */
+    static final String START_NANOS_ATTRIBUTE = OperationLogInterceptor.class.getName() + ".startNanos";
+
     private final OperationLogMetadataResolver metadataResolver;
     private final OperationLogCommandRecorder commandRecorder;
 
@@ -32,6 +38,7 @@ public class OperationLogInterceptor implements HandlerInterceptor {
         }
 
         request.setAttribute(METADATA_ATTRIBUTE, metadata);
+        request.setAttribute(START_NANOS_ATTRIBUTE, System.nanoTime());
         return true;
     }
 

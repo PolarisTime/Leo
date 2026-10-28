@@ -23,5 +23,11 @@ public final class OperationLogConstants {
 
     // 认证相关请求路径(用于审计记录)
     public static final String PATH_LOGIN = "/auth/login";
+    public static final String PATH_REFRESH = "/auth/refresh";
     public static final String PATH_LOGOUT = "/auth/logout";
+
+    // 操作类别(operation_category 存储值; 前端筛选值与之逐字一致)
+    public static final String CATEGORY_SESSION = "SESSION";
+    public static final String CATEGORY_BUSINESS = "BUSINESS";
+    public static final String CATEGORY_SYSTEM = "SYSTEM";
 }

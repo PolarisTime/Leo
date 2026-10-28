@@ -6,6 +6,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.ColumnTransformer;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -78,4 +79,38 @@ public class OperationLog {
 
     @Column(name = "remark", length = 255)
     private String remark;
+
+    /** HTTP 响应状态码(100..599); 历史数据为空。 */
+    @Column(name = "status_code")
+    private Integer statusCode;
+
+    /** 请求处理耗时(毫秒); 历史数据为空。 */
+    @Column(name = "duration_ms")
+    private Integer durationMs;
+
+    /** 请求 User-Agent 头, 截断 512 字符。 */
+    @Column(name = "user_agent", length = 512)
+    private String userAgent;
+
+    /** 失败时的结构化错误码: BusinessException 业务码或异常类简名; 成功为空。 */
+    @Column(name = "error_code", length = 64)
+    private String errorCode;
+
+    /** 失败时的用户可读错误信息; 成功为空。 */
+    @Column(name = "error_message", columnDefinition = "text")
+    private String errorMessage;
+
+    /**
+     * 脱敏后的请求体 JSON 文本(列类型 jsonb)。
+     *
+     * <p>读写都显式 cast: 与 {@code md_material_history} 等既有 jsonb 列的映射方式一致,
+     * 避免 Hibernate 依方言推断 json/jsonb 带来的隐式转换差异。</p>
+     */
+    @ColumnTransformer(read = "request_body::text", write = "?::jsonb")
+    @Column(name = "request_body", columnDefinition = "jsonb")
+    private String requestBody;
+
+    /** 操作类别: SESSION/BUSINESS/SYSTEM, 默认 BUSINESS。 */
+    @Column(name = "operation_category", nullable = false, length = 16)
+    private String operationCategory;
 }

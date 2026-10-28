@@ -6,9 +6,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.support.ClientIpResolver;
 import com.leo.erp.common.support.ModuleCatalog;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.util.ContentCachingRequestWrapper;
+import org.springframework.web.util.WebUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -20,6 +22,9 @@ public class OperationLogResultCollector {
     public static final String BUSINESS_NO_ATTRIBUTE = OperationLogResultCollector.class.getName() + ".businessNo";
     public static final String RECORD_ID_ATTRIBUTE = OperationLogResultCollector.class.getName() + ".recordId";
     public static final String MODULE_KEY_ATTRIBUTE = OperationLogResultCollector.class.getName() + ".moduleKey";
+
+    /** 与 {@code TraceIdFilter} 写入 MDC 的键一致; 该常量在 filter 内是包级私有, 这里按同一字符串读取。 */
+    private static final String TRACE_ID_MDC_KEY = "traceId";
 
     private final ObjectMapper objectMapper;
     private final ClientIpResolver clientIpResolver;
@@ -141,6 +146,52 @@ public class OperationLogResultCollector {
         return ex == null ? null : "请求处理失败";
     }
 
+    /**
+     * 请求耗时(毫秒): 由拦截器 preHandle 写入的 nanoTime 计算, 缺失或时钟异常时返回 null。
+     * 截断到 int 上限, 避免超长挂起请求把耗时写成负数。
+     */
+    public Integer resolveDurationMs(HttpServletRequest request) {
+        if (request == null) {
+            return null;
+        }
+        Object value = request.getAttribute(OperationLogInterceptor.START_NANOS_ATTRIBUTE);
+        if (!(value instanceof Long startNanos)) {
+            return null;
+        }
+        long elapsedNanos = System.nanoTime() - startNanos;
+        if (elapsedNanos < 0) {
+            return 0;
+        }
+        long elapsedMs = elapsedNanos / 1_000_000L;
+        return (int) Math.min(elapsedMs, Integer.MAX_VALUE);
+    }
+
+    /** 请求 User-Agent 头, 截断 512 字符。 */
+    public String resolveUserAgent(HttpServletRequest request) {
+        if (request == null) {
+            return null;
+        }
+        return truncate(request.getHeader("User-Agent"), 512);
+    }
+
+    /** 失败请求的结构化错误码; 成功或异常已被忽略时返回 null。 */
+    public String resolveErrorCode(HttpServletRequest request, Exception ex) {
+        return OperationLogErrorAttributes.resolveCode(request, ex);
+    }
+
+    /** 失败请求的用户可读错误信息(最长 4000); 成功时返回 null。 */
+    public String resolveErrorMessage(HttpServletRequest request, Exception ex) {
+        return OperationLogErrorAttributes.resolveMessage(request, ex);
+    }
+
+    /**
+     * 关联技术日志的 Trace ID: 复用 {@code TraceIdFilter} 写入 MDC 的 traceId;
+     * 异步/无请求线程中 MDC 为空时返回 null(保持既有语义, 不额外生成)。
+     */
+    public String resolveTraceId() {
+        return truncate(MDC.get(TRACE_ID_MDC_KEY), 64);
+    }
+
     public String resolveRequestPath(HttpServletRequest request) {
         String servletPath = request.getServletPath();
         if (servletPath != null && !servletPath.isBlank()) {
@@ -154,7 +205,9 @@ public class OperationLogResultCollector {
     }
 
     private JsonNode parseRequestBody(HttpServletRequest request) {
-        if (!(request instanceof ContentCachingRequestWrapper wrapper)) {
+        ContentCachingRequestWrapper wrapper =
+                WebUtils.getNativeRequest(request, ContentCachingRequestWrapper.class);
+        if (wrapper == null) {
             return null;
         }
         byte[] content = wrapper.getContentAsByteArray();
@@ -205,5 +258,13 @@ public class OperationLogResultCollector {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.length() <= maxLength ? trimmed : trimmed.substring(0, maxLength);
     }
 }
