@@ -23,6 +23,8 @@ import com.leo.erp.finance.receipt.web.dto.ReceiptAllocationRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptResponse;
 import com.leo.erp.finance.common.service.SupplierPrepaymentBalanceService;
+import com.leo.erp.system.company.api.SettlementAccountSnapshot;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,9 +34,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 @Service
 public class ReceiptService {
@@ -52,6 +57,7 @@ public class ReceiptService {
     private final ReceiptSettlementSyncService settlementSyncService;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final SupplierPrepaymentBalanceService supplierPrepaymentBalanceService;
+    private final CompanySettingService companySettingService;
 
     @Autowired
     public ReceiptService(ReceiptRepository receiptRepository,
@@ -62,7 +68,8 @@ public class ReceiptService {
                           ReceiptAllocationResponseAssembler allocationResponseAssembler,
                           ReceiptSettlementSyncService settlementSyncService,
                           SourceAllocationLockService sourceAllocationLockService,
-                          SupplierPrepaymentBalanceService supplierPrepaymentBalanceService) {
+                          SupplierPrepaymentBalanceService supplierPrepaymentBalanceService,
+                          CompanySettingService companySettingService) {
         this.idGenerator = snowflakeIdGenerator;
         this.receiptRepository = receiptRepository;
         this.receiptMapper = receiptMapper;
@@ -72,6 +79,7 @@ public class ReceiptService {
         this.settlementSyncService = settlementSyncService;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.supplierPrepaymentBalanceService = supplierPrepaymentBalanceService;
+        this.companySettingService = companySettingService;
     }
 
     @Transactional(readOnly = true)
@@ -89,7 +97,10 @@ public class ReceiptService {
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("receiptDate", filter.startDate(), filter.endDate()));
-        return pageEntities(query, spec).map(this::toResponse);
+        Page<Receipt> entities = pageEntities(query, spec);
+        // 资金账户快照按整页批量解析（一次查询），不能放到逐行的 toResponse 里，否则分页会出现 N+1。
+        Map<Long, SettlementAccountSnapshot> accounts = settlementAccountIndex(entities.getContent());
+        return entities.map(entity -> enrichAccount(receiptMapper.toResponse(entity), accounts));
     }
 
     @Transactional(readOnly = true)
@@ -350,6 +361,8 @@ public class ReceiptService {
 
     protected ReceiptResponse toDetailResponse(Receipt entity) {
         ReceiptResponse response = receiptMapper.toResponse(entity);
+        SettlementAccountSnapshot account = companySettingService.settlementAccountSnapshot(
+                entity.getSettlementCompanyId(), entity.getAccountId());
         return new ReceiptResponse(
                 response.id(),
                 response.receiptNo(),
@@ -366,6 +379,8 @@ public class ReceiptService {
                 response.settlementCompanyId(),
                 response.settlementCompanyName(),
                 response.accountId(),
+                account == null ? null : account.accountName(),
+                account == null ? null : account.accountNo(),
                 response.sourceCustomerStatementId(),
                 response.receiptDate(),
                 response.payType(),
@@ -402,7 +417,21 @@ public class ReceiptService {
     }
 
     protected ReceiptResponse toResponse(Receipt entity) {
-        return receiptMapper.toResponse(entity);
+        return enrichAccount(receiptMapper.toResponse(entity), settlementAccountIndex(List.of(entity)));
+    }
+
+    /** 按整批单据的结算主体一次性解析资金账户快照，返回 accountId -> 快照。 */
+    private Map<Long, SettlementAccountSnapshot> settlementAccountIndex(List<Receipt> receipts) {
+        return companySettingService.settlementAccountSnapshots(receipts.stream()
+                .map(Receipt::getSettlementCompanyId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet()));
+    }
+
+    private ReceiptResponse enrichAccount(ReceiptResponse response,
+                                          Map<Long, SettlementAccountSnapshot> accounts) {
+        SettlementAccountSnapshot account = response.accountId() == null ? null : accounts.get(response.accountId());
+        return account == null ? response : response.withAccount(account.accountName(), account.accountNo());
     }
 
     private void lockAllocationStatements(Receipt entity, ReceiptRequest request) {

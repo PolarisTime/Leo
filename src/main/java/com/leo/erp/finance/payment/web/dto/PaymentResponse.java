@@ -20,6 +20,9 @@ public record PaymentResponse(
         Long settlementCompanyId,
         String settlementCompanyName,
         Long accountId,
+        // 资金账户快照：读取时按结算主体实时解析，账户不存在或已禁用时为 null，不影响既有字段。
+        String accountName,
+        String accountNo,
         LocalDate paymentDate,
         String payType,
         BigDecimal amount,
@@ -53,7 +56,7 @@ public record PaymentResponse(
                            List<PaymentAllocationResponse> items) {
         this(id, paymentNo, counterpartyType, counterpartyId, paymentPurpose, counterpartyCode,
                 counterpartyName, sourceStatementId, sourcePurchaseOrderId, purchaseOrderNo,
-                supplierCode, supplierName, settlementCompanyId, settlementCompanyName, null,
+                supplierCode, supplierName, settlementCompanyId, settlementCompanyName, null, null, null,
                 paymentDate, payType, amount, status, deletedFlag, operatorName, remark, items);
     }
 
@@ -199,5 +202,17 @@ public record PaymentResponse(
                 remark,
                 items
         );
+    }
+
+    /**
+     * 复制当前响应并补齐资金账户快照（账户名称、账号）。
+     * 列表装配由服务层批量解析后一次性回填，避免逐行查库（N+1）。
+     */
+    public PaymentResponse withAccount(String accountName, String accountNo) {
+        return new PaymentResponse(id, paymentNo, counterpartyType, counterpartyId, paymentPurpose,
+                counterpartyCode, counterpartyName, sourceStatementId, sourcePurchaseOrderId,
+                purchaseOrderNo, supplierCode, supplierName, settlementCompanyId, settlementCompanyName,
+                accountId, accountName, accountNo, paymentDate, payType, amount, status, deletedFlag,
+                operatorName, remark, items);
     }
 }

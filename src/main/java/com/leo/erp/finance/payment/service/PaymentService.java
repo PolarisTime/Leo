@@ -17,6 +17,8 @@ import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.repository.PaymentRepository;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentResponse;
+import com.leo.erp.system.company.api.SettlementAccountSnapshot;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,8 +27,12 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class PaymentService {
@@ -41,6 +47,7 @@ public class PaymentService {
     private final PaymentMutationGuardService mutationGuardService;
     private final PaymentResponseAssembler responseAssembler;
     private final PaymentSettlementSyncService settlementSyncService;
+    private final CompanySettingService companySettingService;
 
     @Autowired
     public PaymentService(PaymentRepository paymentRepository,
@@ -48,13 +55,15 @@ public class PaymentService {
                           PaymentApplyService applyService,
                           PaymentMutationGuardService mutationGuardService,
                           PaymentResponseAssembler responseAssembler,
-                          PaymentSettlementSyncService settlementSyncService) {
+                          PaymentSettlementSyncService settlementSyncService,
+                          CompanySettingService companySettingService) {
         this.idGenerator = snowflakeIdGenerator;
         this.paymentRepository = paymentRepository;
         this.applyService = applyService;
         this.mutationGuardService = mutationGuardService;
         this.responseAssembler = responseAssembler;
         this.settlementSyncService = settlementSyncService;
+        this.companySettingService = companySettingService;
     }
 
     @Transactional(readOnly = true)
@@ -63,7 +72,11 @@ public class PaymentService {
                 .and(Specs.equalIfPresent("businessType", filter.businessType()))
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("paymentDate", filter.startDate(), filter.endDate()));
-        return pageEntities(query, spec).map(this::toResponse);
+        Page<Payment> entities = pageEntities(query, spec);
+        // 资金账户快照按整页批量解析（一次查询），不能放到逐行的 toResponse 里，否则分页会出现 N+1。
+        Map<Long, SettlementAccountSnapshot> accounts = settlementAccountIndex(entities.getContent());
+        return entities.map(entity -> responseAssembler.toSummaryResponse(entity,
+                account(accounts, entity.getAccountId())));
     }
 
     @Transactional(readOnly = true)
@@ -300,7 +313,7 @@ public class PaymentService {
     }
 
     protected PaymentResponse toDetailResponse(Payment entity) {
-        return responseAssembler.toDetailResponse(entity);
+        return responseAssembler.toDetailResponse(entity, settlementAccount(entity));
     }
 
     protected PaymentResponse toSavedResponse(Payment entity) {
@@ -327,7 +340,25 @@ public class PaymentService {
     }
 
     protected PaymentResponse toResponse(Payment entity) {
-        return responseAssembler.toSummaryResponse(entity);
+        return responseAssembler.toSummaryResponse(entity, settlementAccount(entity));
+    }
+
+    /** 按整批单据的结算主体一次性解析资金账户快照，返回 accountId -> 快照。 */
+    private Map<Long, SettlementAccountSnapshot> settlementAccountIndex(List<Payment> payments) {
+        return companySettingService.settlementAccountSnapshots(payments.stream()
+                .map(Payment::getSettlementCompanyId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet()));
+    }
+
+    private SettlementAccountSnapshot settlementAccount(Payment entity) {
+        return companySettingService.settlementAccountSnapshot(
+                entity.getSettlementCompanyId(), entity.getAccountId());
+    }
+
+    /** 空 Map 实现不接受 null key，必须先判空再取快照。 */
+    private SettlementAccountSnapshot account(Map<Long, SettlementAccountSnapshot> accounts, Long accountId) {
+        return accountId == null ? null : accounts.get(accountId);
     }
 
     private Payment requireEntity(Long id) {

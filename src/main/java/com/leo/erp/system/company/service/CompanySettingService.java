@@ -13,6 +13,7 @@ import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
+import com.leo.erp.system.company.api.SettlementAccountSnapshot;
 import com.leo.erp.system.company.api.SettlementCompanySnapshot;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.mapper.CompanySettingMapper;
@@ -33,7 +34,11 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -42,6 +47,9 @@ public class CompanySettingService implements RedisCacheHealthCheck {
 
     public static final String CURRENT_COMPANY_CACHE_KEY = "leo:company:current:v2";
     private static final String COMPANY_OPTIONS_CACHE_KEY = "leo:company-setting:all";
+    /** 结算账户禁用状态文案：结算账户明细使用「禁用」，历史数据或模板中可能出现「停用」。 */
+    private static final Set<String> DISABLED_SETTLEMENT_ACCOUNT_STATUSES =
+            Set.of(StatusConstants.DISABLED, "停用");
 
     private static final CrudStatusGuard<CompanySetting> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
@@ -127,6 +135,68 @@ public class CompanySettingService implements RedisCacheHealthCheck {
     public SettlementCompanySnapshot requireActiveSettlementCompanySnapshot(Long id) {
         CompanySetting company = requireActiveSettlementCompany(id);
         return new SettlementCompanySnapshot(company.getId(), company.getCompanyName());
+    }
+
+    /**
+     * 批量解析结算主体下的资金账户快照，返回 {@code accountId -> 快照}（雪花 ID 全局唯一，可按账户 ID 索引）。
+     * <p>
+     * 一次查询覆盖整批单据，列表装配不会逐行查库（无 N+1）；账户不存在、已禁用，或所属结算主体
+     * 不存在/已删除时，该账户不出现在返回结果中，由调用方按 null 处理，不抛异常。
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, SettlementAccountSnapshot> settlementAccountSnapshots(Collection<Long> settlementCompanyIds) {
+        if (settlementCompanyIds == null || settlementCompanyIds.isEmpty()) {
+            return Map.of();
+        }
+        Set<Long> companyIds = new LinkedHashSet<>(settlementCompanyIds);
+        companyIds.remove(null);
+        if (companyIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, SettlementAccountSnapshot> snapshots = new HashMap<>();
+        for (CompanySetting company : companySettingRepository.findAllById(companyIds)) {
+            if (company == null || company.isDeletedFlag()) {
+                continue;
+            }
+            for (CompanySettlementAccountResponse account : settlementAccountCodec.read(company)) {
+                if (account == null || account.id() == null
+                        || DISABLED_SETTLEMENT_ACCOUNT_STATUSES.contains(account.status())) {
+                    continue;
+                }
+                snapshots.put(account.id(), new SettlementAccountSnapshot(
+                        account.id(),
+                        firstNonBlank(account.accountName(), account.bankName()),
+                        blankToNull(account.bankAccount())
+                ));
+            }
+        }
+        return snapshots;
+    }
+
+    /**
+     * 解析单个资金账户快照；结算主体或账户缺失、账户不存在、账户已禁用时返回 {@code null}，不抛异常。
+     */
+    @Transactional(readOnly = true)
+    public SettlementAccountSnapshot settlementAccountSnapshot(Long settlementCompanyId, Long accountId) {
+        if (settlementCompanyId == null || accountId == null) {
+            return null;
+        }
+        return settlementAccountSnapshots(List.of(settlementCompanyId)).get(accountId);
+    }
+
+    /** 账户名称优先取主数据的账户名，缺失时按前端选择器口径回退到开户银行名。 */
+    private String firstNonBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary.trim();
+        }
+        if (fallback != null && !fallback.isBlank()) {
+            return fallback.trim();
+        }
+        return null;
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     @Override

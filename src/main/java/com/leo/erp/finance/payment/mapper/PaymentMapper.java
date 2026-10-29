@@ -10,5 +10,7 @@ import org.mapstruct.Mapping;
 public interface PaymentMapper {
 
     @Mapping(target = "items", ignore = true)
+    @Mapping(target = "accountName", ignore = true)
+    @Mapping(target = "accountNo", ignore = true)
     PaymentResponse toResponse(Payment payment);
 }

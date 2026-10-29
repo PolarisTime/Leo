@@ -20,6 +20,9 @@ public record ReceiptResponse(
         Long settlementCompanyId,
         String settlementCompanyName,
         Long accountId,
+        // 资金账户快照：读取时按结算主体实时解析，账户不存在或已禁用时为 null，不影响既有字段。
+        String accountName,
+        String accountNo,
         Long sourceCustomerStatementId,
         LocalDate receiptDate,
         String payType,
@@ -55,7 +58,7 @@ public record ReceiptResponse(
                            List<ReceiptAllocationResponse> items) {
         this(id, receiptNo, counterpartyType, counterpartyId, counterpartyCode, counterpartyName,
                 receiptPurpose, customerId, customerCode, customerName, projectId, projectName,
-                settlementCompanyId, settlementCompanyName, null, sourceCustomerStatementId,
+                settlementCompanyId, settlementCompanyName, null, null, null, sourceCustomerStatementId,
                 receiptDate, payType, amount, status, deletedFlag, operatorName, remark, items);
     }
 
@@ -159,5 +162,17 @@ public record ReceiptResponse(
                            List<ReceiptAllocationResponse> items) {
         this(id, receiptNo, null, customerCode, customerName, projectId, projectName, null, null,
                 sourceStatementId, receiptDate, payType, amount, status, false, operatorName, remark, items);
+    }
+
+    /**
+     * 复制当前响应并补齐资金账户快照（账户名称、账号）。
+     * 列表装配由服务层批量解析后一次性回填，避免逐行查库（N+1）。
+     */
+    public ReceiptResponse withAccount(String accountName, String accountNo) {
+        return new ReceiptResponse(id, receiptNo, counterpartyType, counterpartyId, counterpartyCode,
+                counterpartyName, receiptPurpose, customerId, customerCode, customerName, projectId,
+                projectName, settlementCompanyId, settlementCompanyName, accountId, accountName, accountNo,
+                sourceCustomerStatementId, receiptDate, payType, amount, status, deletedFlag,
+                operatorName, remark, items);
     }
 }

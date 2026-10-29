@@ -4,6 +4,7 @@ import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.mapper.PaymentMapper;
 import com.leo.erp.finance.payment.web.dto.PaymentAllocationResponse;
 import com.leo.erp.finance.payment.web.dto.PaymentResponse;
+import com.leo.erp.system.company.api.SettlementAccountSnapshot;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -36,8 +37,40 @@ class PaymentResponseAssemblerTest {
 
         when(paymentMapper.toResponse(payment)).thenReturn(summary);
 
-        assertThat(assembler.toSummaryResponse(payment)).isSameAs(summary);
+        assertThat(assembler.toSummaryResponse(payment, null)).isSameAs(summary);
         verify(allocationResponseAssembler, never()).toResponses(any());
+    }
+
+    @Test
+    void toSummaryResponse_shouldFillAccountSnapshotWithoutExtraFields() {
+        PaymentResponseAssembler assembler = assembler();
+        Payment payment = new Payment();
+
+        when(paymentMapper.toResponse(payment)).thenReturn(summary());
+
+        PaymentResponse result = assembler.toSummaryResponse(payment,
+                new SettlementAccountSnapshot(40L, "基本户", "6222000011223344"));
+
+        assertThat(result.accountId()).isEqualTo(40L);
+        assertThat(result.accountName()).isEqualTo("基本户");
+        assertThat(result.accountNo()).isEqualTo("6222000011223344");
+        // 既有字段语义不变
+        assertThat(result.paymentNo()).isEqualTo("PAY001");
+        assertThat(result.amount()).isEqualByComparingTo(new BigDecimal("10.00"));
+    }
+
+    @Test
+    void toSummaryResponse_shouldKeepAccountFieldsNullWhenSnapshotMissing() {
+        PaymentResponseAssembler assembler = assembler();
+        Payment payment = new Payment();
+
+        when(paymentMapper.toResponse(payment)).thenReturn(summary());
+
+        PaymentResponse result = assembler.toSummaryResponse(payment, null);
+
+        assertThat(result.accountId()).isEqualTo(40L);
+        assertThat(result.accountName()).isNull();
+        assertThat(result.accountNo()).isNull();
     }
 
     @Test
@@ -50,12 +83,30 @@ class PaymentResponseAssemblerTest {
         when(paymentMapper.toResponse(payment)).thenReturn(summary);
         when(allocationResponseAssembler.toResponses(payment)).thenReturn(allocations);
 
-        PaymentResponse result = assembler.toDetailResponse(payment);
+        PaymentResponse result = assembler.toDetailResponse(payment, null);
         assertThat(result.items()).isSameAs(allocations);
         assertThat(result.paymentNo()).isEqualTo(summary.paymentNo());
         assertThat(result.counterpartyId()).isEqualTo(summary.counterpartyId());
         assertThat(result.amount()).isEqualTo(summary.amount());
         assertThat(result.status()).isEqualTo(summary.status());
+        assertThat(result.accountName()).isNull();
+        assertThat(result.accountNo()).isNull();
+    }
+
+    @Test
+    void toDetailResponse_shouldFillAccountSnapshot() {
+        PaymentResponseAssembler assembler = assembler();
+        Payment payment = new Payment();
+
+        when(paymentMapper.toResponse(payment)).thenReturn(summary());
+        when(allocationResponseAssembler.toResponses(payment)).thenReturn(List.of());
+
+        PaymentResponse result = assembler.toDetailResponse(payment,
+                new SettlementAccountSnapshot(40L, "基本户", "6222000011223344"));
+
+        assertThat(result.accountName()).isEqualTo("基本户");
+        assertThat(result.accountNo()).isEqualTo("6222000011223344");
+        assertThat(result.items()).isEmpty();
     }
 
     @Test
@@ -65,7 +116,7 @@ class PaymentResponseAssemblerTest {
         when(paymentMapper.toResponse(payment)).thenReturn(summary());
         when(allocationResponseAssembler.toResponses(payment)).thenReturn(List.of());
 
-        PaymentResponse result = assembler.toDetailResponse(payment);
+        PaymentResponse result = assembler.toDetailResponse(payment, null);
 
         assertThat(result.items()).isEmpty();
         assertThat(result.amount()).isEqualByComparingTo(new BigDecimal("10.00"));
@@ -91,6 +142,8 @@ class PaymentResponseAssemblerTest {
                 "供应商A",
                 30L,
                 "结算主体",
+                40L,
+                null,
                 null,
                 LocalDate.of(2026, 8, 25),
                 "银行转账",

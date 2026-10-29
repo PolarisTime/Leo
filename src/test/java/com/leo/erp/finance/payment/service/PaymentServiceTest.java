@@ -7,6 +7,7 @@ import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.repository.PaymentRepository;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentResponse;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
@@ -55,6 +56,9 @@ class PaymentServiceTest {
 
     @Mock
     private PaymentSettlementSyncService settlementSyncService;
+
+    @Mock
+    private CompanySettingService companySettingService;
 
     @InjectMocks
     private PaymentService service;
@@ -193,7 +197,7 @@ class PaymentServiceTest {
         Payment payment = entity(StatusConstants.DRAFT);
         givenExistingEntity(payment);
         PaymentResponse response = mock(PaymentResponse.class);
-        when(responseAssembler.toDetailResponse(payment)).thenReturn(response);
+        when(responseAssembler.toDetailResponse(payment, null)).thenReturn(response);
 
         PaymentResponse result = service.updateStatus(ID, StatusConstants.DRAFT);
 

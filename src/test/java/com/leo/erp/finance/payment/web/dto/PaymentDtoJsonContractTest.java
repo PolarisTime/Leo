@@ -37,6 +37,7 @@ class PaymentDtoJsonContractTest {
                 1234567890123456789L, "PAY-2026-001", "SUPPLIER_PAYMENT", 555444333222111000L, "PURCHASE_PREPAYMENT",
                 "SUP-001", "供应商甲", 111222333444555666L, 222333444555666777L, "PO-2026-001",
                 "SUP-001", "供应商甲", 888777666555444333L, "结算公司A", 999888777666555444L,
+                "基本户", "6222000011223344",
                 LocalDate.of(2026, 9, 1), "BANK_TRANSFER", new BigDecimal("1000"),
                 "PENDING_APPROVAL", true, "张三", "备注", List.of(allocation));
     }
@@ -52,7 +53,8 @@ class PaymentDtoJsonContractTest {
                 + "\"sourcePurchaseOrderId\":\"222333444555666777\",\"purchaseOrderNo\":\"PO-2026-001\","
                 + "\"supplierCode\":\"SUP-001\",\"supplierName\":\"供应商甲\","
                 + "\"settlementCompanyId\":\"888777666555444333\",\"settlementCompanyName\":\"结算公司A\","
-                + "\"accountId\":\"999888777666555444\",\"paymentDate\":\"2026-09-01\","
+                + "\"accountId\":\"999888777666555444\",\"accountName\":\"基本户\","
+                + "\"accountNo\":\"6222000011223344\",\"paymentDate\":\"2026-09-01\","
                 + "\"payType\":\"BANK_TRANSFER\",\"amount\":1000.00,\"status\":\"PENDING_APPROVAL\","
                 + "\"deletedFlag\":true,\"operatorName\":\"张三\",\"remark\":\"备注\","
                 + "\"items\":[{\"id\":\"987654321098765432\",\"lineNo\":1,"

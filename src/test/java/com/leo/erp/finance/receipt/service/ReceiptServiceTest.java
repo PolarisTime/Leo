@@ -1,5 +1,7 @@
 package com.leo.erp.finance.receipt.service;
 
+import com.leo.erp.common.api.PageFilter;
+import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -9,25 +11,34 @@ import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import com.leo.erp.finance.receipt.mapper.ReceiptMapper;
 import com.leo.erp.finance.receipt.repository.ReceiptRepository;
 import com.leo.erp.finance.receipt.web.dto.ReceiptResponse;
+import com.leo.erp.system.company.api.SettlementAccountSnapshot;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -67,6 +78,9 @@ class ReceiptServiceTest {
     @Mock
     private SupplierPrepaymentBalanceService supplierPrepaymentBalanceService;
 
+    @Mock
+    private CompanySettingService companySettingService;
+
     @InjectMocks
     private ReceiptService service;
 
@@ -88,10 +102,14 @@ class ReceiptServiceTest {
     }
 
     private ReceiptResponse response() {
+        return response(2L);
+    }
+
+    private ReceiptResponse response(Long accountId) {
         return new ReceiptResponse(
                 ID, "RC001", "客户", 10L, "C001", "客户A",
                 "CUSTOMER_STATEMENT_SETTLEMENT", 10L, "C001", "客户A",
-                20L, "项目A", 1L, "主体A", 2L, null,
+                20L, "项目A", 1L, "主体A", accountId, null, null, null,
                 LocalDate.of(2026, 9, 1), "银行转账", new BigDecimal("100.00"),
                 StatusConstants.DRAFT, false, "操作员", null, List.of()
         );
@@ -239,5 +257,66 @@ class ReceiptServiceTest {
                 receipt, StatusConstants.AUDITED);
         inOrder.verify(receiptRepository).save(receipt);
         inOrder.verify(settlementSyncService).syncCustomerStatements(receipt);
+    }
+
+    // ---------- 资金账户快照（新增字段，既有字段不变） ----------
+
+    @Test
+    void detail_shouldFillAccountSnapshotWhenAccountExists() {
+        Receipt receipt = entity(StatusConstants.DRAFT);
+        receipt.setSettlementCompanyId(1L);
+        receipt.setAccountId(2L);
+        when(receiptRepository.findById(ID)).thenReturn(Optional.of(receipt));
+        when(receiptMapper.toResponse(receipt)).thenReturn(response());
+        when(allocationResponseAssembler.toResponses(receipt)).thenReturn(List.of());
+        when(companySettingService.settlementAccountSnapshot(1L, 2L))
+                .thenReturn(new SettlementAccountSnapshot(2L, "基本户", "6222000011223344"));
+
+        ReceiptResponse result = service.detail(ID);
+
+        assertThat(result.accountId()).isEqualTo(2L);
+        assertThat(result.accountName()).isEqualTo("基本户");
+        assertThat(result.accountNo()).isEqualTo("6222000011223344");
+    }
+
+    @Test
+    void detail_shouldKeepAccountSnapshotNullWhenAccountMissingOrDisabled() {
+        Receipt receipt = entity(StatusConstants.DRAFT);
+        receipt.setSettlementCompanyId(1L);
+        receipt.setAccountId(2L);
+        when(receiptRepository.findById(ID)).thenReturn(Optional.of(receipt));
+        when(receiptMapper.toResponse(receipt)).thenReturn(response());
+        when(allocationResponseAssembler.toResponses(receipt)).thenReturn(List.of());
+
+        ReceiptResponse result = service.detail(ID);
+
+        assertThat(result.accountId()).isEqualTo(2L);
+        assertThat(result.accountName()).isNull();
+        assertThat(result.accountNo()).isNull();
+    }
+
+    @Test
+    void page_shouldResolveAccountSnapshotsInOneBatchQuery() {
+        Receipt first = entity(StatusConstants.DRAFT);
+        first.setSettlementCompanyId(1L);
+        first.setAccountId(2L);
+        Receipt second = entity(StatusConstants.DRAFT);
+        second.setSettlementCompanyId(1L);
+        second.setAccountId(3L);
+        when(receiptRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(first, second)));
+        when(receiptMapper.toResponse(first)).thenReturn(response(2L));
+        when(receiptMapper.toResponse(second)).thenReturn(response(3L));
+        when(companySettingService.settlementAccountSnapshots(anyCollection())).thenReturn(Map.of(
+                2L, new SettlementAccountSnapshot(2L, "基本户", "6222000011223344"),
+                3L, new SettlementAccountSnapshot(3L, "一般户", "6222000055667788")));
+
+        Page<ReceiptResponse> page = service.page(new PageQuery(0, 20, null, null), PageFilter.byKeyword(null));
+
+        assertThat(page.getContent()).extracting(ReceiptResponse::accountName)
+                .containsExactly("基本户", "一般户");
+        assertThat(page.getContent()).extracting(ReceiptResponse::accountNo)
+                .containsExactly("6222000011223344", "6222000055667788");
+        verify(companySettingService, times(1)).settlementAccountSnapshots(anyCollection());
     }
 }

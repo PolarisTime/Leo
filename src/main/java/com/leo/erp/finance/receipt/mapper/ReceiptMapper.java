@@ -10,5 +10,7 @@ import org.mapstruct.Mapping;
 public interface ReceiptMapper {
 
     @Mapping(target = "items", ignore = true)
+    @Mapping(target = "accountName", ignore = true)
+    @Mapping(target = "accountNo", ignore = true)
     ReceiptResponse toResponse(Receipt receipt);
 }
