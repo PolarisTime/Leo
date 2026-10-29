@@ -1,3 +1,10 @@
+# [17.1.0](https://github.com/PolarisTime/Leo/compare/v17.0.0...v17.1.0) (2026-10-29)
+
+
+### Features
+
+* **finance:** 收款/付款单返回资金账户名称快照 ([ba52328](https://github.com/PolarisTime/Leo/commit/ba52328e57228fb1207f08f433d604e74847d645))
+
 # [17.0.0](https://github.com/PolarisTime/Leo/compare/v16.1.0...v17.0.0) (2026-10-28)
 
 
