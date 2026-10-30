@@ -49,7 +49,7 @@ class MaterialSpreadsheetImportServiceTest {
 
         MaterialImportProcessor processor = new MaterialImportProcessor(
                 materialRepository, new SnowflakeIdGenerator(1), identityService, historyRecorder,
-                categoryGuard);
+                categoryGuard, new MaterialLengthGuard(TestLengthSpecCatalog.empty()));
         service = new MaterialSpreadsheetImportService(processor, materialDictionaryCache);
     }
 

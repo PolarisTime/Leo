@@ -7,7 +7,8 @@ import jakarta.validation.constraints.Size;
 
 public record AttachmentDirectUploadPrepareRequest(
         @NotBlank(message = "文件名不能为空") @Size(max = 255) String fileName,
-        @Size(max = 255) String contentType,
+        // 与 sys_attachment.content_type 的 varchar(128) 一致
+        @Size(max = 128) String contentType,
         @NotNull(message = "文件大小不能为空") @Positive(message = "文件大小必须大于 0") Long fileSize,
         @Size(max = 32) String sourceType,
         @NotBlank(message = "文件校验值不能为空") @Size(min = 64, max = 64) String sha256Hex

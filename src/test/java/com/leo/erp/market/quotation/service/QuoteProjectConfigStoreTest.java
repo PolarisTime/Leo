@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,14 +43,18 @@ class QuoteProjectConfigStoreTest {
     @Mock
     private com.leo.erp.master.api.ProjectProcurementScopeQuery procurementScopeQuery;
 
+    @Mock
+    private com.leo.erp.market.lengthpremium.service.LengthPremiumService lengthPremiumService;
+
     private QuoteProjectConfigStore store() {
-        return new QuoteProjectConfigStore(repository, snowflakeIdGenerator, entityManager, null, null);
+        return new QuoteProjectConfigStore(repository, snowflakeIdGenerator, entityManager, null, null,
+                lengthPremiumService);
     }
 
     /** 带采购范围端口的实例：用于验证「参与品牌必须落在项目允许品牌内」。 */
     private QuoteProjectConfigStore storeWithScope() {
         return new QuoteProjectConfigStore(
-                repository, snowflakeIdGenerator, entityManager, null, procurementScopeQuery);
+                repository, snowflakeIdGenerator, entityManager, null, procurementScopeQuery, lengthPremiumService);
     }
 
     private static com.leo.erp.master.api.ProjectProcurementScopeQuery.ProjectProcurementScope scope(
@@ -82,6 +87,39 @@ class QuoteProjectConfigStoreTest {
         assertThat(response.designatedBrands()).isEmpty();
         assertThat(response.brands()).isEmpty();
         assertThat(response.version()).isEqualTo(0L);
+    }
+
+    @Test
+    void find_usesDefaultLengthPremiumFromMasterData() {
+        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
+        // 定尺主数据里 12米 的加价不是 30 时, 默认值必须跟着主数据走
+        when(lengthPremiumService.activePremiumMap()).thenReturn(Map.of("12米", 35));
+
+        QuoteProjectConfigResponse response = store().find(88L);
+
+        assertThat(response.lengthPremium()).isEqualByComparingTo("35");
+    }
+
+    @Test
+    void find_fallsBackToConstantWhenMasterDataEmpty() {
+        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
+        when(lengthPremiumService.activePremiumMap()).thenReturn(Map.of());
+
+        assertThat(store().find(88L).lengthPremium()).isEqualByComparingTo("30");
+    }
+
+    @Test
+    void save_usesDefaultLengthPremiumFromMasterDataWhenRequestOmitsIt() {
+        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
+        when(snowflakeIdGenerator.nextId()).thenReturn(1L);
+        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
+                .thenAnswer((invocation) -> invocation.getArgument(0));
+        when(lengthPremiumService.activePremiumMap()).thenReturn(Map.of("12米", 35));
+
+        QuoteProjectConfigResponse response = store().save(88L, new QuoteProjectConfigRequest(
+                null, false, List.of(), List.of(), null, List.of()), null);
+
+        assertThat(response.lengthPremium()).isEqualByComparingTo("35");
     }
 
     @Test

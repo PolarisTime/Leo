@@ -19,6 +19,8 @@ public record LengthPremiumResponse(
         Integer sortOrder,
         String status,
         String remark,
+        /** 打印规格后缀（如 {@code *12}）；为空表示该定尺打印时不追加内容。 */
+        String specSuffix,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

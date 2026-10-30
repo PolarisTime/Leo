@@ -52,6 +52,7 @@ public class PrintScriptService {
     private final AttachmentRecordAccess recordAccessService;
     private final PrintRuntimeProperties runtimeProperties;
     private final PrintRecordAuthorization recordAuthorization;
+    private final PrintSpecLengthResolver specLengthResolver;
 
     public PrintScriptService(
             PrintTemplateRepository templateRepository,
@@ -61,7 +62,8 @@ public class PrintScriptService {
             PrintLayoutLodopRenderer layoutLodopRenderer,
             AttachmentRecordAccess recordAccessService,
             PrintRuntimeProperties runtimeProperties,
-            PrintRecordAuthorization recordAuthorization
+            PrintRecordAuthorization recordAuthorization,
+            PrintSpecLengthResolver specLengthResolver
     ) {
         this.templateRepository = templateRepository;
         this.dataProvider = dataProvider;
@@ -71,6 +73,7 @@ public class PrintScriptService {
         this.recordAccessService = recordAccessService;
         this.runtimeProperties = runtimeProperties;
         this.recordAuthorization = recordAuthorization;
+        this.specLengthResolver = specLengthResolver;
     }
 
     /** Load record + items from DB, return raw template + data for frontend rendering. */
@@ -273,7 +276,7 @@ public class PrintScriptService {
     private List<Map<String, String>> appendLengthToSpec(List<Map<String, String>> items) {
         return items.stream().map(item -> {
             Map<String, String> printableItem = new HashMap<>(item);
-            printableItem.put("spec", PrintSpecLengthRule.apply(
+            printableItem.put("spec", specLengthResolver.apply(
                     normalizeText(printableItem.get("spec")),
                     normalizeText(printableItem.get("length"))));
             return printableItem;

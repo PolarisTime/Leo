@@ -64,6 +64,10 @@ class MaterialServiceTest {
     }
 
     private MaterialService service(MaterialMapper mapper) {
+        return service(mapper, TestLengthSpecCatalog.empty());
+    }
+
+    private MaterialService service(MaterialMapper mapper, TestLengthSpecCatalog lengthSpecCatalog) {
         // 物理商品的类别需存在于分类主数据: 本测试只关注商品自身逻辑,
         // 故让 guard 原样放行传入的类别名。
         // 与真实 MaterialCategoryGuard 行为一致: 按名称匹配后返回规范化(trim)后的分类名。
@@ -71,7 +75,8 @@ class MaterialServiceTest {
                 .thenAnswer(invocation -> ((String) invocation.getArgument(0)).trim());
         return new MaterialService(materialRepository, snowflakeIdGenerator, mapper,
                 materialReferenceGuard, codeIssuanceService, identityService, materialHistoryRecorder,
-                materialDictionaryCache, materialCategoryGuard);
+                materialDictionaryCache, materialCategoryGuard,
+                new MaterialLengthGuard(lengthSpecCatalog));
     }
 
     /** 真实字段映射的 mapper 替身：断言 status 字段真的被映射进响应，而不只是「调用过 mapper」。 */
@@ -233,6 +238,54 @@ class MaterialServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("件重不能为空");
         verify(materialRepository, never()).save(any());
+    }
+
+    @Test
+    void create_lengthMissingFromMasterData_rejectedWithoutSaving() {
+        MaterialRequest request = new MaterialRequest("111", "纯棉", "棉布", "面料", "1米", "10米",
+                "米", "支", BigDecimal.ONE, 2, BigDecimal.TEN, null, null, null);
+
+        assertThatThrownBy(() -> service(materialMapper, TestLengthSpecCatalog.of("9米", "12米")).create(request))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("长度「10米」不在定尺主数据中，请先在定尺加价维护中添加");
+        verify(materialRepository, never()).save(any());
+    }
+
+    @Test
+    void create_dashLength_allowed() {
+        Material saved = new Material();
+        lenient().when(snowflakeIdGenerator.nextId()).thenReturn(123L);
+        lenient().when(codeIssuanceService.resolve(eq("material"), isNull(), eq("111"))).thenReturn("111");
+        when(materialRepository.save(any(Material.class))).thenReturn(saved);
+        when(materialMapper.toResponse(saved)).thenReturn(new MaterialResponse(123L, "111", null, null,
+                null, null, "-", null, null, null, null, null, null, null, null));
+        MaterialRequest request = new MaterialRequest("111", "纯棉", "棉布", "面料", "1米", "-",
+                "米", "支", BigDecimal.ONE, 2, BigDecimal.TEN, null, null, null);
+
+        service(materialMapper, TestLengthSpecCatalog.of("9米", "12米")).create(request);
+
+        verify(materialRepository).save(any(Material.class));
+    }
+
+    @Test
+    void update_unchangedLengthAllowedEvenWhenLengthNoLongerInMasterData() {
+        // 定尺被禁用后老商品仍可改其它字段: 长度与库里原值相同则跳过定尺校验
+        Material entity = new Material();
+        entity.setId(5L);
+        entity.setMaterialCode("M001");
+        entity.setBrand("旧品牌");
+        entity.setLength("8米");
+        when(materialRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(codeIssuanceService.resolve("material", "M001", "111")).thenReturn("M001");
+        when(materialRepository.save(entity)).thenReturn(entity);
+        MaterialRequest request = new MaterialRequest("111", "新品牌", "棉布", "面料", "1米", "8米",
+                "米", "支", BigDecimal.ONE, 2, BigDecimal.TEN, null, null, null);
+
+        service(materialMapper, TestLengthSpecCatalog.of("9米", "12米")).update(5L, request);
+
+        verify(materialRepository).save(entity);
     }
 
     @Test

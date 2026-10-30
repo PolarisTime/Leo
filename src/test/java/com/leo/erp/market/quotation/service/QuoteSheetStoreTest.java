@@ -27,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -64,9 +65,13 @@ class QuoteSheetStoreTest {
     @Mock
     private EntityManager entityManager;
 
+    /** 定尺主数据：未 stub 时 activePremiumMap() 返回 null → 走 QuoteDefaults 兜底(30)。 */
+    @Mock
+    private com.leo.erp.market.lengthpremium.service.LengthPremiumService lengthPremiumService;
+
     private QuoteSheetStore store() {
         return new QuoteSheetStore(repository, quoteProjectConfigRepository, snowflakeIdGenerator,
-                supplierQuery, projectQuery, purchaseOrderOptionQuery, entityManager);
+                supplierQuery, projectQuery, purchaseOrderOptionQuery, entityManager, lengthPremiumService);
     }
 
     @Test
@@ -83,6 +88,23 @@ class QuoteSheetStoreTest {
         assertThat(response.items().get(0).prices()).hasSize(1);
         assertThat(response.lengthPremium()).isEqualByComparingTo("30");
         verify(repository).saveAndFlush(any(QuoteSheet.class));
+    }
+
+    @Test
+    void create_usesDefaultLengthPremiumFromMasterDataWhenRequestOmitsIt() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L, 201L, 202L, 301L, 302L);
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        // 定尺主数据里 12米 的加价被改成 35: 表头默认值必须跟着主数据走, 而不是写死 30
+        when(lengthPremiumService.activePremiumMap()).thenReturn(Map.of("12米", 35));
+        QuoteSheetRequest base = request();
+        QuoteSheetRequest withoutPremium = new QuoteSheetRequest(
+                base.name(), base.projectId(), base.projectName(), base.orderDate(), base.refDate(), base.refPeriod(),
+                null, base.locked(), base.specQuantityLocked(), base.status(), base.remark(),
+                base.brands(), base.items());
+
+        QuoteSheetResponse response = store().create(withoutPremium);
+
+        assertThat(response.lengthPremium()).isEqualByComparingTo("35");
     }
 
     @Test

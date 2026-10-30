@@ -52,6 +52,9 @@ class PrintScriptServiceRecordAuthorizationTest {
     @Mock
     private PrintRuntimeProperties runtimeProperties;
 
+    @Mock
+    private PrintSpecLengthResolver specLengthResolver;
+
     private PrintScriptService printScriptService;
 
     @org.junit.jupiter.api.BeforeEach
@@ -59,7 +62,7 @@ class PrintScriptServiceRecordAuthorizationTest {
         PrintRecordAuthorization authorization = new PrintRecordAuthorization(permissionChecker);
         printScriptService = new PrintScriptService(
                 templateRepository, dataProvider, recordEnricher, layoutPreparer,
-                layoutLodopRenderer, recordAccessService, runtimeProperties, authorization);
+                layoutLodopRenderer, recordAccessService, runtimeProperties, authorization, specLengthResolver);
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.leo.erp.market.quotation.QuoteDefaults;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.market.lengthpremium.service.LengthPremiumService;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
 import com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository;
@@ -45,16 +46,27 @@ public class QuoteProjectConfigStore {
      */
     private final com.leo.erp.master.api.ProjectProcurementScopeQuery procurementScopeQuery;
 
+    /** 定尺主数据：项目级「定尺加价」的默认值取自 12米 当前维护的加价。 */
+    private final LengthPremiumService lengthPremiumService;
+
     public QuoteProjectConfigStore(QuoteProjectConfigRepository repository,
                                    SnowflakeIdGenerator snowflakeIdGenerator,
                                    EntityManager entityManager,
                                    com.leo.erp.master.api.ProjectQuery projectQuery,
-                                   com.leo.erp.master.api.ProjectProcurementScopeQuery procurementScopeQuery) {
+                                   com.leo.erp.master.api.ProjectProcurementScopeQuery procurementScopeQuery,
+                                   LengthPremiumService lengthPremiumService) {
         this.repository = repository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.entityManager = entityManager;
         this.projectQuery = projectQuery;
         this.procurementScopeQuery = procurementScopeQuery;
+        this.lengthPremiumService = lengthPremiumService;
+    }
+
+    /** 项目级定尺加价默认值（定尺主数据 12米 优先，取不到回退常量）。 */
+    private BigDecimal defaultLengthPremium() {
+        return QuoteDefaults.lengthPremiumOrDefault(
+                lengthPremiumService == null ? null : lengthPremiumService.activePremiumMap());
     }
 
     /** 项目取价数据源(MYSTEEL/STEELX)。 */
@@ -73,7 +85,7 @@ public class QuoteProjectConfigStore {
         return repository.findByProjectIdAndDeletedFlagFalse(projectId)
                 .map(this::toResponse)
                 .orElseGet(() -> new QuoteProjectConfigResponse(
-                        projectId, QuoteDefaults.LENGTH_PREMIUM, false, List.of(), List.of(), null, List.of(), 0L,
+                        projectId, defaultLengthPremium(), false, List.of(), List.of(), null, List.of(), 0L,
                         quoteSourceOf(projectId)));
     }
 
@@ -135,7 +147,7 @@ public class QuoteProjectConfigStore {
     /** 应用标量字段并返回是否发生实际变化(用于判定是否需要显式 FORCE_INCREMENT)。 */
     private boolean apply(QuoteProjectConfig entity, QuoteProjectConfigRequest request) {
         boolean changed = false;
-        BigDecimal lengthPremium = request.lengthPremium() == null ? QuoteDefaults.LENGTH_PREMIUM : request.lengthPremium();
+        BigDecimal lengthPremium = request.lengthPremium() == null ? defaultLengthPremium() : request.lengthPremium();
         // 数值列回读后标度可能不同(如 30 vs 30.00), 必须按数值比较, 否则会误判为已变更而跳过 FORCE_INCREMENT。
         changed |= differs(lengthPremium, entity.getLengthPremium());
         entity.setLengthPremium(lengthPremium);

@@ -35,6 +35,15 @@ public class MdLengthPremium extends AbstractAuditableEntity implements StatusAw
     @Column(name = "premium", nullable = false)
     private Integer premium;
 
+    /**
+     * 打印规格后缀（如 {@code *12}）：打印时追加到商品规格之后；空表示该定尺不追加。
+     *
+     * <p>打印解析器 {@code PrintSpecLengthResolver} 按此取值，取代了原先写死在 Java 常量里的
+     * 「12米 → *12」映射；维护口径仍是定尺加价这一处主数据。</p>
+     */
+    @Column(name = "spec_suffix", length = 16)
+    private String specSuffix;
+
     @Column(name = "sort_order", nullable = false)
     private Integer sortOrder;
 
@@ -67,6 +76,14 @@ public class MdLengthPremium extends AbstractAuditableEntity implements StatusAw
 
     public void setPremium(Integer premium) {
         this.premium = premium;
+    }
+
+    public String getSpecSuffix() {
+        return specSuffix;
+    }
+
+    public void setSpecSuffix(String specSuffix) {
+        this.specSuffix = specSuffix;
     }
 
     public Integer getSortOrder() {

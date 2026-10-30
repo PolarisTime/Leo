@@ -11,7 +11,8 @@ public record InitialSetupAccountRequest(
         String password,
         @Size(max = 64)
         String userName,
-        @Size(max = 32)
+        // 与 sys_user.mobile 的 varchar(20) 一致
+        @Size(max = 20)
         @Pattern(regexp = "^$|^1\\d{10}$", message = "手机号格式不正确")
         String mobile
 ) {

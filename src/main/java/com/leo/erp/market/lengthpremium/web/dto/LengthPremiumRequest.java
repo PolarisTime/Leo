@@ -30,6 +30,22 @@ public record LengthPremiumRequest(
         String status,
 
         @Size(max = 255, message = "备注不能超过255个字符")
-        String remark
+        String remark,
+
+        /**
+         * 打印规格后缀（如 {@code *12}）：打印时追加到商品规格之后；空表示该定尺不追加。
+         *
+         * <p><b>写入语义与 remark 等其它字段不同（有意为之）</b>：</p>
+         * <ul>
+         *   <li>新建：按传入值 trim 后落库，{@code null} 即「无后缀」；</li>
+         *   <li>更新：{@code null} = <b>保持原值</b>，空串 = <b>显式清空</b>。</li>
+         * </ul>
+         *
+         * <p>原因：更新是整体替换语义，旧版维护页（未发版 / 回滚场景）只改加价时不会带本字段，
+         * 若 {@code null} 按「清空」处理会静默抹掉已回填的 {@code *12}；空串是可表达的主动清空，
+         * 语义足够。不要为了「与其他字段统一」把这里改回 null=清空。</p>
+         */
+        @Size(max = 16, message = "打印规格后缀长度不能超过16")
+        String specSuffix
 ) {
 }

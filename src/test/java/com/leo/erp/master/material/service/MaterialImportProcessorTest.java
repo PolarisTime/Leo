@@ -1,6 +1,7 @@
 package com.leo.erp.master.material.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.material.domain.entity.Material;
@@ -52,7 +53,7 @@ class MaterialImportProcessorTest {
 
         processor = new MaterialImportProcessor(
                 materialRepository, new SnowflakeIdGenerator(1), identityService, historyRecorder,
-                categoryGuard);
+                categoryGuard, new MaterialLengthGuard(TestLengthSpecCatalog.empty()));
     }
 
     @Test
@@ -244,6 +245,62 @@ class MaterialImportProcessorTest {
         assertThat(preview.materialId()).isEqualTo(100L);
         verify(materialRepository, never()).save(any(Material.class));
         verify(historyRecorder, never()).record(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void importRowWithLengthMissingFromMasterDataFailsForThatRow() {
+        MaterialImportProcessor seeded = processorWithCatalog(TestLengthSpecCatalog.of("9米", "12米"));
+        when(materialRepository.findActiveIdentityCandidates(anyCollection(), anyCollection(), anyCollection()))
+                .thenReturn(List.of());
+
+        MaterialImportProcessor.ImportSession session = seeded.start(List.of(
+                new MaterialIdentityService.Identity("新品牌", "HRB400", "8", "10米")));
+
+        assertThatThrownBy(() -> seeded.importRow(
+                session, importData(null, "新品牌", "HRB400", "8", "10米", 100), 3))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
+                .hasMessage("长度「10米」不在定尺主数据中，请先在定尺加价维护中添加");
+        verify(materialRepository, never()).save(any(Material.class));
+    }
+
+    @Test
+    void importRowAllowsDashLength() {
+        MaterialImportProcessor seeded = processorWithCatalog(TestLengthSpecCatalog.of("9米", "12米"));
+        when(materialRepository.findActiveIdentityCandidates(anyCollection(), anyCollection(), anyCollection()))
+                .thenReturn(List.of());
+
+        MaterialImportProcessor.ImportSession session = seeded.start(List.of(
+                new MaterialIdentityService.Identity("新品牌", "HRB400", "8", "-")));
+        MaterialImportProcessor.ImportRowResult result = seeded.importRow(
+                session, importData(null, "新品牌", "HRB400", "8", "-", 100), 2);
+
+        assertThat(result.outcome()).isEqualTo(MaterialImportProcessor.ImportOutcome.CREATED);
+        assertThat(result.material().getLength()).isEqualTo("-");
+    }
+
+    @Test
+    void importRowKeepsExistingLengthEvenWhenLengthNoLongerInMasterData() {
+        // 定尺被禁用后老数据必须仍可维护: 长度未改动时跳过校验
+        MaterialImportProcessor seeded = processorWithCatalog(TestLengthSpecCatalog.of("9米", "12米"));
+        Material existing = dbMaterial(100L, "100", "中天", "HRB400E", "12", "8米", 1);
+        when(materialRepository.findActiveIdentityCandidates(anyCollection(), anyCollection(), anyCollection()))
+                .thenReturn(List.of(existing));
+
+        MaterialImportProcessor.ImportSession session = seeded.start(List.of(
+                new MaterialIdentityService.Identity("中天", "HRB400E", "12", "8米")));
+        MaterialImportProcessor.ImportRowResult result = seeded.importRow(
+                session, importData(null, "中天", "HRB400E", "12", "8米", 250), 2);
+
+        assertThat(result.outcome()).isEqualTo(MaterialImportProcessor.ImportOutcome.UPDATED);
+        assertThat(result.material().getLength()).isEqualTo("8米");
+    }
+
+    private MaterialImportProcessor processorWithCatalog(TestLengthSpecCatalog catalog) {
+        MaterialIdentityService identityService = new MaterialIdentityService(materialRepository);
+        return new MaterialImportProcessor(materialRepository, new SnowflakeIdGenerator(1), identityService,
+                historyRecorder, categoryGuard, new MaterialLengthGuard(catalog));
     }
 
     private MaterialImportProcessor.ImportSession startSession(String brand, String material, String spec, String length) {

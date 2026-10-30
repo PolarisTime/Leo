@@ -52,7 +52,12 @@ class LengthPremiumServiceTest {
     }
 
     private LengthPremiumRequest request(String lengthName, Integer premium, String status) {
-        return new LengthPremiumRequest(lengthName, premium, 10, status, null);
+        return new LengthPremiumRequest(lengthName, premium, 10, status, null, null);
+    }
+
+    private LengthPremiumRequest requestWithSuffix(String lengthName, Integer premium, String status,
+                                                   String specSuffix) {
+        return new LengthPremiumRequest(lengthName, premium, 10, status, null, specSuffix);
     }
 
     // ---------- create ----------
@@ -102,10 +107,82 @@ class LengthPremiumServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         LengthPremiumResponse response = service.create(
-                new LengthPremiumRequest("  12米  ", 30, 1, StatusConstants.NORMAL, "  备注  "));
+                new LengthPremiumRequest("  12米  ", 30, 1, StatusConstants.NORMAL, "  备注  ", null));
 
         assertThat(response.lengthName()).isEqualTo("12米");
         assertThat(response.remark()).isEqualTo("备注");
+    }
+
+    // ---------- 打印规格后缀(specSuffix) ----------
+
+    @Test
+    void create_shouldPersistTrimmedSpecSuffixAndEchoIt() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(9L);
+        when(repository.saveAndFlush(any(MdLengthPremium.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        LengthPremiumResponse response = service.create(
+                requestWithSuffix("12米", 30, StatusConstants.NORMAL, "  *12  "));
+
+        assertThat(response.specSuffix()).isEqualTo("*12");
+    }
+
+    @Test
+    void create_shouldNormalizeBlankSpecSuffixToNull() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(9L);
+        when(repository.saveAndFlush(any(MdLengthPremium.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        LengthPremiumResponse response = service.create(
+                requestWithSuffix("9米", 0, StatusConstants.NORMAL, "   "));
+
+        assertThat(response.specSuffix()).isNull();
+    }
+
+    @Test
+    void update_shouldChangeSpecSuffix() {
+        when(repository.findByIdAndDeletedFlagFalse(7L))
+                .thenReturn(Optional.of(rule(7L, "12米", 30, StatusConstants.NORMAL)));
+        when(repository.existsByLengthNameAndDeletedFlagFalseAndIdNot("12米", 7L)).thenReturn(false);
+        when(repository.saveAndFlush(any(MdLengthPremium.class)))
+                .thenAnswer((invocation) -> invocation.getArgument(0));
+
+        LengthPremiumResponse response = service.update(7L,
+                requestWithSuffix("12米", 30, StatusConstants.NORMAL, "*12m"));
+
+        assertThat(response.specSuffix()).isEqualTo("*12m");
+    }
+
+    @Test
+    void update_shouldClearSpecSuffixWhenBlank() {
+        // 显式清空: 维护页提交空串 → spec_suffix 置 null(打印时不再追加后缀)
+        MdLengthPremium entity = rule(7L, "12米", 30, StatusConstants.NORMAL);
+        entity.setSpecSuffix("*12");
+        when(repository.findByIdAndDeletedFlagFalse(7L)).thenReturn(Optional.of(entity));
+        when(repository.existsByLengthNameAndDeletedFlagFalseAndIdNot("12米", 7L)).thenReturn(false);
+        when(repository.saveAndFlush(any(MdLengthPremium.class)))
+                .thenAnswer((invocation) -> invocation.getArgument(0));
+
+        LengthPremiumResponse response = service.update(7L,
+                requestWithSuffix("12米", 30, StatusConstants.NORMAL, ""));
+
+        assertThat(response.specSuffix()).isNull();
+    }
+
+    @Test
+    void update_shouldKeepSpecSuffixWhenNull() {
+        // 与 remark 刻意不同: 旧版维护页不带本字段(null) 时必须保持原后缀, 不能静默抹掉回填的 *12
+        MdLengthPremium entity = rule(7L, "12米", 30, StatusConstants.NORMAL);
+        entity.setSpecSuffix("*12");
+        when(repository.findByIdAndDeletedFlagFalse(7L)).thenReturn(Optional.of(entity));
+        when(repository.existsByLengthNameAndDeletedFlagFalseAndIdNot("12米", 7L)).thenReturn(false);
+        when(repository.saveAndFlush(any(MdLengthPremium.class)))
+                .thenAnswer((invocation) -> invocation.getArgument(0));
+
+        LengthPremiumResponse response = service.update(7L, request("12米", 45, StatusConstants.NORMAL));
+
+        assertThat(response.premium()).isEqualTo(45);
+        assertThat(response.specSuffix()).isEqualTo("*12");
     }
 
     @Test
@@ -176,6 +253,7 @@ class LengthPremiumServiceTest {
     void detail_shouldMapAllFields() {
         MdLengthPremium entity = rule(7L, "12米", 30, StatusConstants.DISABLED);
         entity.setRemark("备注");
+        entity.setSpecSuffix("*12");
         when(repository.findByIdAndDeletedFlagFalse(7L)).thenReturn(Optional.of(entity));
 
         LengthPremiumResponse response = service.detail(7L);
@@ -185,6 +263,7 @@ class LengthPremiumServiceTest {
         assertThat(response.premium()).isEqualTo(30);
         assertThat(response.status()).isEqualTo(StatusConstants.DISABLED);
         assertThat(response.remark()).isEqualTo("备注");
+        assertThat(response.specSuffix()).isEqualTo("*12");
     }
 
     // ---------- activePremiumMap ----------
@@ -218,5 +297,54 @@ class LengthPremiumServiceTest {
                 .thenReturn(List.of(rule(1L, "12米", 30, StatusConstants.NORMAL), rule(2L, "9米", 0, StatusConstants.NORMAL)));
 
         assertThat(service.activePremiumMap()).containsKeys("12米", "9米");
+    }
+
+    // ---------- activeLengthNames / activeSpecSuffixMap ----------
+
+    private MdLengthPremium ruleWithSuffix(long id, String lengthName, Integer premium, String suffix) {
+        MdLengthPremium entity = rule(id, lengthName, premium == null ? 0 : premium, StatusConstants.NORMAL);
+        entity.setSpecSuffix(suffix);
+        return entity;
+    }
+
+    @Test
+    void activeLengthNames_shouldReturnActiveNamesInMaintainedOrder() {
+        // 与 V202 种子一致: 9米 排在 12米 之前
+        when(repository.findByStatusAndDeletedFlagFalseOrderBySortOrderAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(
+                        ruleWithSuffix(2L, "9米", 0, null),
+                        ruleWithSuffix(1L, "12米", 30, "*12")));
+
+        assertThat(service.activeLengthNames()).containsExactly("9米", "12米");
+    }
+
+    @Test
+    void activeLengthNames_shouldBeEmptyWhenTableEmpty() {
+        // 空集合表示定尺主数据未维护, 商品长度校验必须据此放行而不是拦截
+        when(repository.findByStatusAndDeletedFlagFalseOrderBySortOrderAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of());
+
+        assertThat(service.activeLengthNames()).isEmpty();
+    }
+
+    @Test
+    void activeSpecSuffixMap_shouldOnlyContainConfiguredSuffixes() {
+        when(repository.findByStatusAndDeletedFlagFalseOrderBySortOrderAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(
+                        ruleWithSuffix(2L, "9米", 0, null),
+                        ruleWithSuffix(3L, "10米", 10, "  "),
+                        ruleWithSuffix(1L, "12米", 30, " *12 ")));
+
+        assertThat(service.activeSpecSuffixMap()).containsExactly(Map.entry("12米", "*12"));
+    }
+
+    @Test
+    void activeSpecSuffixMap_shouldBeEmptyWhenNoSuffixConfigured() {
+        when(repository.findByStatusAndDeletedFlagFalseOrderBySortOrderAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(ruleWithSuffix(1L, "12米", 30, null)));
+
+        assertThat(service.activeSpecSuffixMap()).isEmpty();
+        // 但定尺名称仍在, 打印解析据此判断「主数据已维护、只是没有后缀」
+        assertThat(service.activeLengthNames()).isNotEmpty();
     }
 }

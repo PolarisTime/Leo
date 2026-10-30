@@ -26,17 +26,20 @@ class MaterialImportProcessor {
     private final MaterialIdentityService identityService;
     private final MaterialHistoryRecorder historyRecorder;
     private final MaterialCategoryGuard categoryGuard;
+    private final MaterialLengthGuard lengthGuard;
 
     MaterialImportProcessor(MaterialRepository materialRepository,
                             SnowflakeIdGenerator idGenerator,
                             MaterialIdentityService identityService,
                             MaterialHistoryRecorder historyRecorder,
-                            MaterialCategoryGuard categoryGuard) {
+                            MaterialCategoryGuard categoryGuard,
+                            MaterialLengthGuard lengthGuard) {
         this.materialRepository = materialRepository;
         this.idGenerator = idGenerator;
         this.identityService = identityService;
         this.historyRecorder = historyRecorder;
         this.categoryGuard = categoryGuard;
+        this.lengthGuard = lengthGuard;
     }
 
     ImportSession start(Collection<MaterialIdentityService.Identity> identities) {
@@ -135,6 +138,9 @@ class MaterialImportProcessor {
      * 既不会把禁用商品改回正常，也不会把正常商品改成禁用。
      */
     private void apply(Material material, MaterialImportData data) {
+        // 长度校验与手工保存同一口径；这里是逐行调用, 抛出的 VALIDATION_ERROR 由导入服务
+        // 捕获成「该行失败」而不是整体异常(见 MaterialCsvImportService.importRow)。
+        lengthGuard.validate(data.materialType(), data.length(), material.getLength());
         material.setMaterialCode(resolveMaterialCode(material.getMaterialCode(), material.getId()));
         material.setBrand(data.brand());
         material.setMaterial(data.material());

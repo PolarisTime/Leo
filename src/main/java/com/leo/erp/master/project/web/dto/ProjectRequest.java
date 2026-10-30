@@ -12,11 +12,16 @@ import java.util.List;
 
 public record ProjectRequest(
         @NotBlank(message = "项目编码不能为空")
+        @Size(max = 64, message = "项目编码长度不能超过64")
         String projectCode,
         @NotBlank(message = "项目名称不能为空")
+        @Size(max = 200, message = "项目名称长度不能超过200")
         String projectName,
+        @Size(max = 100, message = "项目简称长度不能超过100")
         String projectNameAbbr,
+        @Size(max = 255, message = "项目地址长度不能超过255")
         String projectAddress,
+        @Size(max = 32, message = "项目经理长度不能超过32")
         String projectManager,
         @Positive(message = "客户ID必须为正整数")
         @SnowflakeId Long customerId,
@@ -24,8 +29,10 @@ public record ProjectRequest(
         String customerCode,
         @Positive(message = "结算主体ID必须为正整数")
         @SnowflakeId Long settlementCompanyId,
+        @Size(max = 128, message = "结算主体名称长度不能超过128")
         String settlementCompanyName,
         @NotBlank(message = ValidationMessages.STATUS_REQUIRED)
+        @Size(max = 16, message = "状态长度不能超过16")
         String status,
         /** 网价浮动方向: ADD加价/SUBTRACT减价; 空表示不浮动。 */
         String priceFloatMode,
@@ -35,6 +42,7 @@ public record ProjectRequest(
         /** 默认取价数据源: MYSTEEL/STEELX。 */
         String quoteSource,
         /** 默认取价地区(西本城市中文名)。 */
+        @Size(max = 32, message = "取价地区长度不能超过32")
         String quoteRegion,
         /** 允许的品牌列表; 空列表或 null 表示不限制。 */
         @Size(max = 100, message = "允许品牌最多 100 项")
@@ -60,6 +68,7 @@ public record ProjectRequest(
         String pricePeriodPolicy,
         /** 固定取价时段(上午/中午/下午), 仅 FIXED 时必填。 */
         String pricePeriodFixed,
+        @Size(max = 255, message = "备注长度不能超过255")
         String remark
 ) {
     public ProjectRequest(String projectCode,

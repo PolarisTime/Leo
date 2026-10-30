@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.market.lengthpremium.service.LengthPremiumService;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
@@ -73,6 +74,8 @@ public class QuoteSheetStore {
     private final ProjectQuery projectQuery;
     private final PurchaseOrderOptionQuery purchaseOrderOptionQuery;
     private final EntityManager entityManager;
+    /** 定尺主数据：表头「定尺加价」未显式提供时取 12米 当前维护的加价。 */
+    private final LengthPremiumService lengthPremiumService;
 
     public QuoteSheetStore(QuoteSheetRepository repository,
                            QuoteProjectConfigRepository quoteProjectConfigRepository,
@@ -80,7 +83,8 @@ public class QuoteSheetStore {
                            SupplierQuery supplierQuery,
                            ProjectQuery projectQuery,
                            PurchaseOrderOptionQuery purchaseOrderOptionQuery,
-                           EntityManager entityManager) {
+                           EntityManager entityManager,
+                           LengthPremiumService lengthPremiumService) {
         this.repository = repository;
         this.quoteProjectConfigRepository = quoteProjectConfigRepository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
@@ -88,6 +92,13 @@ public class QuoteSheetStore {
         this.projectQuery = projectQuery;
         this.purchaseOrderOptionQuery = purchaseOrderOptionQuery;
         this.entityManager = entityManager;
+        this.lengthPremiumService = lengthPremiumService;
+    }
+
+    /** 表头定尺加价默认值（定尺主数据 12米 优先，取不到回退常量）。 */
+    private BigDecimal defaultLengthPremium() {
+        return QuoteDefaults.lengthPremiumOrDefault(
+                lengthPremiumService == null ? null : lengthPremiumService.activePremiumMap());
     }
 
     /*
@@ -762,7 +773,7 @@ public class QuoteSheetStore {
         entity.setRefDate(request.refDate());
         changed |= !Objects.equals(request.refPeriod(), entity.getRefPeriod());
         entity.setRefPeriod(request.refPeriod());
-        BigDecimal lengthPremium = request.lengthPremium() == null ? QuoteDefaults.LENGTH_PREMIUM : request.lengthPremium();
+        BigDecimal lengthPremium = request.lengthPremium() == null ? defaultLengthPremium() : request.lengthPremium();
         // 数值列回读后标度可能不同(如 30 vs 30.00), 必须按数值比较, 否则会误判为已变更而跳过 FORCE_INCREMENT。
         changed |= differs(lengthPremium, entity.getLengthPremium());
         entity.setLengthPremium(lengthPremium);

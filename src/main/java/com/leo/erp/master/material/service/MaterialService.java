@@ -54,6 +54,7 @@ public class MaterialService {
     private final MaterialHistoryRecorder materialHistoryRecorder;
     private final MaterialDictionaryCache materialDictionaryCache;
     private final MaterialCategoryGuard materialCategoryGuard;
+    private final MaterialLengthGuard materialLengthGuard;
 
     public MaterialService(MaterialRepository materialRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
@@ -63,7 +64,8 @@ public class MaterialService {
                            MaterialIdentityService identityService,
                            MaterialHistoryRecorder materialHistoryRecorder,
                            MaterialDictionaryCache materialDictionaryCache,
-                           MaterialCategoryGuard materialCategoryGuard) {
+                           MaterialCategoryGuard materialCategoryGuard,
+                           MaterialLengthGuard materialLengthGuard) {
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.materialRepository = materialRepository;
         this.materialMapper = materialMapper;
@@ -73,6 +75,7 @@ public class MaterialService {
         this.materialHistoryRecorder = materialHistoryRecorder;
         this.materialDictionaryCache = materialDictionaryCache;
         this.materialCategoryGuard = materialCategoryGuard;
+        this.materialLengthGuard = materialLengthGuard;
     }
 
     @Transactional(readOnly = true)
@@ -194,6 +197,8 @@ public class MaterialService {
         codeIssuanceService.validate(CODE_MODULE_KEY, request.materialCode());
         validateCreateStatus(request.status());
         identityService.ensureUnique(null, identity(request));
+        // 长度必须命中定尺主数据: 否则行情加价/打印后缀都匹配不上(仅实体商品)
+        materialLengthGuard.validate(request.materialType(), request.length(), null);
     }
 
     /**
@@ -214,6 +219,8 @@ public class MaterialService {
 
     private void validateUpdate(Material entity, MaterialRequest request) {
         identityService.ensureUnique(entity.getId(), identity(request));
+        // 长度未改动时跳过校验: 定尺被禁用后老商品仍要能改备注/其它字段
+        materialLengthGuard.validate(request.materialType(), request.length(), entity.getLength());
     }
 
     private void apply(Material entity, MaterialRequest request) {

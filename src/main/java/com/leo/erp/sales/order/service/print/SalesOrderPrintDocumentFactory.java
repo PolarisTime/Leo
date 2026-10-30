@@ -5,7 +5,7 @@ import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderPrintXlsxOptions;
 import com.leo.erp.system.printtemplate.service.PrintItemOptions;
 import com.leo.erp.system.printtemplate.service.PrintItemSplitter;
-import com.leo.erp.system.printtemplate.service.PrintSpecLengthRule;
+import com.leo.erp.system.printtemplate.service.PrintSpecLengthResolver;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -19,6 +19,13 @@ import java.util.Set;
 
 @Component
 public class SalesOrderPrintDocumentFactory {
+
+    /** 规格后缀来自定尺主数据（见 PrintSpecLengthResolver），不再写死 12米。 */
+    private final PrintSpecLengthResolver specLengthResolver;
+
+    public SalesOrderPrintDocumentFactory(PrintSpecLengthResolver specLengthResolver) {
+        this.specLengthResolver = specLengthResolver;
+    }
 
     public SalesOrderPrintDocument create(SalesOrder order, SalesOrderPrintXlsxOptions options, int rowsPerPage) {
         SalesOrderPrintXlsxOptions safeOptions = options == null ? SalesOrderPrintXlsxOptions.defaults() : options;
@@ -49,7 +56,7 @@ public class SalesOrderPrintDocumentFactory {
                 brand(item, options.itemOptions()),
                 item.getCategory(),
                 item.getMaterial(),
-                PrintSpecLengthRule.apply(item.getSpec(), item.getLength()),
+                specLengthResolver.apply(item.getSpec(), item.getLength()),
                 item.getQuantity(),
                 item.getPieceWeightTon(),
                 item.getWeightTon(),

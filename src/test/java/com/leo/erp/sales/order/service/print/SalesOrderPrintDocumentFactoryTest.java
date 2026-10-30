@@ -1,13 +1,16 @@
 package com.leo.erp.sales.order.service.print;
 
+import com.leo.erp.common.api.LengthSpecCatalog;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderPrintXlsxOptions;
+import com.leo.erp.system.printtemplate.service.PrintSpecLengthResolver;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -16,7 +19,22 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class SalesOrderPrintDocumentFactoryTest {
 
-    private final SalesOrderPrintDocumentFactory factory = new SalesOrderPrintDocumentFactory();
+    private final SalesOrderPrintDocumentFactory factory = new SalesOrderPrintDocumentFactory(
+            new PrintSpecLengthResolver(new StubLengthSpecCatalog()));
+
+    /** 打印后缀来自定尺主数据：12米 → *12，9米 无后缀（与 V202 种子数据一致）。 */
+    private static final class StubLengthSpecCatalog implements LengthSpecCatalog {
+
+        @Override
+        public Set<String> activeLengthNames() {
+            return Set.of("9米", "12米");
+        }
+
+        @Override
+        public Map<String, String> activeSpecSuffixMap() {
+            return Map.of("12米", "*12");
+        }
+    }
 
     private SalesOrderItem item(String spec, String length) {
         SalesOrderItem item = new SalesOrderItem();

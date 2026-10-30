@@ -47,6 +47,9 @@ class PrintScriptServicePageItemsTest {
     @Mock
     private PrintRecordAuthorization recordAuthorization;
 
+    @Mock
+    private PrintSpecLengthResolver specLengthResolver;
+
     @InjectMocks
     private PrintScriptService service;
 

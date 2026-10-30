@@ -1,5 +1,6 @@
 package com.leo.erp.market.lengthpremium.service;
 
+import com.leo.erp.common.api.LengthSpecCatalog;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
@@ -21,8 +22,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 定尺加价维护服务。
@@ -30,9 +33,12 @@ import java.util.Map;
  * <p>把「12米 +30 元/吨」这类规则从 application.yml 与 Java 默认值的重复定义搬到表里，
  * 调整加价不再需要改代码重启。{@link #activePremiumMap()} 供行情匹配热路径使用，带缓存；
  * 表为空时返回空 Map，由调用方回退到配置兜底，保证「表未初始化」时行为与改造前一致。</p>
+ *
+ * <p>同时实现跨模块只读端口 {@link LengthSpecCatalog}：定尺名称与打印规格后缀（如
+ * {@code 12米 → *12}）供商品长度校验与打印解析使用，避免消费方直接依赖本模块服务而形成模块环。</p>
  */
 @Service
-public class LengthPremiumService {
+public class LengthPremiumService implements LengthSpecCatalog {
 
     private static final int MAX_LENGTH_NAME = 32;
 
@@ -82,6 +88,7 @@ public class LengthPremiumService {
         entity.setSortOrder(request.sortOrder());
         STATUS_GUARD.writeStatus(entity, status);
         entity.setRemark(trimToNull(request.remark()));
+        entity.setSpecSuffix(trimToNull(request.specSuffix()));
         MdLengthPremium saved = repository.saveAndFlush(entity);
         operationLogger.created(saved, entityId);
         return toResponse(saved);
@@ -102,6 +109,12 @@ public class LengthPremiumService {
         entity.setSortOrder(request.sortOrder());
         STATUS_GUARD.writeStatus(entity, status);
         entity.setRemark(trimToNull(request.remark()));
+        // specSuffix 与 remark 的约定刻意不同: null = 保持原值, 空串 = 显式清空。
+        // 维护页 update 是整体替换, 旧版前端(未发版/回滚)只改加价时不会带本字段(null),
+        // 若按 null=清空处理会静默抹掉已回填的 '*12'; 空串足以表达「主动清空」。
+        if (request.specSuffix() != null) {
+            entity.setSpecSuffix(trimToNull(request.specSuffix()));
+        }
         MdLengthPremium saved = repository.saveAndFlush(entity);
         operationLogger.updated(saved, id);
         return toResponse(saved);
@@ -130,6 +143,48 @@ public class LengthPremiumService {
         for (MdLengthPremium row : rows) {
             if (row.getPremium() != null) {
                 mapping.putIfAbsent(row.getLengthName(), row.getPremium());
+            }
+        }
+        return mapping;
+    }
+
+    /**
+     * 正常状态的定尺名称集合（供商品资料长度校验）。
+     *
+     * <p>空集合表示定尺主数据尚未维护：调用方必须放行而不是拦截全部商品，否则升级到本版本后
+     * 老数据将无法再编辑。</p>
+     */
+    @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_OPTIONS, key = "'length-premium:active-names'")
+    @Override
+    public Set<String> activeLengthNames() {
+        List<MdLengthPremium> rows = repository
+                .findByStatusAndDeletedFlagFalseOrderBySortOrderAsc(StatusConstants.NORMAL);
+        Set<String> names = new LinkedHashSet<>();
+        for (MdLengthPremium row : rows) {
+            if (row.getLengthName() != null && !row.getLengthName().isBlank()) {
+                names.add(row.getLengthName());
+            }
+        }
+        return names;
+    }
+
+    /**
+     * 正常状态的打印规格后缀映射：定尺名称 → 后缀（如 {@code 12米 → *12}），按 sortOrder 排序。
+     *
+     * <p>只为「显式配置了后缀」的定尺返回值；未配置/空串表示打印时不追加内容，不是缺失。</p>
+     */
+    @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_OPTIONS, key = "'length-premium:active-suffixes'")
+    @Override
+    public Map<String, String> activeSpecSuffixMap() {
+        List<MdLengthPremium> rows = repository
+                .findByStatusAndDeletedFlagFalseOrderBySortOrderAsc(StatusConstants.NORMAL);
+        Map<String, String> mapping = new LinkedHashMap<>();
+        for (MdLengthPremium row : rows) {
+            String suffix = trimToNull(row.getSpecSuffix());
+            if (suffix != null) {
+                mapping.putIfAbsent(row.getLengthName(), suffix);
             }
         }
         return mapping;
@@ -184,6 +239,7 @@ public class LengthPremiumService {
                 entity.getSortOrder(),
                 entity.getStatus(),
                 entity.getRemark(),
+                entity.getSpecSuffix(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );

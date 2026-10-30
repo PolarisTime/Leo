@@ -62,9 +62,13 @@ class QuoteSheetValidationExtremeTest {
     @Mock
     private EntityManager entityManager;
 
+    /** 定尺主数据：未 stub 时走 QuoteDefaults 兜底(30), 与测试无关。 */
+    @Mock
+    private com.leo.erp.market.lengthpremium.service.LengthPremiumService lengthPremiumService;
+
     private QuoteSheetStore store() {
         return new QuoteSheetStore(repository, quoteProjectConfigRepository, snowflakeIdGenerator,
-                supplierQuery, projectQuery, purchaseOrderOptionQuery, entityManager);
+                supplierQuery, projectQuery, purchaseOrderOptionQuery, entityManager, lengthPremiumService);
     }
 
     /**
