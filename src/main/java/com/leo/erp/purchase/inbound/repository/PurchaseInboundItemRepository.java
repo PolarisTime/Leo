@@ -2,6 +2,7 @@ package com.leo.erp.purchase.inbound.repository;
 
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -31,14 +32,29 @@ public interface PurchaseInboundItemRepository extends JpaRepository<PurchaseInb
             @Param("sourcePurchaseOrderItemIds") Collection<Long> sourcePurchaseOrderItemIds
     );
 
-    @Query("""
-            select item
-            from PurchaseInboundItem item
-            join fetch item.purchaseInbound inbound
-            where item.sourcePurchaseOrderItemId in :sourcePurchaseOrderItemIds
-            """)
-    List<PurchaseInboundItem> findAllBySourcePurchaseOrderItemIds(
-            @Param("sourcePurchaseOrderItemIds") Collection<Long> sourcePurchaseOrderItemIds
+    /**
+     * 解除「已软删除的采购入库单」对采购订单明细的来源引用。
+     *
+     * <p>采购入库单删除是软删除，明细行仍保留（审计需要），其 `source_purchase_order_item_id`
+     * 通过 RESTRICT 外键物理锁定来源订单明细。已删除的单据在业务上不应再阻止订单修改，
+     * 因此订单行被移除前先把这些残留引用置空，随后订单明细的物理删除才不会被外键拒绝。</p>
+     *
+     * <p>只处理 `deleted_flag = true` 的入库单：仍是活跃入库单的引用由业务守卫拦截，
+     * 不会走到这里，保留 RESTRICT 作为最后一道防线。</p>
+     *
+     * @return 解除引用的残留明细行数（0 表示没有残留）
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            update po_purchase_inbound_item item
+               set source_purchase_order_item_id = null
+              from po_purchase_inbound inbound
+             where inbound.id = item.inbound_id
+               and inbound.deleted_flag = true
+               and item.source_purchase_order_item_id in (:sourceItemIds)
+            """, nativeQuery = true)
+    int detachSourceReferencesOfDeletedInbounds(
+            @Param("sourceItemIds") Collection<Long> sourceItemIds
     );
 
     @Query("""

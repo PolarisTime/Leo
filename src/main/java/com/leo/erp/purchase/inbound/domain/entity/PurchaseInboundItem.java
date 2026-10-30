@@ -46,6 +46,13 @@ public class PurchaseInboundItem {
     @Column(name = "unit", nullable = false, length = 8)
     private String unit;
 
+    /**
+     * 来源采购订单明细 ID。
+     *
+     * <p>活跃入库单必须非空（RESTRICT 外键锁定来源行）；已软删除的入库单在来源订单行被
+     * 移除时该引用会被置空（见 V203 与 {@code PurchaseInboundItemRepository
+     * .detachSourceReferencesOfDeletedInbounds}），表示「来源行已删除」。</p>
+     */
     @Column(name = "source_purchase_order_item_id")
     private Long sourcePurchaseOrderItemId;
 
