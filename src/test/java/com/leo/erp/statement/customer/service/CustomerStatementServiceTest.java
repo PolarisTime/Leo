@@ -288,6 +288,17 @@ class CustomerStatementServiceTest {
     }
 
     @Test
+    void afterDelete_shouldDetachSourceReferencesOfDeletedStatement() {
+        CustomerStatement entity = new CustomerStatement();
+        entity.setId(5L);
+
+        service.afterDelete(entity);
+
+        // 软删除后解绑本单明细的来源销售订单明细引用(与 V204 同口径)
+        verify(repository).detachSourceReferencesOfDeletedStatement(5L);
+    }
+
+    @Test
     void beforeStatusUpdate_shouldGuardOnReverseConfirmation() {
         CustomerStatement entity = new CustomerStatement();
         entity.setId(5L);

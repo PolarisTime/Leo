@@ -16,6 +16,7 @@ import com.leo.erp.common.transaction.OptimisticLockRetryExecutor;
 import com.leo.erp.sales.order.config.SalesOrderRetryProperties;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
+import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
@@ -51,6 +52,7 @@ public class SalesOrderService {
 
     private final SnowflakeIdGenerator idGenerator;
     private final SalesOrderRepository repository;
+    private final SalesOrderItemRepository salesOrderItemRepository;
     private final DocumentChargeItemService documentChargeItemService;
     private final SalesOrderQueryService queryService;
     private final SalesOrderMutationGuardService mutationGuardService;
@@ -70,9 +72,11 @@ public class SalesOrderService {
                              PermissionChecker permissionChecker,
                              SalesOrderPriceRuleService priceRuleService,
                              TransactionTemplate transactionTemplate,
-                             SalesOrderRetryProperties retryProperties) {
+                             SalesOrderRetryProperties retryProperties,
+                             SalesOrderItemRepository salesOrderItemRepository) {
         this.idGenerator = idGenerator;
         this.repository = repository;
+        this.salesOrderItemRepository = salesOrderItemRepository;
         this.documentChargeItemService = documentChargeItemService;
         this.queryService = queryService;
         this.mutationGuardService = mutationGuardService;
@@ -507,6 +511,10 @@ public class SalesOrderService {
     }
 
     protected void afterDelete(SalesOrder entity) {
+        // 软删除后解绑本单明细的两个上游来源引用(与 V203/V204 同口径): 已删除的销售订单
+        // 不应再通过 RESTRICT 外键阻止采购订单/采购入库改单。只写本模块的表。
+        int detached = salesOrderItemRepository.detachSourceReferencesOfDeletedOrder(entity.getId());
+        log.debug("detached source references of deleted sales order: id={}, rows={}", entity.getId(), detached);
         documentChargeItemService.removeAll(MODULE_KEY, entity.getId());
         workflowService.publishDeleted(entity);
     }

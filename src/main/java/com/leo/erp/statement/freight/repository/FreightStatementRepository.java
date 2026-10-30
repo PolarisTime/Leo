@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -44,6 +45,24 @@ public interface FreightStatementRepository extends JpaRepository<FreightStateme
 
     @EntityGraph(attributePaths = "items")
     Optional<FreightStatement> findByIdAndDeletedFlagFalse(Long id);
+
+    /**
+     * 物流对账单软删除时解除本单明细对来源物流单明细的引用（与 V203/V204 同口径）。
+     *
+     * <p>删除是软删除（只置 {@code deleted_flag}，明细行保留），而明细上的
+     * {@code source_freight_bill_item_id} 会物理锁定上游物流单明细；若不解绑，
+     * 「已删除的对账单」会继续阻止物流单改单。只解绑本单（按 {@code statement_id}）。
+     * 明细表在本模块没有独立仓储，故 native 更新挂在对账单仓储上。</p>
+     *
+     * @return 受影响行数，仅用于日志；0 行不是错误
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            update st_freight_statement_item
+               set source_freight_bill_item_id = null
+             where statement_id = :statementId
+            """, nativeQuery = true)
+    int detachSourceReferencesOfDeletedStatement(@Param("statementId") Long statementId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select statement from FreightStatement statement "

@@ -62,6 +62,9 @@ class SalesOutboundServiceTest {
     @Mock
     private ProjectQuery projectQuery;
 
+    @Mock
+    private com.leo.erp.sales.outbound.repository.SalesOutboundItemRepository salesOutboundItemRepository;
+
     @InjectMocks
     private SalesOutboundService service;
 
@@ -152,12 +155,16 @@ class SalesOutboundServiceTest {
     }
 
     @Test
-    void afterDelete_shouldDelegatePublish() {
+    void afterDelete_shouldDetachSourceReferencesThenPublish() {
         SalesOutbound outbound = entity(StatusConstants.DRAFT);
 
         service.afterDelete(outbound);
 
-        verify(workflowService).publishDeleted(outbound);
+        // 软删除后解绑本单明细的来源销售订单明细引用(与 V204 同口径)
+        verify(salesOutboundItemRepository).detachSourceReferencesOfDeletedOutbound(outbound.getId());
+        InOrder inOrder = inOrder(salesOutboundItemRepository, workflowService);
+        inOrder.verify(salesOutboundItemRepository).detachSourceReferencesOfDeletedOutbound(outbound.getId());
+        inOrder.verify(workflowService).publishDeleted(outbound);
     }
 
     @Test

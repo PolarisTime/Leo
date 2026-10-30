@@ -24,6 +24,7 @@ import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.domain.enums.FreightSettlementMode;
 import com.leo.erp.logistics.bill.mapper.FreightBillMapper;
+import com.leo.erp.logistics.bill.repository.FreightBillItemRepository;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemResponse;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
@@ -66,6 +67,7 @@ public class FreightBillService {
     private final VehicleQuery vehicleQuery;
     private final BusinessOperationEventPublisher businessOperationEventPublisher;
     private final DocumentChargeItemService documentChargeItemService;
+    private final FreightBillItemRepository freightBillItemRepository;
 
     public FreightBillService(FreightBillRepository repository,
                               SnowflakeIdGenerator idGenerator,
@@ -77,7 +79,8 @@ public class FreightBillService {
                               FreightBillDownstreamMutationGuard downstreamMutationGuard,
                               VehicleQuery vehicleQuery,
                               BusinessOperationEventPublisher businessOperationEventPublisher,
-                              DocumentChargeItemService documentChargeItemService) {
+                              DocumentChargeItemService documentChargeItemService,
+                              FreightBillItemRepository freightBillItemRepository) {
         this.idGenerator = idGenerator;
         this.repository = repository;
         this.mapper = mapper;
@@ -89,6 +92,7 @@ public class FreightBillService {
         this.vehicleQuery = vehicleQuery;
         this.businessOperationEventPublisher = businessOperationEventPublisher;
         this.documentChargeItemService = documentChargeItemService;
+        this.freightBillItemRepository = freightBillItemRepository;
     }
 
     @Transactional(readOnly = true)
@@ -410,6 +414,10 @@ public class FreightBillService {
 
     protected void afterDelete(FreightBill entity) {
         documentChargeItemService.removeAll(MODULE_KEY, entity.getId());
+        // 软删除后解绑本单明细的来源销售订单明细引用(与 V203/V204 同口径): 已删除的物流单
+        // 不应再通过外键阻止销售订单改单。只写本模块的表。
+        int detached = freightBillItemRepository.detachSourceReferencesOfDeletedBill(entity.getId());
+        log.debug("detached source references of deleted freight bill: id={}, rows={}", entity.getId(), detached);
         entity.getSourceOrders().forEach(source -> source.setActiveFlag(false));
         publishEvent(entity, "FREIGHT_BILL_DELETED", "删除", "删除物流单 " + entity.getBillNo());
     }

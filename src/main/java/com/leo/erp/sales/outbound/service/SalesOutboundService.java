@@ -16,6 +16,7 @@ import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.master.api.ProjectNameAbbrResolver;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
+import com.leo.erp.sales.outbound.repository.SalesOutboundItemRepository;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundResponse;
@@ -47,6 +48,7 @@ public class SalesOutboundService {
     private final SalesOutboundDeleteRollbackService deleteRollbackService;
     private final SalesOutboundImportedUpdatePolicy importedUpdatePolicy;
     private final ProjectQuery projectQuery;
+    private final SalesOutboundItemRepository salesOutboundItemRepository;
 
     @Autowired
     public SalesOutboundService(SalesOutboundRepository repository,
@@ -54,7 +56,8 @@ public class SalesOutboundService {
                                 SalesOutboundResponseAssembler responseAssembler,
                                 SalesOutboundWorkflowService workflowService,
                                 SalesOutboundDeleteRollbackService deleteRollbackService,
-                                ProjectQuery projectQuery) {
+                                ProjectQuery projectQuery,
+                                SalesOutboundItemRepository salesOutboundItemRepository) {
         this.idGenerator = idGenerator;
         this.repository = repository;
         this.responseAssembler = responseAssembler;
@@ -62,6 +65,7 @@ public class SalesOutboundService {
         this.deleteRollbackService = deleteRollbackService;
         this.importedUpdatePolicy = new SalesOutboundImportedUpdatePolicy();
         this.projectQuery = projectQuery;
+        this.salesOutboundItemRepository = salesOutboundItemRepository;
     }
 
     @Transactional(readOnly = true)
@@ -333,6 +337,10 @@ public class SalesOutboundService {
     }
 
     protected void afterDelete(SalesOutbound entity) {
+        // 软删除后解绑本单明细的来源销售订单明细引用(与 V203/V204 同口径): 已删除的出库单
+        // 不应再通过外键阻止销售订单改单。只写本模块的表。
+        int detached = salesOutboundItemRepository.detachSourceReferencesOfDeletedOutbound(entity.getId());
+        log.debug("detached source references of deleted outbound: id={}, rows={}", entity.getId(), detached);
         workflowService.publishDeleted(entity);
     }
 

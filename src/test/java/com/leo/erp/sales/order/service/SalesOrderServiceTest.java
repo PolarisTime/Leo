@@ -90,6 +90,9 @@ class SalesOrderServiceTest {
     @Mock
     private SalesOrderRetryProperties salesOrderRetryProperties;
 
+    @Mock
+    private com.leo.erp.sales.order.repository.SalesOrderItemRepository salesOrderItemRepository;
+
     @InjectMocks
     private SalesOrderService service;
 
@@ -262,12 +265,16 @@ class SalesOrderServiceTest {
     }
 
     @Test
-    void afterDelete_shouldRemoveChargesBeforePublishingEvent() {
+    void afterDelete_shouldDetachSourceReferencesThenRemoveChargesAndPublish() {
         SalesOrder entity = entity(1L, StatusConstants.DRAFT);
 
         service.afterDelete(entity);
 
-        InOrder inOrder = inOrder(documentChargeItemService, workflowService);
+        // 软删除后必须先解绑本单明细的来源引用(与 V204 同口径), 否则已删除的销售订单
+        // 仍会锁死采购订单/采购入库明细
+        verify(salesOrderItemRepository).detachSourceReferencesOfDeletedOrder(entity.getId());
+        InOrder inOrder = inOrder(salesOrderItemRepository, documentChargeItemService, workflowService);
+        inOrder.verify(salesOrderItemRepository).detachSourceReferencesOfDeletedOrder(entity.getId());
         inOrder.verify(documentChargeItemService).removeAll("sales-order", 5L);
         inOrder.verify(workflowService).publishDeleted(entity);
     }

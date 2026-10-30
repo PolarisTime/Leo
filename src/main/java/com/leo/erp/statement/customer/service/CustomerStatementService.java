@@ -407,6 +407,11 @@ public class CustomerStatementService {
     }
 
     protected void afterDelete(CustomerStatement entity) {
+        // 软删除后解绑本单明细的来源销售订单明细引用(与 V203/V204 同口径): 已删除的对账单
+        // 不应再通过外键阻止销售订单改单。只写本模块的表。
+        int detached = repository.detachSourceReferencesOfDeletedStatement(entity.getId());
+        log.debug("detached source references of deleted customer statement: id={}, rows={}",
+                entity.getId(), detached);
     }
 
     protected CustomerStatement saveCreatedEntity(CustomerStatement entity, CustomerStatementRequest request) {

@@ -230,6 +230,33 @@ class PurchaseInboundSourceStatusGuardTest {
                 .hasMessageContaining("已失效");
     }
 
+    // ---------- 编辑保存删行的下游守卫（审计 #4） ----------
+
+    @Test
+    void removedItems_shouldRejectWhenReferencedByActiveSalesOrder() {
+        when(purchaseOrderReferenceGuard.hasActiveInboundItemReferences(List.of(21L, 22L))).thenReturn(true);
+
+        assertThatThrownBy(() -> guard.assertRemovedItemsNotReferencedByActiveSalesOrders(List.of(21L, 22L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("采购入库明细已被销售订单引用，不能修改，请先删除相关销售订单");
+        // 先锁采购入库明细（rank 20/21 低于采购订单明细 rank 30/31）
+        verify(sourceAllocationLockService).lockTradeItemSources(List.of(), List.of(21L, 22L), List.of());
+    }
+
+    @Test
+    void removedItems_shouldPassWhenNoActiveSalesOrderReference() {
+        when(purchaseOrderReferenceGuard.hasActiveInboundItemReferences(List.of(21L))).thenReturn(false);
+
+        assertThatCode(() -> guard.assertRemovedItemsNotReferencedByActiveSalesOrders(List.of(21L)))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void removedItems_shouldDoNothingWhenNoLineRemoved() {
+        assertThatCode(() -> guard.assertRemovedItemsNotReferencedByActiveSalesOrders(List.of()))
+                .doesNotThrowAnyException();
+    }
+
     private PurchaseInboundItem inboundItem(Long id) {
         PurchaseInboundItem item = new PurchaseInboundItem();
         item.setId(id);

@@ -10,8 +10,10 @@ import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundItemRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -28,6 +30,43 @@ public class PurchaseInboundMutationGuardService {
                                                PurchaseInboundSourceStatusGuard purchaseInboundSourceStatusGuard) {
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.purchaseInboundSourceStatusGuard = purchaseInboundSourceStatusGuard;
+    }
+
+    /**
+     * 编辑保存删行前的下游守卫（审计 #4）：被移除的入库明细若仍被活跃销售订单引用，
+     * 直接删行会撞 RESTRICT 外键变成 409；这里改为明确的业务提示。
+     *
+     * <p>必须在 {@link #lockSourcePurchaseOrderItems} 之前调用：本方法先锁采购入库明细
+     * （rank 20/21），采购订单明细锁（rank 30/31）随后才获取，保持全局加锁顺序一致。</p>
+     */
+    void assertRemovedLineItemsNotReferenced(PurchaseInbound inbound, PurchaseInboundRequest request) {
+        List<Long> removedItemIds = removedItemIds(inbound, request);
+        if (removedItemIds.isEmpty()) {
+            return;
+        }
+        purchaseInboundSourceStatusGuard.assertRemovedItemsNotReferencedByActiveSalesOrders(removedItemIds);
+    }
+
+    /** 本次保存中被移除的入库明细 ID：库里存在、请求里不再出现（新增行 id 为空，不参与比较）。 */
+    private List<Long> removedItemIds(PurchaseInbound inbound, PurchaseInboundRequest request) {
+        if (inbound == null || inbound.getItems() == null || inbound.getItems().isEmpty()) {
+            return List.of();
+        }
+        Set<Long> requestedIds = new HashSet<>();
+        if (request != null && request.items() != null) {
+            for (PurchaseInboundItemRequest item : request.items()) {
+                if (item != null && item.id() != null) {
+                    requestedIds.add(item.id());
+                }
+            }
+        }
+        return inbound.getItems().stream()
+                .map(PurchaseInboundItem::getId)
+                .filter(Objects::nonNull)
+                .filter(id -> !requestedIds.contains(id))
+                .distinct()
+                .sorted()
+                .toList();
     }
 
     void lockSourcePurchaseOrderItems(PurchaseInbound inbound, PurchaseInboundRequest request) {

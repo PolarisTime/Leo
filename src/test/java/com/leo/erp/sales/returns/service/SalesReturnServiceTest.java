@@ -62,6 +62,9 @@ class SalesReturnServiceTest {
     @Mock
     private ProjectQuery projectQuery;
 
+    @Mock
+    private com.leo.erp.sales.returns.repository.SalesReturnItemRepository salesReturnItemRepository;
+
     @InjectMocks
     private SalesReturnService service;
 
@@ -228,7 +231,12 @@ class SalesReturnServiceTest {
         service.delete(5L);
 
         assertThat(entity.isDeletedFlag()).isTrue();
-        verify(workflowService).publishDeleted(entity);
+        // 软删除后解绑本单明细的两个上游来源引用(与 V204 同口径), 再发布删除事件
+        verify(salesReturnItemRepository).detachSourceReferencesOfDeletedReturn(5L);
+        InOrder inOrder = inOrder(salesReturnItemRepository, workflowService);
+        inOrder.verify(workflowService).save(entity);
+        inOrder.verify(salesReturnItemRepository).detachSourceReferencesOfDeletedReturn(5L);
+        inOrder.verify(workflowService).publishDeleted(entity);
     }
 
     @Test

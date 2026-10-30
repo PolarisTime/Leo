@@ -4,7 +4,9 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.purchase.api.PurchaseItemQueryAppService;
 import com.leo.erp.purchase.api.PurchaseItemQueryAppService.SourceInboundItemRecord;
+import com.leo.erp.purchase.api.PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
@@ -47,8 +49,12 @@ class SalesOrderSourceAllocationServiceTest {
     }
 
     private SalesOrderItemRequest itemRequest(Long inboundId, Long purchaseOrderId, Integer quantity) {
+        return itemRequest(null, inboundId, purchaseOrderId, quantity);
+    }
+
+    private SalesOrderItemRequest itemRequest(Long id, Long inboundId, Long purchaseOrderId, Integer quantity) {
         return new SalesOrderItemRequest(
-                null, 500L, "M001", "品牌A", "型钢", "螺纹钢", "HRB400", "12m", "吨",
+                id, 500L, "M001", "品牌A", "型钢", "螺纹钢", "HRB400", "12m", "吨",
                 inboundId, purchaseOrderId, 1L, "库房A", "B001", quantity, "件",
                 new BigDecimal("1.250"), 100, new BigDecimal("12.500"), new BigDecimal("4000"), null);
     }
@@ -115,6 +121,23 @@ class SalesOrderSourceAllocationServiceTest {
         assertThatThrownBy(() -> service.prepareContext(request, null, List.of()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("采购订单直连来源已停用");
+    }
+
+    @Test
+    void prepareContext_shouldAcceptHistoricalPurchaseOrderSourceOnExistingLine() {
+        // 「恰好一个来源」的另一种合法形态：历史采购订单直连来源原样保存（每类来源各有一个通过样例）
+        SalesOrderItem existing = new SalesOrderItem();
+        existing.setId(9L);
+        existing.setSourcePurchaseOrderItemId(11L);
+        when(purchaseItemQueryAppService.findPurchaseOrderItemSnapshotsByIds(List.of(11L)))
+                .thenReturn(List.of(new SourcePurchaseOrderItemRecord(
+                        11L, 5, null, null, "PO001", null, "品牌A", "螺纹钢", "HRB400", "M001",
+                        "型钢", "吨", "库房A", "B001", 30L, "结算公司A", 500L, 1L, "b001", "12m", "件", 100)));
+        SalesOrderRequest request = request(List.of(itemRequest(9L, null, 11L, 5)));
+
+        SalesOrderSourceContext context = service.prepareContext(request, null, List.of(existing));
+
+        assertThat(context.legacyPurchaseOrderNoByItemId()).containsEntry(11L, "PO001");
     }
 
     // ---------- validateLine ----------

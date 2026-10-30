@@ -76,6 +76,9 @@ class SalesOrderServiceOptimisticLockRetryTest {
     @Mock
     private SalesOrderPriceRuleService priceRuleService;
 
+    @Mock
+    private com.leo.erp.sales.order.repository.SalesOrderItemRepository salesOrderItemRepository;
+
     private RecordingTransactionManager transactionManager;
 
     @BeforeEach
@@ -105,7 +108,8 @@ class SalesOrderServiceOptimisticLockRetryTest {
                 permissionChecker,
                 priceRuleService,
                 new TransactionTemplate(transactionManager),
-                properties);
+                properties,
+                salesOrderItemRepository);
     }
 
     private static ObjectOptimisticLockingFailureException conflict() {

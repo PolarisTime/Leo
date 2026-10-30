@@ -88,6 +88,9 @@ class FreightBillServiceTest {
     @Mock
     private DocumentChargeItemService documentChargeItemService;
 
+    @Mock
+    private com.leo.erp.logistics.bill.repository.FreightBillItemRepository freightBillItemRepository;
+
     @InjectMocks
     private FreightBillService service;
 
@@ -375,6 +378,8 @@ class FreightBillServiceTest {
         service.afterDelete(entity);
 
         assertThat(source.isActiveFlag()).isFalse();
+        // 软删除后解绑本单明细的来源销售订单明细引用(与 V204 同口径)
+        verify(freightBillItemRepository).detachSourceReferencesOfDeletedBill(5L);
         verify(businessOperationEventPublisher).publish(eq("FREIGHT_BILL_DELETED"), anyString(), anyString(),
                 anyString(), anyString(), eq(5L), anyString(), anyString());
     }

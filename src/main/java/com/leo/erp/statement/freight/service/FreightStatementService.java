@@ -322,6 +322,11 @@ public class FreightStatementService {
     }
 
     protected void afterDelete(FreightStatement entity) {
+        // 软删除后解绑本单明细的来源物流单明细引用(与 V203/V204 同口径): 已删除的对账单
+        // 不应再通过外键阻止物流单改单。只写本模块的表。
+        int detached = repository.detachSourceReferencesOfDeletedStatement(entity.getId());
+        log.debug("detached source references of deleted freight statement: id={}, rows={}",
+                entity.getId(), detached);
         workflowService.publishDeleted(entity);
     }
 

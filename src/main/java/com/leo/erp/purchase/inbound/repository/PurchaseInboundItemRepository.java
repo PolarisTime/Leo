@@ -57,6 +57,24 @@ public interface PurchaseInboundItemRepository extends JpaRepository<PurchaseInb
             @Param("sourceItemIds") Collection<Long> sourceItemIds
     );
 
+    /**
+     * 采购入库单软删除时解除本单明细对来源采购订单明细的引用（与 V203/V204 同口径）。
+     *
+     * <p>删除是软删除（只置 {@code deleted_flag}，明细行保留，审计需要），而明细上的
+     * {@code source_purchase_order_item_id} 通过 RESTRICT 外键物理锁定上游订单明细；
+     * 若不解绑，「已删除的入库单」会继续阻止采购订单改单。只解绑本单（按 {@code inbound_id}），
+     * 活跃入库单的来源链路不受影响。</p>
+     *
+     * @return 受影响行数，仅用于日志；0 行不是错误
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            update po_purchase_inbound_item
+               set source_purchase_order_item_id = null
+             where inbound_id = :inboundId
+            """, nativeQuery = true)
+    int detachSourceReferencesOfDeletedInbound(@Param("inboundId") Long inboundId);
+
     @Query("""
             select item.sourcePurchaseOrderItemId as sourcePurchaseOrderItemId,
                    sum(item.quantity) as totalQuantity

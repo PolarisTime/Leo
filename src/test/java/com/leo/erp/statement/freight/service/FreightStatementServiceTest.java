@@ -183,12 +183,17 @@ class FreightStatementServiceTest {
     }
 
     @Test
-    void afterDelete_shouldDelegatePublish() {
+    void afterDelete_shouldDetachSourceReferencesThenPublish() {
         FreightStatement entity = new FreightStatement();
+        entity.setId(7L);
 
         service.afterDelete(entity);
 
-        verify(workflowService).publishDeleted(entity);
+        // 软删除后解绑本单明细的来源物流单明细引用(与 V204 同口径), 再发布删除事件
+        verify(repository).detachSourceReferencesOfDeletedStatement(7L);
+        InOrder inOrder = inOrder(repository, workflowService);
+        inOrder.verify(repository).detachSourceReferencesOfDeletedStatement(7L);
+        inOrder.verify(workflowService).publishDeleted(entity);
     }
 
     @Test

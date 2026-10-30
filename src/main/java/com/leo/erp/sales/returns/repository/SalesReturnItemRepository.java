@@ -2,6 +2,7 @@ package com.leo.erp.sales.returns.repository;
 
 import com.leo.erp.sales.returns.domain.entity.SalesReturnItem;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -10,6 +11,24 @@ import java.util.Collection;
 import java.util.List;
 
 public interface SalesReturnItemRepository extends JpaRepository<SalesReturnItem, Long> {
+
+    /**
+     * 销售退货单软删除时解除本单明细对上游明细（销售订单明细 / 销售出库明细）的引用
+     * （与 V203/V204 同口径）。
+     *
+     * <p>删除是软删除（只置 {@code deleted_flag}，明细行保留），而明细上的两个来源列通过
+     * 外键物理锁定上游明细；若不解绑，「已删除的退货单」会继续阻止销售订单/销售出库改单。</p>
+     *
+     * @return 受影响行数，仅用于日志；0 行不是错误
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            update so_sales_return_item
+               set source_sales_order_item_id = null,
+                   source_sales_outbound_item_id = null
+             where return_id = :returnId
+            """, nativeQuery = true)
+    int detachSourceReferencesOfDeletedReturn(@Param("returnId") Long returnId);
 
     @Query("""
             select item

@@ -16,6 +16,7 @@ import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.master.api.ProjectNameAbbrResolver;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.sales.returns.domain.entity.SalesReturn;
+import com.leo.erp.sales.returns.repository.SalesReturnItemRepository;
 import com.leo.erp.sales.returns.repository.SalesReturnRepository;
 import com.leo.erp.sales.returns.web.dto.SalesReturnRequest;
 import com.leo.erp.sales.returns.web.dto.SalesReturnResponse;
@@ -43,17 +44,20 @@ public class SalesReturnService {
     private final SalesReturnResponseAssembler responseAssembler;
     private final SalesReturnWorkflowService workflowService;
     private final ProjectQuery projectQuery;
+    private final SalesReturnItemRepository salesReturnItemRepository;
 
     public SalesReturnService(SalesReturnRepository repository,
                               SnowflakeIdGenerator idGenerator,
                               SalesReturnResponseAssembler responseAssembler,
                               SalesReturnWorkflowService workflowService,
-                              ProjectQuery projectQuery) {
+                              ProjectQuery projectQuery,
+                              SalesReturnItemRepository salesReturnItemRepository) {
         this.idGenerator = idGenerator;
         this.repository = repository;
         this.responseAssembler = responseAssembler;
         this.workflowService = workflowService;
         this.projectQuery = projectQuery;
+        this.salesReturnItemRepository = salesReturnItemRepository;
     }
 
     @Transactional(readOnly = true)
@@ -136,6 +140,10 @@ public class SalesReturnService {
         STATUS_GUARD.assertDeleteAllowed(entity);
         entity.setDeletedFlag(true);
         saveEntity(entity);
+        // 软删除后解绑本单明细的两个上游来源引用(与 V203/V204 同口径): 已删除的退货单
+        // 不应再通过外键阻止销售订单/销售出库改单。只写本模块的表。
+        int detached = salesReturnItemRepository.detachSourceReferencesOfDeletedReturn(entity.getId());
+        log.debug("detached source references of deleted return: id={}, rows={}", entity.getId(), detached);
         workflowService.publishDeleted(entity);
         log.info("{} deleted: id={}", entity.getClass().getSimpleName(), id);
     }

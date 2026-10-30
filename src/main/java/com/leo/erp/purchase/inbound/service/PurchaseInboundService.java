@@ -47,6 +47,7 @@ public class PurchaseInboundService {
     private final PurchaseInboundResponseAssembler responseAssembler;
     private final PurchaseInboundMutationGuardService mutationGuardService;
     private final PurchaseInboundWorkflowService workflowService;
+    private final PurchaseInboundItemRepository purchaseInboundItemRepository;
 
     @Autowired
     public PurchaseInboundService(PurchaseInboundRepository repository,
@@ -55,7 +56,8 @@ public class PurchaseInboundService {
                                   PurchaseInboundApplyService applyService,
                                   PurchaseInboundResponseAssembler responseAssembler,
                                   PurchaseInboundMutationGuardService mutationGuardService,
-                                  PurchaseInboundWorkflowService workflowService) {
+                                  PurchaseInboundWorkflowService workflowService,
+                                  PurchaseInboundItemRepository purchaseInboundItemRepository) {
         this.idGenerator = idGenerator;
         this.repository = repository;
         this.purchaseInboundMapper = purchaseInboundMapper;
@@ -63,6 +65,7 @@ public class PurchaseInboundService {
         this.responseAssembler = responseAssembler;
         this.mutationGuardService = mutationGuardService;
         this.workflowService = workflowService;
+        this.purchaseInboundItemRepository = purchaseInboundItemRepository;
     }
 
     @Transactional(readOnly = true)
@@ -314,6 +317,8 @@ public class PurchaseInboundService {
     }
 
     private void apply(PurchaseInbound inbound, PurchaseInboundRequest request) {
+        // 删行前先做下游守卫（先锁采购入库明细，锁序低于采购订单明细，不能与下一行互换）
+        mutationGuardService.assertRemovedLineItemsNotReferenced(inbound, request);
         mutationGuardService.lockSourcePurchaseOrderItems(inbound, request);
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
@@ -340,6 +345,11 @@ public class PurchaseInboundService {
 
     private void afterDelete(PurchaseInbound inbound) {
         workflowService.afterDelete(inbound);
+        // 软删除后解绑本单明细的来源订单行引用(与 V203/V204 同口径): 已删除的入库单不应再通过
+        // RESTRICT 外键阻止采购订单改单。放在 workflow 之后是刻意的 —— 那里会物理释放未被销售订单
+        // 引用的明细行并 flush, 本 native UPDATE 作为最后一步, 不会被后续 flush 覆盖。
+        int detached = purchaseInboundItemRepository.detachSourceReferencesOfDeletedInbound(inbound.getId());
+        log.debug("detached source references of deleted inbound: id={}, rows={}", inbound.getId(), detached);
     }
 
     private void beforeStatusUpdate(PurchaseInbound inbound, String currentStatus, String nextStatus) {

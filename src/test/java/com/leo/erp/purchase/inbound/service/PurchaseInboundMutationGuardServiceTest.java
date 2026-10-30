@@ -74,6 +74,58 @@ class PurchaseInboundMutationGuardServiceTest {
                 false);
     }
 
+    // ---------- 编辑保存删行的下游守卫（审计 #4） ----------
+
+    private PurchaseInboundItem existingItem(Long id) {
+        PurchaseInboundItem item = new PurchaseInboundItem();
+        item.setId(id);
+        return item;
+    }
+
+    private PurchaseInboundRequest requestWithItemIds(Long... itemIds) {
+        return new PurchaseInboundRequest(
+                "PI001", "PO001", 1L, "S001", "供应商A", 2L, "库房A",
+                null, "过磅", null, null,
+                java.util.Arrays.stream(itemIds)
+                        .map(id -> new PurchaseInboundItemRequest(
+                                id, null, null, null, null, null, null, null, null,
+                                null, null, null, null, null, null, null, null, null,
+                                null, null, null, null, null, null))
+                        .toList(),
+                false);
+    }
+
+    @Test
+    void removedLineGuard_shouldOnlyCheckLinesRemovedByThisSave() {
+        PurchaseInbound entity = inbound(StatusConstants.DRAFT);
+        entity.setItems(List.of(existingItem(21L), existingItem(22L), existingItem(23L)));
+
+        service.assertRemovedLineItemsNotReferenced(entity, requestWithItemIds(21L, 23L));
+
+        verify(purchaseInboundSourceStatusGuard)
+                .assertRemovedItemsNotReferencedByActiveSalesOrders(List.of(22L));
+    }
+
+    @Test
+    void removedLineGuard_shouldSkipWhenNoLineRemoved() {
+        PurchaseInbound entity = inbound(StatusConstants.AUDITED);
+        entity.setItems(List.of(existingItem(21L)));
+
+        service.assertRemovedLineItemsNotReferenced(entity, requestWithItemIds(21L));
+
+        verify(purchaseInboundSourceStatusGuard, never())
+                .assertRemovedItemsNotReferencedByActiveSalesOrders(any());
+    }
+
+    @Test
+    void removedLineGuard_shouldSkipForNewInbound() {
+        // 新建没有既有明细, 不存在「被移除的行」
+        service.assertRemovedLineItemsNotReferenced(inbound(StatusConstants.DRAFT), requestWithItemIds());
+
+        verify(purchaseInboundSourceStatusGuard, never())
+                .assertRemovedItemsNotReferencedByActiveSalesOrders(any());
+    }
+
     // ---------- 来源锁定 ----------
 
     @Test

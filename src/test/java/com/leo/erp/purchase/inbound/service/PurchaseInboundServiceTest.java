@@ -6,6 +6,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.mapper.PurchaseInboundMapper;
+import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundResponse;
@@ -59,6 +60,9 @@ class PurchaseInboundServiceTest {
 
     @Mock
     private PurchaseInboundWorkflowService workflowService;
+
+    @Mock
+    private PurchaseInboundItemRepository purchaseInboundItemRepository;
 
     @InjectMocks
     private PurchaseInboundService service;
@@ -192,8 +196,11 @@ class PurchaseInboundServiceTest {
         service.delete(5L);
 
         assertThat(inbound.isDeletedFlag()).isTrue();
-        InOrder inOrder = inOrder(repository, workflowService);
+        InOrder inOrder = inOrder(repository, workflowService, purchaseInboundItemRepository);
         inOrder.verify(repository).save(inbound);
         inOrder.verify(workflowService).afterDelete(inbound);
+        // 软删除后解绑本单明细的来源订单行引用(与 V203/V204 同口径): 放在 workflow 之后,
+        // 避免被明细物理释放/fllush 覆盖
+        inOrder.verify(purchaseInboundItemRepository).detachSourceReferencesOfDeletedInbound(5L);
     }
 }

@@ -164,6 +164,28 @@ public class PurchaseInboundSourceStatusGuard {
         }
     }
 
+    /**
+     * 入库单「编辑保存」删行前的下游守卫：本次被移除的入库明细若仍被**活跃**销售订单引用，
+     * 物理删除会撞 RESTRICT 外键，最终由全局异常处理器兜成 409「数据被其他单据引用」——
+     * 用户既不知道是哪张销售订单，也无法自行处理。这里提前给出明确的业务提示。
+     *
+     * <p>只检查本次真正被移除的行；仍是活跃销售订单来源的行不会被删，不必检查。
+     * 加锁顺序：先锁采购入库明细（rank 20/21），调用方随后才锁采购订单明细（rank 30/31），
+     * 与 {@link #lockReverseReferenceSources} 的全局顺序一致，不能颠倒。</p>
+     */
+    void assertRemovedItemsNotReferencedByActiveSalesOrders(List<Long> removedInboundItemIds) {
+        if (removedInboundItemIds == null || removedInboundItemIds.isEmpty()) {
+            return;
+        }
+        sourceAllocationLockService.lockTradeItemSources(List.of(), removedInboundItemIds, List.of());
+        if (purchaseOrderReferenceGuard.hasActiveInboundItemReferences(removedInboundItemIds)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "采购入库明细已被销售订单引用，不能修改，请先删除相关销售订单"
+            );
+        }
+    }
+
     private ReverseReferenceSources resolveReverseReferenceSources(PurchaseInbound inbound) {
         List<Long> currentSourceItemIds = sourceItemIds(inbound);
         if (currentSourceItemIds.isEmpty()) {
