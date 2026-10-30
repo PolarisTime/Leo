@@ -45,15 +45,15 @@ class RequestNumericPrecisionValidationTest {
     @Test
     void material_pieceWeightAndUnitPrice_rejectOutOfRangePrecision() {
         MaterialRequest scaleViolation = new MaterialRequest("111", "品牌", "棉布", "面料", "1米", "100",
-                "米", "件", new BigDecimal("1.123456789"), 2, new BigDecimal("10.00"), null, null);
+                "米", "件", new BigDecimal("1.123456789"), 2, new BigDecimal("10.00"), null, null, null);
         assertThat(digitsViolationPaths(scaleViolation)).containsExactly("pieceWeightTon");
 
         MaterialRequest integerViolation = new MaterialRequest("111", "品牌", "棉布", "面料", "1米", "100",
-                "米", "件", new BigDecimal("1.12345678"), 2, new BigDecimal("12345678901.00"), null, null);
+                "米", "件", new BigDecimal("1.12345678"), 2, new BigDecimal("12345678901.00"), null, null, null);
         assertThat(digitsViolationPaths(integerViolation)).containsExactly("unitPrice");
 
         MaterialRequest valid = new MaterialRequest("111", "品牌", "棉布", "面料", "1米", "100",
-                "米", "件", new BigDecimal("1.12345678"), 2, new BigDecimal("9999999999.99"), null, null);
+                "米", "件", new BigDecimal("1.12345678"), 2, new BigDecimal("9999999999.99"), null, null, null);
         assertThat(digitsViolationPaths(valid)).isEmpty();
     }
 

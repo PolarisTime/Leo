@@ -16,6 +16,7 @@ public record MaterialResponse(
         Integer piecesPerBundle,
         BigDecimal unitPrice,
         String remark,
-        String materialType
+        String materialType,
+        String status
 ) {
 }

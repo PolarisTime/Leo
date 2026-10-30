@@ -4,6 +4,7 @@ import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.master.material.domain.MaterialSnapshot;
 import com.leo.erp.master.material.domain.MaterialTypes;
@@ -124,9 +125,15 @@ class MaterialImportProcessor {
     private Material newMaterial() {
         Material material = new Material();
         material.setId(idGenerator.nextId());
+        // 导入新建的商品一律「正常」；导入不提供、也不接受状态列。
+        material.setStatus(StatusConstants.NORMAL);
         return material;
     }
 
+    /**
+     * 导入只维护商品属性，<b>不触碰 status</b>：命中已有商品（含已禁用商品）时保持其当前状态，
+     * 既不会把禁用商品改回正常，也不会把正常商品改成禁用。
+     */
     private void apply(Material material, MaterialImportData data) {
         material.setMaterialCode(resolveMaterialCode(material.getMaterialCode(), material.getId()));
         material.setBrand(data.brand());

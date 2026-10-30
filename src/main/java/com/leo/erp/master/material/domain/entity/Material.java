@@ -64,6 +64,10 @@ public class Material extends AbstractAuditableEntity {
     @Column(name = "material_type", nullable = false, length = 16)
     private String materialType;
 
+    /** 商品状态：正常 / 禁用（中文 label，与 StatusConstants 一致；禁用不删除数据，只从选商品查询中排除）。 */
+    @Column(name = "status", nullable = false, length = 16)
+    private String status;
+
     @Column(name = "length_sort", insertable = false, updatable = false)
     private BigDecimal lengthSort;
 

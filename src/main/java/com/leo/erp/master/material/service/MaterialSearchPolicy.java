@@ -29,10 +29,15 @@ final class MaterialSearchPolicy {
                 .and(Specs.keywordLike(keyword, SEARCH_FIELDS));
     }
 
-    static Specification<Material> page(String keyword, String category, String material, String materialType) {
+    static Specification<Material> page(String keyword, String category, String material, String materialType,
+                                       String status) {
         return search(keyword)
                 .and(Specs.equalIfPresent("category", category))
                 .and(Specs.equalIfPresent("material", material))
-                .and(Specs.equalIfPresent("materialType", materialType));
+                .and(Specs.equalIfPresent("materialType", materialType))
+                // 状态由 MaterialService.page 先用 StatusConstants.normalizeOptionalActiveStatus 归一化,
+                // 传到这里只会是「正常」/「禁用」或 null(不过滤); 商品列表要能分别筛出两类,
+                // 因此「选商品」的启用过滤不在本列表默认值上做, 而由调用方显式传 status=正常。
+                .and(Specs.equalIfPresent("status", status));
     }
 }

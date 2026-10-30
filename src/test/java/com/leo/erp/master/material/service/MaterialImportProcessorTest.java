@@ -2,6 +2,7 @@ package com.leo.erp.master.material.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.repository.MaterialRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,6 +69,36 @@ class MaterialImportProcessorTest {
         assertThat(result.material().getId()).isEqualTo(100L);
         assertThat(result.material().getPiecesPerBundle()).isEqualTo(250);
         verify(materialRepository).save(any(Material.class));
+    }
+
+    @Test
+    void importHitOnDisabledMaterial_keepsDisabledStatus() {
+        // 导入只维护商品属性，不得把已禁用商品改回「正常」；禁用只能由启停接口变更
+        Material existing = dbMaterial(100L, "100", "中天", "HRB400E", "12", "9米", 1);
+        existing.setStatus(StatusConstants.DISABLED);
+        when(materialRepository.findActiveIdentityCandidates(anyCollection(), anyCollection(), anyCollection()))
+                .thenReturn(List.of(existing));
+
+        MaterialImportProcessor.ImportSession session = startSession("中天", "HRB400E", "12", "9米");
+        MaterialImportProcessor.ImportRowResult result = processor.importRow(
+                session, importData(null, "中天", "HRB400E", "12", "9米", 250), 2);
+
+        assertThat(result.outcome()).isEqualTo(MaterialImportProcessor.ImportOutcome.UPDATED);
+        assertThat(result.material().getStatus()).isEqualTo(StatusConstants.DISABLED);
+    }
+
+    @Test
+    void importNewMaterial_createsAsNormal() {
+        // 导入不接受状态列，新建商品一律「正常」，不会因导入产生禁用商品
+        when(materialRepository.findActiveIdentityCandidates(anyCollection(), anyCollection(), anyCollection()))
+                .thenReturn(List.of());
+
+        MaterialImportProcessor.ImportSession session = startSession("新品牌", "HRB400", "8", "9米");
+        MaterialImportProcessor.ImportRowResult result = processor.importRow(
+                session, importData(null, "新品牌", "HRB400", "8", "9米", 100), 2);
+
+        assertThat(result.outcome()).isEqualTo(MaterialImportProcessor.ImportOutcome.CREATED);
+        assertThat(result.material().getStatus()).isEqualTo(StatusConstants.NORMAL);
     }
 
     @Test

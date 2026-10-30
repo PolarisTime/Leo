@@ -9,6 +9,7 @@ import com.leo.erp.master.material.service.MaterialService;
 import com.leo.erp.master.material.web.dto.MaterialHistoryResponse;
 import com.leo.erp.master.material.web.dto.MaterialRequest;
 import com.leo.erp.master.material.web.dto.MaterialResponse;
+import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,6 +22,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -63,8 +65,8 @@ public class V2MaterialController {
     @GetMapping
     @Operation(summary = "分页查询商品资料")
     @RequirePermission(PermissionCodes.MATERIALS_READ)
-    public PageResponse<MaterialResponse> page(@BindPageQuery(sortFieldKey = "material") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String category, @RequestParam(required = false) String material, @RequestParam(required = false) String materialType) {
-        return PageResponse.from(materialService.page(query, keyword, category, material, materialType));
+    public PageResponse<MaterialResponse> page(@BindPageQuery(sortFieldKey = "material") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String category, @RequestParam(required = false) String material, @RequestParam(required = false) String materialType, @RequestParam(required = false) String status) {
+        return PageResponse.from(materialService.page(query, keyword, category, material, materialType, status));
     }
 
     @GetMapping("/{id}")
@@ -126,6 +128,19 @@ public class V2MaterialController {
     @RequirePermission(PermissionCodes.MATERIALS_UPDATE)
     public MaterialResponse update(@PathVariable Long id, @Valid @RequestBody MaterialRequest request) {
         return materialService.update(id, request);
+    }
+
+    /**
+     * 商品启停：PATCH /materials/{id}/status，请求体 {"status": "正常" | "禁用"}。
+     *
+     * <p>与角色启停端点同形态（状态是资源的受控字段，不建动作后缀路径）；
+     * 双向可切换，返回更新后的商品资源。</p>
+     */
+    @PatchMapping("/{id}/status")
+    @Operation(summary = "启用或禁用商品资料")
+    @RequirePermission(PermissionCodes.MATERIALS_UPDATE)
+    public MaterialResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+        return materialService.updateStatus(id, request.status());
     }
 
     @DeleteMapping("/{id}")

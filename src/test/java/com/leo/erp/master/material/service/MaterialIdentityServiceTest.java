@@ -2,6 +2,7 @@ package com.leo.erp.master.material.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.repository.MaterialRepository;
 import org.junit.jupiter.api.Test;
@@ -159,6 +160,22 @@ class MaterialIdentityServiceTest {
 
         assertThat(index).hasSize(1);
         assertThat(index.values()).containsExactly(first);
+    }
+
+    @Test
+    void activeIndex_shouldKeepDisabledMaterialForDuplicateDetection() {
+        // 禁用商品必须继续参与 identity 查重：查重查询不能加 status 过滤，
+        // 否则导入/手工建档会为同一「品牌+材质+规格+长度」再建一条重复档案。
+        Material disabled = material(3L);
+        disabled.setStatus(StatusConstants.DISABLED);
+        when(materialRepository.findActiveIdentityCandidates(any(), any(), any()))
+                .thenReturn(List.of(disabled));
+
+        Map<MaterialIdentityService.Identity, Material> index =
+                service.activeIndex(List.of(identity("钢", "Q235", "5mm", null)));
+
+        assertThat(index.values()).containsExactly(disabled);
+        assertThat(index.values().iterator().next().getStatus()).isEqualTo(StatusConstants.DISABLED);
     }
 
     @Test

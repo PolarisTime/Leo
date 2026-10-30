@@ -14,6 +14,10 @@ import java.math.BigDecimal;
  * Bean Validation 仅做通用边界校验；「实体商品必填 / 附加费用缩减」的差异化
  * 必填规则由 MaterialService 按类型条件校验。
  * 字符串字段的 {@code @Size} 与数据库列长度一致，避免超长写入触发 500。
+ *
+ * <p>状态（status，取值「正常」/「禁用」）的语义不在 Bean Validation 层：
+ * 创建时固定为「正常」（显式传其它值 422），更新时为 null 表示保持原值、
+ * 传值则允许双向切换；启停也可走 {@code PATCH /materials/{id}/status}。</p>
  */
 public record MaterialRequest(
         @NotBlank(message = "商品编码不能为空")
@@ -47,7 +51,9 @@ public record MaterialRequest(
         @Size(max = 255, message = "备注长度不能超过255")
         String remark,
         @Size(max = 16, message = "商品类型长度不能超过16")
-        String materialType
+        String materialType,
+        @Size(max = 16, message = "商品状态长度不能超过16")
+        String status
 ) {
 
     /** 实体商品类型常量。 */
