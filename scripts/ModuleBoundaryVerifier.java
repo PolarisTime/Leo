@@ -49,6 +49,24 @@ public final class ModuleBoundaryVerifier {
     private static final String BASE_PACKAGE_PREFIX = BASE_PACKAGE + ".";
     private static final Path DEFAULT_STORE_PATH = Paths.get("config", "archunit-boundary-store");
 
+    /**
+     * 跨模块 {@code *.service} 依赖的显式例外（不是冻结基线，也不是 store）。
+     *
+     * <p>默认情况下，模块之间只能通过 {@code *.api} 端口、{@code *.web.dto} 或事件契约协作；
+     * 直接依赖其它模块 {@code *.service} 内部实现属于"改一处断一片"。存量例外必须逐条登记在此，
+     * 写明来源模块、目标模块、目标包前缀与理由，且一旦抽取端口完成必须删除；
+     * 任何未登记的新增 service 依赖都会让门禁失败。</p>
+     */
+    private static final List<AllowedServiceDependency> ALLOWED_SERVICE_DEPENDENCIES = List.of(
+            new AllowedServiceDependency(
+                    "sales", "system", "com.leo.erp.system.printtemplate.service",
+                    "销售订单 XLSX 打印导出复用 printtemplate 的布局模型（PrintXlsxExportLayout 及其嵌套列/汇总/"
+                            + "件重抑制规则、PrintItemSplitter、PrintSpecLengthResolver、PrintExportFilenameService）。"
+                            + "这些类型是 print-forms 布局 DSL 的运行期契约，抽取 system::printtemplate::api 端口属于"
+                            + "一次独立的契约迁移（涉及 print-forms JSON 约定与既有打印链），本轮 P2 不做；"
+                            + "登记为显式例外并在端口抽取完成后删除。")
+    );
+
     private ModuleBoundaryVerifier() {
     }
 
@@ -88,6 +106,11 @@ public final class ModuleBoundaryVerifier {
         ArchRule restrictedInternalsRule = ArchRuleDefinition.classes()
                 .should(notDependOnRestrictedInternalsOfOtherTopLevelModules())
                 .as("top-level modules must not depend on repository, domain.entity or web.dto internals of other top-level modules");
+        ServiceInternalCondition serviceInternalCondition = new ServiceInternalCondition();
+        ArchRule serviceInternalsRule = ArchRuleDefinition.classes()
+                .should(serviceInternalCondition)
+                .as("top-level modules must not depend on *.service internals of other top-level modules"
+                        + " (api ports / web.dto / event contracts are the sanctioned cross-module path)");
         ArchRule cyclicEdgeRule = ArchRuleDefinition.classes()
                 .should(notContributeCyclicTopLevelModuleEdges())
                 .as("top-level module dependency edges must not participate in cycles");
@@ -96,16 +119,34 @@ public final class ModuleBoundaryVerifier {
                 .as("entity status must only be written by ApplyService, CompletionSyncService or CrudStatusGuard classes");
 
         int restrictedTotal = countViolations(restrictedInternalsRule, classes);
+        EvaluationResult serviceInternalResult = serviceInternalsRule.evaluate(classes);
+        int serviceInternalTotal = serviceInternalResult.getFailureReport().getDetails().size();
         int cyclicEdgeTotal = countViolations(cyclicEdgeRule, classes);
         int statusWriteTotal = countViolations(statusWriteRule, classes);
 
         FreezingArchRule.freeze(restrictedInternalsRule).check(classes);
+        // 跨模块 service 依赖不进入冻结基线：存量例外必须显式登记在 ALLOWED_SERVICE_DEPENDENCIES 里
+        // （带来源模块、目标模块、目标包前缀与理由），其余任何新增依赖立即失败——避免"先在本地
+        // refreeze、再提交"的旧漏洞。这里只评估一次（计数与失败判定共用同一结果），避免条件被
+        // 重复执行导致 allowlist 计数翻倍。
+        if (serviceInternalResult.hasViolation()) {
+            throw new AssertionError(serviceInternalResult.getFailureReport().toString());
+        }
         FreezingArchRule.freeze(cyclicEdgeRule).check(classes);
         FreezingArchRule.freeze(statusWriteRule).check(classes);
 
         LOGGER.info(
-                "Architecture boundary check passed: {} classes, {} baselined restricted dependencies, {} baselined cyclic edges, {} baselined status writes (store: {})",
-                moduleClassCount, restrictedTotal, cyclicEdgeTotal, statusWriteTotal, storePath);
+                "Architecture boundary check passed: {} classes, {} baselined restricted dependencies, "
+                        + "{} cross-module service dependencies, {} allowlisted service edges ({} exception rules), "
+                        + "{} baselined cyclic edges, {} baselined status writes (store: {})",
+                moduleClassCount,
+                restrictedTotal,
+                serviceInternalTotal,
+                serviceInternalCondition.allowlistedEdges(),
+                ALLOWED_SERVICE_DEPENDENCIES.size(),
+                cyclicEdgeTotal,
+                statusWriteTotal,
+                storePath);
     }
 
     private static int countViolations(ArchRule rule, JavaClasses classes) {
@@ -191,6 +232,100 @@ public final class ModuleBoundaryVerifier {
                 }
             }
         };
+    }
+
+    /**
+     * 跨模块 {@code *.service} 依赖判定。
+     *
+     * <p><b>为什么单列</b>：原有三条规则只覆盖 {@code repository} / {@code domain.entity} / {@code web.dto}
+     * 三种受限内部类型，跨模块直接依赖别人 {@code *.service} 实现（例如 {@code sales -> system} 的 15 条打印
+     * 布局依赖）在两条门禁（ArchUnit 边界 + Modulith 仅校验 8 个显式模块）下都是静默的。</p>
+     *
+     * <p><b>放行范围</b>：</p>
+     * <ul>
+     *   <li>{@code *.api} 端口、{@code *.web.dto}、事件契约不在 {@code service} 包内，自然不受此规则约束；</li>
+     *   <li>{@code common} 是平台模块（{@code CrudStatusGuard}、{@code CrudVisibilityPolicy}、
+     *       {@code CrudOperationLogger}、{@code DocumentChargeItemService}、{@code Excel*} 等），其
+     *       {@code service} 包按设计就是跨模块的平台能力，与"依赖别的业务模块内部实现"不是同一类问题，
+     *       因此整体放行；{@code common} 的 repository / domain.entity 仍受原规则约束；</li>
+     *   <li>显式登记在 {@link #ALLOWED_SERVICE_DEPENDENCIES} 的存量例外（每条都带模块、包前缀与理由）。</li>
+     * </ul>
+     *
+     * <p>本规则<b>不</b>进入 FreezingArchRule：没有冻结基线可扩大，新增依赖一律当场失败。</p>
+     */
+    private static final class ServiceInternalCondition
+            extends ArchCondition<JavaClass> {
+
+        private int allowlistedEdges;
+
+        private ServiceInternalCondition() {
+            super("not depend on service internals of other top-level modules");
+        }
+
+        private int allowlistedEdges() {
+            return allowlistedEdges;
+        }
+
+        @Override
+        public void check(JavaClass clazz, ConditionEvents events) {
+            String originModule = topLevelModuleOf(clazz);
+            if (originModule == null) {
+                return;
+            }
+            for (Dependency dependency : clazz.getDirectDependenciesFromSelf()) {
+                JavaClass target = dependency.getTargetClass().getBaseComponentType();
+                String targetModule = topLevelModuleOf(target);
+                if (targetModule == null || targetModule.equals(originModule)) {
+                    continue;
+                }
+                if ("common".equals(targetModule) || !isServiceInternalPackage(target.getPackageName())) {
+                    continue;
+                }
+                if (isAllowedServiceDependency(originModule, targetModule, target.getPackageName())) {
+                    allowlistedEdges++;
+                    continue;
+                }
+                // 描述中不含行号，保证失败信息稳定可读，也不受代码位移影响。
+                String message = String.format(Locale.ROOT,
+                        "cross-module service dependency: %s (module %s) -> %s (module %s)",
+                        clazz.getName(), originModule, target.getName(), targetModule);
+                events.add(SimpleConditionEvent.violated(clazz, message));
+            }
+        }
+    }
+
+    /** {@code com.leo.erp.<module>.(...).service(...)} 形式的目标包；{@code common} 已在上游放行。 */
+    private static boolean isServiceInternalPackage(String packageName) {
+        if (!packageName.startsWith(BASE_PACKAGE_PREFIX)) {
+            return false;
+        }
+        String[] segments = packageName.substring(BASE_PACKAGE_PREFIX.length()).split("\\.");
+        for (int i = 1; i < segments.length; i++) {
+            if ("service".equals(segments[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isAllowedServiceDependency(String originModule, String targetModule, String targetPackage) {
+        for (AllowedServiceDependency allowed : ALLOWED_SERVICE_DEPENDENCIES) {
+            if (allowed.originModule().equals(originModule)
+                    && allowed.targetModule().equals(targetModule)
+                    && targetPackage.startsWith(allowed.targetPackagePrefix())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 跨模块 service 依赖的显式例外条目；{@code reason} 必须写清"为什么不走 api 端口"与解除条件。 */
+    private record AllowedServiceDependency(
+            String originModule,
+            String targetModule,
+            String targetPackagePrefix,
+            String reason
+    ) {
     }
 
     /**

@@ -1,9 +1,7 @@
 package com.leo.erp.master.material.service;
 
+import com.leo.erp.common.cache.AfterCommitCacheEvictor;
 import com.leo.erp.common.config.CacheConfig;
-import com.leo.erp.common.support.AfterCommitExecutor;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 
 /**
@@ -16,8 +14,9 @@ import org.springframework.stereotype.Component;
  * （{@link MaterialService} 的手工增改删、{@code MaterialImportProcessor} 的导入、
  * {@link MaterialBatchRollbackService} 的批次回滚）。若各自维护失效逻辑，
  * 漏掉任何一条都会让前端下拉框长期显示已不存在的材质/品牌。
- * 这里提供唯一的 {@link #evictAll()} 入口，并在<em>事务提交后</em>执行：
- * 若在提交前失效，并发请求可能以「未提交的旧数据」回填缓存，从而读到陈旧字典。</p>
+ * 这里提供唯一的 {@link #evictAll()} 入口，并统一走
+ * {@link AfterCommitCacheEvictor}（事务提交后失效）：若在提交前失效，并发请求可能以
+ * 「未提交的旧数据」回填缓存，从而读到陈旧字典。</p>
  */
 @Component
 public class MaterialDictionaryCache {
@@ -28,26 +27,15 @@ public class MaterialDictionaryCache {
     /** 品牌选项缓存 key。 */
     public static final String BRANDS_CACHE_KEY = "leo:material:brands";
 
-    private final CacheManager cacheManager;
-    private final AfterCommitExecutor afterCommitExecutor;
+    private final AfterCommitCacheEvictor cacheEvictor;
 
-    public MaterialDictionaryCache(CacheManager cacheManager, AfterCommitExecutor afterCommitExecutor) {
-        this.cacheManager = cacheManager;
-        this.afterCommitExecutor = afterCommitExecutor;
+    public MaterialDictionaryCache(AfterCommitCacheEvictor cacheEvictor) {
+        this.cacheEvictor = cacheEvictor;
     }
 
-    /** 物料主数据发生任何变更后调用；事务提交后生效。 */
+    /** 物料主数据发生任何变更后调用；事务提交后生效（与其它主数据共用同一 after-commit 口径）。 */
     public void evictAll() {
-        afterCommitExecutor.run(() -> {
-            evict(GRADES_CACHE_KEY);
-            evict(BRANDS_CACHE_KEY);
-        });
-    }
-
-    private void evict(String key) {
-        Cache cache = cacheManager.getCache(CacheConfig.CACHE_OPTIONS);
-        if (cache != null) {
-            cache.evict(key);
-        }
+        cacheEvictor.evict(CacheConfig.CACHE_OPTIONS, GRADES_CACHE_KEY);
+        cacheEvictor.evict(CacheConfig.CACHE_OPTIONS, BRANDS_CACHE_KEY);
     }
 }

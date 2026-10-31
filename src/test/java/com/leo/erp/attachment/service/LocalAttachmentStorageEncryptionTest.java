@@ -2,7 +2,6 @@ package com.leo.erp.attachment.service;
 
 import com.leo.erp.attachment.config.AttachmentProperties;
 import com.leo.erp.attachment.service.storage.AttachmentContentCryptor;
-import com.leo.erp.system.securitykey.service.SecurityKeyService;
 import com.leo.erp.attachment.service.storage.LocalAttachmentStorage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -45,9 +44,10 @@ class LocalAttachmentStorageEncryptionTest {
         properties.getStorage().getS3().setEncryptedStorage(false);
         properties.getStorage().getLocal().setEncryptedStorage(true);
 
-        SecurityKeyService keyService = mock(SecurityKeyService.class);
+        com.leo.erp.system.securitykey.api.SecurityKeyQuery keyService =
+                mock(com.leo.erp.system.securitykey.api.SecurityKeyQuery.class);
         when(keyService.getActiveDataMaterial()).thenReturn(
-                new SecurityKeyService.ResolvedSecretMaterial(
+                new com.leo.erp.system.securitykey.api.ResolvedSecretMaterial(
                         "config", 1, "0123456789abcdef0123456789abcdef", null, null, "fp"));
         LocalAttachmentStorage storage =
                 new LocalAttachmentStorage(properties, new AttachmentContentCryptor(keyService));

@@ -201,10 +201,9 @@ class MaterialCategoryServiceTest {
         Method options = MaterialCategoryService.class.getMethod("options");
 
         for (Method method : List.of(create, update, updateStatus, delete)) {
-            CacheEvict cacheEvict = method.getAnnotation(CacheEvict.class);
-            assertThat(cacheEvict).as(method.getName()).isNotNull();
-            assertThat(cacheEvict.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
-            assertThat(cacheEvict.key()).isEqualTo("'leo:material-category:all'");
+            assertThat(method.getAnnotation(CacheEvict.class))
+                    .as(method.getName() + " 不得再用提交前失效的 @CacheEvict，写路径统一走 after-commit helper")
+                    .isNull();
         }
         Cacheable cacheable = options.getAnnotation(Cacheable.class);
         assertThat(cacheable).isNotNull();

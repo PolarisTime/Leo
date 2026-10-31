@@ -1,6 +1,6 @@
 package com.leo.erp.system.operationlog.support;
 
-import com.leo.erp.system.operationlog.service.OperationLogCommand;
+import com.leo.erp.system.operationlog.api.OperationLogCommand;
 import com.leo.erp.system.operationlog.service.OperationLogService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;

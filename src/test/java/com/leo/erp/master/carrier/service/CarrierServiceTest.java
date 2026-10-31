@@ -14,7 +14,7 @@ import com.leo.erp.master.carrier.web.dto.CarrierRequest;
 import com.leo.erp.master.carrier.web.dto.VehicleItem;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.service.ReferenceSnapshotSyncService;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.api.SettlementCompanySnapshot;
 import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -72,12 +72,10 @@ class CarrierServiceTest {
     @Test
     void create_assignsSnowflakeIdAndResolvesSettlementCompany() {
         Carrier[] savedHolder = new Carrier[1];
-        CompanySetting company = new CompanySetting();
-        company.setId(9L);
-        company.setCompanyName("结算公司C");
         when(snowflakeIdGenerator.nextId()).thenReturn(77L, 78L);
         when(codeIssuanceService.resolve("carrier", null, "111")).thenReturn("111");
-        when(companySettingService.requireActiveSettlementCompany(9L)).thenReturn(company);
+        when(companySettingService.requireActiveSettlementCompanySnapshot(9L))
+                .thenReturn(new SettlementCompanySnapshot(9L, "结算公司C"));
         when(carrierRepository.saveAndFlush(any(Carrier.class))).thenAnswer(invocation -> {
             Carrier entity = invocation.getArgument(0);
             savedHolder[0] = entity;
@@ -103,12 +101,10 @@ class CarrierServiceTest {
     @Test
     void create_trimsUserVisibleStrings() {
         Carrier[] savedHolder = new Carrier[1];
-        CompanySetting company = new CompanySetting();
-        company.setId(9L);
-        company.setCompanyName("结算公司C");
         when(snowflakeIdGenerator.nextId()).thenReturn(77L);
         when(codeIssuanceService.resolve(eq("carrier"), any(), anyString())).thenReturn("111");
-        when(companySettingService.requireActiveSettlementCompany(9L)).thenReturn(company);
+        when(companySettingService.requireActiveSettlementCompanySnapshot(9L))
+                .thenReturn(new SettlementCompanySnapshot(9L, "结算公司C"));
         when(carrierRepository.saveAndFlush(any(Carrier.class))).thenAnswer(invocation -> {
             Carrier entity = invocation.getArgument(0);
             savedHolder[0] = entity;
@@ -204,10 +200,7 @@ class CarrierServiceTest {
         entity.setCarrierCode("C001");
         when(carrierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(carrierRepository.saveAndFlush(entity)).thenReturn(entity);
-        CompanySetting company = new CompanySetting();
-        company.setId(9L);
-        company.setCompanyName("结算公司C");
-        when(companySettingService.requireActiveSettlementCompany(9L)).thenReturn(company);
+        when(companySettingService.requireActiveSettlementCompanySnapshot(9L)).thenReturn(new SettlementCompanySnapshot(9L, "结算公司C"));
 
         service().update(5L, request("新名称"));
 
@@ -274,9 +267,9 @@ class CarrierServiceTest {
         Method listActiveOptions = CarrierService.class.getMethod("listActiveOptions");
 
         for (Method method : List.of(create, update, updateStatus, delete)) {
-            CacheEvict cacheEvict = method.getAnnotation(CacheEvict.class);
-            assertThat(cacheEvict).as(method.getName()).isNotNull();
-            assertThat(cacheEvict.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+            assertThat(method.getAnnotation(CacheEvict.class))
+                    .as(method.getName() + " 不得再用提交前失效的 @CacheEvict，写路径统一走 after-commit helper")
+                    .isNull();
         }
         Cacheable cacheable = listActiveOptions.getAnnotation(Cacheable.class);
         assertThat(cacheable).isNotNull();

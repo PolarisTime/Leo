@@ -1,7 +1,13 @@
-package com.leo.erp.system.operationlog.service;
+package com.leo.erp.system.operationlog.api;
 
 import java.util.UUID;
 
+/**
+ * 操作日志写入命令（跨模块契约）。
+ *
+ * <p>由请求过滤器、领域事件监听器与认证模块构造，交给 {@link OperationLogRecorder} 落库；
+ * 字段补全、去重与落库策略都在 {@code system.operationlog} 模块内部，调用方只负责提供事实字段。</p>
+ */
 public record OperationLogCommand(
         String moduleName,
         String actionType,

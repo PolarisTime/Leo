@@ -12,8 +12,8 @@ import com.leo.erp.master.api.CarrierQuery;
 import com.leo.erp.master.api.CustomerQuery;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.api.SupplierQuery;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
-import com.leo.erp.system.company.service.CompanySettingService;
+import com.leo.erp.system.company.api.CompanySettingQuery;
+import com.leo.erp.system.company.api.SettlementCompanySnapshot;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -32,13 +32,13 @@ public class LedgerAdjustmentApplyService {
     private final SupplierQuery supplierQuery;
     private final CarrierQuery carrierQuery;
     private final ProjectQuery projectQuery;
-    private final CompanySettingService companySettingService;
+    private final CompanySettingQuery companySettingService;
 
     public LedgerAdjustmentApplyService(CustomerQuery customerQuery,
                                         SupplierQuery supplierQuery,
                                         CarrierQuery carrierQuery,
                                         ProjectQuery projectQuery,
-                                        CompanySettingService companySettingService) {
+                                        CompanySettingQuery companySettingService) {
         this.customerQuery = customerQuery;
         this.supplierQuery = supplierQuery;
         this.carrierQuery = carrierQuery;
@@ -72,7 +72,7 @@ public class LedgerAdjustmentApplyService {
                 request.projectId(),
                 request.projectName()
         );
-        CompanySetting settlementCompany = resolveSettlementCompany(
+        SettlementCompanySnapshot settlementCompany = resolveSettlementCompany(
                 request.settlementCompanyId(),
                 request.settlementCompanyName(),
                 project
@@ -84,8 +84,8 @@ public class LedgerAdjustmentApplyService {
         entity.setCounterpartyId(counterparty.id());
         entity.setCounterpartyCode(counterparty.code());
         entity.setCounterpartyName(counterparty.name());
-        entity.setSettlementCompanyId(settlementCompany.getId());
-        entity.setSettlementCompanyName(settlementCompany.getCompanyName());
+        entity.setSettlementCompanyId(settlementCompany.id());
+        entity.setSettlementCompanyName(settlementCompany.name());
         entity.setProjectId(project.id());
         entity.setProjectName(project.name());
         entity.setAdjustmentDate(request.adjustmentDate());
@@ -249,20 +249,20 @@ public class LedgerAdjustmentApplyService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.PROJECT_NOT_FOUND));
     }
 
-    private CompanySetting resolveSettlementCompany(Long requestedId,
-                                                     String requestedName,
-                                                     ResolvedProject project) {
+    private SettlementCompanySnapshot resolveSettlementCompany(Long requestedId,
+                                                              String requestedName,
+                                                              ResolvedProject project) {
         if (project.settlementCompanyId() != null) {
             if (requestedId != null && !project.settlementCompanyId().equals(requestedId)) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "结算主体与项目不一致");
             }
-            CompanySetting company = companySettingService.requireActiveSettlementCompany(
+            SettlementCompanySnapshot company = companySettingService.requireActiveSettlementCompanySnapshot(
                     project.settlementCompanyId()
             );
-            requireSnapshotMatches(requestedName, company.getCompanyName(), "结算主体名称与项目不一致");
+            requireSnapshotMatches(requestedName, company.name(), "结算主体名称与项目不一致");
             return company;
         }
-        return companySettingService.requireActiveSettlementCompany(requestedId);
+        return companySettingService.requireActiveSettlementCompanySnapshot(requestedId);
     }
 
     private void requireSnapshotMatches(String requestedValue, String resolvedValue, String message) {

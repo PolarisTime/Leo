@@ -1,5 +1,6 @@
 package com.leo.erp.master.project.service;
 
+import com.leo.erp.common.cache.AfterCommitCacheEvictor;
 import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
@@ -33,11 +34,10 @@ import com.leo.erp.master.project.web.dto.ProjectRequest;
 import com.leo.erp.master.project.web.dto.ProjectOptionResponse;
 import com.leo.erp.master.project.web.dto.ProjectResponse;
 import com.leo.erp.system.company.api.SettlementCompanySnapshot;
-import com.leo.erp.system.company.service.CompanySettingService;
+import com.leo.erp.system.company.api.CompanySettingQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -83,9 +83,10 @@ public class ProjectService {
     private final ProjectMapper projectMapper;
     private final MasterDataReferenceGuard referenceGuard;
     private final CustomerRepository customerRepository;
-    private final CompanySettingService companySettingService;
+    private final CompanySettingQuery companySettingService;
     private final MasterDataCodeIssuanceService codeIssuanceService;
     private final com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService;
+    private AfterCommitCacheEvictor cacheEvictor;
 
     @Autowired
     public ProjectService(SnowflakeIdGenerator snowflakeIdGenerator,
@@ -93,7 +94,7 @@ public class ProjectService {
                           ProjectMapper projectMapper,
                           MasterDataReferenceGuard referenceGuard,
                           CustomerRepository customerRepository,
-                          CompanySettingService companySettingService,
+                          CompanySettingQuery companySettingService,
                           MasterDataCodeIssuanceService codeIssuanceService,
                           com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
         this.snowflakeIdGenerator = snowflakeIdGenerator;
@@ -106,13 +107,24 @@ public class ProjectService {
         this.referenceSnapshotSyncService = referenceSnapshotSyncService;
     }
 
+    /** 缓存失效统一走 after-commit helper；单测直接构造服务时为 null，跳过失效即可。 */
+    @Autowired(required = false)
+    void setCacheEvictor(AfterCommitCacheEvictor cacheEvictor) {
+        this.cacheEvictor = cacheEvictor;
+    }
+
+    private void evictOptionsCache() {
+        if (cacheEvictor != null) {
+            cacheEvictor.evictAll(CacheConfig.CACHE_PROJECT_OPTIONS);
+        }
+    }
+
     @Transactional(readOnly = true)
     public ProjectResponse detail(Long id) {
         return toResponse(requireActiveProject(id));
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_PROJECT_OPTIONS, allEntries = true)
     public ProjectResponse create(ProjectRequest request) {
         ProjectRequest normalized = normalizeCreateRequest(request);
         requireSettlementCompany(normalized);
@@ -123,11 +135,11 @@ public class ProjectService {
         apply(entity, normalized);
         Project saved = saveCreatedProject(entity);
         operationLogger.created(entity, entityId);
+        evictOptionsCache();
         return toResponse(saved);
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_PROJECT_OPTIONS, allEntries = true)
     public ProjectResponse update(Long id, ProjectRequest request) {
         Project entity = requireActiveProject(id);
         String currentName = entity.getProjectName();
@@ -141,16 +153,17 @@ public class ProjectService {
         if (!currentName.equals(nextName)) {
             referenceSnapshotSyncService.syncProjectName(id, nextName);
         }
+        evictOptionsCache();
         return response;
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_PROJECT_OPTIONS, allEntries = true)
     public ProjectResponse updateStatus(Long id, String status) {
         Project entity = requireActiveProject(id);
         String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
         String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
         if (currentStatus.equals(nextStatus)) {
+            evictOptionsCache();
             return toResponse(entity);
         }
         STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
@@ -158,7 +171,6 @@ public class ProjectService {
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_PROJECT_OPTIONS, allEntries = true)
     public void delete(Long id) {
         Project entity = requireActiveProject(id);
         if (referenceGuard != null) {
@@ -167,6 +179,7 @@ public class ProjectService {
         entity.setDeletedFlag(true);
         projectRepository.save(entity);
         operationLogger.deleted(entity, id);
+        evictOptionsCache();
     }
 
     @Transactional(readOnly = true)

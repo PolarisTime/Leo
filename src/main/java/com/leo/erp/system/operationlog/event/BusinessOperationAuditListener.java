@@ -1,7 +1,7 @@
 package com.leo.erp.system.operationlog.event;
 
 import com.leo.erp.system.operationlog.support.OperationLogConstants;
-import com.leo.erp.system.operationlog.service.OperationLogCommand;
+import com.leo.erp.system.operationlog.api.OperationLogCommand;
 import com.leo.erp.system.operationlog.service.OperationLogService;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;

@@ -17,7 +17,7 @@ import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
 import com.leo.erp.master.api.CarrierQuery;
 import com.leo.erp.master.api.VehicleQuery;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.api.SettlementCompanySnapshot;
 import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.junit.jupiter.api.Test;
@@ -165,10 +165,7 @@ class FreightBillServiceTest {
         FreightBill entity = new FreightBill();
         FreightBillRequest request = request("FB001", 1L, StatusConstants.DRAFT);
         when(carrierQuery.findActiveById(1L)).thenReturn(Optional.of(carrier(1L, 30L)));
-        CompanySetting company = new CompanySetting();
-        company.setId(30L);
-        company.setCompanyName("结算公司A");
-        when(companySettingService.requireActiveSettlementCompany(30L)).thenReturn(company);
+        when(companySettingService.requireActiveSettlementCompanySnapshot(30L)).thenReturn(new SettlementCompanySnapshot(30L, "结算公司A"));
 
         service.apply(entity, request);
 
@@ -241,10 +238,7 @@ class FreightBillServiceTest {
     }
 
     private void stubSettlementCompany() {
-        CompanySetting company = new CompanySetting();
-        company.setId(30L);
-        company.setCompanyName("结算公司A");
-        when(companySettingService.requireActiveSettlementCompany(30L)).thenReturn(company);
+        when(companySettingService.requireActiveSettlementCompanySnapshot(30L)).thenReturn(new SettlementCompanySnapshot(30L, "结算公司A"));
     }
 
     /** 新建时未携带结算方式: 默认按吨位结算, 固定运费金额为空。 */

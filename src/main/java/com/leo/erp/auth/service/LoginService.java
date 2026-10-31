@@ -8,8 +8,8 @@ import com.leo.erp.auth.web.dto.LoginRequest;
 import com.leo.erp.auth.web.dto.TokenResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.system.operationlog.service.OperationLogCommand;
-import com.leo.erp.system.operationlog.service.OperationLogService;
+import com.leo.erp.system.operationlog.api.OperationLogCommand;
+import com.leo.erp.system.operationlog.api.OperationLogRecorder;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,7 +27,7 @@ public class LoginService {
     private final PasswordEncoder passwordEncoder;
     private final LoginAttemptService loginAttemptService;
     private final TokenIssuanceService tokenIssuanceService;
-    private final OperationLogService operationLogService;
+    private final OperationLogRecorder operationLogService;
     private final LoginAuditService loginAuditService;
 
     public LoginService(
@@ -35,7 +35,7 @@ public class LoginService {
             PasswordEncoder passwordEncoder,
             LoginAttemptService loginAttemptService,
             TokenIssuanceService tokenIssuanceService,
-            OperationLogService operationLogService,
+            OperationLogRecorder operationLogService,
             LoginAuditService loginAuditService
     ) {
         this.userAccountRepository = userAccountRepository;

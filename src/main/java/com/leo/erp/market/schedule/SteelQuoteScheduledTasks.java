@@ -1,5 +1,7 @@
 package com.leo.erp.market.schedule;
 
+import com.leo.erp.common.schedule.ClusterScheduleLock;
+import com.leo.erp.common.schedule.ScheduleJob;
 import com.leo.erp.market.QuoteNotPublishedException;
 import com.leo.erp.market.mysteel.MysteelProperties;
 import com.leo.erp.market.service.SteelQuoteSyncService;
@@ -20,11 +22,15 @@ public class SteelQuoteScheduledTasks {
 
     private final MysteelProperties properties;
     private final SteelQuoteSyncService steelQuoteSyncService;
+    private final ClusterScheduleLock clusterScheduleLock;
     private final AtomicBoolean syncRunning = new AtomicBoolean(false);
 
-    public SteelQuoteScheduledTasks(MysteelProperties properties, SteelQuoteSyncService steelQuoteSyncService) {
+    public SteelQuoteScheduledTasks(MysteelProperties properties,
+                                    SteelQuoteSyncService steelQuoteSyncService,
+                                    ClusterScheduleLock clusterScheduleLock) {
         this.properties = properties;
         this.steelQuoteSyncService = steelQuoteSyncService;
+        this.clusterScheduleLock = clusterScheduleLock;
     }
 
     @Scheduled(cron = "${leo.market.steel-quote.sync.cron:0 35 10,13,16 * * *}",
@@ -38,16 +44,26 @@ public class SteelQuoteScheduledTasks {
             return;
         }
         try {
-            LocalDate today = LocalDate.now(ZoneId.of(properties.getSync().getZone()));
-            SteelQuoteSyncService.SyncResult result = steelQuoteSyncService.sync(today);
-            log.info("定时行情同步完成: {} {} ({} 行, 新文章={})", result.articleDate(), result.articleTime(),
-                    result.rowCount(), result.created());
-        } catch (QuoteNotPublishedException ex) {
-            // 站点该日未发布(休市/节假日)属预期结果, 记为跳过而不是错误。
-            log.info("定时行情同步跳过: 该日无行情文章 - {}", ex.getMessage());
+            // 跨实例互斥：拿到 PG 会话级咨询锁才执行，避免多实例/滚动发布期间重复抓取与重复写 market 表
+            boolean executed = clusterScheduleLock.runIfLocked(ScheduleJob.STEEL_QUOTE_SYNC, () -> {
+                try {
+                    LocalDate today = LocalDate.now(ZoneId.of(properties.getSync().getZone()));
+                    SteelQuoteSyncService.SyncResult result = steelQuoteSyncService.sync(today);
+                    log.info("定时行情同步完成: {} {} ({} 行, 新文章={})", result.articleDate(), result.articleTime(),
+                            result.rowCount(), result.created());
+                } catch (QuoteNotPublishedException ex) {
+                    // 站点该日未发布(休市/节假日)属预期结果, 记为跳过而不是错误。
+                    log.info("定时行情同步跳过: 该日无行情文章 - {}", ex.getMessage());
+                } catch (Exception ex) {
+                    // 定时任务兜底: 记录告警, 不让异常打穿调度线程
+                    log.error("定时行情同步失败", ex);
+                }
+            });
+            if (!executed) {
+                log.info("跳过行情同步: 其它实例正在执行");
+            }
         } catch (Exception ex) {
-            // 定时任务兜底: 记录告警, 不让异常打穿调度线程
-            log.error("定时行情同步失败", ex);
+            log.error("定时行情同步失败: 获取集群锁异常", ex);
         } finally {
             syncRunning.set(false);
         }

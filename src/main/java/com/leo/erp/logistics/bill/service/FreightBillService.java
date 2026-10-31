@@ -31,8 +31,7 @@ import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
 import com.leo.erp.master.api.CarrierQuery;
 import com.leo.erp.master.api.VehicleQuery;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
-import com.leo.erp.system.company.service.CompanySettingService;
+import com.leo.erp.system.company.api.CompanySettingQuery;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,7 +60,7 @@ public class FreightBillService {
     private final FreightBillMapper mapper;
     private final FreightBillApplyService applyService;
     private final FreightBillCarrierResolver carrierResolver;
-    private final CompanySettingService companySettingService;
+    private final CompanySettingQuery companySettingService;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final FreightBillDownstreamMutationGuard downstreamMutationGuard;
     private final VehicleQuery vehicleQuery;
@@ -74,7 +73,7 @@ public class FreightBillService {
                               FreightBillMapper mapper,
                               FreightBillApplyService applyService,
                               CarrierQuery carrierQuery,
-                              CompanySettingService companySettingService,
+                              CompanySettingQuery companySettingService,
                               SourceAllocationLockService sourceAllocationLockService,
                               FreightBillDownstreamMutationGuard downstreamMutationGuard,
                               VehicleQuery vehicleQuery,
@@ -469,9 +468,10 @@ public class FreightBillService {
         if (carrier.defaultSettlementCompanyId() == null) {
             throw business("物流商未配置默认结算主体，请先完善物流商档案");
         }
-        CompanySetting company = companySettingService.requireActiveSettlementCompany(carrier.defaultSettlementCompanyId());
-        entity.setSettlementCompanyId(company.getId());
-        entity.setSettlementCompanyName(company.getCompanyName());
+        var company = companySettingService.requireActiveSettlementCompanySnapshot(
+                carrier.defaultSettlementCompanyId());
+        entity.setSettlementCompanyId(company.id());
+        entity.setSettlementCompanyName(company.name());
     }
 
     private String resolveMaterialName(FreightBillItem item) {

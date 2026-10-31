@@ -14,7 +14,7 @@ import com.leo.erp.auth.domain.enums.UserStatus;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.security.rbac.service.UserRoleService;
+import com.leo.erp.security.rbac.api.UserRoleGrant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -39,7 +39,7 @@ class InitialAccountProvisioningServiceTest {
     private SnowflakeIdGenerator snowflakeIdGenerator;
 
     @Mock
-    private UserRoleService userRoleService;
+    private UserRoleGrant userRoleService;
 
     @InjectMocks
     private InitialAccountProvisioningService service;

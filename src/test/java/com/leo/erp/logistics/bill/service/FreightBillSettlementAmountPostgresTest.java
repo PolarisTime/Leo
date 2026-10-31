@@ -15,7 +15,7 @@ import com.leo.erp.master.api.VehicleQuery;
 import com.leo.erp.sales.api.SalesOrderLogisticsSourceQuery;
 import com.leo.erp.sales.api.SalesOrderSourceItemSnapshot;
 import com.leo.erp.sales.api.SalesOrderSourceSnapshot;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.api.SettlementCompanySnapshot;
 import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.junit.jupiter.api.AfterEach;
@@ -149,10 +149,9 @@ class FreightBillSettlementAmountPostgresTest {
         when(carrierQuery.findActiveById(CARRIER_ID)).thenReturn(Optional.of(
                 new CarrierQuery.CarrierSnapshot(CARRIER_ID, CARRIER_CODE, CARRIER_NAME,
                         SETTLEMENT_COMPANY_ID)));
-        CompanySetting company = new CompanySetting();
-        company.setId(SETTLEMENT_COMPANY_ID);
-        company.setCompanyName(SETTLEMENT_COMPANY_NAME);
-        when(companySettingService.requireActiveSettlementCompany(SETTLEMENT_COMPANY_ID)).thenReturn(company);
+        when(companySettingService.requireActiveSettlementCompanySnapshot(SETTLEMENT_COMPANY_ID))
+                .thenReturn(new com.leo.erp.system.company.api.SettlementCompanySnapshot(
+                        SETTLEMENT_COMPANY_ID, SETTLEMENT_COMPANY_NAME));
         when(documentChargeItemService.list(any(), any())).thenReturn(List.of());
         when(documentChargeItemService.sumAmount(any())).thenReturn(BigDecimal.ZERO);
         when(salesOrderSourceQuery.findOrderIdsBySourceItemIds(any())).thenReturn(List.of(SALES_ORDER_ID));

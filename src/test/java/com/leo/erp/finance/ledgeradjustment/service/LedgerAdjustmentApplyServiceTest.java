@@ -7,7 +7,7 @@ import com.leo.erp.master.api.CarrierQuery;
 import com.leo.erp.master.api.CustomerQuery;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.api.SupplierQuery;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.api.SettlementCompanySnapshot;
 import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,7 +51,7 @@ class LedgerAdjustmentApplyServiceTest {
         when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(
                 new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001", 40L, "项目主体")
         ));
-        when(companySettingService.requireActiveSettlementCompany(40L))
+        when(companySettingService.requireActiveSettlementCompanySnapshot(40L))
                 .thenReturn(company(40L, "项目主体"));
 
         LedgerAdjustment entity = new LedgerAdjustment();
@@ -86,7 +86,7 @@ class LedgerAdjustmentApplyServiceTest {
         when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(
                 new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001", 40L, "项目主体")
         ));
-        when(companySettingService.requireActiveSettlementCompany(40L))
+        when(companySettingService.requireActiveSettlementCompanySnapshot(40L))
                 .thenReturn(company(40L, "项目主体"));
 
         LedgerAdjustment entity = new LedgerAdjustment();
@@ -197,7 +197,7 @@ class LedgerAdjustmentApplyServiceTest {
         when(supplierQuery.findActiveByCode("SUP001")).thenReturn(Optional.of(
                 new SupplierQuery.SupplierSnapshot(11L, "SUP001", "供应商A")
         ));
-        when(companySettingService.requireActiveSettlementCompany(30L))
+        when(companySettingService.requireActiveSettlementCompanySnapshot(30L))
                 .thenReturn(company(30L, "客户主体"));
 
         LedgerAdjustment entity = new LedgerAdjustment();
@@ -280,7 +280,7 @@ class LedgerAdjustmentApplyServiceTest {
         when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(
                 new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null)
         ));
-        when(companySettingService.requireActiveSettlementCompany(30L))
+        when(companySettingService.requireActiveSettlementCompanySnapshot(30L))
                 .thenReturn(company(30L, "客户主体"));
 
         LedgerAdjustment entity = new LedgerAdjustment();
@@ -300,7 +300,7 @@ class LedgerAdjustmentApplyServiceTest {
         when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(
                 new ProjectQuery.ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001", 40L, "项目主体")
         ));
-        when(companySettingService.requireActiveSettlementCompany(40L))
+        when(companySettingService.requireActiveSettlementCompanySnapshot(40L))
                 .thenReturn(company(40L, "项目主体"));
 
         assertThatThrownBy(() -> service.apply(new LedgerAdjustment(),
@@ -383,10 +383,7 @@ class LedgerAdjustmentApplyServiceTest {
         );
     }
 
-    private CompanySetting company(Long id, String name) {
-        CompanySetting company = new CompanySetting();
-        company.setId(id);
-        company.setCompanyName(name);
-        return company;
+    private SettlementCompanySnapshot company(Long id, String name) {
+        return new SettlementCompanySnapshot(id, name);
     }
 }

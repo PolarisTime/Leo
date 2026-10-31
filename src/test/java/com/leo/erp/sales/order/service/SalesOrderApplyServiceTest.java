@@ -284,11 +284,8 @@ class SalesOrderApplyServiceTest {
         SalesOrderRequest req = new SalesOrderRequest(
                 "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A", 30L, null,
                 LocalDate.of(2026, 8, 1), "销售员A", null, null, List.of(), List.of(), false);
-        com.leo.erp.system.company.domain.entity.CompanySetting company =
-                new com.leo.erp.system.company.domain.entity.CompanySetting();
-        company.setId(30L);
-        company.setCompanyName("指定结算");
-        when(companySettingService.requireActiveSettlementCompany(30L)).thenReturn(company);
+        when(companySettingService.requireActiveSettlementCompanySnapshot(30L))
+                .thenReturn(new com.leo.erp.system.company.api.SettlementCompanySnapshot(30L, "指定结算"));
         SalesOrder entity = new SalesOrder();
 
         service.apply(entity, req, () -> 100L);

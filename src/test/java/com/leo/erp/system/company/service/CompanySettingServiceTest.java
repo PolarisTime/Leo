@@ -1,6 +1,7 @@
 package com.leo.erp.system.company.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leo.erp.common.cache.AfterCommitCacheEvictor;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -15,9 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -235,25 +234,28 @@ class CompanySettingServiceTest {
         verify(dashboardSummaryService).evictAllCache();
     }
 
+    /** 写路径不再用 @CacheEvict（提交前失效），统一走 after-commit helper。 */
     @Test
-    void cacheAnnotations_preservedOnPublicWriteAndReadMethods() throws Exception {
-        Method create = CompanySettingService.class.getMethod("create", CompanySettingRequest.class);
-        Method update = CompanySettingService.class.getMethod("update", Long.class, CompanySettingRequest.class);
-        Method updateStatus = CompanySettingService.class.getMethod("updateStatus", Long.class, String.class);
-        Method delete = CompanySettingService.class.getMethod("delete", Long.class);
-        Method saveCurrent = CompanySettingService.class.getMethod("saveCurrent", CompanySettingRequest.class);
+    void writePath_evictsCompanyCachesThroughAfterCommitHelper() {
+        CompanySetting entity = new CompanySetting();
+        entity.setId(5L);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(repository.save(entity)).thenReturn(entity);
+        AfterCommitCacheEvictor evictor = mock(AfterCommitCacheEvictor.class);
+        CompanySettingService service = service();
+        service.setCacheEvictor(evictor);
+
+        service.delete(5L);
+
+        verify(evictor).evict(CacheConfig.CACHE_STATIC, CompanySettingService.CURRENT_COMPANY_CACHE_KEY);
+        verify(evictor).evict(CacheConfig.CACHE_OPTIONS, "leo:company-setting:all");
+    }
+
+    @Test
+    void readMethodsKeepCacheableAnnotations() throws Exception {
         Method current = CompanySettingService.class.getMethod("current");
         Method listActiveOptions = CompanySettingService.class.getMethod("listActiveOptions");
 
-        for (Method method : List.of(create, update, updateStatus, delete, saveCurrent)) {
-            Caching caching = method.getAnnotation(Caching.class);
-            assertThat(caching).as(method.getName()).isNotNull();
-            assertThat(caching.evict())
-                    .extracting(cacheEvict -> cacheEvict.value()[0], CacheEvict::key)
-                    .containsExactlyInAnyOrder(
-                            tuple(CacheConfig.CACHE_STATIC, "'leo:company:current:v2'"),
-                            tuple(CacheConfig.CACHE_OPTIONS, "'leo:company-setting:all'"));
-        }
         Cacheable cacheable = current.getAnnotation(Cacheable.class);
         assertThat(cacheable).isNotNull();
         assertThat(cacheable.value()).containsExactly(CacheConfig.CACHE_STATIC);

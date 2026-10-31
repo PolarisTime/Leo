@@ -3,7 +3,7 @@ package com.leo.erp.attachment.service.storage;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.attachment.support.AttachmentCryptoConstants;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.system.securitykey.service.SecurityKeyService;
+import com.leo.erp.system.securitykey.api.SecurityKeyQuery;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Cipher;
@@ -25,10 +25,10 @@ public class AttachmentContentCryptor {
     private static final int GCM_IV_LENGTH = 12;
     private static final int GCM_TAG_LENGTH = 128;
 
-    private final SecurityKeyService securityKeyService;
+    private final SecurityKeyQuery securityKeyService;
     private final SecureRandom secureRandom = new SecureRandom();
 
-    public AttachmentContentCryptor(SecurityKeyService securityKeyService) {
+    public AttachmentContentCryptor(SecurityKeyQuery securityKeyService) {
         this.securityKeyService = securityKeyService;
     }
 

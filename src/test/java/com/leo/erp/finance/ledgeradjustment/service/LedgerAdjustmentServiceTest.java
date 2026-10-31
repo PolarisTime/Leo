@@ -9,7 +9,6 @@ import com.leo.erp.master.api.CarrierQuery;
 import com.leo.erp.master.api.CustomerQuery;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.api.SupplierQuery;
-import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;

@@ -24,7 +24,7 @@ import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptResponse;
 import com.leo.erp.finance.common.service.SupplierPrepaymentBalanceService;
 import com.leo.erp.system.company.api.SettlementAccountSnapshot;
-import com.leo.erp.system.company.service.CompanySettingService;
+import com.leo.erp.system.company.api.CompanySettingQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,7 +57,7 @@ public class ReceiptService {
     private final ReceiptSettlementSyncService settlementSyncService;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final SupplierPrepaymentBalanceService supplierPrepaymentBalanceService;
-    private final CompanySettingService companySettingService;
+    private final CompanySettingQuery companySettingService;
 
     @Autowired
     public ReceiptService(ReceiptRepository receiptRepository,
@@ -69,7 +69,7 @@ public class ReceiptService {
                           ReceiptSettlementSyncService settlementSyncService,
                           SourceAllocationLockService sourceAllocationLockService,
                           SupplierPrepaymentBalanceService supplierPrepaymentBalanceService,
-                          CompanySettingService companySettingService) {
+                          CompanySettingQuery companySettingService) {
         this.idGenerator = snowflakeIdGenerator;
         this.receiptRepository = receiptRepository;
         this.receiptMapper = receiptMapper;

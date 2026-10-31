@@ -1,5 +1,6 @@
 package com.leo.erp.master.carrier.service;
 
+import com.leo.erp.common.cache.AfterCommitCacheEvictor;
 import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
@@ -25,13 +26,11 @@ import com.leo.erp.master.carrier.web.dto.CarrierOptionResponse;
 import com.leo.erp.master.carrier.web.dto.CarrierRequest;
 import com.leo.erp.master.carrier.web.dto.CarrierResponse;
 import com.leo.erp.master.carrier.web.dto.VehicleOptionResponse;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
-import com.leo.erp.system.company.service.CompanySettingService;
+import com.leo.erp.system.company.api.CompanySettingQuery;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.CacheManager;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -58,11 +57,12 @@ public class CarrierService implements RedisCacheHealthCheck {
     private final VehicleRepository vehicleRepository;
     private final CarrierMapper carrierMapper;
     private final MasterDataReferenceGuard referenceGuard;
-    private final CompanySettingService companySettingService;
+    private final CompanySettingQuery companySettingService;
     private final CarrierVehicleSynchronizer vehicleSynchronizer;
     private final MasterDataCodeIssuanceService codeIssuanceService;
     private final com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService;
     private CacheManager cacheManager;
+    private AfterCommitCacheEvictor cacheEvictor;
 
     @Autowired
     public CarrierService(CarrierRepository carrierRepository,
@@ -70,7 +70,7 @@ public class CarrierService implements RedisCacheHealthCheck {
                           SnowflakeIdGenerator snowflakeIdGenerator,
                           CarrierMapper carrierMapper,
                           MasterDataReferenceGuard referenceGuard,
-                          CompanySettingService companySettingService,
+                          CompanySettingQuery companySettingService,
                           MasterDataCodeIssuanceService codeIssuanceService,
                           com.leo.erp.master.service.ReferenceSnapshotSyncService referenceSnapshotSyncService) {
         this.snowflakeIdGenerator = snowflakeIdGenerator;
@@ -84,13 +84,24 @@ public class CarrierService implements RedisCacheHealthCheck {
         this.referenceSnapshotSyncService = referenceSnapshotSyncService;
     }
 
+    /** 缓存失效统一走 after-commit helper；单测直接构造服务时为 null，跳过失效即可。 */
+    @Autowired(required = false)
+    void setCacheEvictor(AfterCommitCacheEvictor cacheEvictor) {
+        this.cacheEvictor = cacheEvictor;
+    }
+
+    private void evictOptionsCache() {
+        if (cacheEvictor != null) {
+            cacheEvictor.evict(CacheConfig.CACHE_OPTIONS, CARRIER_CACHE_KEY);
+        }
+    }
+
     @Transactional(readOnly = true)
     public CarrierResponse detail(Long id) {
         return toResponse(requireActiveCarrier(id));
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'")
     public CarrierResponse create(CarrierRequest request) {
         validateCreate(request);
         Carrier entity = new Carrier();
@@ -99,11 +110,11 @@ public class CarrierService implements RedisCacheHealthCheck {
         apply(entity, request);
         Carrier saved = saveCreatedCarrier(entity);
         operationLogger.created(entity, entityId);
+        evictOptionsCache();
         return toResponse(saved);
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'")
     public CarrierResponse update(Long id, CarrierRequest request) {
         Carrier entity = requireActiveCarrier(id);
         String currentName = entity.getCarrierName();
@@ -116,16 +127,17 @@ public class CarrierService implements RedisCacheHealthCheck {
         if (!currentName.equals(nextName)) {
             referenceSnapshotSyncService.syncCarrierName(id, nextName);
         }
+        evictOptionsCache();
         return response;
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'")
     public CarrierResponse updateStatus(Long id, String status) {
         Carrier entity = requireActiveCarrier(id);
         String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
         String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
         if (currentStatus.equals(nextStatus)) {
+            evictOptionsCache();
             return toResponse(entity);
         }
         STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
@@ -133,7 +145,6 @@ public class CarrierService implements RedisCacheHealthCheck {
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'")
     public void delete(Long id) {
         Carrier entity = requireActiveCarrier(id);
         if (referenceGuard != null) {
@@ -142,6 +153,7 @@ public class CarrierService implements RedisCacheHealthCheck {
         entity.setDeletedFlag(true);
         saveCarrier(entity);
         operationLogger.deleted(entity, id);
+        evictOptionsCache();
     }
 
     @Transactional(readOnly = true)
@@ -309,8 +321,8 @@ public class CarrierService implements RedisCacheHealthCheck {
         if (companySettingService == null) {
             return new SettlementCompanySnapshot(id, null);
         }
-        CompanySetting company = companySettingService.requireActiveSettlementCompany(id);
-        return new SettlementCompanySnapshot(company.getId(), company.getCompanyName());
+        var company = companySettingService.requireActiveSettlementCompanySnapshot(id);
+        return new SettlementCompanySnapshot(company.id(), company.name());
     }
 
     private record SettlementCompanySnapshot(Long id, String name) {

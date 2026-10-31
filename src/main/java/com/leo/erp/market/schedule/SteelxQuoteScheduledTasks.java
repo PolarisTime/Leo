@@ -1,5 +1,7 @@
 package com.leo.erp.market.schedule;
 
+import com.leo.erp.common.schedule.ClusterScheduleLock;
+import com.leo.erp.common.schedule.ScheduleJob;
 import com.leo.erp.market.QuoteNotPublishedException;
 import com.leo.erp.market.service.SteelxQuoteSyncService;
 import com.leo.erp.market.steelx.SteelxProperties;
@@ -19,12 +21,15 @@ public class SteelxQuoteScheduledTasks {
 
     private final SteelxProperties properties;
     private final SteelxQuoteSyncService steelxQuoteSyncService;
+    private final ClusterScheduleLock clusterScheduleLock;
     private final AtomicBoolean syncRunning = new AtomicBoolean(false);
 
     public SteelxQuoteScheduledTasks(SteelxProperties properties,
-                                     SteelxQuoteSyncService steelxQuoteSyncService) {
+                                     SteelxQuoteSyncService steelxQuoteSyncService,
+                                     ClusterScheduleLock clusterScheduleLock) {
         this.properties = properties;
         this.steelxQuoteSyncService = steelxQuoteSyncService;
+        this.clusterScheduleLock = clusterScheduleLock;
     }
 
     @Scheduled(cron = "${leo.market.steelx-quote.sync.cron:0 20 10 * * *}",
@@ -38,14 +43,24 @@ public class SteelxQuoteScheduledTasks {
             return;
         }
         try {
-            var results = steelxQuoteSyncService.syncAllRegions();
-            log.info("定时西本行情同步完成: {} 个地区, 共 {} 行", results.size(),
-                    results.stream().mapToInt(SteelxQuoteSyncService.SyncResult::rowCount).sum());
-        } catch (QuoteNotPublishedException ex) {
-            // 全部地区都是空表(休市/节假日)属预期结果, 记为跳过而不是错误。
-            log.info("定时西本行情同步跳过: 该日无报价 - {}", ex.getMessage());
+            // 跨实例互斥：拿到 PG 会话级咨询锁才执行，避免多实例重复抓取外部行情并重复写入
+            boolean executed = clusterScheduleLock.runIfLocked(ScheduleJob.STEELX_QUOTE_SYNC, () -> {
+                try {
+                    var results = steelxQuoteSyncService.syncAllRegions();
+                    log.info("定时西本行情同步完成: {} 个地区, 共 {} 行", results.size(),
+                            results.stream().mapToInt(SteelxQuoteSyncService.SyncResult::rowCount).sum());
+                } catch (QuoteNotPublishedException ex) {
+                    // 全部地区都是空表(休市/节假日)属预期结果, 记为跳过而不是错误。
+                    log.info("定时西本行情同步跳过: 该日无报价 - {}", ex.getMessage());
+                } catch (Exception ex) {
+                    log.error("定时西本行情同步失败", ex);
+                }
+            });
+            if (!executed) {
+                log.info("跳过西本行情同步: 其它实例正在执行");
+            }
         } catch (Exception ex) {
-            log.error("定时西本行情同步失败", ex);
+            log.error("定时西本行情同步失败: 获取集群锁异常", ex);
         } finally {
             syncRunning.set(false);
         }

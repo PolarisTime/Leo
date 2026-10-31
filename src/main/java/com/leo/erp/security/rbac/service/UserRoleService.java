@@ -7,6 +7,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.security.rbac.PermissionCacheService;
+import com.leo.erp.security.rbac.api.UserRoleGrant;
 import com.leo.erp.security.rbac.domain.entity.SysRole;
 import com.leo.erp.security.rbac.domain.entity.SysUserRole;
 import com.leo.erp.security.rbac.repository.SysRolePermissionRepository;
@@ -30,7 +31,7 @@ import java.util.Optional;
  * （代价随用户数线性放大，且形成惊群）。变更仍在下一请求生效。</p>
  */
 @Service
-public class UserRoleService {
+public class UserRoleService implements UserRoleGrant {
 
     private final SysUserRoleRepository userRoleRepository;
     private final SysRoleRepository roleRepository;

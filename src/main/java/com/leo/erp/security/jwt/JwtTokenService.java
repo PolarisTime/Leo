@@ -8,7 +8,8 @@ import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.PrematureJwtException;
 import io.jsonwebtoken.security.Keys;
-import com.leo.erp.system.securitykey.service.SecurityKeyService;
+import com.leo.erp.system.securitykey.api.ResolvedSecretMaterial;
+import com.leo.erp.system.securitykey.api.SecurityKeyQuery;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -21,16 +22,16 @@ import java.util.Date;
 public class JwtTokenService {
 
     private final JwtProperties jwtProperties;
-    private final SecurityKeyService securityKeyService;
+    private final SecurityKeyQuery securityKeyService;
 
-    public JwtTokenService(JwtProperties jwtProperties, SecurityKeyService securityKeyService) {
+    public JwtTokenService(JwtProperties jwtProperties, SecurityKeyQuery securityKeyService) {
         this.jwtProperties = jwtProperties;
         this.securityKeyService = securityKeyService;
     }
 
     public String generateAccessToken(SecurityPrincipal principal, String sessionId) {
         Instant now = Instant.now();
-        SecurityKeyService.ResolvedSecretMaterial activeMaterial = securityKeyService.getActiveJwtMaterial();
+        ResolvedSecretMaterial activeMaterial = securityKeyService.getActiveJwtMaterial();
         SecretKey secretKey = secretKey(activeMaterial.secretValue());
         return Jwts.builder()
                 .header()
@@ -49,7 +50,7 @@ public class JwtTokenService {
 
     public Claims parseAccessToken(String token) {
         JwtException lastException = null;
-        for (SecurityKeyService.ResolvedSecretMaterial material : securityKeyService.getJwtVerificationMaterials()) {
+        for (ResolvedSecretMaterial material : securityKeyService.getJwtVerificationMaterials()) {
             try {
                 Claims claims = Jwts.parser()
                         .requireIssuer(jwtProperties.getIssuer())
@@ -99,7 +100,7 @@ public class JwtTokenService {
     }
 
     private void validateKeyWindow(
-            SecurityKeyService.ResolvedSecretMaterial material,
+            ResolvedSecretMaterial material,
             Claims claims
     ) {
         if (material.retiredAt() == null) {

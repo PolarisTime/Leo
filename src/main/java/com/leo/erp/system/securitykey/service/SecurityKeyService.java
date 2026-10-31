@@ -1,6 +1,8 @@
 package com.leo.erp.system.securitykey.service;
 
 import com.leo.erp.security.jwt.JwtProperties;
+import com.leo.erp.system.securitykey.api.ResolvedSecretMaterial;
+import com.leo.erp.system.securitykey.api.SecurityKeyQuery;
 import com.leo.erp.system.securitykey.domain.entity.SecuritySecret;
 import com.leo.erp.system.securitykey.repository.SecuritySecretRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,7 +17,7 @@ import java.util.HexFormat;
 import java.util.List;
 
 @Service
-public class SecurityKeyService {
+public class SecurityKeyService implements SecurityKeyQuery {
 
     public static final String SOURCE_CONFIG = "CONFIG_FILE";
     public static final String SOURCE_DATABASE = "DATABASE";
@@ -129,15 +131,5 @@ public class SecurityKeyService {
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("生成密钥指纹失败", ex);
         }
-    }
-
-    public record ResolvedSecretMaterial(
-            String source,
-            Integer version,
-            String secretValue,
-            LocalDateTime activatedAt,
-            LocalDateTime retiredAt,
-            String fingerprint
-    ) {
     }
 }

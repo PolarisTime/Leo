@@ -9,7 +9,7 @@ import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.security.rbac.service.UserRoleService;
+import com.leo.erp.security.rbac.api.UserRoleGrant;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -24,13 +24,13 @@ public class InitialAccountProvisioningService implements InitialAccountProvisio
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
-    private final UserRoleService userRoleService;
+    private final UserRoleGrant userRoleService;
 
     public InitialAccountProvisioningService(
             UserAccountRepository userAccountRepository,
             PasswordEncoder passwordEncoder,
             SnowflakeIdGenerator snowflakeIdGenerator,
-            UserRoleService userRoleService
+            UserRoleGrant userRoleService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;

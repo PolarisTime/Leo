@@ -7,6 +7,8 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.support.SecurityPrincipal;
+import com.leo.erp.system.operationlog.api.OperationLogCommand;
+import com.leo.erp.system.operationlog.api.OperationLogRecorder;
 import com.leo.erp.system.operationlog.domain.entity.OperationLog;
 import com.leo.erp.system.operationlog.mapper.OperationLogMapper;
 import com.leo.erp.system.operationlog.repository.OperationLogRepository;
@@ -29,7 +31,7 @@ import java.util.List;
 import java.util.Locale;
 
 @Service
-public class OperationLogService {
+public class OperationLogService implements OperationLogRecorder {
 
     /** 概览统计默认时间窗: 最近 7 天(含今天)。 */
     static final int DEFAULT_SUMMARY_DAYS = 7;

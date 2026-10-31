@@ -18,7 +18,7 @@ import com.leo.erp.finance.payment.repository.PaymentRepository;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentResponse;
 import com.leo.erp.system.company.api.SettlementAccountSnapshot;
-import com.leo.erp.system.company.service.CompanySettingService;
+import com.leo.erp.system.company.api.CompanySettingQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,7 +47,7 @@ public class PaymentService {
     private final PaymentMutationGuardService mutationGuardService;
     private final PaymentResponseAssembler responseAssembler;
     private final PaymentSettlementSyncService settlementSyncService;
-    private final CompanySettingService companySettingService;
+    private final CompanySettingQuery companySettingService;
 
     @Autowired
     public PaymentService(PaymentRepository paymentRepository,
@@ -56,7 +56,7 @@ public class PaymentService {
                           PaymentMutationGuardService mutationGuardService,
                           PaymentResponseAssembler responseAssembler,
                           PaymentSettlementSyncService settlementSyncService,
-                          CompanySettingService companySettingService) {
+                          CompanySettingQuery companySettingService) {
         this.idGenerator = snowflakeIdGenerator;
         this.paymentRepository = paymentRepository;
         this.applyService = applyService;

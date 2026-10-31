@@ -1,6 +1,8 @@
 package com.leo.erp.system.schedule.service;
 
 import com.leo.erp.attachment.api.AttachmentManifestExporter;
+import com.leo.erp.common.schedule.ClusterScheduleLock;
+import com.leo.erp.common.schedule.ScheduleJob;
 import com.leo.erp.system.operationlog.partition.OperationLogPartitionCleanupService;
 import com.leo.erp.system.operationlog.partition.OperationLogPartitionPrecreateService;
 import com.leo.erp.system.schedule.config.MaintenanceScheduleProperties;
@@ -19,6 +21,7 @@ public class MaintenanceScheduledTasks {
     private final AttachmentManifestExporter attachmentManifestExporter;
     private final OperationLogPartitionCleanupService operationLogPartitionCleanupService;
     private final OperationLogPartitionPrecreateService operationLogPartitionPrecreateService;
+    private final ClusterScheduleLock clusterScheduleLock;
     private final AtomicBoolean redisCacheHealthCheckRunning = new AtomicBoolean(false);
     private final AtomicBoolean attachmentManifestExportRunning = new AtomicBoolean(false);
     private final AtomicBoolean operationLogPartitionCleanupRunning = new AtomicBoolean(false);
@@ -28,12 +31,14 @@ public class MaintenanceScheduledTasks {
                                      RedisCacheHealthCheckService redisCacheHealthCheckService,
                                      AttachmentManifestExporter attachmentManifestExporter,
                                      OperationLogPartitionCleanupService operationLogPartitionCleanupService,
-                                     OperationLogPartitionPrecreateService operationLogPartitionPrecreateService) {
+                                     OperationLogPartitionPrecreateService operationLogPartitionPrecreateService,
+                                     ClusterScheduleLock clusterScheduleLock) {
         this.properties = properties;
         this.redisCacheHealthCheckService = redisCacheHealthCheckService;
         this.attachmentManifestExporter = attachmentManifestExporter;
         this.operationLogPartitionCleanupService = operationLogPartitionCleanupService;
         this.operationLogPartitionPrecreateService = operationLogPartitionPrecreateService;
+        this.clusterScheduleLock = clusterScheduleLock;
     }
 
     @Scheduled(cron = "${leo.maintenance.redis-cache-health-check.cron:0 */5 * * * *}", zone = "${leo.maintenance.zone:Asia/Shanghai}")
@@ -46,7 +51,9 @@ public class MaintenanceScheduledTasks {
             return;
         }
         try {
-            redisCacheHealthCheckService.verifyAndRefreshCaches();
+            clusterScheduleLock.runIfLocked(
+                    ScheduleJob.REDIS_CACHE_HEALTH_CHECK,
+                    redisCacheHealthCheckService::verifyAndRefreshCaches);
         } catch (Exception ex) {
             log.error("Redis 缓存巡检失败", ex);
         } finally {
@@ -64,7 +71,9 @@ public class MaintenanceScheduledTasks {
             return;
         }
         try {
-            attachmentManifestExporter.exportDaily();
+            clusterScheduleLock.runIfLocked(
+                    ScheduleJob.ATTACHMENT_MANIFEST_EXPORT,
+                    attachmentManifestExporter::exportDaily);
         } catch (Exception ex) {
             log.error("附件恢复清单导出失败", ex);
         } finally {
@@ -90,7 +99,9 @@ public class MaintenanceScheduledTasks {
             return;
         }
         try {
-            operationLogPartitionPrecreateService.precreateMissingPartitions();
+            clusterScheduleLock.runIfLocked(
+                    ScheduleJob.OPERATION_LOG_PARTITION_PRECREATE,
+                    operationLogPartitionPrecreateService::precreateMissingPartitions);
         } catch (Exception ex) {
             log.error("操作日志分区预建失败", ex);
         } finally {
@@ -117,7 +128,9 @@ public class MaintenanceScheduledTasks {
             return;
         }
         try {
-            operationLogPartitionCleanupService.cleanupExpiredEmptyPartitions();
+            clusterScheduleLock.runIfLocked(
+                    ScheduleJob.OPERATION_LOG_PARTITION_CLEANUP,
+                    operationLogPartitionCleanupService::cleanupExpiredEmptyPartitions);
         } catch (Exception ex) {
             log.error("操作日志分区清理失败", ex);
         } finally {

@@ -1,5 +1,6 @@
 package com.leo.erp.master.customer.service;
 
+import com.leo.erp.common.cache.AfterCommitCacheEvictor;
 import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
@@ -29,7 +30,6 @@ import com.leo.erp.master.service.ReferenceSnapshotSyncService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
@@ -57,6 +57,7 @@ public class CustomerService implements RedisCacheHealthCheck {
     private final ProjectRepository projectRepository;
     private final ReferenceSnapshotSyncService referenceSnapshotSyncService;
     private CacheManager cacheManager;
+    private AfterCommitCacheEvictor cacheEvictor;
 
     @Autowired
     public CustomerService(CustomerRepository customerRepository,
@@ -75,13 +76,24 @@ public class CustomerService implements RedisCacheHealthCheck {
         this.referenceSnapshotSyncService = referenceSnapshotSyncService;
     }
 
+    /** 缓存失效统一走 after-commit helper；单测直接构造服务时为 null，跳过失效即可。 */
+    @Autowired(required = false)
+    void setCacheEvictor(AfterCommitCacheEvictor cacheEvictor) {
+        this.cacheEvictor = cacheEvictor;
+    }
+
+    private void evictOptionsCache() {
+        if (cacheEvictor != null) {
+            cacheEvictor.evict(CacheConfig.CACHE_OPTIONS, CUSTOMER_CACHE_KEY);
+        }
+    }
+
     @Transactional(readOnly = true)
     public CustomerResponse detail(Long id) {
         return toResponse(requireActiveCustomer(id));
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CUSTOMER_CACHE_KEY + "'")
     public CustomerResponse create(CustomerRequest request) {
         Customer entity = new Customer();
         long entityId = snowflakeIdGenerator.nextId();
@@ -90,11 +102,11 @@ public class CustomerService implements RedisCacheHealthCheck {
         apply(entity, request);
         Customer saved = saveCreatedCustomer(entity);
         operationLogger.created(entity, entityId);
+        evictOptionsCache();
         return toResponse(saved);
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CUSTOMER_CACHE_KEY + "'")
     public CustomerResponse update(Long id, CustomerRequest request) {
         Customer entity = requireActiveCustomer(id);
         String currentName = entity.getCustomerName();
@@ -106,16 +118,17 @@ public class CustomerService implements RedisCacheHealthCheck {
         if (!currentName.equals(nextName)) {
             referenceSnapshotSyncService.syncCustomerName(id, nextName);
         }
+        evictOptionsCache();
         return response;
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CUSTOMER_CACHE_KEY + "'")
     public CustomerResponse updateStatus(Long id, String status) {
         Customer entity = requireActiveCustomer(id);
         String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
         String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
         if (currentStatus.equals(nextStatus)) {
+            evictOptionsCache();
             return toResponse(entity);
         }
         STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
@@ -123,7 +136,6 @@ public class CustomerService implements RedisCacheHealthCheck {
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CUSTOMER_CACHE_KEY + "'")
     public void delete(Long id) {
         Customer entity = requireActiveCustomer(id);
         if (referenceGuard != null) {
@@ -132,6 +144,7 @@ public class CustomerService implements RedisCacheHealthCheck {
         entity.setDeletedFlag(true);
         saveCustomer(entity);
         operationLogger.deleted(entity, id);
+        evictOptionsCache();
     }
 
     @Transactional(readOnly = true)

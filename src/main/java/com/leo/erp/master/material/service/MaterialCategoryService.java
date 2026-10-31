@@ -1,5 +1,6 @@
 package com.leo.erp.master.material.service;
 
+import com.leo.erp.common.cache.AfterCommitCacheEvictor;
 import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
@@ -18,7 +19,7 @@ import com.leo.erp.master.material.repository.MaterialCategoryRepository;
 import com.leo.erp.master.material.web.dto.MaterialCategoryOptionResponse;
 import com.leo.erp.master.material.web.dto.MaterialCategoryRequest;
 import com.leo.erp.master.material.web.dto.MaterialCategoryResponse;
-import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -41,6 +42,7 @@ public class MaterialCategoryService {
     private final MaterialCategoryRepository repository;
     private final MaterialCategoryMapper materialCategoryMapper;
     private final MasterDataCodeIssuanceService codeIssuanceService;
+    private AfterCommitCacheEvictor cacheEvictor;
 
     public MaterialCategoryService(SnowflakeIdGenerator idGenerator,
                                    MaterialCategoryRepository repository,
@@ -52,13 +54,24 @@ public class MaterialCategoryService {
         this.codeIssuanceService = codeIssuanceService;
     }
 
+    /** 缓存失效统一走 after-commit helper；单测直接构造服务时为 null，跳过失效即可。 */
+    @Autowired(required = false)
+    void setCacheEvictor(AfterCommitCacheEvictor cacheEvictor) {
+        this.cacheEvictor = cacheEvictor;
+    }
+
+    private void evictOptionsCache() {
+        if (cacheEvictor != null) {
+            cacheEvictor.evict(CacheConfig.CACHE_OPTIONS, MATERIAL_CATEGORY_OPTIONS_CACHE_KEY);
+        }
+    }
+
     @Transactional(readOnly = true)
     public MaterialCategoryResponse detail(Long id) {
         return toResponse(requireActiveCategory(id));
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + MATERIAL_CATEGORY_OPTIONS_CACHE_KEY + "'")
     public MaterialCategoryResponse create(MaterialCategoryRequest request) {
         MaterialCategory entity = new MaterialCategory();
         long entityId = snowflakeIdGenerator.nextId();
@@ -67,26 +80,27 @@ public class MaterialCategoryService {
         apply(entity, request);
         MaterialCategory saved = saveCreatedCategory(entity);
         operationLogger.created(entity, entityId);
+        evictOptionsCache();
         return toResponse(saved);
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + MATERIAL_CATEGORY_OPTIONS_CACHE_KEY + "'")
     public MaterialCategoryResponse update(Long id, MaterialCategoryRequest request) {
         MaterialCategory entity = requireActiveCategory(id);
         apply(entity, request);
         MaterialCategory saved = repository.save(entity);
         operationLogger.updated(entity, id);
+        evictOptionsCache();
         return toResponse(saved);
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + MATERIAL_CATEGORY_OPTIONS_CACHE_KEY + "'")
     public MaterialCategoryResponse updateStatus(Long id, String status) {
         MaterialCategory entity = requireActiveCategory(id);
         String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
         String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
         if (currentStatus.equals(nextStatus)) {
+            evictOptionsCache();
             return toResponse(entity);
         }
         STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
@@ -94,12 +108,12 @@ public class MaterialCategoryService {
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + MATERIAL_CATEGORY_OPTIONS_CACHE_KEY + "'")
     public void delete(Long id) {
         MaterialCategory entity = requireActiveCategory(id);
         entity.setDeletedFlag(true);
         repository.save(entity);
         operationLogger.deleted(entity, id);
+        evictOptionsCache();
     }
 
     @Transactional(readOnly = true)

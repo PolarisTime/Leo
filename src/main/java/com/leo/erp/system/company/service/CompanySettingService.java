@@ -1,5 +1,6 @@
 package com.leo.erp.system.company.service;
 
+import com.leo.erp.common.cache.AfterCommitCacheEvictor;
 import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
@@ -13,6 +14,7 @@ import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
+import com.leo.erp.system.company.api.CompanySettingQuery;
 import com.leo.erp.system.company.api.SettlementAccountSnapshot;
 import com.leo.erp.system.company.api.SettlementCompanySnapshot;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
@@ -26,9 +28,7 @@ import com.leo.erp.system.dashboard.service.DashboardSummaryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -43,7 +43,7 @@ import java.util.Optional;
 import java.util.Set;
 
 @Service
-public class CompanySettingService implements RedisCacheHealthCheck {
+public class CompanySettingService implements RedisCacheHealthCheck, CompanySettingQuery {
 
     public static final String CURRENT_COMPANY_CACHE_KEY = "leo:company:current:v2";
     private static final String COMPANY_OPTIONS_CACHE_KEY = "leo:company-setting:all";
@@ -64,6 +64,7 @@ public class CompanySettingService implements RedisCacheHealthCheck {
     private final CompanySettingMutationGuardService mutationGuardService;
     private final CompanySettlementNameSyncService nameSyncService;
     private CacheManager cacheManager;
+    private AfterCommitCacheEvictor cacheEvictor;
 
     @Autowired
     public CompanySettingService(CompanySettingRepository companySettingRepository,
@@ -220,6 +221,21 @@ public class CompanySettingService implements RedisCacheHealthCheck {
         this.cacheManager = cacheManager;
     }
 
+    /** 缓存失效统一走 after-commit helper；单测直接构造服务时为 null，跳过失效即可。 */
+    @Autowired(required = false)
+    void setCacheEvictor(AfterCommitCacheEvictor cacheEvictor) {
+        this.cacheEvictor = cacheEvictor;
+    }
+
+    /** 结算主体写路径统一失效：当前主体静态缓存 + 主体选项缓存，均在事务提交后执行。 */
+    private void evictCompanyCaches() {
+        if (cacheEvictor == null) {
+            return;
+        }
+        cacheEvictor.evict(CacheConfig.CACHE_STATIC, CURRENT_COMPANY_CACHE_KEY);
+        cacheEvictor.evict(CacheConfig.CACHE_OPTIONS, COMPANY_OPTIONS_CACHE_KEY);
+    }
+
     private CompanySettingResponse loadCurrent() {
         return findCurrentEntity()
                 .map(this::toResponse)
@@ -227,15 +243,11 @@ public class CompanySettingService implements RedisCacheHealthCheck {
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + COMPANY_OPTIONS_CACHE_KEY + "'")
-    })
     public CompanySettingResponse saveCurrent(CompanySettingRequest request) {
         Optional<CompanySetting> currentEntity = findCurrentEntity();
         if (currentEntity.isEmpty()) {
             CompanySettingResponse created = create(request);
-            evictCache();
+            evictCompanyCaches();
             return created;
         }
 
@@ -247,16 +259,12 @@ public class CompanySettingService implements RedisCacheHealthCheck {
         if (!currentName.equals(request.companyName())) {
             nameSyncService.syncSettlementCompanyName(entity.getId(), request.companyName());
         }
-        evictCache();
+        evictCompanyCaches();
         dashboardSummaryService.evictAllCache();
         return toResponse(saved);
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + COMPANY_OPTIONS_CACHE_KEY + "'")
-    })
     public CompanySettingResponse create(CompanySettingRequest request) {
         CompanySetting entity = new CompanySetting();
         long entityId = snowflakeIdGenerator.nextId();
@@ -265,14 +273,11 @@ public class CompanySettingService implements RedisCacheHealthCheck {
         apply(entity, request);
         CompanySetting saved = saveCompanySetting(entity);
         operationLogger.created(entity, entityId);
+        evictCompanyCaches();
         return toResponse(saved);
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + COMPANY_OPTIONS_CACHE_KEY + "'")
-    })
     public CompanySettingResponse update(Long id, CompanySettingRequest request) {
         CompanySetting entity = requireActiveCompanySetting(id);
         String currentName = entity.getCompanyName();
@@ -284,19 +289,17 @@ public class CompanySettingService implements RedisCacheHealthCheck {
         if (!currentName.equals(request.companyName())) {
             nameSyncService.syncSettlementCompanyName(id, request.companyName());
         }
+        evictCompanyCaches();
         return response;
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + COMPANY_OPTIONS_CACHE_KEY + "'")
-    })
     public CompanySettingResponse updateStatus(Long id, String status) {
         CompanySetting entity = requireActiveCompanySetting(id);
         String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
         String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
         if (currentStatus.equals(nextStatus)) {
+            evictCompanyCaches();
             return toResponse(entity);
         }
         STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
@@ -304,16 +307,13 @@ public class CompanySettingService implements RedisCacheHealthCheck {
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + COMPANY_OPTIONS_CACHE_KEY + "'")
-    })
     public void delete(Long id) {
         CompanySetting entity = requireActiveCompanySetting(id);
         mutationGuardService.assertDeletable(entity);
         entity.setDeletedFlag(true);
         saveCompanySetting(entity);
         operationLogger.deleted(entity, id);
+        evictCompanyCaches();
     }
 
     @Transactional(readOnly = true)

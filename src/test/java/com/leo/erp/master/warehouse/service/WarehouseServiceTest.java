@@ -253,10 +253,9 @@ class WarehouseServiceTest {
         Method listActiveOptions = WarehouseService.class.getMethod("listActiveOptions");
 
         for (Method method : List.of(create, update, updateStatus, delete)) {
-            CacheEvict cacheEvict = method.getAnnotation(CacheEvict.class);
-            assertThat(cacheEvict).as(method.getName()).isNotNull();
-            assertThat(cacheEvict.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
-            assertThat(cacheEvict.key()).isEqualTo("'leo:warehouse:all'");
+            assertThat(method.getAnnotation(CacheEvict.class))
+                    .as(method.getName() + " 不得再用提交前失效的 @CacheEvict，写路径统一走 after-commit helper")
+                    .isNull();
         }
         Cacheable cacheable = listActiveOptions.getAnnotation(Cacheable.class);
         assertThat(cacheable).isNotNull();

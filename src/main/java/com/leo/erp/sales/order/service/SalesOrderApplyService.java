@@ -16,8 +16,7 @@ import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
-import com.leo.erp.system.company.service.CompanySettingService;
+import com.leo.erp.system.company.api.CompanySettingQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +40,7 @@ public class SalesOrderApplyService {
     private final SalesOrderItemMapper salesOrderItemMapper;
     private final CustomerQuery customerQuery;
     private final ProjectQuery projectQuery;
-    private final CompanySettingService companySettingService;
+    private final CompanySettingQuery companySettingService;
 
     public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
                                   SalesOrderSourceAllocationService sourceAllocationService,
@@ -64,7 +63,7 @@ public class SalesOrderApplyService {
                                   SalesOrderWeightResolver weightResolver,
                                   SalesOrderItemMapper salesOrderItemMapper,
                                   CustomerQuery customerQuery,
-                                  CompanySettingService companySettingService) {
+                                  CompanySettingQuery companySettingService) {
         this(tradeItemMaterialSupport, sourceAllocationService, weightResolver, salesOrderItemMapper,
                 customerQuery, null, companySettingService);
     }
@@ -76,7 +75,7 @@ public class SalesOrderApplyService {
                                   SalesOrderItemMapper salesOrderItemMapper,
                                   CustomerQuery customerQuery,
                                   ProjectQuery projectQuery,
-                                  CompanySettingService companySettingService) {
+                                  CompanySettingQuery companySettingService) {
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
         this.sourceAllocationService = sourceAllocationService;
         this.weightResolver = weightResolver;
@@ -390,8 +389,8 @@ public class SalesOrderApplyService {
                     trimToNull(request.settlementCompanyName())
             );
         }
-        CompanySetting company = companySettingService.requireActiveSettlementCompany(settlementCompanyId);
-        return new SettlementCompanySnapshot(company.getId(), company.getCompanyName());
+        var company = companySettingService.requireActiveSettlementCompanySnapshot(settlementCompanyId);
+        return new SettlementCompanySnapshot(company.id(), company.name());
     }
 
     private String trimToNull(String value) {

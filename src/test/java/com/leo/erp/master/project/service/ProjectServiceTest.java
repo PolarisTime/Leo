@@ -292,10 +292,9 @@ class ProjectServiceTest {
         // 项目选项 key 含 customerId，只能整 region 失效；因此必须使用专用 region，
         // 否则一次项目改动会把供应商/客户/物流商/仓库等全部 options 缓存一并清空。
         for (Method method : List.of(create, update, updateStatus, delete)) {
-            CacheEvict cacheEvict = method.getAnnotation(CacheEvict.class);
-            assertThat(cacheEvict).as(method.getName()).isNotNull();
-            assertThat(cacheEvict.value()).containsExactly(CacheConfig.CACHE_PROJECT_OPTIONS);
-            assertThat(cacheEvict.allEntries()).isTrue();
+            assertThat(method.getAnnotation(CacheEvict.class))
+                    .as(method.getName() + " 不得再用提交前失效的 @CacheEvict，写路径统一走 after-commit helper")
+                    .isNull();
         }
         Cacheable cacheable = listActiveOptions.getAnnotation(Cacheable.class);
         assertThat(cacheable).isNotNull();

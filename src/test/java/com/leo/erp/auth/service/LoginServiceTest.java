@@ -8,8 +8,8 @@ import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.web.dto.AuthUserResponse;
 import com.leo.erp.auth.web.dto.LoginRequest;
 import com.leo.erp.auth.web.dto.TokenResponse;
-import com.leo.erp.system.operationlog.service.OperationLogCommand;
-import com.leo.erp.system.operationlog.service.OperationLogService;
+import com.leo.erp.system.operationlog.api.OperationLogCommand;
+import com.leo.erp.system.operationlog.api.OperationLogRecorder;
 import com.leo.erp.security.jwt.JwtTokenService;
 import com.leo.erp.security.permission.AuthorityProvider;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,7 +65,7 @@ class LoginServiceTest {
     @Mock
     private LoginAttemptService loginAttemptService;
     @Mock
-    private OperationLogService operationLogService;
+    private OperationLogRecorder operationLogService;
     @Mock
     private JwtTokenService jwtTokenService;
     @Mock
