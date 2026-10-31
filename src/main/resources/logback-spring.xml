@@ -22,6 +22,32 @@
         </encoder>
     </appender>
 
+    <!--
+      生产主日志：ECS JSON 写文件，按天滚动。
+
+      <p>为什么需要它：prod 原本只把日志打到 stdout，由部署脚本
+      `steelx-process.sh` 以 `>> logs/backend.log` 追加重定向 —— 该文件没有滚动，
+      只增不减（2026-10 已长到 25MB+），排障时既难定位也不好清理。
+      现在主日志由 logback 自己按天切分：当天写 backend.log，跨天自动改名为
+      backend.yyyy-MM-dd.log，保留 30 天、总量上限 2GB。</p>
+
+      <p>stdout 仍保留（JSON_CONSOLE）：systemd/journald、容器与 CI 冒烟仍靠它；
+      部署脚本会把 stdout 落到 console.log，不再与这里的 backend.log 抢同一个文件。</p>
+    -->
+    <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/backend.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- 默认 24 小时切分；跨天第一条日志触发改名 -->
+            <fileNamePattern>${LOG_PATH}/backend.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder class="org.springframework.boot.logging.logback.StructuredLogEncoder">
+            <format>ecs</format>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
     <!-- 文件输出（按天滚动） -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_PATH}/${APP_NAME}.log</file>
@@ -78,9 +104,11 @@
         </root>
     </springProfile>
 
-    <!-- 生产环境：标准输出作为唯一主日志，错误日志另行滚动保留。 -->
+    <!-- 生产环境：主日志写 backend.log 按天滚动，同时保留 stdout（journald/容器采集），
+         错误日志另行滚动保留。 -->
     <springProfile name="prod">
         <root level="INFO">
+            <appender-ref ref="JSON_FILE"/>
             <appender-ref ref="JSON_CONSOLE"/>
             <appender-ref ref="JSON_ERROR_FILE"/>
         </root>

@@ -7,7 +7,13 @@ STEELX_ROOT="${STEELX_ROOT:-/instance/steelx}"
 STEELX_BACKEND_ROOT="${STEELX_BACKEND_ROOT:-$STEELX_ROOT/backend}"
 ENV_FILE="$STEELX_ROOT/shared/steelx.env"
 BACKEND_PID_FILE="$STEELX_ROOT/run/backend.pid"
-BACKEND_LOG_FILE="$STEELX_ROOT/logs/backend.log"
+# stdout/stderr 兜底落点：logback 接管 backend.log 之后，这里只保留 JVM 启动失败、
+# Spring 上下文启动异常等「logback 还没接管」阶段的输出，以及启动分隔行。
+# 若继续写 backend.log，会与 logback 的滚动 appender 抢同一个文件（双写、切分错乱）。
+BACKEND_CONSOLE_LOG_FILE="$STEELX_ROOT/logs/console.log"
+# logback 的 LOG_PATH 默认是相对路径 logs/（随进程 CWD 漂移），生产显式指向共享日志目录，
+# 让 backend.log 与按天滚动出的 backend.yyyy-MM-dd.log 都落在 logs/ 下。
+export LEO_LOG_PATH="${LEO_LOG_PATH:-$STEELX_ROOT/logs}"
 
 usage() {
   echo "用法: STEELX_ROOT=/instance/steelx bash steelx-process.sh {run|start|stop|status}" >&2
@@ -142,7 +148,7 @@ start_backend() {
   {
     printf '\n===== %s starting %s mode=%s =====\n' "$(date -Is)" "$JAR_FILE" "$JAVA_LAUNCH_MODE"
     env -u RUNNER_TRACKING_ID setsid "${JAVA_COMMAND[@]}"
-  } >> "$BACKEND_LOG_FILE" 2>&1 &
+  } >> "$BACKEND_CONSOLE_LOG_FILE" 2>&1 &
   local launcher_pid=$!
   echo "$launcher_pid" > "$BACKEND_PID_FILE"
   # setsid 会 fork, $! 只是启动器; kill 启动器不会停掉 java(stop 因此失效)。
