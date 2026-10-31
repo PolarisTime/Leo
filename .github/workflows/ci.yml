@@ -24,6 +24,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # 架构基线守卫需要与父提交比较 store 行数变化（HEAD~1）。
+          fetch-depth: 2
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -37,6 +40,11 @@ jobs:
         run: |
           bash scripts/check-java-module-boundaries.sh
           bash scripts/verify-modulith-architecture.sh
+
+      # 冻结基线只许收敛：新增违规必须修复，不允许再靠一次 refreeze 把新违规塞进基线。
+      # 确需纳管例外时显式设置 ALLOW_ARCH_BASELINE_EXPANSION=true，并在架构评审中说明。
+      - name: 架构冻结基线不得净扩张
+        run: bash scripts/deploy/assert-arch-baseline-not-expanded.sh
 
       # 迁移政策门禁（无需数据库）：
       #   1) V1__baseline.sql 的 sha256 冻结：基线不可改写，内容一改即红。官方 flyway:validate

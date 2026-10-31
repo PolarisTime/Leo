@@ -26,9 +26,40 @@ bash scripts/check-java-module-boundaries.sh --write-baseline
 
 基于字节码分析后，反射之外的全限定类名引用、注解、泛型签名等不再是盲区；早期基于 import 文本的 Python 扫描器已退役（历史实现见 Git 历史）。已显式纳管的模块由下面的 Spring Modulith 验证补充覆盖。
 
-### 当前基线快照
+### 2026-10-31 当前基线（权威）
 
-2026-07-26 最终源码与阶段中间基线的对比如下：
+| 指标 | 数值 |
+| --- | ---: |
+| 冻结受限依赖 | 44 |
+| 冻结循环模块边 | 25（平台 SCC 20 + 业务 SCC 5） |
+| 冻结未授权状态写 | 23 |
+| 已纳管 Modulith 模块 | 8 |
+
+当前 25 条循环边的分布：平台强连通分量
+`{attachment, auth, common, master, security, system}` 20 条；业务强连通分量
+`{inventory, purchase, sales}` 5 条（`inventory -> purchase`、`inventory -> sales`、
+`purchase -> inventory`、`sales -> inventory`、`sales -> purchase`，均走 `api` 端口）。
+
+当前 44 条受限依赖分布：
+
+| 来源 -> 目标 | 数量 |
+| --- | ---: |
+| finance -> system | 21 |
+| inventory -> master | 8 |
+| security -> auth | 4 |
+| auth -> security | 3 |
+| sales -> system | 2 |
+| purchase -> system | 2 |
+| master -> system | 2 |
+| logistics -> system | 2 |
+
+`config/archunit-boundary-store/` 是唯一权威来源，上表随基线收敛会变化。2026-10-31 前的
+一次 refreeze（`36673b52`）曾把 172 条新增违规一次性纳入基线，因此基线的更新方式已收紧为
+"只读 + 显式写基线 + CI 禁止净扩张"，见本节末尾"基线更新政策"。
+
+### 历史基线快照（2026-07-26，仅作趋势参照）
+
+2026-07-26 最终源码与阶段中间基线的对比如下（历史口径，数字与当前不一致）：
 
 | 指标 | 阶段中间基线 | 当前基线 | 变化 |
 | --- | ---: | ---: | ---: |
@@ -39,57 +70,28 @@ bash scripts/check-java-module-boundaries.sh --write-baseline
 
 Java 文件增加来自公开端口、快照和适配器；同时顶层依赖边下降 9.1%，内部类型 import 下降 76.9%，循环边下降 38.7%。刷新基线前的差异检查只发现已移除项，没有新增受限 import 或新增循环边。
 
-剩余 19 条循环边全部位于平台强连通分量
-`{attachment, auth, common, master, security, system}`。其中 `attachment`、`master` 已纳管，`auth`、`common`、`security`、`system` 尚未纳管；静态基线继续按完整顶层包图阻止该分量增加新边。精确边如下：
+当时的 19 条循环边全部位于平台强连通分量
+`{attachment, auth, common, master, security, system}`。其中 `attachment`、`master` 已纳管，
+`auth`、`common`、`security`、`system` 尚未纳管；静态基线继续按完整顶层包图阻止该分量增加新边。
+当前基线已包含业务分量 `{inventory, purchase, sales}`（见上节），本文档不再声称业务模块之间是 DAG。
 
-```text
-attachment -> common, security, system
-auth       -> common, security, system
-common     -> security, system
-master     -> attachment, common, system
-security   -> auth, common, system
-system     -> attachment, auth, common, master, security
-```
+历史 import 口径的 24 条分布已退役，不再作为门禁输入；当前以冻结存储的 44 条受限依赖为准（见上节）。
 
-剩余 24 条跨模块内部类型 import 的分布如下。它们仍是待解耦债务，不因进入基线而视为合规：
+### 基线更新政策（2026-10-31 收紧）
 
-| 来源 -> 目标 | 数量 | 类型 |
-| --- | ---: | --- |
-| finance -> common | 5 | 5 web.dto |
-| finance -> system | 5 | 2 repository，3 domain.entity |
-| sales -> common | 4 | 4 web.dto |
-| master -> system | 2 | 2 domain.entity |
-| purchase -> common | 2 | 2 web.dto |
-| statement -> common | 2 | 2 web.dto |
-| logistics -> common | 1 | 1 web.dto |
-| logistics -> system | 1 | 1 domain.entity |
-| purchase -> system | 1 | 1 domain.entity |
-| sales -> system | 1 | 1 domain.entity |
-
-### ArchUnit 字节码基线重校准
-
-2026-07-26 边界检查引擎从 import 文本扫描切换为 ArchUnit 字节码分析后，同一份源码的度量口径发生变化：受限依赖按"类 → 类"的字节码依赖计数（含注解、泛型签名、方法体内引用），冻结存储共 65 条受限依赖；循环模块边保持 19 条，与旧口径一致，交叉验证了两代引擎的模块图等价。当前字节码口径的受限依赖分布：
-
-| 来源 -> 目标 | 数量 |
-| --- | ---: |
-| finance -> system | 17 |
-| sales -> common | 15 |
-| finance -> common | 13 |
-| statement -> common | 4 |
-| purchase -> common | 4 |
-| master -> system | 4 |
-| sales -> system | 2 |
-| purchase -> system | 2 |
-| logistics -> system | 2 |
-| logistics -> common | 2 |
-
-上表 import 口径的历史分布保留作趋势参照；后续整改进度以冻结存储 `config/archunit-boundary-store/` 为准。
+- `ModuleBoundaryVerifier` 默认只读：本地运行也不再自动写基线，只有显式 `--write-baseline`
+  （脚本内部传 `--refreeze`）才允许更新，且 `CI=true` 时拒绝 refreeze。
+- CI 增加 `scripts/deploy/assert-arch-baseline-not-expanded.sh`：相对父提交，基线新增行数必须
+  不超过删除行数（只许净收敛）；确需净扩张时显式设置 `ALLOW_ARCH_BASELINE_EXPANSION=true`
+  并在架构评审中说明。
+- 历史教训：`36673b52` 曾一次 refreeze 172 条新增违规，其中 7 条状态写至今仍在基线；
+  这条"本地跑一次门禁就自动扩容"的通道已经关闭。
 
 ## Spring Modulith 验证
 
 `application.yml` 使用 `explicitly-annotated` 检测策略。只有顶层 `package-info.java` 明确声明的模块参与硬门禁，模块收口后再逐个加入，避免历史依赖一次性阻断全部交付。
 
-当前已纳管 7 个模块，允许边均指向目标模块的 `api` 命名接口：
+当前已纳管 8 个模块，允许边均指向目标模块的 `api` 命名接口：
 
 | 模块 | `allowedDependencies` |
 | --- | --- |
@@ -100,8 +102,9 @@ system     -> attachment, auth, common, master, security
 | sales | `attachment::api`、`master::api`、`purchase::api` |
 | logistics | `attachment::api`、`master::api`、`sales::api` |
 | statement | `attachment::api`、`logistics::api`、`master::api`、`sales::api` |
+| market | `master::api`、`purchase::api` |
 
-这些边构成 DAG。`ApplicationModules.verify()` 同时检查循环、内部包访问和白名单，禁止使用开放模块或内部包白名单绕过边界。
+这 8 个模块各自的 `allowedDependencies` 有向且受 `ApplicationModules.verify()` 校验，但**不能据此认为全局依赖图是 DAG**：`finance`、`system`、`inventory` 等模块尚未纳管，仍由上面的完整包图冻结基线约束；业务分量 `{inventory, purchase, sales}` 就是未纳管循环的实例。
 `master::api` 按客户、供应商、项目、物流商、车辆、物料分类规则和主数据统计拆分同步查询端口，只返回不可变快照。生产源码中 `master` 外部对其 Repository 和 JPA 实体的 import 已清零；尚未纳管的 `finance`、`system` 也统一改为消费该公开 API，后续纳管无需再迁移主数据依赖。
 `auth.api` 通过账号展示快照、有效认证快照、会话统计、首次账号初始化命令和公开事件契约收口外部调用。生产源码中 `auth` 外部对其 Repository、JPA 实体、领域枚举和内部 Service 的 import 已清零。`auth` 根模块仍反向依赖 `security` 的 JWT/缓存能力和 `system` 的操作日志能力，且三者仍处于同一强连通分量，因此本阶段不添加 `@ApplicationModule`，避免把尚未消除的循环误报为已治理完成。
 

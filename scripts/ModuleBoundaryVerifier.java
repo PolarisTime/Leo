@@ -34,7 +34,9 @@ import java.util.TreeSet;
  *
  * <p>Replaces the retired Python import scanner with bytecode-level analysis while keeping the
  * same ratchet semantics: existing violations live in a committed store, new violations fail the
- * build, and fixed violations shrink the store automatically on local runs.</p>
+ * build, and the store is read-only by default. The store only changes when
+ * {@code --write-baseline} is passed explicitly (and never under {@code CI=true}); this closes the
+ * "local run silently refreezes new violations and the build passes" hole.</p>
  *
  * <p>This source is compiled into a temporary tools directory and is never packaged with the
  * application.</p>
@@ -69,8 +71,9 @@ public final class ModuleBoundaryVerifier {
         ArchConfiguration configuration = ArchConfiguration.get();
         configuration.setProperty("freeze.store.default.path", storePath.toString());
         configuration.setProperty("freeze.store.default.allowStoreCreation", String.valueOf(refreeze));
-        // CI 只读校验；本地运行允许 FreezingArchRule 在违规修复后自动收缩基线。
-        configuration.setProperty("freeze.store.default.allowStoreUpdate", String.valueOf(!ci));
+        // 默认只读：本地运行也不再自动写基线，避免"新违规被静默冻结并通过"。
+        // 只有显式 --write-baseline（脚本传 --refreeze）才允许创建/更新/收缩基线，且 CI 下拒绝。
+        configuration.setProperty("freeze.store.default.allowStoreUpdate", String.valueOf(refreeze));
         configuration.setProperty("freeze.refreeze", String.valueOf(refreeze));
 
         JavaClasses classes = new ClassFileImporter().importPath("target/classes");
