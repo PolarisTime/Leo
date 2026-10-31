@@ -38,6 +38,8 @@
 
 > 备份目录 `.local/` 已在 `.gitignore` 中忽略（`.gitignore:29-30`），不会被 `git add -A` 带入索引。
 
+> 另有 `src/main/resources/db/seed/`（15 个 `S*.sql`）于同日退役，见第 11 节。
+
 ---
 
 ## 2. 数据库退役归档表（16 张，COMMENT 标注「功能已退役」）
@@ -131,6 +133,20 @@ so_sales_order_item`、`fm_invoice_receipt_item → po_purchase_order_item`、
 
 同时清理了操作日志的超窗口空分区：保留「当前月 ±12 个月」，其余**空**分区删除；非空分区一律不动
 （插入若超出保留窗口会落到 `sys_operation_log_default`，不影响可用性）。
+
+---
+
+## 4.1 V206 删除的死列与孤儿表（2026-10-31）
+
+依据 `remaining-checks.md` 的 A1/A3：这些对象已无代码、视图、函数、触发器依赖，属退役残留，随 V206 一并移除。
+
+| 对象 | 处置 | 依据 |
+| --- | --- | --- |
+| `fm_payment_allocation.source_supplier_statement_id` | `DROP COLUMN` | 指向退役表 `st_supplier_statement` 的死外键列（FK 已由 V205 删除）；表 0 行、零 Java/视图引用 |
+| `fm_supplier_refund_receipt.purchase_refund_id` | `DROP COLUMN` | 指向退役表 `po_purchase_refund` 的死列；表 0 行、零引用；列上的 `NOT NULL` 随列消失 |
+| `sys_general_setting` | `DROP TABLE` | V95 已退役；10 行全部 `deleted_flag=true`，零 Java/XML/YAML/视图/函数/触发器引用、无子表外键 |
+
+> 恢复历史备份后如需回放：直接执行 `V206__drop_retired_orphan_columns_and_table.sql`（全 `IF EXISTS`，幂等）。
 
 ---
 
@@ -282,9 +298,83 @@ git log --diff-filter=D --name-only -- archive scripts/jsh_erp_steel_dump.sql
 
 ---
 
-## 11. 变更记录
+## 11. `db/seed` 线退役（15 个 `S*.sql`，2026-10-31）
+
+| 项 | 内容 |
+| --- | --- |
+| 原路径 | `src/main/resources/db/seed/`（S1–S15 连续，共 15 个脚本） |
+| 处置 | `git rm -r src/main/resources/db/seed`（仅随本次整改提交）；**不建** `flyway_seed_history`、**不写**第二 Flyway 实例 |
+| 仓库外备份 | `/home/instance/Gemini/.local/seed-backup-20261031/`（15 文件；`diff -r` 与源目录完全一致；sha256 清单 `/home/instance/Gemini/.local/seed-backup-20261031.sha256`，15/15 `OK`） |
+| 依据 | 全量遗留审计 `docs/audit-2026-10-18-backend/05-code-quality-tests.md` §4.4（P2「seed 线孤立」），2026-10-31 复核 |
+
+**15 个脚本**：
+
+| 脚本 | 主题 |
+| --- | --- |
+| `S1__seed_print_template_metadata.sql` | 内置打印模板元数据 |
+| `S2__seed_dev_business_test_data.sql` | 开发库业务测试数据 |
+| `S3__seed_default_pdf_print_template_metadata.sql` | 默认 PDF 打印模板元数据 |
+| `S4__update_charge_pdf_print_template_checksums.sql` | 费用单 PDF 模板 checksum |
+| `S5__update_pdf_layout_table_key_checksums.sql` | PDF 布局表 key checksum |
+| `S6__revert_charge_pdf_print_template_checksums.sql` | 回退 S4 的 checksum |
+| `S7__disable_pdf_font_auto_scaling.sql` | 关闭 PDF 字体自动缩放 |
+| `S8__update_a4_pdf_project_name_layout.sql` | A4 PDF 项目名布局 |
+| `S9__repair_print_template_settlement_company_identity.sql` | 修复模板结算主体身份 |
+| `S10__retire_contract_print_templates.sql` | 退役合同打印模板 |
+| `S11__retire_supplier_statement_print_templates.sql` | 退役供应商对账单打印模板 |
+| `S12__fit_a4_project_name_to_two_lines.sql` | A4 项目名两行适配 |
+| `S13__update_customer_statement_pdf_layout.sql` | 客户对账单 PDF 布局 |
+| `S14__update_freight_statement_pdf_layout.sql` | 物流对账单 PDF 布局 |
+| `S15__repair_seed_print_template_state.sql` | 修复 seed 打印模板状态 |
+
+**为什么是退役而不是接线**：
+
+1. **从未被执行**：`application.yml` 的 Flyway 只使用默认 `locations=classpath:db/migration`，
+   没有第二实例、没有 `flyway_seed_history`（2026-10-31 实测 `to_regclass('public.flyway_seed_history')`
+   为空；开发库主线 `flyway_schema_history` 206 行）。
+2. **打印模板的权威来源已换成文件同步**：`PrintTemplateFileSyncRunner`（`ApplicationRunner`，启动时执行）
+   从 `src/main/resources/print-forms/*.layout.json`（PDF_FORM）与 `*.lodop.txt`（COORD）按 `sourceRef`
+   注册/更新模板，并禁用已从文件移除的模板；模板正文与元数据不再依赖数据库种子。
+3. **强行接线会造成回退**：S4–S9 是 2026-07 的历史 checksum/layout 修正。若按 `db/seed` 顺序执行，
+   会用旧元数据覆盖线上已同步的模板，属于反向数据回退——这不是「补齐缺失」，而是「把旧状态写回去」。
+
+**若将来确需重新启用 seed 线**（不推荐；优先并入主线 `V*.sql`）：
+
+1. 先评估是否真的需要独立生命周期；能并入 `db/migration/V*.sql` 的一律并入（与 `AGENTS.md`
+   《Database Migration Policy》一致）。
+2. 必须实现第二 Flyway 实例：`locations=classpath:db/seed`、`table=flyway_seed_history`、
+   `sqlMigrationPrefix=S`、对已有 schema 首次执行 `baselineOnMigrate=true` + `baselineVersion=0`；
+   与主线互不复用 history table。
+3. 从备份恢复脚本：`cp -a /home/instance/Gemini/.local/seed-backup-20261031/. src/main/resources/db/seed/`，
+   并用 sha256 清单校验。
+4. 先在空库与副本库演练，比对 `sys_print_template` 的 checksum/layout 与 `print-forms` 文件同步结果；
+   确认不会覆盖线上模板后再进任何共享环境。
+5. 补齐 CI 校验（seed 线 migrate/validate）与阶段上限，并同步更新
+   `docs/deployment/production-cicd.md` 与 `AGENTS.md`。
+
+**复核命令**：
+
+```bash
+# 1) 仓库内不应再有 seed 目录（提交后 git log 可见删除记录）
+cd /home/instance/Gemini/leo
+ls src/main/resources/db/seed 2>/dev/null || echo "db/seed removed"
+git log --diff-filter=D --name-only -- src/main/resources/db/seed
+
+# 2) 备份与 sha256 清单
+ls /home/instance/Gemini/.local/seed-backup-20261031/*.sql | wc -l          # 15
+(cd /home/instance/Gemini && sha256sum -c .local/seed-backup-20261031.sha256)  # 15 行 OK
+
+# 3) 库内不应存在 seed history 表
+psql "$LEO_DB_URL" -c "SELECT to_regclass('public.flyway_seed_history');"   # 应返回空
+```
+
+---
+
+## 12. 变更记录
 
 | 日期 | 变更 |
 | --- | --- |
 | 2026-10-31 | 建档：`archive/`（769 文件）与 `scripts/jsh_erp_steel_dump.sql` 移出 Git 跟踪（**已随 `777b8657` 提交**，仓库外备份见第 1 节）；登记 V205 的四类处置（3 张孤儿表 / 6 张幽灵入库单 / 10 个 NOT VALID CHECK / 2 条死外键）；登记 16 张退役归档表与 `ct_contract_purchase_order` 保留例外 |
 | 2026-10-31（收尾复核） | 修正提交状态为已提交（`777b8657`）；新增 A4：`global_search_document` 视图依赖 11 张退役归档表，删除任何一张前必须先重建视图（见 §3.1） |
+| 2026-10-31（seed 线退役） | 移除 `src/main/resources/db/seed/` 的 15 个 `S*.sql`（S1–S15）；依据「从未执行 + 打印模板已改文件同步 + 强行接线会回退历史 checksum/layout」；仓库外备份 `.local/seed-backup-20261031`（15 文件、sha256 15/15 一致）；现行机制说明已写入 `docs/deployment/production-cicd.md`（见 §11） |
+| 2026-10-31（V206 死列/孤儿表） | V206 删除 `fm_payment_allocation.source_supplier_statement_id`、`fm_supplier_refund_receipt.purchase_refund_id` 两列与 `sys_general_setting`（10 行全软删孤儿数据）；依据 `remaining-checks.md` A1/A3（见 §4.1） |

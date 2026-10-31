@@ -175,6 +175,18 @@ sudo systemctl reload nginx
 
 数据库迁移遵循 forward-only 原则。所有数据库结构、约束、索引、种子数据、数据修复和清理变更必须新增递增的 Flyway 脚本，禁止修改已经合入或已经在任一环境执行过的历史迁移。后端启动会执行 Flyway，应用回滚不会自动反向回滚数据库结构；涉及破坏性 schema 变更时必须拆成“兼容发布 -> 数据迁移 -> 清理发布”多步。
 
+### 数据库种子与可选数据（`db/seed` 已退役，2026-10-31）
+
+- `src/main/resources/db/seed/` 下 15 个 `S*.sql` 已移除：Flyway 只配置了默认 `classpath:db/migration`，
+  没有第二实例，库内也不存在 `flyway_seed_history`，这些脚本**从未在任何环境执行**，属死资产。
+- 打印模板等可选数据的权威来源是**文件同步**：启动时 `PrintTemplateFileSyncRunner`（`ApplicationRunner`）
+  从 `src/main/resources/print-forms/*.layout.json`（PDF_FORM）与 `*.lodop.txt`（COORD）按 `sourceRef`
+  注册/更新模板，并禁用已从文件移除的模板；模板正文不再写入迁移脚本。
+- 其它种子数据一律并入主线 `db/migration/V*.sql` 随版本前滚。**不要再新增 `S*.sql`**，也不要按
+  `db/seed` + `flyway_seed_history` 双实例接线：S4–S9 是 2026-07 的历史 checksum/layout 修正，
+  强接会用旧元数据覆盖线上已同步模板。
+- 备份路径、退役理由与重新启用步骤见 `docs/legacy-retired-modules.md` §11。
+
 ## PostgreSQL 调优检查
 
 生产调优先执行只读检查脚本，确认扩展、参数、缓存命中率、死元组和表维护状态：
