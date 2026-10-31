@@ -1,3 +1,19 @@
+# [17.2.0](https://github.com/PolarisTime/Leo/compare/v17.1.0...v17.2.0) (2026-10-31)
+
+
+### Bug Fixes
+
+* **material:** 商品启停功能修复两处架构门禁违规 ([c65c15a](https://github.com/PolarisTime/Leo/commit/c65c15af6ae68e34610bcf8e57a71b8bad3e15d8))
+* **material:** 材质字典只取实体商品，过滤掉费用类 ([edde48c](https://github.com/PolarisTime/Leo/commit/edde48cd6d6b09107f006b52eb5e113093306363))
+* **purchase:** 已删除的采购入库单不再阻止采购订单修改 ([0ea9a7f](https://github.com/PolarisTime/Leo/commit/0ea9a7f382279689b848a4cfa95c8baf4bf89ec3))
+* **sales:** 软删除下游单据时解绑来源引用，不再锁死上游明细 ([96e3b46](https://github.com/PolarisTime/Leo/commit/96e3b466f7d491e9eae49735e21ed73df0a5ddac))
+
+
+### Features
+
+* **market:** 定尺加价主数据驱动打印规格与材料长度校验 ([3a9333b](https://github.com/PolarisTime/Leo/commit/3a9333b9edb568fe16940d756c562107149133ba))
+* **material:** 商品资料支持启用/禁用，选商品类查询只返回启用商品 ([a245c0c](https://github.com/PolarisTime/Leo/commit/a245c0cf738ebbf0dd184fe9946855a0e642fe95))
+
 # [17.1.0](https://github.com/PolarisTime/Leo/compare/v17.0.0...v17.1.0) (2026-10-29)
 
 
