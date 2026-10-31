@@ -31,7 +31,8 @@ import java.util.Objects;
  * 期初回填补记历史单据时豁免该校验（见 {@link #recordBackfill}）。
  *
  * <p>幂等：同一来源明细同一事务类型在未删除状态下只记一次。反审核/删除软删事务。
- * 记账在同一事务内完成，读取余额前对库存维度加 PostgreSQL 事务级咨询锁防并发。
+ * 记账在同一事务内完成，读取余额前先取 {@code inv:backfill} 共享咨询锁（与余额重建/期初回填的
+ * 排他锁互斥），再对库存维度取事务级咨询锁防并发。
  */
 @Service
 public class InventoryTransactionService implements InventoryTransactionCommand {
@@ -92,8 +93,10 @@ public class InventoryTransactionService implements InventoryTransactionCommand 
         if (active.isEmpty()) {
             return;
         }
-        // 与记账共用加锁协议：先按 (materialId, warehouseId) 升序锁定待回补维度，
-        // 再在同一事务内反向更新快照，保证软删与快照守恒。
+        // 与记账共用加锁协议：先取 inv:backfill 共享锁（与余额重建互斥），
+        // 再按 (materialId, warehouseId) 升序锁定待回补维度，
+        // 最后在同一事务内反向更新快照，保证软删与快照守恒。
+        lockService.lockBackfillSharedTxScoped();
         lockService.lockAll(active.stream()
                 .filter(transaction -> transaction.getMaterialId() != null)
                 .map(transaction -> new InventoryTransactionLockService.Dimension(
@@ -140,8 +143,10 @@ public class InventoryTransactionService implements InventoryTransactionCommand 
                         .comparing((InventoryTransactionInput.Line line) -> sortKey(line.materialId()))
                         .thenComparing(line -> sortKey(resolveWarehouseId(line, input))))
                 .toList();
-        // 统一锁顺序：同一事务内先按 (materialId, warehouseId) 升序一次性获取本单全部维度锁，
+        // 统一锁顺序：先取 inv:backfill 共享锁（与余额重建/期初回填的排他锁互斥），
+        // 再按 (materialId, warehouseId) 升序一次性获取本单全部维度锁，
         // 与期初回填的批次加锁协议一致，避免 AB-BA 死锁。
+        lockService.lockBackfillSharedTxScoped();
         lockService.lockAll(lines.stream()
                 .filter(line -> line.materialId() != null && line.quantity() > 0)
                 .map(line -> new InventoryTransactionLockService.Dimension(

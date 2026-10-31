@@ -79,19 +79,42 @@ public class PurchaseInboundItemQueryService {
     }
 
     /**
+     * 有效入库状态白名单（<b>唯一来源</b>）：只有这两种状态的入库单参与完成度判定，草稿不计。
+     */
+    public static final List<String> EFFECTIVE_INBOUND_STATUSES =
+            List.of(StatusConstants.AUDITED, StatusConstants.INBOUND_COMPLETED);
+
+    /**
      * 有效入库件数汇总：仅统计未删除且状态为已审核/完成入库的入库单，草稿不参与完成度判定。
      */
     @Transactional(readOnly = true)
     public Map<Long, Long> summarizeEffectiveQuantityBySourcePurchaseOrderItemIds(
             Collection<Long> sourcePurchaseOrderItemIds
     ) {
+        return summarizeEffectiveQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+                sourcePurchaseOrderItemIds,
+                null
+        );
+    }
+
+    /**
+     * 有效入库件数汇总（可排除一张入库单）：与无参版本共用同一 @Query、同一状态白名单。
+     *
+     * <p>入库完成判定在保存本单之前执行，DB 中的本单仍是旧明细/不存在，因此以
+     * {@code excludedInboundId} 排除本单，再由调用方把内存态本单明细计入。</p>
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, Long> summarizeEffectiveQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+            Collection<Long> sourcePurchaseOrderItemIds,
+            Long excludedInboundId
+    ) {
         if (sourcePurchaseOrderItemIds == null || sourcePurchaseOrderItemIds.isEmpty()) {
             return Map.of();
         }
         return repository.summarizeEffectiveWeightBySourcePurchaseOrderItemIdsExcludingInbound(
                         sourcePurchaseOrderItemIds,
-                        null,
-                        List.of(StatusConstants.AUDITED, StatusConstants.INBOUND_COMPLETED)
+                        excludedInboundId,
+                        EFFECTIVE_INBOUND_STATUSES
                 )
                 .stream()
                 .collect(Collectors.toMap(

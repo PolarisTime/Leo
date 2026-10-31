@@ -1,6 +1,7 @@
 package com.leo.erp.system.printtemplate.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -13,7 +14,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "sys_print_template")
-public class PrintTemplate extends AbstractAuditableEntity {
+public class PrintTemplate extends AbstractAuditableEntity implements StatusAwareEntity {
 
     @Id
     private Long id;

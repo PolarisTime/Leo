@@ -14,6 +14,8 @@ import com.leo.erp.sales.order.web.dto.SalesOrderOutboundImportCandidatesCriteri
 import com.leo.erp.sales.order.web.dto.SalesOrderPageCriteria;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.sales.order.web.dto.SalesOrderSourceCandidateResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.support.SecurityPrincipal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +26,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -78,6 +83,14 @@ class V2SalesOrderControllerTest {
     @AfterEach
     void clearServletContext() {
         RequestContextHolder.resetRequestAttributes();
+        SecurityContextHolder.clearContext();
+    }
+
+    private void authenticate(String... authorities) {
+        var granted = java.util.Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toList();
+        var authentication = new UsernamePasswordAuthenticationToken(
+                SecurityPrincipal.authenticated(1L, "tester", 0L), "n/a", granted);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
     }
 
     private SalesOrderRequest request() {
@@ -222,6 +235,7 @@ class V2SalesOrderControllerTest {
 
     @Test
     void updateStatus_shouldPassStatus() {
+        authenticate(PermissionCodes.SALES_ORDERS_AUDIT);
         SalesOrderResponse response = mock(SalesOrderResponse.class);
         when(service.updateStatus(anyLong(), anyString())).thenReturn(response);
 

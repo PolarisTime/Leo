@@ -22,7 +22,9 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderPickupListResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderWarehouseRecommendationResponse;
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.StatusTransitionPermissionGuard;
 import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
@@ -153,6 +155,8 @@ public class V2PurchaseOrderController {
     @DomainEventAudited
     @RequirePermission(PermissionCodes.PURCHASE_ORDERS_UPDATE)
     public PurchaseOrderResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+        // 入口 fail-closed：目标态所需动作权限与动作端点共用同一迁移表。
+        StatusTransitionPermissionGuard.requireForTransitionAtEntry(ModuleKeys.PURCHASE_ORDER, request.status());
         return purchaseOrderService.updateStatus(id, request.status());
     }
 

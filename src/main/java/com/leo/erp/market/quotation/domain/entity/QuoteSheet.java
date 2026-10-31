@@ -1,6 +1,7 @@
 package com.leo.erp.market.quotation.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -23,7 +24,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "mk_quote_sheet")
-public class QuoteSheet extends AbstractAuditableEntity {
+public class QuoteSheet extends AbstractAuditableEntity implements StatusAwareEntity {
 
     @Id
     private Long id;

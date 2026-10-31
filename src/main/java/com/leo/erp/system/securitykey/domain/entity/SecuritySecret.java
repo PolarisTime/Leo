@@ -1,6 +1,7 @@
 package com.leo.erp.system.securitykey.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -14,7 +15,7 @@ import java.time.LocalDateTime;
 @Setter
 @Entity
 @Table(name = "sys_security_secret")
-public class SecuritySecret extends AbstractAuditableEntity {
+public class SecuritySecret extends AbstractAuditableEntity implements StatusAwareEntity {
 
     @Id
     private Long id;

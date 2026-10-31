@@ -142,4 +142,58 @@ class StatusTransitionPermissionGuardTest {
                 ModuleKeys.FREIGHT_BILL, DocumentStatus.AUDITED.label(), DocumentStatus.DRAFT.label()))
                 .isNull();
     }
+
+    /** 撤销确认（已确认 → 待确认）必须要求与正向确认相同的动作权限。 */
+    @Test
+    void reverseConfirm_withoutConfirmPermission_shouldBeRejected() {
+        authenticate(PermissionCodes.CUSTOMER_STATEMENTS_UPDATE);
+
+        assertThatThrownBy(() -> StatusTransitionPermissionGuard.requireForTransition(
+                ModuleKeys.CUSTOMER_STATEMENT,
+                DocumentStatus.CONFIRMED.label(),
+                DocumentStatus.PENDING_CONFIRM.label()))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining(PermissionCodes.CUSTOMER_STATEMENTS_CONFIRM);
+    }
+
+    /** 撤销完成销售（完成销售 → 送货核验）必须要求 complete 权限。 */
+    @Test
+    void reverseComplete_withoutCompletePermission_shouldBeRejected() {
+        authenticate(PermissionCodes.SALES_ORDERS_UPDATE);
+
+        assertThatThrownBy(() -> StatusTransitionPermissionGuard.requireForTransition(
+                ModuleKeys.SALES_ORDER,
+                DocumentStatus.SALES_COMPLETED.label(),
+                DocumentStatus.DELIVERY_VERIFICATION.label()))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining(PermissionCodes.SALES_ORDERS_COMPLETE);
+    }
+
+    @Test
+    void entry_auditWithoutAuditPermission_shouldBeRejected() {
+        authenticate(PermissionCodes.SALES_ORDERS_UPDATE);
+
+        assertThatThrownBy(() -> StatusTransitionPermissionGuard.requireForTransitionAtEntry(
+                ModuleKeys.SALES_ORDER, DocumentStatus.AUDITED.label()))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining(PermissionCodes.SALES_ORDERS_AUDIT);
+    }
+
+    @Test
+    void entry_auditWithAuditPermission_shouldPass() {
+        authenticate(PermissionCodes.SALES_ORDERS_AUDIT);
+
+        assertThatCode(() -> StatusTransitionPermissionGuard.requireForTransitionAtEntry(
+                ModuleKeys.SALES_ORDER, DocumentStatus.AUDITED.label()))
+                .doesNotThrowAnyException();
+    }
+
+    /** 入口 fail-closed：无已认证主体时不得像服务层那样跳过。 */
+    @Test
+    void entry_withoutAuthentication_shouldFailClosed() {
+        assertThatThrownBy(() -> StatusTransitionPermissionGuard.requireForTransitionAtEntry(
+                ModuleKeys.SALES_ORDER, DocumentStatus.AUDITED.label()))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("已认证主体");
+    }
 }

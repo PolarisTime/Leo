@@ -1,6 +1,7 @@
 package com.leo.erp.security.rbac.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import com.leo.erp.common.support.StatusConstants;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -18,7 +19,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "sys_role")
-public class SysRole extends AbstractAuditableEntity {
+public class SysRole extends AbstractAuditableEntity implements StatusAwareEntity {
 
     public static final String SUPER_ADMIN_CODE = "SUPER_ADMIN";
 

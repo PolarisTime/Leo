@@ -13,8 +13,10 @@ import java.util.Map;
 /**
  * 库存余额快照运维：从账本重建快照、守恒校验。
  *
- * <p>重建是幂等的（按账本聚合覆盖写回 + 清理过期维度），可在任何怀疑快照漂移时重复调用；
- * 与期初回填共用 {@code inv:backfill} 全局串行锁，避免并发重建互相覆盖。</p>
+ * <p>重建是幂等的（按账本聚合覆盖写回 + 清理过期维度），但<b>不是</b>可以随时执行的无代价操作：
+ * 它在单事务内持有 {@code inv:backfill} 全局排他锁，与所有库存记账事务（持有同一键的事务级
+ * 共享锁）互斥——重建拿到锁之前必须等所有在途记账提交，期间新的记账会阻塞等待。
+ * 因此重建会短暂阻塞库存写路径，应在业务低峰执行；「可随时重复调用」的说法不成立。</p>
  *
  * <p>校验结果为仓库内部类型 {@link InventoryBalanceSnapshotRepository.BalanceMismatch}，
  * 对外一律经 {@link #reconcile(PageQuery)} 映射成 {@link InventoryBalanceMismatchResponse}，

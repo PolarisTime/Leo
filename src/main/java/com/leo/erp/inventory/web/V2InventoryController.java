@@ -95,15 +95,18 @@ public class V2InventoryController {
 
     /**
      * 资源型重建端点：创建“库存余额重建任务”。
-     * 从 inv_transaction 账本按 (materialId, warehouseId) 覆盖写回 inv_balance 并清理过期维度，
-     * 天然幂等；重复调用只返回相同维度行数（除非账本已变化）。与期初回填共用 inv:backfill 串行锁。
+     * 从 inv_transaction 账本按 (materialId, warehouseId) 覆盖写回 inv_balance 并清理过期维度。
+     * 重建事务持有 {@code inv:backfill} 全局排他锁，与所有库存记账事务（同一键的事务级共享锁）互斥：
+     * 重建会等待在途记账提交，并在执行期间阻塞新的库存写。因此<b>不能</b>视为可随时执行的轻量操作，
+     * 应在业务低峰触发。
      */
     @PostMapping("/balance-rebuilds")
     @Operation(
-            summary = "创建库存余额重建任务（从账本幂等重算快照）",
+            summary = "创建库存余额重建任务（从账本重算快照，与记账互斥）",
             description = "同步执行：按 (materialId, warehouseId) 从账本聚合覆盖写回 inv_balance，"
-                    + "并删除账本已无对应维度的过期行。重建本身幂等，可重复调用；"
-                    + "按本控制器的写接口统一要求携带 X-Idempotency-Key，"
+                    + "并删除账本已无对应维度的过期行。结果本身幂等（重复执行得到同一账本聚合值），"
+                    + "但重建持有 inv:backfill 排他锁、与并发记账互斥，执行期间会阻塞库存写路径，"
+                    + "应在业务低峰调用；按本控制器的写接口统一要求携带 X-Idempotency-Key，"
                     + "权限与期初回填同为 inventory:backfill。")
     @V2Created
     @RequirePermission(PermissionCodes.INVENTORY_BACKFILL)

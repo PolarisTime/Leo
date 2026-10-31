@@ -11,7 +11,9 @@ import com.leo.erp.logistics.bill.service.FreightBillSalesOrderCandidateService;
 import com.leo.erp.logistics.bill.service.FreightBillService;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.StatusTransitionPermissionGuard;
 import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import com.leo.erp.logistics.bill.web.dto.FreightBillSalesOrderCandidateResponse;
@@ -112,6 +114,8 @@ public class V2FreightBillController {
     @DomainEventAudited
     @RequirePermission(PermissionCodes.FREIGHT_BILLS_UPDATE)
     public FreightBillResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+        // 入口 fail-closed：无已认证主体直接 403；目标态需要的动作权限与 POST /audits 同一迁移表。
+        StatusTransitionPermissionGuard.requireForTransitionAtEntry(ModuleKeys.FREIGHT_BILL, request.status());
         return service.updateStatus(id, request.status());
     }
 

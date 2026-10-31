@@ -85,7 +85,7 @@ class UserAdminServiceTest {
         assertThat(saved.getId()).isEqualTo(100L);
         assertThat(saved.getLoginName()).isEqualTo("alice");
         assertThat(saved.getPasswordHash()).isEqualTo("encoded:Init@123");
-        assertThat(saved.getStatus()).isEqualTo(UserStatus.NORMAL);
+        assertThat(saved.getUserStatus()).isEqualTo(UserStatus.NORMAL);
         assertThat(response.id()).isEqualTo(100L);
         assertThat(response.status()).isEqualTo(UserStatus.NORMAL);
     }
@@ -145,7 +145,7 @@ class UserAdminServiceTest {
         assertThatThrownBy(() -> service.updateStatus(42L, UserStatus.DISABLED))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("至少保留一个");
-        assertThat(account.getStatus()).isEqualTo(UserStatus.NORMAL);
+        assertThat(account.getUserStatus()).isEqualTo(UserStatus.NORMAL);
         verify(userAccountRepository, never()).saveAndFlush(any());
     }
 
@@ -159,7 +159,7 @@ class UserAdminServiceTest {
         when(userAccountRepository.countActiveAdminsWithPermission(
                 PermissionCodes.WILDCARD, StatusConstants.NORMAL)).thenReturn(2L);
         doAnswer(invocation -> {
-            account.setStatus(invocation.getArgument(1));
+            account.setStatus((UserStatus) invocation.getArgument(1));
             return null;
         }).when(statusApplyService).apply(account, UserStatus.DISABLED);
 
@@ -177,13 +177,13 @@ class UserAdminServiceTest {
         when(userAccountRepository.findByIdAndDeletedFlagFalseForUpdate(42L))
                 .thenReturn(Optional.of(account));
         doAnswer(invocation -> {
-            account.setStatus(invocation.getArgument(1));
+            account.setStatus((UserStatus) invocation.getArgument(1));
             return null;
         }).when(statusApplyService).apply(account, UserStatus.NORMAL);
 
         service.updateStatus(42L, UserStatus.NORMAL);
 
-        assertThat(account.getStatus()).isEqualTo(UserStatus.NORMAL);
+        assertThat(account.getUserStatus()).isEqualTo(UserStatus.NORMAL);
         verify(userAccountRepository, never()).countActiveAdminsWithPermission(any(), any());
         verify(sessionManagementService, never()).revokeActiveSessionsForAccountStatusChange(anyLong());
     }
@@ -227,7 +227,7 @@ class UserAdminServiceTest {
         service.delete(42L, 7L);
 
         assertThat(account.isDeletedFlag()).isTrue();
-        assertThat(account.getStatus()).isEqualTo(UserStatus.DISABLED);
+        assertThat(account.getUserStatus()).isEqualTo(UserStatus.DISABLED);
         verify(userAccountRepository).saveAndFlush(account);
         verify(sessionManagementService).revokeActiveSessionsForAccountStatusChange(42L);
     }

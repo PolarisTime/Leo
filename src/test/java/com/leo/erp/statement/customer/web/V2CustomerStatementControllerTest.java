@@ -11,6 +11,8 @@ import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementSummaryResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.support.SecurityPrincipal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +24,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -62,6 +67,14 @@ class V2CustomerStatementControllerTest {
     @AfterEach
     void clearServletContext() {
         RequestContextHolder.resetRequestAttributes();
+        SecurityContextHolder.clearContext();
+    }
+
+    private void authenticate(String... authorities) {
+        var granted = java.util.Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toList();
+        var authentication = new UsernamePasswordAuthenticationToken(
+                SecurityPrincipal.authenticated(1L, "tester", 0L), "n/a", granted);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
     }
 
     private CustomerStatementRequest request() {
@@ -176,6 +189,7 @@ class V2CustomerStatementControllerTest {
 
     @Test
     void updateStatus_shouldPassStatus() {
+        authenticate(PermissionCodes.CUSTOMER_STATEMENTS_CONFIRM);
         CustomerStatementResponse response = mock(CustomerStatementResponse.class);
         when(customerStatementService.updateStatus(anyLong(), anyString())).thenReturn(response);
 

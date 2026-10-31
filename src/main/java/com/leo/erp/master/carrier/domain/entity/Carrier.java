@@ -1,6 +1,7 @@
 package com.leo.erp.master.carrier.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -18,7 +19,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "md_carrier")
-public class Carrier extends AbstractAuditableEntity {
+public class Carrier extends AbstractAuditableEntity implements StatusAwareEntity {
 
     @Id
     private Long id;

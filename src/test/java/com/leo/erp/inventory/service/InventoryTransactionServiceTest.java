@@ -11,6 +11,7 @@ import com.leo.erp.inventory.repository.InventoryTransactionRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -27,6 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -292,6 +294,38 @@ class InventoryTransactionServiceTest {
         service.softDeleteBySource("SALES_OUTBOUND", null);
 
         verify(repository, never()).findBySourceDocumentTypeAndSourceDocumentIdAndDeletedFlagFalse(any(), any());
+    }
+
+    /**
+     * 加锁顺序是互斥协议的一部分：必须先取 inv:backfill 共享锁，再取维度锁。
+     * 顺序反了会与余额重建的排他锁形成交叉等待，且覆盖写窗口无法被关闭。
+     */
+    @Test
+    void record_shouldAcquireBackfillSharedLockBeforeDimensionLocks() {
+        service.recordPurchaseIn(input(line(11L, 5, "4000")));
+
+        InOrder order = inOrder(lockService);
+        order.verify(lockService).lockBackfillSharedTxScoped();
+        order.verify(lockService).lockAll(any());
+    }
+
+    @Test
+    void softDeleteBySource_shouldAcquireBackfillSharedLockBeforeDimensionLocks() {
+        InventoryTransaction transaction = new InventoryTransaction();
+        transaction.setId(9L);
+        transaction.setMaterialId(100L);
+        transaction.setWarehouseId(3L);
+        transaction.setDirection((short) 1);
+        transaction.setQuantity(5);
+        transaction.setAmount(new BigDecimal("20000.00"));
+        when(repository.findBySourceDocumentTypeAndSourceDocumentIdAndDeletedFlagFalse(
+                "PURCHASE_INBOUND", 5L)).thenReturn(List.of(transaction));
+
+        service.softDeleteBySource("PURCHASE_INBOUND", 5L);
+
+        InOrder order = inOrder(lockService);
+        order.verify(lockService).lockBackfillSharedTxScoped();
+        order.verify(lockService).lockAll(any());
     }
 
     private InventoryTransaction captureSaved() {

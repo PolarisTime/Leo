@@ -23,7 +23,9 @@ import com.leo.erp.sales.order.web.dto.SalesOrderPageCriteria;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.sales.order.web.dto.SalesOrderSourceCandidateResponse;
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.StatusTransitionPermissionGuard;
 import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -191,6 +193,8 @@ public class V2SalesOrderController {
     @DomainEventAudited
     @RequirePermission(PermissionCodes.SALES_ORDERS_UPDATE)
     public SalesOrderResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+        // 入口 fail-closed：目标态所需动作权限与 POST /completions、/delivery-verifications 同一迁移表。
+        StatusTransitionPermissionGuard.requireForTransitionAtEntry(ModuleKeys.SALES_ORDER, request.status());
         return service.updateStatus(id, request.status());
     }
 

@@ -75,7 +75,7 @@ public class TokenIssuanceService {
             throw new BadCredentialsException("refreshToken无效或已过期");
         }
 
-        if (user.getStatus() != UserStatus.NORMAL) {
+        if (user.getUserStatus() != UserStatus.NORMAL) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "账户已禁用");
         }
         if (normalizeCredentialVersion(session.getCredentialVersion())

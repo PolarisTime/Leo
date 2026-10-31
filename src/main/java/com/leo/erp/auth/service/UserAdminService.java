@@ -123,7 +123,7 @@ public class UserAdminService {
         UserAccount account = requireActiveUserForUpdate(id);
         account.setUserName(requireText(request.userName(), "姓名不能为空"));
         account.setMobile(normalizeOptional(request.mobile()));
-        if (request.status() != null && request.status() != account.getStatus()) {
+        if (request.status() != null && request.status() != account.getUserStatus()) {
             applyStatusChange(account, request.status());
         }
         userAccountRepository.saveAndFlush(account);
@@ -137,7 +137,7 @@ public class UserAdminService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "账号状态不能为空");
         }
         UserAccount account = requireActiveUserForUpdate(id);
-        if (account.getStatus() != status) {
+        if (account.getUserStatus() != status) {
             applyStatusChange(account, status);
             userAccountRepository.saveAndFlush(account);
         }
@@ -207,7 +207,7 @@ public class UserAdminService {
     }
 
     private boolean isActiveAdmin(UserAccount account) {
-        if (account == null || account.getStatus() != UserStatus.NORMAL || account.getId() == null) {
+        if (account == null || account.getUserStatus() != UserStatus.NORMAL || account.getId() == null) {
             return false;
         }
         return rolePermissionRepository
@@ -265,7 +265,7 @@ public class UserAdminService {
                 account.getLoginName(),
                 account.getUserName(),
                 account.getMobile(),
-                account.getStatus(),
+                account.getUserStatus(),
                 account.getLastLoginDate(),
                 account.getRemark()
         );

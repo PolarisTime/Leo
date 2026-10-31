@@ -59,7 +59,7 @@ public class LoginService {
         UserAccount user = userAccountRepository.findByLoginNameAndDeletedFlagFalse(normalizedLoginName)
                 .orElseThrow(() -> invalidCredentials(normalizedLoginName, ctx));
 
-        if (user.getStatus() != UserStatus.NORMAL) {
+        if (user.getUserStatus() != UserStatus.NORMAL) {
             recordAuthenticationLog(OperationLogConstants.ACTION_LOGIN_FAILED, user, normalizedLoginName, ctx, OperationLogConstants.RESULT_FAILURE, "账户已禁用");
             throw new BusinessException(ErrorCode.FORBIDDEN, "账户已禁用");
         }

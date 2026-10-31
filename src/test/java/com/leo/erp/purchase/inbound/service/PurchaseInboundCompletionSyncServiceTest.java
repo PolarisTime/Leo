@@ -39,9 +39,6 @@ class PurchaseInboundCompletionSyncServiceTest {
     private PurchaseInboundSourceValidator sourceValidator;
 
     @Mock
-    private PurchaseInboundAllocationService allocationService;
-
-    @Mock
     private PurchaseInboundItemQueryService purchaseInboundItemQueryService;
 
     @Mock
@@ -65,7 +62,6 @@ class PurchaseInboundCompletionSyncServiceTest {
                 );
         service = new PurchaseInboundCompletionSyncService(
                 sourceValidator,
-                allocationService,
                 purchaseInboundItemQueryService,
                 supplierLedgerLock,
                 directSalesCapacityGuard,
@@ -118,6 +114,15 @@ class PurchaseInboundCompletionSyncServiceTest {
                 .thenReturn(effectiveQuantityByItemId);
     }
 
+    private void stubEffectiveReceivedExcludingInbound(List<Long> sourceItemIds,
+                                                       Long excludedInboundId,
+                                                       Map<Long, Long> effectiveQuantityByItemId) {
+        when(purchaseInboundItemQueryService
+                .summarizeEffectiveQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+                        sourceItemIds, excludedInboundId))
+                .thenReturn(effectiveQuantityByItemId);
+    }
+
     // ---------- shouldCompleteInbound：当前单是否置完成入库 ----------
 
     @Test
@@ -146,27 +151,27 @@ class PurchaseInboundCompletionSyncServiceTest {
                 List.of(inboundItem(1L, 10), inboundItem(2L, 5)));
         PurchaseOrderItem sourceItem = orderItem(1L, 10, null);
         when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(1L, 2L))).thenReturn(Map.of(1L, sourceItem));
-        when(allocationService.loadAllocatedQuantityMap(List.of(1L, 2L), 1L)).thenReturn(Map.of(1L, 0));
 
         assertThat(service.shouldCompleteInbound(inbound)).isFalse();
     }
 
     @Test
-    void shouldCompleteInbound_shouldReturnTrueWhenFullyAllocated() {
+    void shouldCompleteInbound_shouldReturnTrueWhenEffectiveReceivedReachesOrderedQuantity() {
         PurchaseInbound inbound = inbound(1L, StatusConstants.AUDITED, List.of(inboundItem(1L, 6)));
         PurchaseOrderItem sourceItem = orderItem(1L, 10, null);
         when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(1L))).thenReturn(Map.of(1L, sourceItem));
-        when(allocationService.loadAllocatedQuantityMap(List.of(1L), 1L)).thenReturn(Map.of(1L, 4));
+        // DB 中其它已审核入库单累计 4 件（本单按 id 排除，内存 6 件另计）。
+        stubEffectiveReceivedExcludingInbound(List.of(1L), 1L, Map.of(1L, 4L));
 
         assertThat(service.shouldCompleteInbound(inbound)).isTrue();
     }
 
     @Test
-    void shouldCompleteInbound_shouldReturnFalseWhenUnderAllocated() {
+    void shouldCompleteInbound_shouldReturnFalseWhenUnderReceived() {
         PurchaseInbound inbound = inbound(1L, StatusConstants.AUDITED, List.of(inboundItem(1L, 6)));
         PurchaseOrderItem sourceItem = orderItem(1L, 10, null);
         when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(1L))).thenReturn(Map.of(1L, sourceItem));
-        when(allocationService.loadAllocatedQuantityMap(List.of(1L), 1L)).thenReturn(Map.of(1L, 3));
+        stubEffectiveReceivedExcludingInbound(List.of(1L), 1L, Map.of(1L, 3L));
 
         assertThat(service.shouldCompleteInbound(inbound)).isFalse();
     }
@@ -176,9 +181,24 @@ class PurchaseInboundCompletionSyncServiceTest {
         PurchaseInbound inbound = inbound(1L, StatusConstants.AUDITED, List.of(inboundItem(1L, null)));
         PurchaseOrderItem sourceItem = orderItem(1L, 10, null);
         when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(1L))).thenReturn(Map.of(1L, sourceItem));
-        when(allocationService.loadAllocatedQuantityMap(List.of(1L), 1L)).thenReturn(Map.of(1L, 10));
+        stubEffectiveReceivedExcludingInbound(List.of(1L), 1L, Map.of(1L, 10L));
 
         assertThat(service.shouldCompleteInbound(inbound)).isTrue();
+    }
+
+    /**
+     * 订货 100 / 草稿兄弟单 50 / 本单已审核 50：草稿不参与有效累计，本单不得判「完成入库」。
+     * 旧口径（DAO 不过滤状态 + 内存数量）会得到 100 并把本单误置为完成入库。
+     */
+    @Test
+    void shouldCompleteInbound_shouldIgnoreDraftSiblingWhenDecidingInboundCompletion() {
+        PurchaseInbound inbound = inbound(2L, StatusConstants.AUDITED, List.of(inboundItem(1L, 50)));
+        PurchaseOrderItem sourceItem = orderItem(1L, 100, null);
+        when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(1L))).thenReturn(Map.of(1L, sourceItem));
+        // 有效状态白名单过滤后 DB 累计为 0（草稿兄弟单 50 被排除；本单按 id 排除后在内存计入 50）。
+        stubEffectiveReceivedExcludingInbound(List.of(1L), 2L, Map.of());
+
+        assertThat(service.shouldCompleteInbound(inbound)).isFalse();
     }
 
     // ---------- synchronizeSourcePurchaseOrders：订单「完成采购」判定 ----------

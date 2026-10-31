@@ -1,6 +1,7 @@
 package com.leo.erp.market.supplierprice.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -30,14 +31,16 @@ import java.util.List;
  * {@code status} / {@code effective_from} / {@code effective_to} 仅因列 NOT NULL 而继续写入，
  * 不再参与取价判断；业务时间只有一个：{@link #quotedOn}（报价日期，V172）。</p>
  *
- * <p>为什么保留 {@code status} 列而不实现 {@code StatusAwareEntity}：该列已不承载状态流转
- * （新行恒为 {@code ACTIVE}），若接入状态守卫反而会要求为它注册状态机与权限，凭空增加约束。</p>
+ * <p>关于 {@code status} 与 {@link StatusAwareEntity}：该列已不承载状态流转（新行恒为
+ * {@code ACTIVE}），但实体仍实现 {@link StatusAwareEntity}，以保证「凡有 status 字段的实体都
+ * 实现该契约」的一致性。实现接口本身不注册状态机或权限，只有服务层显式接入
+ * {@code CrudStatusGuard} 才会产生状态迁移约束；本实体没有状态写端点，故行为不变。</p>
  */
 @Entity
 @Table(name = "mk_supplier_price_list")
 @Getter
 @Setter
-public class SupplierPriceList extends AbstractAuditableEntity {
+public class SupplierPriceList extends AbstractAuditableEntity implements StatusAwareEntity {
 
     @Id
     private Long id;

@@ -21,11 +21,13 @@ import java.util.Map;
  * <ul>
  *   <li>目标状态为「已审核」→ 要求 {@code 资源:audit}；</li>
  *   <li>自「已审核」退回「草稿」(反审核) → 要求 {@code 资源:unaudit}；</li>
- *   <li>目标状态为「已确认」→ 要求 {@code 资源:confirm}；</li>
+ *   <li>目标状态为「已确认」/ 自「已确认」退回「待确认」(撤销确认) → 要求 {@code 资源:confirm}；</li>
+ *   <li>目标状态为「完成销售」/ 自「完成销售」退回「送货核验」(撤销完成) → 要求 {@code 资源:complete}；</li>
  *   <li>未登记受控动作权限的资源(如仅用 update 的普通状态)不加额外要求，保持既有行为。</li>
  * </ul>
  * 通配 {@code *} 与 {@code 资源:*} 语义由 {@link PermissionChecker} 统一处理；
- * 无已认证主体时(内部/系统调用或单元测试)跳过，交由上层 {@code @RequirePermission} 负责。</p>
+ * 服务层调用（内部/系统调用、单元测试）无已认证主体时跳过，交由上层 {@code @RequirePermission} 负责；
+ * HTTP 入口调用必须走 {@link #requireForTransitionAtEntry}，无已认证主体直接 403（fail-closed）。</p>
  */
 public final class StatusTransitionPermissionGuard {
 
@@ -58,6 +60,21 @@ public final class StatusTransitionPermissionGuard {
 
     /** 目标状态为「完成销售」时所需的动作权限(仅有独立权限码的资源)。 */
     private static final Map<String, String> COMPLETE_PERMISSIONS = Map.of(
+            ModuleKeys.SALES_ORDER, PermissionCodes.SALES_ORDERS_COMPLETE
+    );
+
+    /**
+     * 「撤销确认」反向迁移（已确认 → 待确认）所需的动作权限。
+     *
+     * <p>同一状态迁移存在两条写路径时，反向路径必须要求与正向相同的动作权限，
+     * 否则只持 {@code :update} 的主体可以经 PATCH 把已确认对账单退回待确认。</p>
+     */
+    private static final Map<String, String> REVERSE_CONFIRM_PERMISSIONS = Map.of(
+            ModuleKeys.CUSTOMER_STATEMENT, PermissionCodes.CUSTOMER_STATEMENTS_CONFIRM
+    );
+
+    /** 「撤销完成销售」反向迁移（完成销售 → 送货核验）所需的动作权限，口径同正向完成。 */
+    private static final Map<String, String> REVERSE_COMPLETE_PERMISSIONS = Map.of(
             ModuleKeys.SALES_ORDER, PermissionCodes.SALES_ORDERS_COMPLETE
     );
 
@@ -95,10 +112,44 @@ public final class StatusTransitionPermissionGuard {
         if (DocumentStatus.CONFIRMED.label().equals(toStatus)) {
             return CONFIRM_PERMISSIONS.get(moduleKey);
         }
+        if (DocumentStatus.CONFIRMED.label().equals(fromStatus)
+                && DocumentStatus.PENDING_CONFIRM.label().equals(toStatus)) {
+            return REVERSE_CONFIRM_PERMISSIONS.get(moduleKey);
+        }
         if (DocumentStatus.SALES_COMPLETED.label().equals(toStatus)) {
             return COMPLETE_PERMISSIONS.get(moduleKey);
         }
+        if (DocumentStatus.SALES_COMPLETED.label().equals(fromStatus)
+                && DocumentStatus.DELIVERY_VERIFICATION.label().equals(toStatus)) {
+            return REVERSE_COMPLETE_PERMISSIONS.get(moduleKey);
+        }
         return null;
+    }
+
+    /**
+     * HTTP 入口（{@code PATCH /{id}/status}）的 fail-closed 门禁。
+     *
+     * <p>与 {@link #requireForTransition} 的区别只有两点：</p>
+     * <ol>
+     *   <li><b>无已认证主体直接 403</b>：服务层门禁对内部/系统调用选择跳过，入口不能沿用该语义，
+     *       否则「入口放过 + 服务层跳过」会叠加成双重失效；</li>
+     *   <li>入口只能拿到目标状态（当前状态需查库），因此仅覆盖只依赖目标状态的规则
+     *       （目标已审核/已确认/完成销售）；依赖起始状态的反审核、撤销确认等规则仍由服务层
+     *       拿到当前状态后校验 —— 两层使用同一张迁移表，不重复维护口径。</li>
+     * </ol>
+     *
+     * @param moduleKey 单据模块键
+     * @param toStatus  目标状态
+     */
+    public static void requireForTransitionAtEntry(String moduleKey, String toStatus) {
+        if (!hasAuthenticatedPrincipal()) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "状态变更需要已认证主体，已拒绝未认证的入口调用");
+        }
+        String required = resolveRequiredPermission(moduleKey, null, toStatus);
+        if (required != null && !PermissionChecker.hasCurrent(required)) {
+            throw new org.springframework.security.access.AccessDeniedException("缺少权限: " + required);
+        }
     }
 
     private static boolean hasAuthenticatedPrincipal() {

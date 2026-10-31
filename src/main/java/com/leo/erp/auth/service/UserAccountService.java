@@ -83,7 +83,7 @@ public class UserAccountService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "账号状态不能为空");
         }
         UserAccount account = getEntityForUpdate(userId);
-        if (account.getStatus() != status) {
+        if (account.getUserStatus() != status) {
             statusApplyService.apply(account, status);
             account = repository.saveAndFlush(account);
         }

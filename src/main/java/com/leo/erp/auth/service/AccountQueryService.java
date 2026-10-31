@@ -33,7 +33,7 @@ public class AccountQueryService implements AccountQuery, AuthenticationAccountQ
     @Override
     public Optional<AuthenticatedAccountSnapshot> findActiveById(Long userId) {
         return userAccountRepository.findByIdAndDeletedFlagFalse(userId)
-                .filter(account -> account.getStatus() == UserStatus.NORMAL)
+                .filter(account -> account.getUserStatus() == UserStatus.NORMAL)
                 .map(account -> new AuthenticatedAccountSnapshot(
                         account.getId(),
                         account.getLoginName(),

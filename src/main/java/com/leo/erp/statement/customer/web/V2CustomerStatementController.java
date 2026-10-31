@@ -7,7 +7,9 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.StatusTransitionPermissionGuard;
 import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.statement.customer.service.CustomerStatementService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
@@ -109,6 +111,8 @@ public class V2CustomerStatementController {
     @PatchMapping("/{id}/status")
     @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_UPDATE)
     public CustomerStatementResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+        // 入口 fail-closed：目标态所需动作权限与 POST /confirmations 共用同一迁移表。
+        StatusTransitionPermissionGuard.requireForTransitionAtEntry(ModuleKeys.CUSTOMER_STATEMENT, request.status());
         return customerStatementService.updateStatus(id, request.status());
     }
 

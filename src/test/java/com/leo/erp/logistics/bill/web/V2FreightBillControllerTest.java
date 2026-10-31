@@ -13,6 +13,8 @@ import com.leo.erp.logistics.bill.service.FreightBillService;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
 import com.leo.erp.logistics.bill.web.dto.FreightBillSalesOrderCandidateResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.support.SecurityPrincipal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +26,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -44,6 +49,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -74,6 +80,14 @@ class V2FreightBillControllerTest {
     @AfterEach
     void clearServletContext() {
         RequestContextHolder.resetRequestAttributes();
+        SecurityContextHolder.clearContext();
+    }
+
+    private void authenticate(String... authorities) {
+        var granted = java.util.Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toList();
+        var authentication = new UsernamePasswordAuthenticationToken(
+                SecurityPrincipal.authenticated(1L, "tester", 0L), "n/a", granted);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
     }
 
     private FreightBillRequest request() {
@@ -211,11 +225,34 @@ class V2FreightBillControllerTest {
 
     @Test
     void updateStatus_shouldPassStatus() {
+        authenticate(PermissionCodes.FREIGHT_BILLS_AUDIT);
         FreightBillResponse response = mock(FreightBillResponse.class);
         when(service.updateStatus(anyLong(), anyString())).thenReturn(response);
 
         assertThat(controller.updateStatus(5L, new StatusUpdateRequest("AUDITED"))).isSameAs(response);
         verify(service).updateStatus(5L, "AUDITED");
+    }
+
+    /**
+     * 入口 fail-closed + 迁移表校验：仅持 {@code freight-bills:update} 的主体经
+     * {@code PATCH /{id}/status} 到「已审核」必须 403（等价动作端点 {@code POST /audits} 要求
+     * {@code freight-bills:audit}），且不得触达 service。
+     */
+    @Test
+    void updateStatus_withOnlyUpdatePermission_shouldReturn403() throws Exception {
+        authenticate(PermissionCodes.FREIGHT_BILLS_UPDATE);
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler(new ApiProblemFactory("Asia/Shanghai")))
+                .build();
+
+        mockMvc.perform(patch("/v2.0/freight-bills/5/status")
+                        .contentType("application/json")
+                        .content("{\"status\":\"" + StatusConstants.AUDITED + "\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(4030));
+
+        verify(service, never()).updateStatus(anyLong(), anyString());
     }
 
     @Test

@@ -78,7 +78,7 @@ class InitialAccountProvisioningServiceTest {
         ArgumentCaptor<UserAccount> captor = ArgumentCaptor.forClass(UserAccount.class);
         verify(userAccountRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getPasswordHash()).isEqualTo("encoded:Init@123");
-        assertThat(captor.getValue().getStatus()).isEqualTo(UserStatus.NORMAL);
+        assertThat(captor.getValue().getUserStatus()).isEqualTo(UserStatus.NORMAL);
         assertThat(created.id()).isEqualTo(500L);
         verify(userRoleService).grantSuperAdmin(500L);
     }

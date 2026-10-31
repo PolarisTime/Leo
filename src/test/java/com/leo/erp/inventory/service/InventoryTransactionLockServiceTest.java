@@ -66,4 +66,30 @@ class InventoryTransactionLockServiceTest {
 
         verify(jdbcTemplate, never()).query(anyString(), any(SqlParameterSource.class), any(RowCallbackHandler.class));
     }
+
+    /**
+     * 互斥协议不变量：重建/回填的排他锁与记账的共享锁必须落在<b>同一</b>
+     * {@code inv:backfill} 键上，且模式不同（排他 vs 共享）；否则覆盖写仍会吞掉并发记账。
+     */
+    @Test
+    void backfillLocks_shouldUseSameKeyWithExclusiveForRebuildAndSharedForRecording() {
+        service.lockBackfillTxScoped();
+        service.lockBackfillSharedTxScoped();
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<SqlParameterSource> paramsCaptor = ArgumentCaptor.forClass(SqlParameterSource.class);
+        verify(jdbcTemplate, times(2)).query(sqlCaptor.capture(), paramsCaptor.capture(), any(RowCallbackHandler.class));
+
+        assertThat(sqlCaptor.getAllValues())
+                .hasSize(2)
+                .satisfiesExactly(
+                        exclusive -> {
+                            assertThat(exclusive).contains("pg_advisory_xact_lock(");
+                            assertThat(exclusive).doesNotContain("_shared");
+                        },
+                        shared -> assertThat(shared).contains("pg_advisory_xact_lock_shared("));
+        assertThat(paramsCaptor.getAllValues())
+                .extracting(source -> source.getValue("lockKey"))
+                .containsExactly("inv:backfill", "inv:backfill");
+    }
 }

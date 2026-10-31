@@ -49,13 +49,13 @@ class UserAccountServiceTest {
                 .thenReturn(java.util.Optional.of(account));
         org.mockito.Mockito.when(repository.saveAndFlush(account)).thenReturn(account);
         doAnswer(invocation -> {
-            account.setStatus(invocation.getArgument(1));
+            account.setStatus((UserStatus) invocation.getArgument(1));
             return null;
         }).when(statusApplyService).apply(account, UserStatus.DISABLED);
 
         service.updateStatus(42L, UserStatus.DISABLED);
 
-        assertThat(account.getStatus()).isEqualTo(UserStatus.DISABLED);
+        assertThat(account.getUserStatus()).isEqualTo(UserStatus.DISABLED);
         verify(repository).saveAndFlush(account);
         verify(sessionManagementService).revokeActiveSessionsForAccountStatusChange(42L);
         verify(authenticatedUserCacheService).evict(42L);
