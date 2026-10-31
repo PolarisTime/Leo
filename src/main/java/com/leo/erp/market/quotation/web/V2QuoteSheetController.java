@@ -1,6 +1,7 @@
 package com.leo.erp.market.quotation.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
@@ -46,6 +47,7 @@ import java.util.List;
 @Tag(name = "比价报价单")
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/quote-sheets")
 public class V2QuoteSheetController {
 

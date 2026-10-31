@@ -1,6 +1,7 @@
 package com.leo.erp.finance.cashledger.web;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.export.ExportConcurrencyGuard;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.finance.cashledger.service.CashLedgerService;
@@ -29,9 +30,12 @@ import com.leo.erp.common.api.ApiVersion;
 public class V2CashLedgerController {
 
     private final CashLedgerService cashLedgerService;
+    private final ExportConcurrencyGuard exportConcurrencyGuard;
 
-    public V2CashLedgerController(CashLedgerService cashLedgerService) {
+    public V2CashLedgerController(CashLedgerService cashLedgerService,
+                                  ExportConcurrencyGuard exportConcurrencyGuard) {
         this.cashLedgerService = cashLedgerService;
+        this.exportConcurrencyGuard = exportConcurrencyGuard;
     }
 
     @GetMapping
@@ -43,13 +47,19 @@ public class V2CashLedgerController {
                 counterpartyType, counterpartyId, flowType, keyword);
     }
 
+    @Operation(
+            summary = "导出资金流水",
+            description = "同步返回 XLSX 文件表示。导出受并发闸门保护: 并发导出额度耗尽时快速失败返回 429"
+                    + "(带 Retry-After), 不排队耗线程与连接。单次导出行数有上限, 超过上限返回 422 提示缩小范围。")
     @GetMapping("/export")
-    @Operation(summary = "导出资金流水")
     @RequirePermission(PermissionCodes.CASH_LEDGER_EXPORT)
     public ResponseEntity<byte[]> export(@RequestParam Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) String counterpartyType, @RequestParam(required = false) Long counterpartyId, @RequestParam(required = false) String flowType, @RequestParam(required = false) String keyword) {
-        return toDownloadResponse(cashLedgerService.exportExcel(
-                settlementCompanyId, startDate, endDate,
-                counterpartyType, counterpartyId, flowType, keyword));
+        // 闸门在进入 @Transactional 之前拿额度: 若在事务内等待, 等待线程会一直占着数据库连接,
+        // 导出高峰反而先把连接池耗尽（同 module-exports / sales-orders 的 xlsx 导出）。
+        return exportConcurrencyGuard.execute("cash-ledger-export",
+                () -> toDownloadResponse(cashLedgerService.exportExcel(
+                        settlementCompanyId, startDate, endDate,
+                        counterpartyType, counterpartyId, flowType, keyword)));
     }
 
     private ResponseEntity<byte[]> toDownloadResponse(FileDownloadResponse file) {

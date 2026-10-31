@@ -13,6 +13,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
+import com.leo.erp.common.web.ResourceVersionPrecondition;
 import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.repository.PurchaseOrderDerivedQueryRepository;
@@ -119,17 +120,27 @@ public class PurchaseOrderService {
         return created;
     }
 
+    /**
+     * 整体替换写路径（{@code PUT /api/v2.0/purchase-orders/{id}}）。
+     *
+     * <p><b>版本前置条件：</b>{@code expectedVersion} 来自 {@code X-Resource-Version}（兼容
+     * {@code If-Match}），与实体 {@code @Version} 比对：不一致抛 412
+     * （{@link ErrorCode#PRECONDITION_FAILED}），避免「A 打开表单 → B 保存 → A 保存」静默覆盖。
+     * 缺少版本头返回 428 由入口（控制器）负责。</p>
+     */
     @Transactional
-    public PurchaseOrderResponse update(Long id, PurchaseOrderRequest request) {
+    public PurchaseOrderResponse update(Long id, PurchaseOrderRequest request, Long expectedVersion) {
         BigDecimal previousExpenseTotal = purchaseOrderApplyService.chargeTotal(id);
-        PurchaseOrderResponse updated = updateOrder(id,
-                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        updateOrder(id, request.audit() ? withStatus(request, StatusConstants.DRAFT) : request,
+                expectedVersion);
         purchaseOrderApplyService.syncChargeItems(id, request.chargeItems());
         purchaseOrderApplyService.adjustTotalAmount(requireEntity(id), previousExpenseTotal);
         if (request.audit()) {
-            return updateStatus(id, StatusConstants.AUDITED);
+            updateStatus(id, StatusConstants.AUDITED);
         }
-        return updated;
+        // 写路径收尾必须「flush 后重新装配」：附加费用同步与合计重算会再次推进 @Version，
+        // 直接返回中途快照会让客户端拿到旧版本，下一次保存必然 412。
+        return refreshedDetail(id);
     }
 
     @Transactional
@@ -172,12 +183,17 @@ public class PurchaseOrderService {
 
     /**
      * 基类 update 的显式内联，状态断言序列逐字保持：
-     * 编辑状态守卫 → 更新校验 → 快照当前状态 → 应用请求 →
+     * 版本前置条件 → 编辑状态守卫 → 更新校验 → 快照当前状态 → 应用请求 →
      * assertRequestStatusTransitionAllowed → allowRequestToWriteFinalStatus 分支下的
      * assertRequestDidNotWriteFinalStatus → 保存。
+     *
+     * <p>版本校验紧跟在「加载实体」之后、任何业务校验之前：前置条件的语义是
+     * 「你编辑的这一版是否仍然是最新版」，它先于字段合法性判断才有意义；
+     * 实体不存在仍先由 {@link #requireEntity} 返回 404。</p>
      */
-    private PurchaseOrderResponse updateOrder(Long id, PurchaseOrderRequest request) {
+    private PurchaseOrderResponse updateOrder(Long id, PurchaseOrderRequest request, Long expectedVersion) {
         PurchaseOrder entity = requireEntity(id);
+        ResourceVersionPrecondition.verify(expectedVersion, entity.getVersion(), "采购订单");
         PurchaseOrderRequest normalized = normalizeUpdateRequest(entity, request);
         STATUS_GUARD.assertEditAllowed(entity, false);
         validateUpdate(entity, normalized);
@@ -379,6 +395,21 @@ public class PurchaseOrderService {
         PurchaseOrder saved = purchaseOrderRepository.saveAndFlush(entity);
         publishMutationEvent(saved, "PURCHASE_ORDER_UPDATED", "编辑");
         return saved;
+    }
+
+    /**
+     * 写路径收尾：先 flush 把 {@code @Version} 推进到本事务的最终值，再重新装配详情。
+     *
+     * <p><b>为什么必须 flush：</b>{@code @Version} 在 flush 时才自增。整体替换写路径里
+     * 「保存单据 → 同步附加费用 → 重算合计」会连续写同一实体，若直接返回中途装配的响应，
+     * 客户端拿到的是**旧版本号**，下一次保存必然 412（提示刷新），等于把版本前置条件变成死循环。</p>
+     *
+     * <p><b>为什么重新装配而不是改中间 DTO 的 version：</b>合计/状态/费用在收尾阶段都可能变化，
+     * 只改版本号会让响应里其它字段与被推进的版本不自洽；重新映射一次以持久层状态为准。</p>
+     */
+    private PurchaseOrderResponse refreshedDetail(Long id) {
+        purchaseOrderRepository.flush();
+        return toDetailResponse(requireEntity(id));
     }
 
     private void publishMutationEvent(PurchaseOrder entity, String eventType, String actionType) {

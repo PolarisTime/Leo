@@ -42,12 +42,16 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.web.ResourceVersionPrecondition;
+import com.leo.erp.purchase.order.PurchaseOrderProperties;
 import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
@@ -66,17 +70,20 @@ public class V2PurchaseOrderController {
     private final PurchaseOrderWarehouseRecommendationService warehouseRecommendationService;
     private final PurchaseOrderOptionService purchaseOrderOptionService;
     private final PurchaseOrderForceCloseService purchaseOrderForceCloseService;
+    private final PurchaseOrderProperties properties;
 
     public V2PurchaseOrderController(PurchaseOrderService purchaseOrderService,
                                      PurchaseOrderPickupListService pickupListService,
                                      PurchaseOrderWarehouseRecommendationService warehouseRecommendationService,
                                      PurchaseOrderOptionService purchaseOrderOptionService,
-                                     PurchaseOrderForceCloseService purchaseOrderForceCloseService) {
+                                     PurchaseOrderForceCloseService purchaseOrderForceCloseService,
+                                     PurchaseOrderProperties properties) {
         this.purchaseOrderService = purchaseOrderService;
         this.pickupListService = pickupListService;
         this.warehouseRecommendationService = warehouseRecommendationService;
         this.purchaseOrderOptionService = purchaseOrderOptionService;
         this.purchaseOrderForceCloseService = purchaseOrderForceCloseService;
+        this.properties = properties;
     }
 
     @Operation(summary = "采购订单下拉选项(单号/供应商/订货吨数/状态)")
@@ -143,12 +150,24 @@ public class V2PurchaseOrderController {
         return V2ResponseSupport.created("/purchase-orders", purchaseOrderService.create(request));
     }
 
-    @Operation(summary = "更新采购订单")
+    @Operation(summary = "更新采购订单",
+            description = "整体替换订单。写操作要求资源版本前置条件头 "
+                    + ResourceVersionPrecondition.HEADER + "（兼容别名 If-Match）："
+                    + "缺少版本返回 428，与单据当前版本不一致返回 412，一致才更新；"
+                    + "成功返回 200 + 更新后的订单表示（含新 version）。"
+                    + "版本号即列表/详情响应里的 version 字段。")
     @PutMapping("/{id}")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.PURCHASE_ORDERS_UPDATE)
-    public PurchaseOrderResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody PurchaseOrderRequest request) {
-        return purchaseOrderService.update(id, request);
+    public PurchaseOrderResponse update(
+            @PathVariable @SnowflakeId Long id,
+            @Parameter(description = "资源版本(强比较), 取详情/列表响应的 version 字段")
+            @RequestHeader(value = ResourceVersionPrecondition.HEADER, required = false) String resourceVersion,
+            @Parameter(description = "兼容别名, 非标准弱验证器用法")
+            @RequestHeader(value = ResourceVersionPrecondition.LEGACY_HEADER, required = false) String ifMatch,
+            @Valid @RequestBody PurchaseOrderRequest request) {
+        return purchaseOrderService.update(id, request,
+                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()));
     }
 
     @Operation(summary = "更新采购订单状态")

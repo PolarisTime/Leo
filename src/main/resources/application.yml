@@ -300,7 +300,14 @@ leo:
       # 非空分区保留待人工归档，窗口口径与 V205 一次性清理一致
       enabled: ${LEO_MAINTENANCE_OPERATION_LOG_PARTITION_CLEANUP_ENABLED:true}
       cron: ${LEO_MAINTENANCE_OPERATION_LOG_PARTITION_CLEANUP_CRON:0 20 3 1 * *}
+  purchase-order:
+    # PUT /purchase-orders/{id} 是否强制要求资源版本前置条件头 X-Resource-Version(缺失返回 428，
+    # 与单据 @Version 不一致返回 412); 灰度兼容旧客户端时可临时关闭(关闭后带了版本仍校验 412)
+    require-resource-version: ${LEO_PURCHASE_ORDER_REQUIRE_RESOURCE_VERSION:true}
   sales-order:
+    # PUT /sales-orders/{id} 是否强制要求资源版本前置条件头 X-Resource-Version(缺失返回 428，
+    # 与单据 @Version 不一致返回 412); 灰度兼容旧客户端时可临时关闭(关闭后带了版本仍校验 412)
+    require-resource-version: ${LEO_SALES_ORDER_REQUIRE_RESOURCE_VERSION:true}
     retry:
       # 同一单据并发写(乐观锁冲突)时服务端的有界重试：单次请求最大尝试次数(含首次执行)；
       # <=1 表示禁用服务端重试，冲突直接按现状返回 409

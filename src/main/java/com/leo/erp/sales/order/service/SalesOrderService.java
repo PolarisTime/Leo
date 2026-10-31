@@ -13,6 +13,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.common.transaction.OptimisticLockRetryExecutor;
+import com.leo.erp.common.web.ResourceVersionPrecondition;
 import com.leo.erp.sales.order.config.SalesOrderRetryProperties;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
@@ -138,28 +139,36 @@ public class SalesOrderService {
      * <p><b>自调用语义：</b>{@code request.audit()} 分支内部自调用 {@link #updateStatus} 时，
      * 执行器检测到活动事务会直接执行原逻辑（不新开事务、不重试），与改造前「自调用参与外层事务」完全一致。
      *
+     * <p><b>版本前置条件：</b>{@code expectedVersion} 来自 {@code X-Resource-Version}（兼容
+     * {@code If-Match}），在每次尝试加载实体后与 {@code @Version} 比对：不一致抛 412
+     * （{@link ErrorCode#PRECONDITION_FAILED}），因此「A 打开表单 → B 保存 → A 保存」不再静默覆盖。
+     * 重试语义仍成立：冲突重试用的是新事务里重新加载的实体版本，客户端期望版本不变。</p>
+     *
      * <p><b>副作用：</b>费用同步、合计修正、状态发布全部发生在同一事务内，失败整体回滚；
      * 领域事件由 {@code @ApplicationModuleListener}（AFTER_COMMIT）在提交成功后投递，
      * 失败的尝试不会重复发布事件/日志。重试仅识别乐观锁异常，耗尽后原样抛出 → 409（现状不变）。
      */
-    public SalesOrderResponse update(Long id, SalesOrderRequest request) {
-        return optimisticLockRetry.execute("sales-order.update", () -> doUpdate(id, request));
+    public SalesOrderResponse update(Long id, SalesOrderRequest request, Long expectedVersion) {
+        return optimisticLockRetry.execute("sales-order.update",
+                () -> doUpdate(id, request, expectedVersion));
     }
 
     /**
      * {@link #update} 的整段写逻辑（在执行器开启的事务内运行，可被完整重放）。
      */
-    private SalesOrderResponse doUpdate(Long id, SalesOrderRequest request) {
+    private SalesOrderResponse doUpdate(Long id, SalesOrderRequest request, Long expectedVersion) {
         BigDecimal previousExpenseTotal = documentChargeItemService
                 .sumAmount(documentChargeItemService.list(MODULE_KEY, id));
-        SalesOrderResponse updated = updateOrder(id,
-                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+        updateOrder(id, request.audit() ? withStatus(request, StatusConstants.DRAFT) : request,
+                expectedVersion);
         documentChargeItemService.sync(MODULE_KEY, id, request.chargeItems());
         applyChargeTotal(id, previousExpenseTotal);
         if (request.audit()) {
-            return updateStatus(id, StatusConstants.AUDITED);
+            updateStatus(id, StatusConstants.AUDITED);
         }
-        return updated;
+        // 写路径收尾必须「flush 后重新装配」：合计/费用修正会再次推进 @Version，
+        // 直接返回中途快照会让客户端拿到旧版本，下一次保存必然 412。
+        return refreshedDetail(id);
     }
 
     /**
@@ -178,7 +187,9 @@ public class SalesOrderService {
      * {@link #updateAndComplete} 的整段写逻辑（在执行器开启的事务内运行，可被完整重放）。
      */
     private SalesOrderResponse doUpdateAndComplete(Long id, SalesOrderRequest request) {
-        updateOrder(id, withStatus(request, StatusConstants.DELIVERY_VERIFICATION));
+        // 交付核定端点不在本轮「订单版本前置条件」覆盖范围（它只做状态迁移 + 保存，
+        // 不承诺整体替换语义），因此这里不传期望版本；若后续纳入，把 expectedVersion 一并透传即可。
+        updateOrder(id, withStatus(request, StatusConstants.DELIVERY_VERIFICATION), null);
         // 应用交付核定所选价格规定: 校验归属、快照到单据、记录项目上次使用。
         SalesOrder order = requireEntity(id);
         priceRuleService.applyPriceRule(order, request.priceRuleId());
@@ -266,12 +277,17 @@ public class SalesOrderService {
 
     /**
      * 基类 update 的显式内联，状态断言序列逐字保持：
-     * 编辑状态守卫 → 更新校验 → 快照当前状态 → 应用请求 →
+     * 版本前置条件 → 编辑状态守卫 → 更新校验 → 快照当前状态 → 应用请求 →
      * assertRequestStatusTransitionAllowed → allowRequestToWriteFinalStatus 分支下的
      * assertRequestDidNotWriteFinalStatus → 保存。
+     *
+     * <p>版本校验紧跟在「加载实体」之后、任何业务校验之前：前置条件的语义是
+     * 「你编辑的这一版是否仍然是最新版」，它先于字段合法性判断才有意义；
+     * 实体不存在仍先由 {@link #requireEntity} 返回 404。</p>
      */
-    private SalesOrderResponse updateOrder(Long id, SalesOrderRequest request) {
+    private SalesOrderResponse updateOrder(Long id, SalesOrderRequest request, Long expectedVersion) {
         SalesOrder entity = requireEntity(id);
+        ResourceVersionPrecondition.verify(expectedVersion, entity.getVersion(), "销售订单");
         SalesOrderRequest normalized = normalizeUpdateRequest(entity, request);
         STATUS_GUARD.assertEditAllowed(entity, allowProtectedStatusUpdate(entity, normalized));
         assertUnitPriceChangeAllowed(entity, normalized);
@@ -596,6 +612,21 @@ public class SalesOrderService {
 
     private SalesOrderResponse toSavedResponse(SalesOrder entity) {
         return toDetailResponse(entity);
+    }
+
+    /**
+     * 写路径收尾：先 flush 把 {@code @Version} 推进到本事务的最终值，再重新装配详情。
+     *
+     * <p><b>为什么必须 flush：</b>{@code @Version} 在 flush 时才自增。整体替换写路径里
+     * 「保存单据 → 同步附加费用 → 重算合计」会连续写同一实体，若直接返回中途装配的响应，
+     * 客户端拿到的是**旧版本号**，下一次保存必然 412（提示刷新），等于把版本前置条件变成死循环。</p>
+     *
+     * <p><b>为什么重新装配而不是改中间 DTO 的 version：</b>合计/状态/费用在收尾阶段都可能变化，
+     * 只改版本号会让响应里其它字段与被推进的版本不自洽；重新映射一次以持久层状态为准。</p>
+     */
+    private SalesOrderResponse refreshedDetail(Long id) {
+        repository.flush();
+        return toDetailResponse(requireEntity(id));
     }
 
     private SalesOrder requireEntity(Long id) {

@@ -65,6 +65,10 @@ class V2SalesOrderControllerTest {
     @Mock
     private com.leo.erp.sales.order.service.SalesOrderDocumentFlowService documentFlowService;
 
+    /** 订单版本前置条件开关（默认开启，见 {@code SalesOrderProperties}）。 */
+    @Mock
+    private com.leo.erp.sales.order.SalesOrderProperties properties;
+
     /** 真实导出闸门（默认额度 4）：单线程用例直接放行，无需桩化。 */
     @org.mockito.Spy
     private com.leo.erp.common.export.ExportConcurrencyGuard exportConcurrencyGuard =
@@ -213,9 +217,10 @@ class V2SalesOrderControllerTest {
     @Test
     void update_shouldDelegate() {
         SalesOrderResponse response = mock(SalesOrderResponse.class);
-        when(service.update(anyLong(), any())).thenReturn(response);
+        when(properties.isRequireResourceVersion()).thenReturn(true);
+        when(service.update(anyLong(), any(), eq(3L))).thenReturn(response);
 
-        assertThat(controller.update(5L, request())).isSameAs(response);
+        assertThat(controller.update(5L, "3", null, request())).isSameAs(response);
     }
 
     @Test

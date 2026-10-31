@@ -36,7 +36,15 @@ public record PurchaseOrderResponse(
          * 未强制结单时不输出该键, 以保持与旧前端的向后兼容(同 chargeItems:null 需要显式声明的道理)。</p>
          */
         @JsonInclude(JsonInclude.Include.NON_NULL)
-        ForceCloseInfo forceClose
+        ForceCloseInfo forceClose,
+        /**
+         * 资源版本（实体 {@code @Version}，乐观并发前置条件）。
+         *
+         * <p>列表与详情都返回：客户端保存时必须把这一版原样回送到
+         * {@code X-Resource-Version}，服务端据此判定「我编辑的是哪一版」（不一致 412）。
+         * 全局 {@code Long} → 字符串序列化即输出 {@code "3"} 这样的十进制字符串。</p>
+         */
+        Long version
 ) {
 
     /**
@@ -75,7 +83,7 @@ public record PurchaseOrderResponse(
                                  List<DocumentChargeItemResponse> chargeItems) {
         this(id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
     }
 
     /** 覆盖强制结单留痕(实体派生), 其余字段保持不变。 */
@@ -83,7 +91,8 @@ public record PurchaseOrderResponse(
         return new PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                totalRemainingQuantity, totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
+                totalRemainingQuantity, totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose,
+                version
         );
     }
 
@@ -91,7 +100,8 @@ public record PurchaseOrderResponse(
         return new PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                totalRemainingQuantity, totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
+                totalRemainingQuantity, totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose,
+                version
         );
     }
 
@@ -99,7 +109,8 @@ public record PurchaseOrderResponse(
         return new PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                totalRemainingQuantity, totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
+                totalRemainingQuantity, totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose,
+                version
         );
     }
 
@@ -107,7 +118,8 @@ public record PurchaseOrderResponse(
         return new PurchaseOrderResponse(
                 id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, chargeItems,
-                totalRemainingQuantity, totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose
+                totalRemainingQuantity, totalActualAmount, totalAmountDifference, totalReceivedQuantity, forceClose,
+                version
         );
     }
 
@@ -128,7 +140,7 @@ public record PurchaseOrderResponse(
                                  List<PurchaseOrderItemResponse> items) {
         this(id, orderNo, supplierId, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items, List.of(),
-                null, null, null, null, null);
+                null, null, null, null, null, null);
     }
 
     public PurchaseOrderResponse(Long id,

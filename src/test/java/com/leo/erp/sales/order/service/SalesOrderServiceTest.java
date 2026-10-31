@@ -393,7 +393,7 @@ class SalesOrderServiceTest {
             return null;
         }).when(workflowService).apply(eq(entity), any(), any());
 
-        assertThatThrownBy(() -> service.update(5L, request("SO001", null)))
+        assertThatThrownBy(() -> service.update(5L, request("SO001", null), null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不能从「已审核」变更为「完成销售」");
 
@@ -422,7 +422,7 @@ class SalesOrderServiceTest {
                 LocalDate.of(2026, 8, 1), "销售员A", "草稿", null,
                 List.of(item), List.of(), false);
 
-        assertThatThrownBy(() -> service.update(5L, request))
+        assertThatThrownBy(() -> service.update(5L, request, null))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("sales-orders:update:unit-price");
 
@@ -441,9 +441,28 @@ class SalesOrderServiceTest {
             return null;
         }).when(workflowService).apply(eq(entity), any(), any());
 
-        assertThatThrownBy(() -> service.update(5L, request("SO001", null)))
+        assertThatThrownBy(() -> service.update(5L, request("SO001", null), null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("完成态状态必须通过专用状态接口变更");
+
+        verify(workflowService, never()).saveUpdated(any(), any());
+    }
+
+    /** 资源版本前置条件（P1-2）：客户端带来的版本与实体 @Version 不一致时必须 412 且不落库。 */
+    @Test
+    void update_shouldRejectStaleVersionWith412() {
+        loginAs(1L);
+        SalesOrder entity = entity(1L, StatusConstants.DRAFT);
+        entity.setVersion(3L);
+        when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        when(documentChargeItemService.list("sales-order", 5L)).thenReturn(List.of());
+        when(documentChargeItemService.sumAmount(any())).thenReturn(BigDecimal.ZERO);
+
+        assertThatThrownBy(() -> service.update(5L, request("SO001", null), 2L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("销售订单版本已变更")
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.PRECONDITION_FAILED));
 
         verify(workflowService, never()).saveUpdated(any(), any());
     }

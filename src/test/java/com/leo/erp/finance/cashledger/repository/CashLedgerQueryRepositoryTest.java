@@ -271,7 +271,7 @@ class CashLedgerQueryRepositoryTest {
         doReturn(List.of(line(1L))).when(jdbcTemplate).query(
                 anyString(), any(MapSqlParameterSource.class), lineMapper());
 
-        List<CashLedgerLineResponse> rows = repository().listForExport(filter());
+        List<CashLedgerLineResponse> rows = repository().listForExport(filter(), 200_000);
 
         assertThat(rows).hasSize(1);
         ArgumentCaptor<String> dataSql = ArgumentCaptor.forClass(String.class);
@@ -282,8 +282,11 @@ class CashLedgerQueryRepositoryTest {
         assertThat(dataSql.getValue())
                 .contains(":openingBalance + SUM(filtered_ledger.balance_change) OVER (")
                 .contains("ORDER BY ledger_with_balance.business_date ASC")
-                .doesNotContain("COUNT(1) OVER ()");
+                .doesNotContain("COUNT(1) OVER ()")
+                // 有界：SQL 必须带上限，且绑定值为「上限 + 1」的溢出哨兵
+                .endsWith("LIMIT :exportRowLimit");
         assertThat(paramsCaptor.getValue().getValue("openingBalance")).isEqualTo(BigDecimal.valueOf(1500));
+        assertThat(paramsCaptor.getValue().getValue("exportRowLimit")).isEqualTo(200_001L);
     }
 
     private CashLedgerQueryRepository repository() {

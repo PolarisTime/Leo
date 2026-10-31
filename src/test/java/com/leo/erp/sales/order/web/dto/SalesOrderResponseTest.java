@@ -137,6 +137,7 @@ class SalesOrderResponseTest {
                 null,
                 null,
                 null,
-                "项A");
+                "项A",
+                4L);
     }
 }

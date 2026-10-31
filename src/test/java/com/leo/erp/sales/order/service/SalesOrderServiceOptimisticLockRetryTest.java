@@ -170,14 +170,14 @@ class SalesOrderServiceOptimisticLockRetryTest {
         // 真实场景里版本号 UPDATE 在 flush/commit 阶段失败：让首次提交抛乐观锁冲突。
         transactionManager.failNextCommits(1, conflict());
 
-        SalesOrderResponse result = service(3).update(ORDER_ID, request("SO001"));
+        SalesOrderResponse result = service(3).update(ORDER_ID, request("SO001"), null);
 
         assertThat(result).isNotNull();
         // 2 次尝试 = 2 个全新事务，最终只有 1 次成功提交。
         assertThat(transactionManager.getTransactionCount()).isEqualTo(2);
         assertThat(transactionManager.getCommitCount()).isEqualTo(1);
-        // 每次尝试都重新加载实体（updateOrder 与 applyChargeTotal 各一次 × 2 次尝试）。
-        verify(repository, times(4)).findByIdAndDeletedFlagFalse(ORDER_ID);
+        // 每次尝试都重新加载实体（updateOrder、applyChargeTotal、收尾 refreshedDetail 各一次 × 2 次尝试）。
+        verify(repository, times(6)).findByIdAndDeletedFlagFalse(ORDER_ID);
         // 整段写逻辑被完整重放：保存与费用同步在两次尝试中各执行一次，
         // 失败尝试的写入随事务回滚，成功的那次才落库。
         verify(workflowService, times(2)).saveUpdated(any(SalesOrder.class), any());
@@ -193,7 +193,7 @@ class SalesOrderServiceOptimisticLockRetryTest {
                 .thenThrow(conflict())
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        SalesOrderResponse result = service(3).update(ORDER_ID, request("SO001"));
+        SalesOrderResponse result = service(3).update(ORDER_ID, request("SO001"), null);
 
         assertThat(result).isNotNull();
         assertThat(transactionManager.getTransactionCount()).isEqualTo(2);
@@ -214,7 +214,7 @@ class SalesOrderServiceOptimisticLockRetryTest {
         transactionManager.failNextCommits(3, conflict);
 
         // 原样抛出最后一次乐观锁异常 → GlobalExceptionHandler 仍映射 409 CONCURRENT_MODIFICATION。
-        assertThatThrownBy(() -> service(3).update(ORDER_ID, request("SO001")))
+        assertThatThrownBy(() -> service(3).update(ORDER_ID, request("SO001"), null))
                 .isSameAs(conflict);
 
         assertThat(transactionManager.getTransactionCount()).isEqualTo(3);
@@ -235,7 +235,7 @@ class SalesOrderServiceOptimisticLockRetryTest {
                 LocalDate.of(2026, 8, 1), "销售员A", StatusConstants.AUDITED, null,
                 List.of(), List.of(), false);
 
-        assertThatThrownBy(() -> service(3).update(ORDER_ID, statusChangingRequest))
+        assertThatThrownBy(() -> service(3).update(ORDER_ID, statusChangingRequest, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("状态只能通过审核、反审核或完成销售操作变更");
 
@@ -252,7 +252,7 @@ class SalesOrderServiceOptimisticLockRetryTest {
         ObjectOptimisticLockingFailureException conflict = conflict();
         transactionManager.failNextCommits(1, conflict);
 
-        assertThatThrownBy(() -> service(1).update(ORDER_ID, request("SO001")))
+        assertThatThrownBy(() -> service(1).update(ORDER_ID, request("SO001"), null))
                 .isSameAs(conflict);
 
         assertThat(transactionManager.getTransactionCount()).isEqualTo(1);

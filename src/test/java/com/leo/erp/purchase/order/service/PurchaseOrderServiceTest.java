@@ -108,6 +108,26 @@ class PurchaseOrderServiceTest {
         return order;
     }
 
+    /** 资源版本前置条件（P1-2）：客户端带来的版本与实体 @Version 不一致时必须 412 且不落库。 */
+    @Test
+    void update_shouldRejectStaleVersionWith412() {
+        PurchaseOrder entity = order(StatusConstants.DRAFT);
+        entity.setVersion(3L);
+        when(purchaseOrderRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
+        PurchaseOrderRequest request = new PurchaseOrderRequest(
+                "PO001", 1L, "SUP001", "供应商A", LocalDateTime.of(2026, 8, 1, 0, 0),
+                "采购员A", 2L, null, null, List.of(), List.of(), false);
+
+        assertThatThrownBy(() -> service.update(5L, request, 2L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("采购订单版本已变更")
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(com.leo.erp.common.error.ErrorCode.PRECONDITION_FAILED));
+
+        verify(purchaseOrderRepository, never()).save(any(PurchaseOrder.class));
+        verify(purchaseOrderRepository, never()).saveAndFlush(any(PurchaseOrder.class));
+    }
+
     @Test
     void updateStatus_shouldRejectBlankStatus() {
         when(purchaseOrderRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(order(StatusConstants.DRAFT)));
@@ -173,7 +193,7 @@ class PurchaseOrderServiceTest {
                 "PO001", 1L, "SUP001", "供应商A", LocalDateTime.of(2026, 8, 1, 0, 0),
                 "采购员A", 2L, StatusConstants.AUDITED, null, List.of(), List.of(), false);
 
-        assertThatThrownBy(() -> service.update(5L, request))
+        assertThatThrownBy(() -> service.update(5L, request, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("普通保存不能修改采购订单状态");
 

@@ -59,7 +59,10 @@ public class PurchaseOrderResponseAssembler {
                 null,
                 null,
                 null,
-                forceCloseInfoOf(order)
+                forceCloseInfoOf(order),
+                // 版本是写接口的前置条件来源: 列表/详情/更新响应都必须带上，
+                // 否则客户端无从表达「我编辑的是哪一版」。
+                order.getVersion()
         );
     }
 

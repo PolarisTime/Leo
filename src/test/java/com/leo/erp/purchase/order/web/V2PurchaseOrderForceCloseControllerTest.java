@@ -65,7 +65,8 @@ class V2PurchaseOrderForceCloseControllerTest {
                 pickupListService,
                 warehouseRecommendationService,
                 purchaseOrderOptionService,
-                forceCloseService
+                forceCloseService,
+                new com.leo.erp.purchase.order.PurchaseOrderProperties()
         );
         RequestContextHolder.setRequestAttributes(
                 new ServletRequestAttributes(new MockHttpServletRequest()));

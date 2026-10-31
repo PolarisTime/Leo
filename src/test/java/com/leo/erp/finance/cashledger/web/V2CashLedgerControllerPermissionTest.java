@@ -114,8 +114,15 @@ class V2CashLedgerControllerPermissionTest {
         }
 
         @Bean
-        V2CashLedgerController v2CashLedgerController(CashLedgerService cashLedgerService) {
-            return new V2CashLedgerController(cashLedgerService);
+        com.leo.erp.common.export.ExportConcurrencyGuard exportConcurrencyGuard() {
+            return new com.leo.erp.common.export.ExportConcurrencyGuard(
+                    new com.leo.erp.common.export.ExportConcurrencyProperties());
+        }
+
+        @Bean
+        V2CashLedgerController v2CashLedgerController(CashLedgerService cashLedgerService,
+                                                      com.leo.erp.common.export.ExportConcurrencyGuard guard) {
+            return new V2CashLedgerController(cashLedgerService, guard);
         }
     }
 }

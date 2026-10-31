@@ -57,7 +57,15 @@ public record SalesOrderResponse(
         Integer returnedQuantity,
         Integer deliveredNetQuantity,
         /** 项目简称(取自 md_project.project_name_abbr); 项目缺失/已删除/简称为空 → null, 由前端回退显示全称。 */
-        String projectNameAbbr
+        String projectNameAbbr,
+        /**
+         * 资源版本（实体 {@code @Version}，乐观并发前置条件）。
+         *
+         * <p>列表与详情都返回：客户端保存时必须把这一版原样回送到
+         * {@code X-Resource-Version}，服务端据此判定「我编辑的是哪一版」（不一致 412）。
+         * 全局 {@code Long} → 字符串序列化即输出 {@code "3"} 这样的十进制字符串。</p>
+         */
+        Long version
 ) {
 
     public SalesOrderResponse(Long id,
@@ -83,7 +91,7 @@ public record SalesOrderResponse(
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, totalWeight,
                 totalAmount, status, deletedFlag, remark, null, null, null, null, null, null, null, null, null, null, null,
-                items, chargeItems, null, null, null, null);
+                items, chargeItems, null, null, null, null, null);
     }
 
     public SalesOrderResponse withDerivedQuantities(Integer deliveredQuantity,
@@ -95,7 +103,7 @@ public record SalesOrderResponse(
                 totalWeight, totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
                 priceFloatValue, priceTargetDate, priceQuoteDate, priceQuotePeriod, priceDateBasis,
                 priceDateOffsetDays, priceClosedSettleDirection, priceClosedSettleDays, items, chargeItems,
-                deliveredQuantity, returnedQuantity, deliveredNetQuantity, projectNameAbbr
+                deliveredQuantity, returnedQuantity, deliveredNetQuantity, projectNameAbbr, version
         );
     }
 
@@ -116,7 +124,7 @@ public record SalesOrderResponse(
                 source.priceQuoteDate(), source.priceQuotePeriod(), source.priceDateBasis(),
                 source.priceDateOffsetDays(), source.priceClosedSettleDirection(), source.priceClosedSettleDays(),
                 source.items(), source.chargeItems(), source.deliveredQuantity(), source.returnedQuantity(),
-                source.deliveredNetQuantity(), projectNameAbbr
+                source.deliveredNetQuantity(), projectNameAbbr, source.version()
         );
     }
 
@@ -142,7 +150,7 @@ public record SalesOrderResponse(
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, totalWeight,
                 totalAmount, status, deletedFlag, remark, null, null, null, null, null, null, null, null, null,
-                null, null, items, List.of(), null, null, null, null);
+                null, null, items, List.of(), null, null, null, null, null);
     }
 
     public SalesOrderResponse(Long id,

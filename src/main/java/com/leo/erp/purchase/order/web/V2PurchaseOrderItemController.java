@@ -1,6 +1,7 @@
 package com.leo.erp.purchase.order.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2NoContent;
 import com.leo.erp.common.api.V2ResponseSupport;
@@ -40,6 +41,7 @@ import java.util.Optional;
 @Tag(name = "采购订单明细")
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/purchase-order-items")
 public class V2PurchaseOrderItemController {
 

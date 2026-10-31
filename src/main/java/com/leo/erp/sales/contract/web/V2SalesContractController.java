@@ -1,6 +1,7 @@
 package com.leo.erp.sales.contract.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
@@ -37,6 +38,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "销售合同")
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/sales-contracts")
 public class V2SalesContractController {
 

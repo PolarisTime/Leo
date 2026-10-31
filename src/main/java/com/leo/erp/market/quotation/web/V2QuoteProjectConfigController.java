@@ -1,6 +1,7 @@
 package com.leo.erp.market.quotation.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.market.quotation.QuotationProperties;
 import com.leo.erp.market.quotation.service.QuoteProjectConfigService;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "比价项目配置")
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/quote-project-configs")
 public class V2QuoteProjectConfigController {
 

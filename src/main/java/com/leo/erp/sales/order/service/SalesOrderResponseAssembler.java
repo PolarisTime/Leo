@@ -127,7 +127,10 @@ public class SalesOrderResponseAssembler {
                 deliveredQuantity,
                 returnedQuantity,
                 deliveredQuantity - returnedQuantity,
-                response.projectNameAbbr()
+                response.projectNameAbbr(),
+                // 版本是写接口的前置条件来源: 列表/详情/更新响应都必须带上，
+                // 否则客户端无从表达「我编辑的是哪一版」。
+                response.version()
         );
     }
 

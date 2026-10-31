@@ -94,7 +94,8 @@ class PurchaseOrderForceCloseServiceTest {
                     return new PurchaseOrderResponse(
                             1L, order.getOrderNo(), null, null, "供应商", null, null, null, null,
                             null, null, order.getStatus(), false, null, List.of(), List.of(),
-                            0, null, null, null, null
+                            0, null, null, null, null,
+                            order.getVersion()
                     );
                 });
     }

@@ -203,16 +203,30 @@ public class CashLedgerQueryRepository {
         return new CashLedgerPageResponse(fallback.summary(), PageResponse.from(emptyPage));
     }
 
-    public List<CashLedgerLineResponse> listForExport(CashLedgerFilter filter) {
+    /**
+     * 导出用的全量行查询（**带硬上限**，不允许无界全表读）。
+     *
+     * <p>为什么按「上限 + 1」取行：调用方需要区分「刚好等于上限」与「已溢出」。用
+     * {@code LIMIT maxRows + 1} 取一行哨兵，比「先 COUNT 再取」少扫一遍过滤条件，
+     * 且 COUNT 与取数之间还有窗口差；单条 SQL 的 {@code LIMIT} 语义足够确定——
+     * 取到 {@code maxRows + 1} 行就说明真实命中超过上限，由调用方抛 422 并提示缩小范围。</p>
+     *
+     * @param filter  资金流水过滤条件
+     * @param maxRows 允许导出的最大行数（必须为正数）
+     * @return 至多 {@code maxRows + 1} 行；超过 {@code maxRows} 即表示溢出
+     */
+    public List<CashLedgerLineResponse> listForExport(CashLedgerFilter filter, int maxRows) {
+        int safeMaxRows = Math.max(1, maxRows);
         MapSqlParameterSource parameters = parameters(filter);
         CashLedgerSummaryResponse summary = querySummary(filter, parameters);
         parameters.addValue("openingBalance", summary.openingBalance());
+        parameters.addValue("exportRowLimit", (long) safeMaxRows + 1L);
         String whereClause = whereClause(
                 basePredicate(filter, parameters),
                 periodPredicate(filter, parameters)
         );
         return jdbcTemplate.query(
-                ledgerDataSql(whereClause) + stableOrder("asc"),
+                ledgerDataSql(whereClause) + stableOrder("asc") + " LIMIT :exportRowLimit",
                 parameters,
                 LINE_ROW_MAPPER
         );

@@ -6,8 +6,10 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.export.ExportConcurrencyGuard;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.common.web.ResourceVersionPrecondition;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
+import com.leo.erp.sales.order.SalesOrderProperties;
 import com.leo.erp.sales.order.service.SalesOrderPrintExportService;
 import com.leo.erp.sales.order.service.SalesOrderPrintXlsxOptions;
 import com.leo.erp.sales.order.service.SalesOrderService;
@@ -28,6 +30,7 @@ import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.StatusTransitionPermissionGuard;
 import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
@@ -44,6 +47,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -67,17 +71,20 @@ public class V2SalesOrderController {
     private final SalesOrderSourceCandidateService sourceCandidateService;
     private final SalesOrderDocumentFlowService documentFlowService;
     private final ExportConcurrencyGuard exportConcurrencyGuard;
+    private final SalesOrderProperties properties;
 
     public V2SalesOrderController(SalesOrderService service,
                                   SalesOrderPrintExportService printExportService,
                                   SalesOrderSourceCandidateService sourceCandidateService,
                                   SalesOrderDocumentFlowService documentFlowService,
-                                  ExportConcurrencyGuard exportConcurrencyGuard) {
+                                  ExportConcurrencyGuard exportConcurrencyGuard,
+                                  SalesOrderProperties properties) {
         this.service = service;
         this.printExportService = printExportService;
         this.sourceCandidateService = sourceCandidateService;
         this.documentFlowService = documentFlowService;
         this.exportConcurrencyGuard = exportConcurrencyGuard;
+        this.properties = properties;
     }
 
     @Operation(summary = "分页查询销售订单采购来源候选")
@@ -164,13 +171,25 @@ public class V2SalesOrderController {
         return V2ResponseSupport.created("/sales-orders", service.create(request));
     }
 
-    @Operation(summary = "更新销售订单")
+    @Operation(summary = "更新销售订单",
+            description = "整体替换订单。写操作要求资源版本前置条件头 "
+                    + ResourceVersionPrecondition.HEADER + "（兼容别名 If-Match）："
+                    + "缺少版本返回 428，与单据当前版本不一致返回 412，一致才更新；"
+                    + "成功返回 200 + 更新后的订单表示（含新 version）。"
+                    + "版本号即列表/详情响应里的 version 字段。")
     @IdempotencyRequired
     @PutMapping("/{id}")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.SALES_ORDERS_UPDATE)
-    public SalesOrderResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody SalesOrderRequest request) {
-        return service.update(id, request);
+    public SalesOrderResponse update(
+            @PathVariable @SnowflakeId Long id,
+            @Parameter(description = "资源版本(强比较), 取详情/列表响应的 version 字段")
+            @RequestHeader(value = ResourceVersionPrecondition.HEADER, required = false) String resourceVersion,
+            @Parameter(description = "兼容别名, 非标准弱验证器用法")
+            @RequestHeader(value = ResourceVersionPrecondition.LEGACY_HEADER, required = false) String ifMatch,
+            @Valid @RequestBody SalesOrderRequest request) {
+        return service.update(id, request,
+                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()));
     }
 
     /**

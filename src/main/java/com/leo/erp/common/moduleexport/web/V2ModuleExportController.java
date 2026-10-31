@@ -2,6 +2,7 @@ package com.leo.erp.common.moduleexport.web;
 
 import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.export.ExportConcurrencyGuard;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.moduleexport.service.ModuleExportService;
 import com.leo.erp.common.moduleexport.web.dto.ModuleExportRequest;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
@@ -36,6 +37,7 @@ import java.nio.charset.StandardCharsets;
 @Tag(name = "业务单据导出")
 @RestController
 @Validated
+@IdempotencyRequired
 @RequestMapping(ApiVersion.V2_PREFIX + "/module-exports")
 public class V2ModuleExportController {
 
