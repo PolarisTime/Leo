@@ -17,8 +17,8 @@
 
 | 资产 | 原路径 | 规模 | 处置 | 仓库外备份 |
 | --- | --- | --- | --- | --- |
-| 历史归档代码 | `leo/archive/` | **769 个 Git 文件 / 8.2 MB**（755 个 `.java`，其中 700 个 `*Test.java`；另有 5 json / 3 md / 2 txt / 2 sha256 / 1 yml / 1 properties） | `git rm -r archive`（索引与工作区均已删除，**尚未提交**，由 Lead 统一提交） | `/home/instance/Gemini/.local/archive-backup-20261031`（769 文件，`diff -r` 完全一致，sha256 769/769 一致；清单 `.local/archive-backup-20261031.sha256`） |
-| 含 PII 的库 dump | `leo/scripts/jsh_erp_steel_dump.sql` | 717,093 字节 | `git rm`（**尚未提交**） | `/home/instance/Gemini/.local/jsh_erp_steel_dump.sql`（`chmod 600`；sha256 `4033f220f2c311b78b1bfc12b8fcf642feeb727d78c9f4d6fa3e7f76377182a8`，与源文件一致） |
+| 历史归档代码 | `leo/archive/` | **769 个 Git 文件 / 8.2 MB**（755 个 `.java`，其中 700 个 `*Test.java`；另有 5 json / 3 md / 2 txt / 2 sha256 / 1 yml / 1 properties） | `git rm -r archive`（索引与工作区均已删除，**已随 `777b8657` 提交**） | `/home/instance/Gemini/.local/archive-backup-20261031`（769 文件，`diff -r` 完全一致，sha256 769/769 一致；清单 `.local/archive-backup-20261031.sha256`） |
+| 含 PII 的库 dump | `leo/scripts/jsh_erp_steel_dump.sql` | 717,093 字节 | `git rm`（**已随 `777b8657` 提交**） | `/home/instance/Gemini/.local/jsh_erp_steel_dump.sql`（`chmod 600`；sha256 `4033f220f2c311b78b1bfc12b8fcf642feeb727d78c9f4d6fa3e7f76377182a8`，与源文件一致） |
 
 移除理由：
 
@@ -90,6 +90,30 @@ so_sales_order_item`、`fm_invoice_receipt_item → po_purchase_order_item`、
   `FROM public.ct_contract_purchase_order relation`——全局搜索仍会扫它，删表会让视图失效。
 - 处置：保留为历史查询资产；`V205` 已在其注释中写明该例外。
 - 删除前提：先改视图（移除该 UNION 分支）+ 改全局搜索的文档类型映射，再 `DROP TABLE`。
+
+### 3.1 A4：`global_search_document` 视图还依赖另外 10 张退役归档表
+
+`public.global_search_document`（`V1__baseline.sql:859` 起）的 CTE/UNION 分支共直接读取
+**11 张退役归档表**（除本节例外表 `ct_contract_purchase_order` 外还有下列 10 张）：
+
+| # | 视图引用的退役表 | 视图中的用途 |
+| --- | --- | --- |
+| 1 | `ct_contract_purchase_order` | 采购合同 ↔ 采购订单来源号聚合（`purchase_contract_sources` CTE） |
+| 2 | `ct_purchase_contract` | 采购合同搜索分支 |
+| 3 | `ct_sales_contract` | 销售合同搜索分支 |
+| 4 | `fm_invoice_issue` | 开票搜索分支 |
+| 5 | `fm_invoice_issue_item` | 开票来源号聚合（`invoice_issue_sources` CTE） |
+| 6 | `fm_invoice_issue_source_order` | 开票来源订单聚合（`invoice_issue_sources` CTE） |
+| 7 | `fm_invoice_receipt` | 收票搜索分支 |
+| 8 | `fm_invoice_receipt_item` | 收票来源号聚合（`invoice_receipt_sources` CTE） |
+| 9 | `fm_invoice_receipt_source_order` | 收票来源订单聚合（`invoice_receipt_sources` CTE） |
+| 10 | `st_supplier_statement` | 供应商对账单搜索分支 |
+| 11 | `st_supplier_statement_item` | 供应商对账来源号聚合（`supplier_statement_sources` CTE） |
+
+**约束（A4）**：将来删除上述任何一张表之前，**必须先按当前定义重建 `global_search_document` 视图**
+（移除对应 CTE/UNION 分支），再改全局搜索的文档类型映射，最后才能 `DROP TABLE`；
+否则视图失效会让全局搜索整体报错（不只是少一个分支）。
+本节清单来自 `V1__baseline.sql` 视图定义逐表比对；改视图时请同步更新本表。
 
 ---
 
@@ -262,4 +286,5 @@ git log --diff-filter=D --name-only -- archive scripts/jsh_erp_steel_dump.sql
 
 | 日期 | 变更 |
 | --- | --- |
-| 2026-10-31 | 建档：`archive/`（769 文件）与 `scripts/jsh_erp_steel_dump.sql` 移出 Git 跟踪（待 Lead 提交，仓库外备份见第 1 节）；登记 V205 的四类处置（3 张孤儿表 / 6 张幽灵入库单 / 10 个 NOT VALID CHECK / 2 条死外键）；登记 16 张退役归档表与 `ct_contract_purchase_order` 保留例外 |
+| 2026-10-31 | 建档：`archive/`（769 文件）与 `scripts/jsh_erp_steel_dump.sql` 移出 Git 跟踪（**已随 `777b8657` 提交**，仓库外备份见第 1 节）；登记 V205 的四类处置（3 张孤儿表 / 6 张幽灵入库单 / 10 个 NOT VALID CHECK / 2 条死外键）；登记 16 张退役归档表与 `ct_contract_purchase_order` 保留例外 |
+| 2026-10-31（收尾复核） | 修正提交状态为已提交（`777b8657`）；新增 A4：`global_search_document` 视图依赖 11 张退役归档表，删除任何一张前必须先重建视图（见 §3.1） |

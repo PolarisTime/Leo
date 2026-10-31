@@ -277,7 +277,7 @@ classify_path() {
       changed_tests+=("$path")
       fallback_reasons+=("测试目录存在非 Java 文件变更: $path")
       ;;
-    docs/*|scripts/*|.github/*|archive/*|*.md|.gitignore|.gitattributes|.editorconfig|LICENSE)
+    docs/*|scripts/*|.github/*|*.md|.gitignore|.gitattributes|.editorconfig|LICENSE)
       changed_noncode+=("$path")
       ;;
     *)

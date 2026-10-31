@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
@@ -15,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -63,7 +65,7 @@ class OperationLogPartitionPrecreateServiceTest {
         verify(jdbcTemplate).execute(contains("sys_operation_log_y2026m12"));
         verify(jdbcTemplate, never()).execute(contains("sys_operation_log_y2026m10"));
         verify(jdbcTemplate, never()).execute(contains("sys_operation_log_y2026m11"));
-        verify(metrics).recordPartitionPrecreate(1);
+        verify(metrics).recordPartitionPrecreate(1, 0, 3);
     }
 
     @Test
@@ -79,6 +81,27 @@ class OperationLogPartitionPrecreateServiceTest {
         assertThat(summary.missing()).isZero();
         assertThat(summary.created()).isZero();
         verify(jdbcTemplate, never()).execute(anyString());
-        verify(metrics).recordPartitionPrecreate(0);
+        verify(metrics).recordPartitionPrecreate(0, 0, 0);
+    }
+
+    @Test
+    void precreate_shouldCountFailureAndKeepOtherMonths() {
+        when(jdbcTemplate.queryForObject(contains("to_char(CURRENT_DATE"), eq(String.class)))
+                .thenReturn("2026-10");
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class))).thenReturn(List.of(
+                "sys_operation_log_y2026m10",
+                "sys_operation_log_y2026m11"));
+        when(properties.getPartitionLookaheadMonths()).thenReturn(3);
+        // 2026-12 建分区失败（模拟 default 分区已有该月数据），其余月份不受影响
+        doThrow(new DataIntegrityViolationException("default partition conflict"))
+                .when(jdbcTemplate).execute(contains("sys_operation_log_y2026m12"));
+
+        OperationLogPartitionPrecreateService.PrecreateSummary summary = service.precreateMissingPartitions();
+
+        assertThat(summary.expected()).isEqualTo(3);
+        assertThat(summary.missing()).isEqualTo(1);
+        assertThat(summary.created()).isZero();
+        assertThat(summary.failed()).isEqualTo(1);
+        verify(metrics).recordPartitionPrecreate(0, 1, 3);
     }
 }

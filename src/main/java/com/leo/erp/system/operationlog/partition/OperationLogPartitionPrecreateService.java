@@ -24,8 +24,10 @@ import java.util.stream.Collectors;
  * <p>安全边界：</p>
  * <ul>
  *   <li>只补建缺失分区，已存在的直接跳过（判定见 {@link OperationLogPartitionCreationPlanner}）；</li>
- *   <li>DDL 使用 {@code CREATE TABLE IF NOT EXISTS ... PARTITION OF}，多实例并发执行也幂等；</li>
- *   <li>单个分区创建失败只记日志并继续，不影响其它月份；</li>
+ *   <li>DDL 使用 {@code CREATE TABLE IF NOT EXISTS ... PARTITION OF}，多实例并发下幂等
+ *       （极小概率的并发 DDL 冲突会记失败并在下一轮重试）；</li>
+ *   <li>单个分区创建失败记 ERROR（含月份/分区名/default 分区提示）并继续，不影响其它月份；
+ *       失败数写入 {@code leo.operation.log.partition.precreate.failed}，持续大于 0 需人工介入；</li>
  *   <li>配置非法（lookahead 小于 1 或过大）时判定返回空清单，本任务不做任何动作。</li>
  * </ul>
  */
@@ -72,13 +74,13 @@ public class OperationLogPartitionPrecreateService {
             }
         }
 
-        metrics.recordPartitionPrecreate(created);
+        metrics.recordPartitionPrecreate(created, failed, expectedMonths.size());
         log.info("操作日志分区预建完成: 当前月 {}, 窗口内应存在 {} 个, 缺失 {} 个, 创建成功 {} 个, 失败 {} 个",
                 currentMonth, expectedMonths.size(), missingMonths.size(), created, failed);
         return new PrecreateSummary(expectedMonths.size(), missingMonths.size(), created, failed);
     }
 
-    /** 创建单个月分区；失败返回 false（只记日志，不中断整轮）。 */
+    /** 创建单个月分区；失败返回 false（记 ERROR 并计入失败指标，不中断整轮）。 */
     private boolean createPartition(YearMonth month) {
         String partitionName = OperationLogPartitionCreationPlanner.partitionName(month);
         LocalDate from = month.atDay(1);
@@ -91,7 +93,13 @@ public class OperationLogPartitionPrecreateService {
             log.info("已预建操作日志月分区: {}（{} ~ {}）", partitionName, from, to);
             return true;
         } catch (RuntimeException ex) {
-            log.warn("预建操作日志月分区失败，已跳过: {}", partitionName, ex);
+            // 失败要能被运维看见：单月失败会逐轮重试，若原因是 default 分区已有该月数据，
+            // 则 CREATE ... PARTITION OF 会一直失败，必须人工先把该月行迁出 default。
+            log.error("预建操作日志月分区失败，已跳过: {}（{} ~ {}）。"
+                            + "若 sys_operation_log_default 已存在该月数据，CREATE ... PARTITION OF 会因"
+                            + "default 分区约束校验失败而持续不成功：需先把该月行从 default 迁出（或 detach/attach），"
+                            + "再由下一轮任务自动补建；指标 leo.operation.log.partition.precreate.failed 持续 > 0 需人工介入。",
+                    partitionName, from, to, ex);
             return false;
         }
     }

@@ -45,7 +45,7 @@ bash scripts/test-affected.sh --max-classes 60     # 默认 40，也可用 LEO_A
 | `pom.xml`、`.mvn/*`、`mvnw`、`lombok.config`、`config/*` | 回退全量 |
 | `src/main/resources/**`、`src/test/resources/**`（含 Flyway 迁移） | 回退全量 |
 | 删除测试文件 | 回退全量 |
-| 文档 / `scripts/*` / `.github/*` / `archive/*` / `*.md` | 明确跳过（不跑测试） |
+| 文档 / `scripts/*` / `.github/*` / `*.md` | 明确跳过（不跑测试） |
 | 未分类路径（含 `perf/*` 等） | 回退全量 |
 | 选中测试类 > 阈值（默认 40） | 回退全量 |
 | `*PostgresTest` | 默认过滤不跑；仅命中真实库用例时退出码 3 |

@@ -22,6 +22,10 @@ public class OperationLogPartitionMetrics {
     private final AtomicLong cleanupSkipped = new AtomicLong();
     /** 最近一轮分区预建成功创建的分区数。 */
     private final AtomicLong precreated = new AtomicLong();
+    /** 最近一轮分区预建失败的分区数（失败只影响该月份，下一轮会重试）。 */
+    private final AtomicLong precreateFailed = new AtomicLong();
+    /** 最近一轮分区预建「应存在」的分区数（= 预建窗口内的月份数）。 */
+    private final AtomicLong precreateScanned = new AtomicLong();
 
     public OperationLogPartitionMetrics(JdbcTemplate jdbcTemplate,
                                         MeterRegistry meterRegistry,
@@ -52,6 +56,13 @@ public class OperationLogPartitionMetrics {
         Gauge.builder("leo.operation.log.partition.precreated", precreated, AtomicLong::get)
                 .description("最近一轮操作日志分区预建成功创建的分区数")
                 .register(meterRegistry);
+        Gauge.builder("leo.operation.log.partition.precreate.failed", precreateFailed, AtomicLong::get)
+                .description("最近一轮操作日志分区预建失败的分区数（持续大于 0 说明预建受阻，"
+                        + "常见原因是 sys_operation_log_default 已存在该月数据）")
+                .register(meterRegistry);
+        Gauge.builder("leo.operation.log.partition.precreate.scanned", precreateScanned, AtomicLong::get)
+                .description("最近一轮操作日志分区预建应存在的分区数（预建窗口内月份数）")
+                .register(meterRegistry);
     }
 
     /**
@@ -65,9 +76,17 @@ public class OperationLogPartitionMetrics {
         cleanupSkipped.set(skipped);
     }
 
-    /** 由分区预建任务回填最近一轮结果。 */
-    public void recordPartitionPrecreate(int created) {
+    /**
+     * 由分区预建任务回填最近一轮结果。
+     *
+     * @param created 成功创建的分区数
+     * @param failed  创建失败的分区数（单月失败不影响其它月份）
+     * @param scanned 应存在的分区数（预建窗口内月份数）
+     */
+    public void recordPartitionPrecreate(int created, int failed, int scanned) {
         precreated.set(created);
+        precreateFailed.set(failed);
+        precreateScanned.set(scanned);
     }
 
     @Scheduled(fixedDelayString = "${leo.observability.partition-metrics-refresh-interval:5m}")
@@ -78,8 +97,10 @@ public class OperationLogPartitionMetrics {
                     SELECT month_offset,
                            format(
                                'public.sys_operation_log_y%sm%s',
-                               to_char(date_trunc('month', CURRENT_DATE) + make_interval(months => month_offset), 'YYYY'),
-                               to_char(date_trunc('month', CURRENT_DATE) + make_interval(months => month_offset), 'MM')
+                               to_char(date_trunc('month', CURRENT_DATE)
+                                       + make_interval(months => month_offset), 'YYYY'),
+                               to_char(date_trunc('month', CURRENT_DATE)
+                                       + make_interval(months => month_offset), 'MM')
                            ) AS relation_name
                     FROM generate_series(0, ?) AS offsets(month_offset)
                 )
