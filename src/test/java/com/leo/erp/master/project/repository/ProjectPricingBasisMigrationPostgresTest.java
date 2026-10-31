@@ -19,6 +19,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 新增 6 个取价快照列且全部可空。CHECK 约束既要声明允许取值，也要在数据库层真的拦住脏值 ——
  * 应用层的归一化与校验都不能替代这一层兜底（历史数据、手工 SQL、其他写入方都会绕过应用层）。</p>
  *
+ * <p>V207 清理发布删除了两个一次性历史列 {@code md_project.price_closed_day_prev_settle} 与
+ * {@code so_sales_order.price_closed_settle_prev}（数据已按 V195 映射回填到 direction/days 列），
+ * 因此本用例不再断言这两列的存在性与默认值；删除口径由
+ * {@link ProjectClosedSettleDirectionMigrationPostgresTest} 断言。</p>
+ *
  * <p>迁移由 Flyway 管理，本用例只读 {@code information_schema}/{@code pg_constraint}，
  * 写入用例的测试事务由 {@code @DataJpaTest} 回滚。</p>
  */
@@ -49,10 +54,6 @@ class ProjectPricingBasisMigrationPostgresTest {
         assertThat(columnNullable("md_project", "price_date_offset_days")).isFalse();
         assertThat(columnDefault("md_project", "price_date_offset_days")).isEqualTo("0");
 
-        assertThat(columnType("md_project", "price_closed_day_prev_settle")).isEqualTo("boolean");
-        assertThat(columnNullable("md_project", "price_closed_day_prev_settle")).isFalse();
-        assertThat(columnDefault("md_project", "price_closed_day_prev_settle")).isEqualTo("false");
-
         assertThat(columnType("md_project", "price_period_policy")).isEqualTo("character varying");
         assertThat(columnMaxLength("md_project", "price_period_policy")).isEqualTo(16);
         assertThat(columnNullable("md_project", "price_period_policy")).isFalse();
@@ -65,7 +66,7 @@ class ProjectPricingBasisMigrationPostgresTest {
     }
 
     @Test
-    void v179_销售订单取价快照六列可空存在() {
+    void v179_销售订单取价快照列可空存在() {
         assertThat(columnType("so_sales_order", "price_target_date")).isEqualTo("date");
         assertThat(columnType("so_sales_order", "price_quote_date")).isEqualTo("date");
         assertThat(columnType("so_sales_order", "price_quote_period")).isEqualTo("character varying");
@@ -73,10 +74,9 @@ class ProjectPricingBasisMigrationPostgresTest {
         assertThat(columnType("so_sales_order", "price_date_basis")).isEqualTo("character varying");
         assertThat(columnMaxLength("so_sales_order", "price_date_basis")).isEqualTo(16);
         assertThat(columnType("so_sales_order", "price_date_offset_days")).isEqualTo("integer");
-        assertThat(columnType("so_sales_order", "price_closed_settle_prev")).isEqualTo("boolean");
 
         for (String column : new String[]{"price_target_date", "price_quote_date", "price_quote_period",
-                "price_date_basis", "price_date_offset_days", "price_closed_settle_prev"}) {
+                "price_date_basis", "price_date_offset_days"}) {
             assertThat(columnNullable("so_sales_order", column)).as(column).isTrue();
             assertThat(columnDefault("so_sales_order", column)).as(column).isNull();
         }
@@ -147,9 +147,6 @@ class ProjectPricingBasisMigrationPostgresTest {
         assertThat(jdbc.queryForObject("""
                 SELECT price_period_fixed FROM public.md_project WHERE id = ?
                 """, String.class, PROJECT_ID)).isEqualTo("下午");
-        assertThat(jdbc.queryForObject("""
-                SELECT price_closed_day_prev_settle FROM public.md_project WHERE id = ?
-                """, Boolean.class, PROJECT_ID)).isFalse();
     }
 
     private void insertProject(String basis, int offsetDays, String periodPolicy, String fixedPeriod) {

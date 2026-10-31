@@ -101,7 +101,7 @@
     "freight-bill": {
       "tableName": "lg_freight_bill",
       "printColumns": [
-        "id", "bill_no", "carrier_name", "customer_name", "project_name", "bill_time",
+        "id", "bill_no", "carrier_name", "bill_time",
         "unit_price", "total_weight", "total_freight", "status", "remark", "vehicle_plate",
         "settlement_company_id", "settlement_company_name"
       ],
@@ -139,7 +139,7 @@
       "tableName": "st_freight_statement",
       "printColumns": [
         "id", "statement_no", "carrier_name", "start_date", "end_date", "total_weight",
-        "total_freight", "paid_amount", "unpaid_amount", "status", "sign_status", "attachment",
+        "total_freight", "paid_amount", "unpaid_amount", "status", "attachment",
         "remark", "carrier_code", "settlement_company_id", "settlement_company_name"
       ],
       "itemTableName": "st_freight_statement_item",
@@ -148,7 +148,7 @@
         "id", "statement_id", "line_no", "source_no", "customer_name", "project_name",
         "material_code", "material_name", "brand", "category", "material", "spec", "length",
         "quantity", "piece_weight_ton", "pieces_per_bundle", "batch_no", "weight_ton",
-        "warehouse_name", "quantity_unit", "source_sales_outbound_item_id",
+        "warehouse_name", "quantity_unit",
         "settlement_company_id", "settlement_company_name"
       ],
       "productPrintItems": true,

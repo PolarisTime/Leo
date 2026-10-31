@@ -51,12 +51,6 @@ public class FreightBill extends AbstractAuditableEntity implements StatusAwareE
     @Column(name = "vehicle_id")
     private Long vehicleId;
 
-    @Column(name = "customer_name", length = 128)
-    private String customerName;
-
-    @Column(name = "project_name", length = 200)
-    private String projectName;
-
     @Column(name = "bill_time", nullable = false)
     private LocalDate billTime;
 

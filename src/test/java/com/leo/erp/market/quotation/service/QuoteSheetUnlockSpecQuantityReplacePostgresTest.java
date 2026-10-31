@@ -3,6 +3,7 @@ package com.leo.erp.market.quotation.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.market.lengthpremium.service.LengthPremiumService;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItem;
@@ -53,7 +54,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @EnabledIfEnvironmentVariable(named = "LEO_TEST_POSTGRES", matches = "true")
-@Import({QuoteSheetStore.class, QuoteSheetUnlockSpecQuantityReplacePostgresTest.StubConfig.class})
+@Import({QuoteSheetStore.class, LengthPremiumService.class,
+        QuoteSheetUnlockSpecQuantityReplacePostgresTest.StubConfig.class})
 class QuoteSheetUnlockSpecQuantityReplacePostgresTest {
 
     private static final long SHEET_UNLOCK = 940000000000000101L;

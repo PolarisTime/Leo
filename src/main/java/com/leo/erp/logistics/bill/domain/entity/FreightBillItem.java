@@ -6,6 +6,16 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 
+/**
+ * 物流单明细。
+ *
+ * <p><b>保留列（不要当死列删除）</b>：{@code lg_freight_bill_item.source_sales_outbound_item_id}
+ * 未映射到本实体，但仍被单据流只读查询 JOIN 使用
+ * （{@code com.leo.erp.search.flow.service.DocumentFlowService#addFreightByOutboundIdEdges} /
+ * {@code addOutboundsByFreightBillIdEdges}），用于展示「销售出库 ↔ 物流单」历史单据流；
+ * 该列同时出现在 {@code print-runtime.json} 的物流单明细打印列里。当前无写入路径，
+ * 但删除列会让历史单据流断链，故列与索引都保留。</p>
+ */
 @Getter
 @Setter
 @Entity

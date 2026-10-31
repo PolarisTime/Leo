@@ -87,7 +87,7 @@ class FreightStatementSourceServiceTest {
     void candidatePage_shouldMapCandidates() {
         when(repository.findOccupiedSourceFreightBillIdsExcludingCurrentStatement(any())).thenReturn(List.of());
         CandidateSnapshot candidate = new CandidateSnapshot(1L, "FB001", "C001", "承运商A", 30L, "结算公司A",
-                "客户A", "项目A", LocalDate.of(2026, 8, 1), new BigDecimal("100"), new BigDecimal("5000"),
+                LocalDate.of(2026, 8, 1), new BigDecimal("100"), new BigDecimal("5000"),
                 StatusConstants.AUDITED, 100L);
         when(sourceQuery.findCandidates(any())).thenReturn(new CandidatePage(List.of(candidate), 1, 1, 0, 10));
         PageQuery query = mock(PageQuery.class);
@@ -97,6 +97,9 @@ class FreightStatementSourceServiceTest {
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).billNo()).isEqualTo("FB001");
+        // 客户/项目随 lg_freight_bill 废弃列删除后恒为 null（字段暂留以兼容前端候选列）
+        assertThat(result.getContent().get(0).customerName()).isNull();
+        assertThat(result.getContent().get(0).projectName()).isNull();
     }
 
     // ---------- applyItems 来源 ID 校验 ----------

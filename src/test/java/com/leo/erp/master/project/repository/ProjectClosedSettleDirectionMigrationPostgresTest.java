@@ -17,10 +17,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <ul>
  *   <li>{@code md_project} 新增 {@code price_closed_settle_direction}（varchar(8) NOT NULL，
  *       默认 {@code PREV}）与 {@code price_closed_settle_days}（integer NOT NULL，默认 1），
- *       并带「枚举取值 + 0..30 范围」两个 CHECK；旧列 {@code price_closed_day_prev_settle} 保留；</li>
- *   <li>{@code so_sales_order} 新增同口径的两个可空快照列与两个 CHECK；旧列
- *       {@code price_closed_settle_prev} 保留；</li>
- *   <li>两个旧列都被注释为 DEPRECATED（保留只为历史只读与回滚留痕，待清理发布删除）。</li>
+ *       并带「枚举取值 + 0..30 范围」两个 CHECK；</li>
+ *   <li>{@code so_sales_order} 新增同口径的两个可空快照列与两个 CHECK；</li>
+ *   <li>V195 保留作回滚留痕的旧列 {@code md_project.price_closed_day_prev_settle} 与
+ *       {@code so_sales_order.price_closed_settle_prev} 已由 V207 清理发布删除，本用例断言其不存在。</li>
  * </ul>
  *
  * <p>迁移由 Flyway 管理，本用例只读 {@code information_schema}/{@code pg_constraint}/
@@ -77,16 +77,25 @@ class ProjectClosedSettleDirectionMigrationPostgresTest {
                 .contains("IS NULL").contains(">= 0").contains("<= 30");
     }
 
-    /** 旧列必须保留（V195 只把它们标成 deprecated，删除留给后续清理发布）。 */
+    /** V207 清理发布已删除 V195 仅作回滚留痕的两个旧列，旧列不得再出现在 schema 中。 */
     @Test
-    void v195_旧列保留并标注DEPRECATED() {
-        assertThat(columnType("md_project", "price_closed_day_prev_settle")).isEqualTo("boolean");
-        assertThat(columnType("so_sales_order", "price_closed_settle_prev")).isEqualTo("boolean");
-
-        assertThat(columnComment("md_project", "price_closed_day_prev_settle")).contains("DEPRECATED");
-        assertThat(columnComment("so_sales_order", "price_closed_settle_prev")).contains("DEPRECATED");
+    void v207_旧列已删除() {
+        assertThat(columnExists("md_project", "price_closed_day_prev_settle"))
+                .as("md_project.price_closed_day_prev_settle 已由 V207 删除")
+                .isFalse();
+        assertThat(columnExists("so_sales_order", "price_closed_settle_prev"))
+                .as("so_sales_order.price_closed_settle_prev 已由 V207 删除")
+                .isFalse();
         assertThat(columnComment("md_project", "price_closed_settle_direction"))
                 .contains("PREV").contains("NEXT");
+    }
+
+    private boolean columnExists(String table, String column) {
+        Integer count = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = ? AND column_name = ?
+                """, Integer.class, table, column);
+        return count != null && count > 0;
     }
 
     private String columnType(String table, String column) {

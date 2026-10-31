@@ -42,6 +42,12 @@ public interface FreightBillStatementSourceQuery {
         }
     }
 
+    /**
+     * 物流单候选行快照。
+     *
+     * <p>不包含客户/项目：{@code lg_freight_bill.customer_name/project_name} 已废弃并在 V208 删除，
+     * 物流单的客户/项目信息只保存在明细（{@code lg_freight_bill_item}）与结算主体字段上。</p>
+     */
     record CandidateSnapshot(
             Long id,
             String billNo,
@@ -49,8 +55,6 @@ public interface FreightBillStatementSourceQuery {
             String carrierName,
             Long settlementCompanyId,
             String settlementCompanyName,
-            String customerName,
-            String projectName,
             LocalDate billTime,
             BigDecimal totalWeight,
             BigDecimal totalFreight,

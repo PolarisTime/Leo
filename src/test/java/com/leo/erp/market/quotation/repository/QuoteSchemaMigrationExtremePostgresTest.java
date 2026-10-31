@@ -59,7 +59,9 @@ class QuoteSchemaMigrationExtremePostgresTest {
         assertThat(lengthPremium.numericPrecision()).isEqualTo(10);
         assertThat(lengthPremium.numericScale()).isEqualTo(2);
         assertThat(lengthPremium.nullable()).isFalse();
-        assertThat(lengthPremium.defaultValue()).contains("30");
+        // V142 建列时带 DEFAULT 30；V202 已 DROP DEFAULT —— 项目级定尺加价的兜底值改为
+        // 由定尺主数据/QuoteDefaults 提供（列必须显式写入，仍为 NOT NULL），故此处断言无默认值。
+        assertThat(lengthPremium.defaultValue()).isNull();
 
         ColumnMeta fallback = column("mk_quote_project_config", "hrb400e_fallback");
         assertThat(fallback.type()).isEqualTo("boolean");

@@ -1,37 +1,36 @@
 package com.leo.erp.finance.ledgeradjustment.web;
 
-import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.api.PageFilter;
+import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.finance.ledgeradjustment.service.LedgerAdjustmentService;
-import com.leo.erp.common.web.dto.StatusUpdateRequest;
-import com.leo.erp.finance.ledgeradjustment.web.dto.LedgerAdjustmentRequest;
 import com.leo.erp.finance.ledgeradjustment.web.dto.LedgerAdjustmentResponse;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import java.time.LocalDate;
-import com.leo.erp.common.api.ApiVersion;
-import com.leo.erp.common.api.V2ResponseSupport;
-import com.leo.erp.common.api.V2Created;
-import com.leo.erp.common.api.V2NoContent;
-import org.springframework.http.ResponseEntity;
 
+import java.time.LocalDate;
+
+/**
+ * 台账调整单目录：<b>仅保留只读查询</b>。
+ *
+ * <p>写端点（{@code POST / PUT / PATCH / DELETE}）已于 2026-10-31 下线：台账余额不得通过独立调整单
+ * 直接改写，新的余额变更必须由具有明确业务来源的付款、收款、冲销或其他受控单据产生
+ * （停用口径见 {@link LedgerAdjustmentService} 的说明）。历史调整单仍可查询。</p>
+ *
+ * <p>权限码随之收敛：删除 {@code ledger-adjustments:create/update/delete/audit}，仅保留
+ * {@code ledger-adjustments:read}；下线登记见 {@code docs/legacy-retired-modules.md}。</p>
+ */
 @Tag(name = "台账调整单")
 @RestController
 @Validated
@@ -47,7 +46,15 @@ public class V2LedgerAdjustmentController {
     @Operation(summary = "分页查询台账调整单")
     @GetMapping
     @RequirePermission(PermissionCodes.LEDGER_ADJUSTMENTS_READ)
-    public PageResponse<LedgerAdjustmentResponse> page(@BindPageQuery(sortFieldKey = "ledger-adjustment", directionParam = "sortDirection") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String direction, @RequestParam(required = false) String counterpartyType, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+    public PageResponse<LedgerAdjustmentResponse> page(
+            @BindPageQuery(sortFieldKey = "ledger-adjustment", directionParam = "sortDirection") PageQuery query,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String direction,
+            @RequestParam(required = false) String counterpartyType,
+            @RequestParam(required = false) Long settlementCompanyId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return PageResponse.from(ledgerAdjustmentService.page(
                 query,
                 PageFilter.of(keyword, null, settlementCompanyId, status, startDate, endDate),
@@ -61,36 +68,5 @@ public class V2LedgerAdjustmentController {
     @RequirePermission(PermissionCodes.LEDGER_ADJUSTMENTS_READ)
     public LedgerAdjustmentResponse detail(@PathVariable Long id) {
         return ledgerAdjustmentService.detail(id);
-    }
-
-    @Operation(summary = "创建台账调整单")
-    @PostMapping
-    @V2Created
-    @RequirePermission(PermissionCodes.LEDGER_ADJUSTMENTS_CREATE)
-    public ResponseEntity<LedgerAdjustmentResponse> create(@Valid @RequestBody LedgerAdjustmentRequest request) {
-        return V2ResponseSupport.created("/ledger-adjustments", ledgerAdjustmentService.create(request));
-    }
-
-    @Operation(summary = "更新台账调整单")
-    @PutMapping("/{id}")
-    @RequirePermission(PermissionCodes.LEDGER_ADJUSTMENTS_UPDATE)
-    public LedgerAdjustmentResponse update(@PathVariable Long id, @Valid @RequestBody LedgerAdjustmentRequest request) {
-        return ledgerAdjustmentService.update(id, request);
-    }
-
-    @Operation(summary = "更新台账调整单状态")
-    @PatchMapping("/{id}/status")
-    @RequirePermission(PermissionCodes.LEDGER_ADJUSTMENTS_UPDATE)
-    public LedgerAdjustmentResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
-        return ledgerAdjustmentService.updateStatus(id, request.status());
-    }
-
-    @Operation(summary = "删除台账调整单")
-    @DeleteMapping("/{id}")
-    @V2NoContent
-    @RequirePermission(PermissionCodes.LEDGER_ADJUSTMENTS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-        ledgerAdjustmentService.delete(id);
-        return V2ResponseSupport.noContent();
     }
 }

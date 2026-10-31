@@ -150,6 +150,60 @@ so_sales_order_item`、`fm_invoice_receipt_item → po_purchase_order_item`、
 
 ---
 
+## 4.2 V207 / V208 列退役（2026-10-31，代码侧已先行摘除）
+
+V207 删除 6 个零读写历史列，V208 删除 3 个「先停代码读写、再删列」的废弃列。
+代码侧同步改动（实体 / 打印列 / 导出列 / native SQL / 响应 DTO）已完成，逐列证据见
+`.local/len-audit/deprecated-leo.md` §2。
+
+| 列 | 版本 | 代码侧处置 |
+| --- | --- | --- |
+| `md_project.price_closed_day_prev_settle` | V207 | 未映射；`Project` javadoc 注明已删除；V179/V195 迁移回归测试同步改为「列不存在」断言 |
+| `so_sales_order.price_closed_settle_prev` | V207 | 未映射；同上测试改为「列不存在」断言 |
+| `so_sales_order.sales_mode` | V207 | 未映射、零引用；CHECK `chk_so_sales_order_sales_mode_v74` 随列删除 |
+| `lg_freight_bill.source_sales_order_id` | V207 | 未映射；`lg_freight_bill_source_order.source_sales_order_id` 是另一张在用关联表，**不受影响** |
+| `so_sales_outbound.source_freight_bill_id` | V207 | 未映射；`so_sales_return_item` / `st_freight_statement_item` 的同名列属其他表，**保留** |
+| `st_freight_statement_item.source_sales_outbound_item_id` | V207 | 未映射；从 `print-runtime.json` 的对账单明细打印列移除 |
+| `st_freight_statement.sign_status` | V208 | 实体字段、`FreightStatementApplyService` 写入、导出列、打印列、全局搜索视图依赖全部移除 |
+| `lg_freight_bill.customer_name` / `project_name` | V208 | 实体字段、保存时 `set(null)`、对账候选读取、导出列、打印列全部移除；候选响应字段暂留恒 `null`（见下） |
+
+**保留列（不要当死列删）**：
+
+| 列 | 处置 | 原因 |
+| --- | --- | --- |
+| `lg_freight_bill_item.source_sales_outbound_item_id` | **保留**（列 + 索引） | 历史单据流只读依赖：`DocumentFlowService#addFreightByOutboundIdEdges` / `addOutboundsByFreightBillIdEdges` 仍 JOIN；同时是打印列。无写入路径，但删列会断历史单据流 |
+| `so_sales_order_item.source_purchase_order_item_id` | **保留**（仍可写） | 采购订单直连来源是仍在服役的兼容能力：`SalesOrderItemMapper` 新建/更新仍会写入，来源形态由 `validateSourceShape` 收敛。列注释「仅保留历史」只描述数据分布，不代表写入停止；下线需产品确认 |
+
+**API 兼容说明**：`FreightStatementCandidateResponse.customerName/projectName` 已无限可读的数据源，
+恒返回 `null` 并标注「已废弃」；字段保留只为不破坏前端候选列契约（`aries` 仍声明该两列），
+前端移除候选列后可一并删除。对账候选的 keyword 搜索/排序字段同步移除这两列。
+
+---
+
+## 4.3 已下线的 HTTP 端点：台账调整写操作（2026-10-31）
+
+台账余额不得通过独立调整单直接改写（余额变更必须有明确业务来源），服务层早已全部拒绝写入，
+但控制器仍暴露 4 个写端点。现已删除，请求落到 404（无调用方，无需 405/410 兼容层）。
+
+| 端点 | 处置 | 权限码 |
+| --- | --- | --- |
+| `POST /api/v2.0/ledger-adjustments` | 删除 | `ledger-adjustments:create` 一并删除 |
+| `PUT /api/v2.0/ledger-adjustments/{id}` | 删除 | `ledger-adjustments:update` 一并删除 |
+| `PATCH /api/v2.0/ledger-adjustments/{id}/status` | 删除 | 同上（并移除 `StatusTransitionPermissionGuard` 的审核权限映射） |
+| `DELETE /api/v2.0/ledger-adjustments/{id}` | 删除 | `ledger-adjustments:delete` 一并删除 |
+| `GET /api/v2.0/ledger-adjustments`（分页）与 `/{id}`（详情） | **保留** | `ledger-adjustments:read` |
+
+- 代码：`V2LedgerAdjustmentController` 仅保留 GET；`PermissionCodes` 删除上述 4 个权限码，
+  `StatusTransitionPermissionGuard` 删除 `LEDGER_ADJUSTMENT → :audit` 映射。
+- 服务层停用桩（`LedgerAdjustmentService.create/update/updateStatus/delete` 抛「台账调整单已停用」）
+  与其单测**保留**，作为「禁止绕过来源单据直接改余额」的显式拒绝口径。
+- 遗留：`aries` 的权限模板仍列 `ledger-adjustments:{create,update,delete,audit}`
+  （`src/views/system/permission-templates.ts`、`permission-domains.ts`），需前端清理；
+  `sys_permission` 中这 4 行历史数据只能靠后续迁移清理（`PermissionCatalogService.syncCatalog`
+  只 upsert、不删除过期码），当前库内 0 条角色授权引用。
+
+---
+
 ## 5. 6 张幽灵入库单处置（V205 金额/重量归零）
 
 **成因**：`PurchaseInboundDeleteService.releaseUnreferencedItems` 在软删采购入库单时，会把
@@ -378,3 +432,5 @@ psql "$LEO_DB_URL" -c "SELECT to_regclass('public.flyway_seed_history');"   # �
 | 2026-10-31（收尾复核） | 修正提交状态为已提交（`777b8657`）；新增 A4：`global_search_document` 视图依赖 11 张退役归档表，删除任何一张前必须先重建视图（见 §3.1） |
 | 2026-10-31（seed 线退役） | 移除 `src/main/resources/db/seed/` 的 15 个 `S*.sql`（S1–S15）；依据「从未执行 + 打印模板已改文件同步 + 强行接线会回退历史 checksum/layout」；仓库外备份 `.local/seed-backup-20261031`（15 文件、sha256 15/15 一致）；现行机制说明已写入 `docs/deployment/production-cicd.md`（见 §11） |
 | 2026-10-31（V206 死列/孤儿表） | V206 删除 `fm_payment_allocation.source_supplier_statement_id`、`fm_supplier_refund_receipt.purchase_refund_id` 两列与 `sys_general_setting`（10 行全软删孤儿数据）；依据 `remaining-checks.md` A1/A3（见 §4.1） |
+| 2026-10-31（V207/V208 列退役） | 代码侧先行摘除 V207 的 6 列与 V208 的 3 列的读写（实体/打印列/导出列/native SQL/响应 DTO）；保留 `lg_freight_bill_item.source_sales_outbound_item_id`（历史单据流只读）与 `so_sales_order_item.source_purchase_order_item_id`（仍可写）；对账候选响应两字段暂留恒 `null`（见 §4.2） |
+| 2026-10-31（台账写端点下线） | 删除 `POST/PUT/PATCH/DELETE /ledger-adjustments*` 与 `ledger-adjustments:{create,update,delete,audit}` 权限码，仅保留 GET 与 `:read`；登记见 §4.3 |

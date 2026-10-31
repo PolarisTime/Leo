@@ -328,6 +328,13 @@ public class DocumentFlowService {
         }
     }
 
+    /**
+     * 销售出库 → 物流单 的单据流边。
+     *
+     * <p><b>依赖保留列</b>：JOIN 用的是 {@code lg_freight_bill_item.source_sales_outbound_item_id}，
+     * 该列已停止写入但**保留**（历史单据流只读依赖，勿删；见
+     * {@code com.leo.erp.logistics.bill.domain.entity.FreightBillItem} 类注释）。</p>
+     */
     private void addFreightByOutboundIdEdges(List<FlowNode> salesOutbounds, List<FlowEdge> edges) {
         String sql = "SELECT DISTINCT " + aliasColumns(FREIGHT_BILL_COLUMNS, "bill")
                 + ", outbound_item.outbound_id AS source_id FROM lg_freight_bill bill"
@@ -356,6 +363,12 @@ public class DocumentFlowService {
         }
     }
 
+    /**
+     * 物流单 → 销售出库 的单据流边（反方向）。
+     *
+     * <p>同样依赖**保留列** {@code lg_freight_bill_item.source_sales_outbound_item_id}
+     * （历史单据流只读依赖，勿删）。</p>
+     */
     private void addOutboundsByFreightBillIdEdges(List<FlowNode> freightBills, List<FlowEdge> edges) {
         String sql = "SELECT DISTINCT " + aliasColumns(SALES_OUTBOUND_COLUMNS, "outbound")
                 + ", bill_item.bill_id AS source_id FROM so_sales_outbound outbound"

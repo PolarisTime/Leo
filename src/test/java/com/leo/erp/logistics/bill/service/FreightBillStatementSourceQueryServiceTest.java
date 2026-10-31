@@ -74,8 +74,6 @@ class FreightBillStatementSourceQueryServiceTest {
         bill.setCarrierName("承运商A");
         bill.setSettlementCompanyId(200L);
         bill.setSettlementCompanyName("结算公司A");
-        bill.setCustomerName("客户A");
-        bill.setProjectName("项目A");
         bill.setBillTime(LocalDate.of(2026, 8, 1));
         bill.setTotalWeight(new BigDecimal("1000.50"));
         bill.setUnitPrice(new BigDecimal("50.00"));

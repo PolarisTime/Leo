@@ -356,8 +356,6 @@ public class FreightBillService {
         applySettlementCompany(entity, request, carrier);
         entity.setVehicleId(vehicle.id());
         entity.setVehiclePlate(vehicle.plate());
-        entity.setCustomerName(null);
-        entity.setProjectName(null);
         entity.setBillTime(request.billTime());
         entity.setUnitPrice(request.unitPrice());
         entity.setStatus(nextStatus);

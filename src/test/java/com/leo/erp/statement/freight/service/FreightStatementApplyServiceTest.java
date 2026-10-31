@@ -56,7 +56,6 @@ class FreightStatementApplyServiceTest {
         service.apply(entity, cmd, () -> 100L);
 
         assertThat(entity.getStatus()).isEqualTo(StatusConstants.DRAFT);
-        assertThat(entity.getSignStatus()).isEqualTo(StatusConstants.UNSIGNED);
         assertThat(entity.getAttachment()).isEqualTo("att.png"); // creating 且附件非空
         assertThat(entity.getCarrierName()).isEqualTo("承运商A");
         assertThat(entity.getCarrierCode()).isEqualTo("C001");

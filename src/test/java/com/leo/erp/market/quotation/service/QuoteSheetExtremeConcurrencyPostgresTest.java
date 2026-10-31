@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.JpaAuditConfig;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.market.lengthpremium.service.LengthPremiumService;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetEditLock;
@@ -71,7 +72,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @EnabledIfEnvironmentVariable(named = "LEO_TEST_POSTGRES", matches = "true")
 @Import({QuoteSheetStore.class, QuoteSheetService.class, QuoteSheetEditLockService.class,
-        JpaAuditConfig.class, ClockConfig.class, QuoteSheetExtremeConcurrencyPostgresTest.StubConfig.class})
+        LengthPremiumService.class, JpaAuditConfig.class, ClockConfig.class,
+        QuoteSheetExtremeConcurrencyPostgresTest.StubConfig.class})
 class QuoteSheetExtremeConcurrencyPostgresTest {
 
     private static final long SHEET_ID = 930000000000000101L;

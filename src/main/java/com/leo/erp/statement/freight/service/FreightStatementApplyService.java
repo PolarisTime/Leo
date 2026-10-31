@@ -32,8 +32,6 @@ public class FreightStatementApplyService {
         );
         entity.setStatementNo(command.statementNo());
         entity.setStatus(nextStatus);
-        // 签署流程已移除，兼容旧数据库列时始终保持未签署。
-        entity.setSignStatus(StatusConstants.UNSIGNED);
         if (creating && command.attachment() != null) {
             entity.setAttachment(command.attachment());
         }

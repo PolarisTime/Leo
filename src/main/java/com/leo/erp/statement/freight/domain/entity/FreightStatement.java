@@ -69,9 +69,6 @@ public class FreightStatement extends AbstractAuditableEntity implements StatusA
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 
-    @Column(name = "sign_status", nullable = false, length = 16)
-    private String signStatus;
-
     @Column(name = "attachment", length = 500)
     private String attachment;
 

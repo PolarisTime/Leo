@@ -95,7 +95,7 @@ public class Project extends AbstractAuditableEntity {
      * 基准日(送货日/报单日)休市时的位移方向: PREV 往前第 X 个交易日 / NEXT 延后第 X 个交易日。
      *
      * <p>与 {@link #priceClosedSettleDays} 一起构成休市结算的唯一口径; MANUAL 基准不参与。
-     * 旧列 {@code price_closed_day_prev_settle} 已由 V195 置为 deprecated, 不再映射到实体。</p>
+     * 旧列 {@code price_closed_day_prev_settle} 自 V195 起不再映射到实体, 并已由 V207 删除。</p>
      */
     @Column(name = "price_closed_settle_direction", nullable = false, length = 8)
     private String priceClosedSettleDirection;

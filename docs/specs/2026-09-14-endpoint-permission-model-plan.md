@@ -122,6 +122,7 @@ scope: Leo 后端、Spring Security、方法级安全、权限目录
 | | `PATCH /customer-statements/{id}/status` | `customer-statements:update` |
 | | `POST /customer-statements/{id}/confirmations` | `customer-statements:confirm` |
 | | `DELETE /customer-statements/{id}` | `customer-statements:delete` |
+| `V2LedgerAdjustmentController` | `GET /ledger-adjustments`、`/{id}`（写端点已于 2026-10-31 下线） | `ledger-adjustments:read` |
 
 ## 7. 扩展到全仓库的路线
 

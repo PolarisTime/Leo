@@ -3,6 +3,7 @@ package com.leo.erp.market.quotation.repository;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.persistence.JpaAuditConfig;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.market.lengthpremium.service.LengthPremiumService;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItem;
@@ -53,7 +54,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @EnabledIfEnvironmentVariable(named = "LEO_TEST_POSTGRES", matches = "true")
-@Import({QuoteSheetStore.class, JpaAuditConfig.class, QuoteSheetFetchGraphExtremePostgresTest.StubConfig.class})
+@Import({QuoteSheetStore.class, LengthPremiumService.class, JpaAuditConfig.class,
+        QuoteSheetFetchGraphExtremePostgresTest.StubConfig.class})
 class QuoteSheetFetchGraphExtremePostgresTest {
 
     private static final long BASE_ID = 950000000000000000L;

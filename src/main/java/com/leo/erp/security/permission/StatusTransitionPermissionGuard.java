@@ -39,8 +39,7 @@ public final class StatusTransitionPermissionGuard {
             Map.entry(ModuleKeys.FREIGHT_BILL, PermissionCodes.FREIGHT_BILLS_AUDIT),
             Map.entry(ModuleKeys.FREIGHT_STATEMENT, PermissionCodes.FREIGHT_STATEMENTS_AUDIT),
             Map.entry(ModuleKeys.RECEIPT, PermissionCodes.RECEIPTS_AUDIT),
-            Map.entry(ModuleKeys.PAYMENT, PermissionCodes.PAYMENTS_AUDIT),
-            Map.entry(ModuleKeys.LEDGER_ADJUSTMENT, PermissionCodes.LEDGER_ADJUSTMENTS_AUDIT)
+            Map.entry(ModuleKeys.PAYMENT, PermissionCodes.PAYMENTS_AUDIT)
     );
 
     /** 自「已审核」退回「草稿」(反审核) 时所需的动作权限。 */

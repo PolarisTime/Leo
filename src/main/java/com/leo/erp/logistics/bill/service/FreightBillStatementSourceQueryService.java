@@ -24,14 +24,12 @@ public class FreightBillStatementSourceQueryService implements FreightBillStatem
             "billNo",
             "carrierCode",
             "carrierName",
-            "vehiclePlate",
-            "customerName",
-            "projectName"
+            "vehiclePlate"
     };
 
     private final FreightBillRepository freightBillRepository;
 
-    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("id", "billNo", "carrierCode", "carrierName", "vehiclePlate", "customerName", "projectName", "billTime", "unitPrice", "totalWeight", "totalFreight");
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("id", "billNo", "carrierCode", "carrierName", "vehiclePlate", "billTime", "unitPrice", "totalWeight", "totalFreight");
 
     public FreightBillStatementSourceQueryService(FreightBillRepository freightBillRepository) {
         this.freightBillRepository = freightBillRepository;
@@ -131,8 +129,6 @@ public class FreightBillStatementSourceQueryService implements FreightBillStatem
                 bill.getCarrierName(),
                 bill.getSettlementCompanyId(),
                 bill.getSettlementCompanyName(),
-                bill.getCustomerName(),
-                bill.getProjectName(),
                 bill.getBillTime(),
                 bill.getTotalWeight(),
                 bill.getTotalFreight(),

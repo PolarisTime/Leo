@@ -130,8 +130,6 @@ public class ModuleExportCatalog {
                 ModuleKeys.FREIGHT_BILL, "lg_freight_bill", PermissionCodes.FREIGHT_BILLS_READ,
                 column("bill_no", "物流单号"),
                 column("carrier_name", "物流商"),
-                column("customer_name", "客户"),
-                column("project_name", "项目"),
                 column("bill_time", "开单时间"),
                 column("vehicle_plate", "车牌号"),
                 column("unit_price", "单价"),
@@ -169,7 +167,6 @@ public class ModuleExportCatalog {
                 column("paid_amount", "已付金额"),
                 column("unpaid_amount", "未付金额"),
                 column("status", "状态"),
-                column("sign_status", "签收状态"),
                 column("attachment", "附件"),
                 column("remark", "备注"),
                 column("settlement_company_name", "结算主体")));

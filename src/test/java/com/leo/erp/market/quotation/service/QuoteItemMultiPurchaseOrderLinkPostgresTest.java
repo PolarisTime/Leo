@@ -2,6 +2,7 @@ package com.leo.erp.market.quotation.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.market.lengthpremium.service.LengthPremiumService;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItem;
@@ -59,7 +60,7 @@ import static org.mockito.Mockito.when;
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @EnabledIfEnvironmentVariable(named = "LEO_TEST_POSTGRES", matches = "true")
-@Import({QuoteSheetStore.class, PurchaseOrderTonnageService.class,
+@Import({QuoteSheetStore.class, PurchaseOrderTonnageService.class, LengthPremiumService.class,
         QuoteItemMultiPurchaseOrderLinkPostgresTest.StubConfig.class})
 class QuoteItemMultiPurchaseOrderLinkPostgresTest {
 

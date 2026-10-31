@@ -3,6 +3,7 @@ package com.leo.erp.market.quotation.service;
 import com.leo.erp.common.config.ClockConfig;
 import com.leo.erp.common.persistence.JpaAuditConfig;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.market.lengthpremium.service.LengthPremiumService;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
@@ -57,7 +58,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @EnabledIfEnvironmentVariable(named = "LEO_TEST_POSTGRES", matches = "true")
 @Import({QuoteSheetStore.class, QuoteSheetService.class, QuoteSheetEditLockService.class,
-        QuoteProjectConfigStore.class, QuoteProjectConfigService.class, JpaAuditConfig.class,
+        QuoteProjectConfigStore.class, QuoteProjectConfigService.class, LengthPremiumService.class,
+        JpaAuditConfig.class,
         ClockConfig.class, QuoteVersionPostgresTest.StubConfig.class})
 class QuoteVersionPostgresTest {
 

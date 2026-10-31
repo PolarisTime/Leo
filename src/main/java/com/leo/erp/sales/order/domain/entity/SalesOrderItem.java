@@ -49,6 +49,15 @@ public class SalesOrderItem {
     @Column(name = "source_inbound_item_id")
     private Long sourceInboundItemId;
 
+    /**
+     * 采购订单直连来源明细：<b>仍在服役的兼容字段，不是只读历史</b>。
+     *
+     * <p>销售订单明细的「采购订单直连来源」口径（历史单据）仍允许在新建/更新时写入
+     * （{@code SalesOrderItemMapper} 从请求复制；来源形态由
+     * {@code SalesOrderSourceAllocationService#validateSourceShape} 收敛为「采购入库明细」或
+     * 「采购订单明细」二选一）。因此列注释里的「仅保留无法无损映射的历史」只描述来源数据分布，
+     * 不代表写入已停止；删除该列需先产品确认下线「采购订单直连来源」能力。</p>
+     */
     @Column(name = "source_purchase_order_item_id")
     private Long sourcePurchaseOrderItemId;
 

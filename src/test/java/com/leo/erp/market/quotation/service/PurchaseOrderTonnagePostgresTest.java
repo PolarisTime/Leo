@@ -149,8 +149,8 @@ class PurchaseOrderTonnagePostgresTest {
         long linkId = 946000000000000203L;
         jdbc.update("""
                 insert into public.mk_quote_sheet (id, sheet_no, name, order_date, ref_date, ref_period,
-                                                   status, created_by, created_name, deleted_flag)
-                values (?, ?, 'PG吨位对照单', current_date, current_date, '月度', '报价', 0, 'pg-test', false)
+                                                   length_premium, status, created_by, created_name, deleted_flag)
+                values (?, ?, 'PG吨位对照单', current_date, current_date, '月度', 30.00, '报价', 0, 'pg-test', false)
                 """, sheetId, "PG-TONNAGE-SHEET-" + sheetId);
         jdbc.update("""
                 insert into public.mk_quote_item (id, sheet_id, line_no, category, material, spec, length,
