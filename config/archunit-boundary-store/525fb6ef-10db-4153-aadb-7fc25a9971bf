@@ -13,7 +13,6 @@ unsanctioned entity status write: com.leo.erp.purchase.inbound.service.PurchaseI
 unsanctioned entity status write: com.leo.erp.purchase.inbound.service.PurchaseInboundWorkflowService -> com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound.setStatus
 unsanctioned entity status write: com.leo.erp.purchase.order.service.PurchaseOrderService -> com.leo.erp.purchase.order.domain.entity.PurchaseOrder.setStatus
 unsanctioned entity status write: com.leo.erp.sales.order.service.SalesOrderWorkflowService -> com.leo.erp.sales.order.domain.entity.SalesOrder.setStatus
-unsanctioned entity status write: com.leo.erp.sales.outbound.service.SalesOutboundDeleteRollbackService -> com.leo.erp.sales.order.domain.entity.SalesOrder.setStatus
 unsanctioned entity status write: com.leo.erp.sales.outbound.service.SalesOutboundWorkflowService -> com.leo.erp.sales.outbound.domain.entity.SalesOutbound.setStatus
 unsanctioned entity status write: com.leo.erp.sales.returns.service.SalesReturnWorkflowService -> com.leo.erp.sales.returns.domain.entity.SalesReturn.setStatus
 unsanctioned entity status write: com.leo.erp.security.rbac.service.RoleService -> com.leo.erp.security.rbac.domain.entity.SysRole.setStatus

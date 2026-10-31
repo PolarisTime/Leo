@@ -19,8 +19,6 @@ public interface MdValueAliasRepository extends JpaRepository<MdValueAlias, Long
 
     Optional<MdValueAlias> findByIdAndDeletedFlagFalse(Long id);
 
-    List<MdValueAlias> findByDeletedFlagFalseOrderByDimensionAscSourceValueAsc();
-
     List<MdValueAlias> findByDimensionAndDeletedFlagFalseOrderBySourceValueAsc(String dimension);
 
     boolean existsByDimensionAndSourceValueAndDeletedFlagFalse(String dimension, String sourceValue);

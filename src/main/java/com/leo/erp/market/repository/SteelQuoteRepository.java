@@ -34,11 +34,6 @@ public interface SteelQuoteRepository extends JpaRepository<SteelQuote, Long>,
                                               @Param("source") String source,
                                               @Param("market") String market);
 
-    Optional<SteelQuote> findByQuoteDateAndPeriodAndBreedAndSpecAndMaterialAndFactoryAndDeletedFlagFalse(
-            LocalDate quoteDate, String period, String breed, String spec, String material, String factory);
-
-    List<SteelQuote> findByQuoteDateAndPeriodAndDeletedFlagFalse(LocalDate quoteDate, String period);
-
     Optional<SteelQuote> findBySourceAndMarketAndQuoteDateAndPeriodAndBreedAndSpecAndMaterialAndFactoryAndDeletedFlagFalse(
             String source, String market, LocalDate quoteDate, String period, String breed, String spec,
             String material, String factory);
@@ -50,6 +45,4 @@ public interface SteelQuoteRepository extends JpaRepository<SteelQuote, Long>,
     Optional<SteelQuote> findBySourceAndMarketAndQuoteDateAndPeriodAndBreedAndSpecAndMaterialAndFactory(
             String source, String market, LocalDate quoteDate, String period, String breed, String spec,
             String material, String factory);
-
-    List<SteelQuote> findByArticleIdAndDeletedFlagFalse(Long articleId);
 }

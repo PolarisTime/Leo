@@ -17,6 +17,9 @@ public class OperationLogPartitionMetrics {
     private final AtomicLong defaultPartitionRows = new AtomicLong();
     private final AtomicLong availablePartitionMonths = new AtomicLong();
     private final AtomicLong expiredRows = new AtomicLong();
+    /** 最近一轮分区清理结果：Gauge 为瞬时值，每轮覆盖而不是累计。 */
+    private final AtomicLong cleanupDropped = new AtomicLong();
+    private final AtomicLong cleanupSkipped = new AtomicLong();
 
     public OperationLogPartitionMetrics(JdbcTemplate jdbcTemplate,
                                         MeterRegistry meterRegistry,
@@ -38,6 +41,23 @@ public class OperationLogPartitionMetrics {
                 .baseUnit("months")
                 .description("操作日志热数据保留月数")
                 .register(meterRegistry);
+        Gauge.builder("leo.operation.log.partition.cleanup.dropped", cleanupDropped, AtomicLong::get)
+                .description("最近一轮操作日志分区清理删除的分区数")
+                .register(meterRegistry);
+        Gauge.builder("leo.operation.log.partition.cleanup.skipped", cleanupSkipped, AtomicLong::get)
+                .description("最近一轮操作日志分区清理跳过的分区数（窗口内/非空/非法名）")
+                .register(meterRegistry);
+    }
+
+    /**
+     * 由分区清理任务回填最近一轮结果。
+     *
+     * <p>用 Gauge 而不是 Counter：运维关心的是「最近一轮删了多少、跳过多少」，
+     * 累计值在进程重启后会归零，反而不可比。</p>
+     */
+    public void recordPartitionCleanup(int dropped, int skipped) {
+        cleanupDropped.set(dropped);
+        cleanupSkipped.set(skipped);
     }
 
     @Scheduled(fixedDelayString = "${leo.observability.partition-metrics-refresh-interval:5m}")

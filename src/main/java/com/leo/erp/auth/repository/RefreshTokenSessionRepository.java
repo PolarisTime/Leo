@@ -48,8 +48,6 @@ public interface RefreshTokenSessionRepository extends JpaRepository<RefreshToke
             LocalDateTime now
     );
 
-    List<RefreshTokenSession> findByDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfter(LocalDateTime now);
-
     Optional<RefreshTokenSession> findFirstByUserIdAndRevokeReasonAndDeletedFlagFalseOrderByRevokedAtDesc(
             Long userId,
             RevokeReason revokeReason

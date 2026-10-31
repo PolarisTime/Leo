@@ -71,19 +71,6 @@ public interface SalesOrderItemRepository extends JpaRepository<SalesOrderItem, 
     );
 
     @Query("""
-            select distinct outboundItem.sourceSalesOrderItemId
-            from SalesOutboundItem outboundItem
-            join outboundItem.salesOutbound outbound
-            where outbound.deletedFlag = false
-              and outboundItem.sourceSalesOrderItemId in :sourceSalesOrderItemIds
-              and (:currentOutboundId is null or outbound.id <> :currentOutboundId)
-            """)
-    List<Long> findOccupiedSourceSalesOrderItemIds(
-            @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds,
-            @Param("currentOutboundId") Long currentOutboundId
-    );
-
-    @Query("""
             select item.sourceInboundItemId as sourceInboundItemId,
                    sum(item.quantity) as totalQuantity,
                    coalesce(sum(item.weightTon), 0) as totalWeightTon

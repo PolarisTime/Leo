@@ -3,7 +3,6 @@ package com.leo.erp.attachment.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.attachment.support.AttachmentMediaTypes;
-import com.leo.erp.common.support.PrecisionConstants;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -11,7 +10,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.UUID;
 
 @Component
 public class AttachmentFilenameResolver {
@@ -26,10 +24,6 @@ public class AttachmentFilenameResolver {
         return parts.extension().isBlank()
                 ? String.valueOf(attachmentId)
                 : attachmentId + "." + parts.extension();
-    }
-
-    public String buildFileName(String renamePattern, String originalFilename, String contentType, LocalDateTime now) {
-        return renderFileName(renamePattern, originalFilename, contentType, now, String.valueOf(System.currentTimeMillis()), UUID.randomUUID().toString().replace("-", "").substring(0, PrecisionConstants.ID_PREFIX_LENGTH));
     }
 
     public String preview(String renamePattern, String originalFilename) {

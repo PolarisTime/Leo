@@ -128,6 +128,10 @@ class SalesOutboundDeleteRollbackServiceTest {
 
         service.beforeDelete(entity);
 
+        // 状态回退走 CrudStatusGuard（ModuleBoundaryVerifier 的 sanctioned 白名单），
+        // 不是从出库域直接 SalesOrder.setStatus 的跨聚合旁路写
+        assertThat(com.leo.erp.common.service.CrudStatusGuard.forStatusAwareEntities().resolveStatus(order))
+                .contains(StatusConstants.DRAFT);
         assertThat(order.getStatus()).isEqualTo(StatusConstants.DRAFT);
         verify(salesOrderRepository).save(order);
         verify(businessOperationEventPublisher).publish(

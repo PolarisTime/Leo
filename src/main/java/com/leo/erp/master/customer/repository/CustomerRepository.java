@@ -37,10 +37,6 @@ public interface CustomerRepository extends JpaRepository<Customer, Long>, JpaSp
 
     boolean existsByIdAndDeletedFlagFalse(Long id);
 
-    boolean existsByCustomerCodeAndDeletedFlagFalse(String customerCode);
-
-    List<Customer> findByDeletedFlagFalseOrderByCustomerCodeAsc();
-
     List<Customer> findByDeletedFlagFalseAndStatusOrderByCustomerCodeAsc(String status);
 
     Optional<Customer> findByIdAndDeletedFlagFalse(Long id);

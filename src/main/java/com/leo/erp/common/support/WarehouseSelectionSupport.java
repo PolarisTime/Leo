@@ -20,10 +20,6 @@ public class WarehouseSelectionSupport {
         this.warehouseCatalog = warehouseCatalog;
     }
 
-    public String normalizeWarehouseName(String warehouseName, int lineNo, boolean required) {
-        return resolveWarehouse(null, warehouseName, lineNo, required).warehouseName();
-    }
-
     public WarehouseSnapshot resolveWarehouse(Long warehouseId,
                                                String warehouseName,
                                                int lineNo,

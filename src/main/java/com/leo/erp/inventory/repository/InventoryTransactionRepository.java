@@ -23,12 +23,6 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
             Long sourceDocumentId
     );
 
-    List<InventoryTransaction> findBySourceDocumentTypeAndSourceItemIdAndTransactionTypeAndDeletedFlagFalse(
-            String sourceDocumentType,
-            Long sourceItemId,
-            String transactionType
-    );
-
     /**
      * 批量预加载指定来源明细的未删除事务幂等键 (sourceDocumentType, sourceItemId, transactionType)，
      * 供期初回填在内存中做差集判断，避免逐行 exists 查询。

@@ -4,6 +4,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundItemRepository;
 import org.springframework.stereotype.Service;
@@ -40,6 +41,14 @@ public class SalesReturnSourceService {
         );
     }
 
+    /**
+     * 写入路径取来源出库明细：必须存在，且其父出库单未被软删除。
+     *
+     * <p>为什么过滤放在这里而不是 {@link SalesOutboundItemRepository#findAllByIdInWithOutbound}：
+     * 同一个装载方法还被详情装配（{@code SalesReturnResponseAssembler}）使用，历史退货单的来源出库
+     * 可能在事后被删除，装配层仍需按快照显示；若在仓储层统一过滤，详情页会凭空丢行。
+     * 因此写入/校验路径在这里显式拒绝已删除的来源，读路径保持快照语义。</p>
+     */
     SalesOutboundItem requireSourceOutboundItem(Map<Long, SalesOutboundItem> sourceMap, Long outboundItemId, int lineNo) {
         if (outboundItemId == null) {
             throw business("第" + lineNo + "行来源销售出库明细不能为空");
@@ -47,6 +56,10 @@ public class SalesReturnSourceService {
         SalesOutboundItem item = sourceMap.get(outboundItemId);
         if (item == null) {
             throw business("第" + lineNo + "行来源销售出库明细不存在");
+        }
+        SalesOutbound outbound = item.getSalesOutbound();
+        if (outbound == null || outbound.isDeletedFlag()) {
+            throw business("第" + lineNo + "行来源销售出库明细不存在或已删除");
         }
         return item;
     }

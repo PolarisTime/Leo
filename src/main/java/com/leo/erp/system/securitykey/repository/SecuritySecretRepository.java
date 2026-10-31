@@ -11,10 +11,6 @@ public interface SecuritySecretRepository extends JpaRepository<SecuritySecret, 
 
     Optional<SecuritySecret> findFirstBySecretTypeAndStatusAndDeletedFlagFalseOrderByKeyVersionDesc(String secretType, String status);
 
-    Optional<SecuritySecret> findFirstBySecretTypeAndDeletedFlagFalseOrderByKeyVersionDesc(String secretType);
-
-    List<SecuritySecret> findBySecretTypeAndDeletedFlagFalseOrderByKeyVersionDesc(String secretType);
-
     List<SecuritySecret> findBySecretTypeAndStatusInAndDeletedFlagFalseOrderByKeyVersionDesc(
             String secretType,
             Collection<String> statuses

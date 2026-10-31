@@ -55,9 +55,6 @@ public interface PurchaseInboundRepository extends JpaRepository<PurchaseInbound
     @EntityGraph(attributePaths = "items")
     Optional<PurchaseInbound> findById(Long id);
 
-    @EntityGraph(attributePaths = "items")
-    List<PurchaseInbound> findAllByStatusInAndDeletedFlagFalse(Collection<String> statuses);
-
     /**
      * 按 (inboundDate, id) 升序 keyset 分页扫描已过账入库单，供库存期初回填分批装载。
      * 不 join fetch 明细，确保 LIMIT 下推数据库；明细由 {@link #findAllByIdIn(Collection)} 批量初始化。

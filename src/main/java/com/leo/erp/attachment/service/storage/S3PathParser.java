@@ -1,13 +1,11 @@
 package com.leo.erp.attachment.service.storage;
 
 import com.leo.erp.attachment.support.AttachmentStorageTypes;
-import com.leo.erp.attachment.config.AttachmentProperties;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
@@ -34,22 +32,6 @@ public class S3PathParser {
         return PREFIX + bucket + "/" + objectKey;
     }
 
-    public URI buildUri(String objectKey, AttachmentProperties.S3 s3) {
-        URI endpoint = parseEndpoint(s3.getEndpoint());
-        boolean pathStyle = s3.isPathStyleAccess();
-        String encodedKey = encodeObjectKey(objectKey);
-        String endpointPath = normalizedEndpointPath(endpoint.getPath());
-        String path = pathStyle
-                ? endpointPath + "/" + urlEncodeSegment(s3.getBucket()) + "/" + encodedKey
-                : endpointPath + "/" + encodedKey;
-        String host = pathStyle ? endpoint.getHost() : s3.getBucket() + "." + endpoint.getHost();
-        try {
-            return new URI(endpoint.getScheme(), endpoint.getUserInfo(), host, endpoint.getPort(), path, null, null);
-        } catch (URISyntaxException ex) {
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "S3 Endpoint 配置错误");
-        }
-    }
-
     public String encodeObjectKey(String objectKey) {
         String[] segments = objectKey.split("/");
         StringBuilder encoded = new StringBuilder();
@@ -64,13 +46,6 @@ public class S3PathParser {
 
     public String urlEncodeSegment(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
-    }
-
-    public String normalizedEndpointPath(String rawPath) {
-        if (rawPath == null || rawPath.isBlank() || "/".equals(rawPath)) {
-            return "";
-        }
-        return rawPath.endsWith("/") ? rawPath.substring(0, rawPath.length() - 1) : rawPath;
     }
 
     public URI parseEndpoint(String endpoint) {

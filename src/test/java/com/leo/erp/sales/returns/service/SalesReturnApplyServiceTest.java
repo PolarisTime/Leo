@@ -145,6 +145,23 @@ class SalesReturnApplyServiceTest {
                 .hasMessageContaining("退货数量必须大于0");
     }
 
+    @Test
+    void applyItems_shouldRejectDeletedSourceOutbound() {
+        // 已软删除的销售出库单不能再作为退货来源（草稿保存也要拦住，不能等到审核才校验）
+        SalesOutboundItem deletedSource = outboundItem(100L, 500L, 5, "库房A", 30L);
+        deletedSource.getSalesOutbound().setDeletedFlag(true);
+        when(salesOutboundItemRepository.findAllByIdInWithOutbound(any())).thenReturn(List.of(deletedSource));
+
+        SalesReturn entity = new SalesReturn();
+        entity.setId(1L);
+        SalesReturnRequest request = request(List.of(itemRequest(100L, 5, "1.25", "6.25", "4000")),
+                "客户A", "项目A", "库房A");
+
+        assertThatThrownBy(() -> service.applyItems(entity, request, new AtomicLong(1000)::incrementAndGet))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源销售出库明细不存在或已删除");
+    }
+
     private SalesOutboundItem outboundItem(Long id, Long orderItemId, int quantity,
                                            String warehouseName, Long warehouseId) {
         SalesOutbound outbound = new SalesOutbound();

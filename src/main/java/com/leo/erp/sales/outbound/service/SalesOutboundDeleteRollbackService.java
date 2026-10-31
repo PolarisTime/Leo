@@ -5,6 +5,7 @@ import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
@@ -24,6 +25,18 @@ import java.util.Objects;
  */
 @Service
 public class SalesOutboundDeleteRollbackService {
+
+    /**
+     * 来源销售订单状态回退的唯一写入口。
+     *
+     * <p>直接 {@code SalesOrder#setStatus} 属「跨聚合旁路写」：状态门禁
+     * （{@code ModuleBoundaryVerifier} 的 sanctioned 白名单）只允许 {@code *ApplyService}、
+     * {@code *CompletionSyncService}、{@code *ForceCloseService} 与 {@link CrudStatusGuard} 写实体状态。
+     * 本类是销售出库域的删除回退服务，不属于上述任何一类，因此统一走框架守卫写状态，
+     * 行为与改造前完全一致（已审核 → 草稿，前置条件由 {@link #rollbackSourceSalesOrders} 校验）。</p>
+     */
+    private static final CrudStatusGuard<SalesOrder> SALES_ORDER_STATUS_GUARD =
+            CrudStatusGuard.forStatusAwareEntities();
 
     private final SalesOutboundRepository repository;
     private final SalesOutboundApplyService applyService;
@@ -97,7 +110,8 @@ public class SalesOutboundDeleteRollbackService {
             if (salesOrderDownstreamMutationGuard != null) {
                 salesOrderDownstreamMutationGuard.assertNoFreightReference(order, "删除销售出库");
             }
-            order.setStatus(StatusConstants.DRAFT);
+            // 走 sanctioned 状态写入口（见 SALES_ORDER_STATUS_GUARD），不做跨聚合直接 setStatus
+            SALES_ORDER_STATUS_GUARD.writeStatus(order, StatusConstants.DRAFT);
             salesOrderRepository.save(order);
             publishSalesOrderRollbackEvent(order);
         }

@@ -115,16 +115,6 @@ public class AttachmentBindingService implements AttachmentQuery {
     }
 
     @Transactional(readOnly = true)
-    public List<Long> listAttachmentIds(String moduleKey, Long recordId) {
-        String normalizedModuleKey = normalizeModuleKey(moduleKey);
-        long normalizedRecordId = normalizeRecordId(recordId);
-        return repository.findByModuleKeyAndRecordIdAndDeletedFlagFalseOrderBySortOrderAscIdAsc(normalizedModuleKey, normalizedRecordId)
-                .stream()
-                .map(AttachmentBinding::getAttachmentId)
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
     @Override
     public Map<Long, List<AttachmentView>> listByRecordIds(String moduleKey, List<Long> recordIds) {
         String normalizedModuleKey = normalizeModuleKey(moduleKey);

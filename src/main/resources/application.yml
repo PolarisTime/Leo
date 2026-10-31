@@ -289,6 +289,12 @@ leo:
       # 每天 02:05 导出附件恢复清单到附件存储的隔离前缀
       enabled: ${LEO_MAINTENANCE_ATTACHMENT_MANIFEST_EXPORT_ENABLED:true}
       cron: ${LEO_MAINTENANCE_ATTACHMENT_MANIFEST_EXPORT_CRON:0 5 2 * * *}
+    operation-log-partition-cleanup:
+      # 每月 01 日 03:20 清理超出保留窗口的空月分区（过去按 retention-months、
+      # 未来按 partition-lookahead-months，默认即当前月 ±12 个月）；
+      # 非空分区保留待人工归档，窗口口径与 V205 一次性清理一致
+      enabled: ${LEO_MAINTENANCE_OPERATION_LOG_PARTITION_CLEANUP_ENABLED:true}
+      cron: ${LEO_MAINTENANCE_OPERATION_LOG_PARTITION_CLEANUP_CRON:0 20 3 1 * *}
   sales-order:
     retry:
       # 同一单据并发写(乐观锁冲突)时服务端的有界重试：单次请求最大尝试次数(含首次执行)；

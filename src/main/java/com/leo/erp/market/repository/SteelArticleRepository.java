@@ -11,8 +11,6 @@ import java.util.Optional;
 
 public interface SteelArticleRepository extends JpaRepository<SteelArticle, Long> {
 
-    boolean existsByArticleUrlAndDeletedFlagFalse(String articleUrl);
-
     Optional<SteelArticle> findByArticleUrlAndDeletedFlagFalse(String articleUrl);
 
     Optional<SteelArticle> findBySourceAndArticleUrlAndDeletedFlagFalse(String source, String articleUrl);
@@ -25,13 +23,6 @@ public interface SteelArticleRepository extends JpaRepository<SteelArticle, Long
 
     Optional<SteelArticle> findFirstBySourceAndMarketAndArticleDateAndDeletedFlagFalseOrderByArticleTimeDesc(
             String source, String market, LocalDate articleDate);
-
-    Optional<SteelArticle> findFirstByDeletedFlagFalseOrderByArticleDateDescArticleTimeDesc();
-
-    Optional<SteelArticle> findFirstByArticleDateAndDeletedFlagFalseOrderByArticleTimeDesc(LocalDate articleDate);
-
-    List<SteelArticle> findByArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
-            LocalDate from, LocalDate to);
 
     List<SteelArticle> findBySourceAndMarketAndArticleDateBetweenAndDeletedFlagFalseOrderByArticleDateAscArticleTimeAsc(
             String source, String market, LocalDate from, LocalDate to);

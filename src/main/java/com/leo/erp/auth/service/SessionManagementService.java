@@ -277,12 +277,6 @@ public class SessionManagementService {
         return refreshTokenSessionRepository.findByTokenHashAndDeletedFlagFalse(hashToken(rawToken));
     }
 
-    public Optional<RefreshTokenSession> findRecentlyEvictedSession(Long userId) {
-        return refreshTokenSessionRepository
-                .findFirstByUserIdAndRevokeReasonAndDeletedFlagFalseOrderByRevokedAtDesc(
-                        userId, RevokeReason.CONCURRENT_LIMIT);
-    }
-
     public record RefreshTokenRotationResult(
             RefreshTokenSession session,
             String refreshToken

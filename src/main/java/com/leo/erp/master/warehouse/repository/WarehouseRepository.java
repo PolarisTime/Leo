@@ -13,7 +13,6 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,10 +39,6 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, Long>, Jpa
     Optional<Warehouse> findActiveForAttachmentBinding(@Param("id") Long id);
 
     boolean existsByIdAndDeletedFlagFalse(Long id);
-
-    boolean existsByWarehouseCodeAndDeletedFlagFalse(String warehouseCode);
-
-    List<Warehouse> findByWarehouseNameInAndDeletedFlagFalse(Collection<String> warehouseNames);
 
     List<Warehouse> findByDeletedFlagFalseAndStatusOrderByWarehouseNameAsc(String status);
 

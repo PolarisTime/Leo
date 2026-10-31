@@ -9,6 +9,7 @@ public class MaintenanceScheduleProperties {
     private String zone = "Asia/Shanghai";
     private RedisCacheHealthCheckTask redisCacheHealthCheck = new RedisCacheHealthCheckTask();
     private AttachmentManifestExportTask attachmentManifestExport = new AttachmentManifestExportTask();
+    private OperationLogPartitionCleanupTask operationLogPartitionCleanup = new OperationLogPartitionCleanupTask();
 
     public boolean isEnabled() {
         return enabled;
@@ -42,6 +43,14 @@ public class MaintenanceScheduleProperties {
         this.attachmentManifestExport = attachmentManifestExport;
     }
 
+    public OperationLogPartitionCleanupTask getOperationLogPartitionCleanup() {
+        return operationLogPartitionCleanup;
+    }
+
+    public void setOperationLogPartitionCleanup(OperationLogPartitionCleanupTask operationLogPartitionCleanup) {
+        this.operationLogPartitionCleanup = operationLogPartitionCleanup;
+    }
+
     public static class RedisCacheHealthCheckTask {
         private boolean enabled = true;
         private String cron = "0 */5 * * * *";
@@ -66,6 +75,34 @@ public class MaintenanceScheduleProperties {
     public static class AttachmentManifestExportTask {
         private boolean enabled = true;
         private String cron = "0 5 2 * * *";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getCron() {
+            return cron;
+        }
+
+        public void setCron(String cron) {
+            this.cron = cron;
+        }
+    }
+
+    /**
+     * 操作日志月分区清理任务。
+     *
+     * <p>默认每月 1 日 03:20 执行：只删「超出保留窗口且为空」的分区。窗口过去侧沿用
+     * {@code leo.observability.operation-log.retention-months}、未来侧沿用
+     * {@code partition-lookahead-months}，默认配置下与 V205 的「当前月 ±12 个月」等价。</p>
+     */
+    public static class OperationLogPartitionCleanupTask {
+        private boolean enabled = true;
+        private String cron = "0 20 3 1 * *";
 
         public boolean isEnabled() {
             return enabled;

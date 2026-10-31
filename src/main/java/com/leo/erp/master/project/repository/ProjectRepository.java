@@ -12,10 +12,6 @@ import java.util.Set;
 
 public interface ProjectRepository extends JpaRepository<Project, Long>, JpaSpecificationExecutor<Project> {
 
-    boolean existsByProjectCodeAndDeletedFlagFalse(String projectCode);
-
-    List<Project> findByDeletedFlagFalseOrderByProjectCodeAsc();
-
     List<Project> findByCustomerCodeAndProjectNameAndDeletedFlagFalseOrderByProjectCodeAsc(String customerCode,
                                                                                            String projectName);
 

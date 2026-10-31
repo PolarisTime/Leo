@@ -46,9 +46,6 @@ public interface SalesOutboundRepository extends JpaRepository<SalesOutbound, Lo
     @EntityGraph(attributePaths = "items")
     Optional<SalesOutbound> findByIdAndDeletedFlagFalse(Long id);
 
-    @EntityGraph(attributePaths = "items")
-    List<SalesOutbound> findAllByStatusAndDeletedFlagFalse(String status);
-
     /**
      * 按 (outboundDate, id) 升序 keyset 分页扫描已审核出库单，供库存期初回填分批装载。
      * 不 join fetch 明细，确保 LIMIT 下推数据库；明细由 {@link #findAllByIdIn(Collection)} 批量初始化。

@@ -121,25 +121,45 @@ public final class ModuleBoundaryVerifier {
         return dot < 0 ? remainder : remainder.substring(0, dot);
     }
 
-    /** 与退役的 Python 扫描器保持一致的受限内部类型判定：repository、domain.entity、web.dto。 */
+    /**
+     * 与退役的 Python 扫描器保持一致的受限内部类型判定：repository、domain.entity、web.dto。
+     *
+     * <p><b>平台层例外</b>：{@code common} 是平台模块，它的 {@code web.dto} 与 {@code api}
+     * 是跨模块的对外契约（如 {@code StatusUpdateRequest}、{@code FileDownloadResponse}、
+     * {@code LengthSpecCatalog}），其它模块依赖它们属于设计意图，而不是"依赖别人的内部实现"。
+     * 2026-10-31 遗留审计发现冻结基线 158 条里有 42 条（27%）正是这类误报；若不放行，
+     * 真正的结构性债务（InventoryBackfillService 72 条等）会被噪声淹没。此处只放行 common 的
+     * 契约包，common 的 repository / domain.entity 仍按原规则受限。</p>
+     */
     private static String restrictedKindOf(JavaClass target) {
         String packageName = target.getPackageName();
         if (!packageName.startsWith(BASE_PACKAGE_PREFIX)) {
             return null;
         }
         String[] segments = packageName.substring(BASE_PACKAGE_PREFIX.length()).split("\\.");
-        for (int i = 1; i < segments.length; i++) {
+        String kind = null;
+        for (int i = 1; i < segments.length && kind == null; i++) {
             if ("repository".equals(segments[i])) {
-                return "repository";
-            }
-            if (i + 1 < segments.length && "domain".equals(segments[i]) && "entity".equals(segments[i + 1])) {
-                return "domain.entity";
-            }
-            if (i + 1 < segments.length && "web".equals(segments[i]) && "dto".equals(segments[i + 1])) {
-                return "web.dto";
+                kind = "repository";
+            } else if (i + 1 < segments.length && "domain".equals(segments[i]) && "entity".equals(segments[i + 1])) {
+                kind = "domain.entity";
+            } else if (i + 1 < segments.length && "web".equals(segments[i]) && "dto".equals(segments[i + 1])) {
+                kind = "web.dto";
             }
         }
-        return null;
+        if (kind == null) {
+            return null;
+        }
+        if ("common".equals(segments[0]) && isPlatformContractPackage(packageName, kind)) {
+            return null;
+        }
+        return kind;
+    }
+
+    /** common 平台层对外契约包判定：{@code web.dto}（含子包）与 {@code common.api}（含子包）。 */
+    private static boolean isPlatformContractPackage(String packageName, String kind) {
+        return "web.dto".equals(kind)
+                || packageName.startsWith(BASE_PACKAGE_PREFIX + "common.api");
     }
 
     private static ArchCondition<JavaClass> notDependOnRestrictedInternalsOfOtherTopLevelModules() {

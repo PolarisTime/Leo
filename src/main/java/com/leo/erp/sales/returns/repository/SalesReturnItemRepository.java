@@ -30,15 +30,6 @@ public interface SalesReturnItemRepository extends JpaRepository<SalesReturnItem
             """, nativeQuery = true)
     int detachSourceReferencesOfDeletedReturn(@Param("returnId") Long returnId);
 
-    @Query("""
-            select item
-            from SalesReturnItem item
-            join fetch item.salesReturn ret
-            where ret.deletedFlag = false
-              and ret.id = :returnId
-            """)
-    List<SalesReturnItem> findActiveByReturnId(@Param("returnId") Long returnId);
-
     /**
      * 按来源销售出库明细汇总已审核退货数量，用于累计超退校验。
      * 排除当前退货单自身，避免保存后二次校验重复累计。

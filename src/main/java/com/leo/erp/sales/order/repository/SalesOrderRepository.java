@@ -46,9 +46,6 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
     boolean existsByOrderNoAndDeletedFlagFalse(String orderNo);
 
     @EntityGraph(attributePaths = "items")
-    List<SalesOrder> findByOrderNoInAndDeletedFlagFalse(Collection<String> orderNos);
-
-    @EntityGraph(attributePaths = "items")
     List<SalesOrder> findByIdInAndDeletedFlagFalse(Collection<Long> ids);
 
     @EntityGraph(attributePaths = "items")

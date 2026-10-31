@@ -40,11 +40,7 @@ public interface MaterialRepository extends JpaRepository<Material, Long>, JpaSp
 
     boolean existsByIdAndDeletedFlagFalse(Long id);
 
-    boolean existsByMaterialCodeAndDeletedFlagFalse(String materialCode);
-
     Optional<Material> findByMaterialCode(String materialCode);
-
-    List<Material> findByMaterialCodeInAndDeletedFlagFalse(Collection<String> materialCodes);
 
     List<Material> findByDeletedFlagFalseOrderByMaterialCodeAsc();
 

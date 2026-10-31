@@ -20,6 +20,19 @@ public interface PurchaseOrderItemRepository extends JpaRepository<PurchaseOrder
             """)
     List<PurchaseOrderItem> findActiveByIdIn(@Param("itemIds") Collection<Long> itemIds);
 
+    /**
+     * 快照读取：<b>刻意不过滤 {@code purchaseOrder.deletedFlag}</b>。
+     *
+     * <p>唯一调用方是 {@code PurchaseItemQueryAppService#findPurchaseOrderItemSnapshotsByIds}，
+     * 再由 {@code SalesOrderSourceAllocationService#loadLegacyPurchaseOrderNos} 用来给
+     * 「历史采购订单直连来源」解析订单号（快照语义：来源单据之后可能被归档/删除，仍要能读出编号）。</p>
+     *
+     * <p>这样做不会放过「用已删除来源新建单据」：活跃销售订单引用采购订单明细时，
+     * {@code PurchaseOrderDownstreamMutationGuard#assertMutable}（经
+     * {@code PurchaseOrderReferenceGuard#hasActivePurchaseOrderItemReferences}）会阻止该采购订单被删除；
+     * 而新行也不允许再使用采购订单直连来源（见 {@code SalesOrderSourceAllocationService#validateSourceShape}）。
+     * 若将来需要「只取未删除来源」，请改用 {@link #findActiveByIdIn}，不要在这里加过滤——那会让快照解析失效。</p>
+     */
     @Query("""
             select item
             from PurchaseOrderItem item

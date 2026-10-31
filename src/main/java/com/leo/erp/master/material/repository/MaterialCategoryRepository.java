@@ -40,8 +40,6 @@ public interface MaterialCategoryRepository extends JpaRepository<MaterialCatego
 
     Optional<MaterialCategory> findByIdAndDeletedFlagFalse(Long id);
 
-    Optional<MaterialCategory> findByCategoryCodeAndDeletedFlagFalse(String categoryCode);
-
     List<MaterialCategory> findByCategoryNameInAndDeletedFlagFalse(Collection<String> categoryNames);
 
     List<MaterialCategory> findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc(String status);

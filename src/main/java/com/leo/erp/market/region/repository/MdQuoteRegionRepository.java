@@ -17,8 +17,6 @@ public interface MdQuoteRegionRepository extends JpaRepository<MdQuoteRegion, Lo
 
     List<MdQuoteRegion> findByStatusAndDeletedFlagFalseOrderBySortOrderAsc(String status);
 
-    List<MdQuoteRegion> findByDeletedFlagFalseOrderBySortOrderAsc();
-
     boolean existsByRegionNameAndDeletedFlagFalse(String regionName);
 
     boolean existsByRegionNameAndDeletedFlagFalseAndIdNot(String regionName, Long id);

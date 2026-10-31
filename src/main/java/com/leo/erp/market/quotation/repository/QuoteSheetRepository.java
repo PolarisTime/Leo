@@ -16,8 +16,6 @@ import java.util.Optional;
 public interface QuoteSheetRepository extends JpaRepository<QuoteSheet, Long>,
         JpaSpecificationExecutor<QuoteSheet> {
 
-    boolean existsBySheetNoAndDeletedFlagFalse(String sheetNo);
-
     /** 只读取版本号(不初始化 brands/items 集合), 供写事务提交后回读权威版本。 */
     @Query("select sheet.version from QuoteSheet sheet where sheet.id = :id and sheet.deletedFlag = false")
     Long findVersionById(@Param("id") Long id);
