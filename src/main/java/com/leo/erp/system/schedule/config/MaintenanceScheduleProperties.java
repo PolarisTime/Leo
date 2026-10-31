@@ -10,6 +10,8 @@ public class MaintenanceScheduleProperties {
     private RedisCacheHealthCheckTask redisCacheHealthCheck = new RedisCacheHealthCheckTask();
     private AttachmentManifestExportTask attachmentManifestExport = new AttachmentManifestExportTask();
     private OperationLogPartitionCleanupTask operationLogPartitionCleanup = new OperationLogPartitionCleanupTask();
+    private OperationLogPartitionPrecreateTask operationLogPartitionPrecreate =
+            new OperationLogPartitionPrecreateTask();
 
     public boolean isEnabled() {
         return enabled;
@@ -49,6 +51,14 @@ public class MaintenanceScheduleProperties {
 
     public void setOperationLogPartitionCleanup(OperationLogPartitionCleanupTask operationLogPartitionCleanup) {
         this.operationLogPartitionCleanup = operationLogPartitionCleanup;
+    }
+
+    public OperationLogPartitionPrecreateTask getOperationLogPartitionPrecreate() {
+        return operationLogPartitionPrecreate;
+    }
+
+    public void setOperationLogPartitionPrecreate(OperationLogPartitionPrecreateTask operationLogPartitionPrecreate) {
+        this.operationLogPartitionPrecreate = operationLogPartitionPrecreate;
     }
 
     public static class RedisCacheHealthCheckTask {
@@ -103,6 +113,34 @@ public class MaintenanceScheduleProperties {
     public static class OperationLogPartitionCleanupTask {
         private boolean enabled = true;
         private String cron = "0 20 3 1 * *";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getCron() {
+            return cron;
+        }
+
+        public void setCron(String cron) {
+            this.cron = cron;
+        }
+    }
+
+    /**
+     * 操作日志月分区预建任务。
+     *
+     * <p>默认每天 03:10 执行：按 {@code leo.observability.operation-log.partition-lookahead-months}
+     * 补齐「当前月起连续 N 个月」中缺失的月分区；已存在分区跳过，避免新月份写入落到 default 分区。
+     * 与清理任务错开 10 分钟，先补建再回收。</p>
+     */
+    public static class OperationLogPartitionPrecreateTask {
+        private boolean enabled = true;
+        private String cron = "0 10 3 * * *";
 
         public boolean isEnabled() {
             return enabled;

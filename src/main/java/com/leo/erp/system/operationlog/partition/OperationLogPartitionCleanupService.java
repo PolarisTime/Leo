@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.YearMonth;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * 操作日志月分区清理：删除「超出保留窗口且为空」的月分区。
@@ -36,22 +35,6 @@ import java.util.Objects;
 @Service
 public class OperationLogPartitionCleanupService {
 
-    /** 列出 public schema 下 sys_operation_log 的月分区名（目录查询，不扫表数据）。 */
-    private static final String LIST_MONTH_PARTITIONS_SQL = """
-            SELECT child.relname
-              FROM pg_inherits inh
-              JOIN pg_class parent ON parent.oid = inh.inhparent
-              JOIN pg_class child ON child.oid = inh.inhrelid
-             WHERE parent.relname = 'sys_operation_log'
-               AND parent.relnamespace = 'public'::regnamespace
-               AND child.relnamespace = 'public'::regnamespace
-               AND child.relname ~ '^sys_operation_log_y[0-9]{4}m[0-9]{2}$'
-             ORDER BY child.relname
-            """;
-
-    /** 以数据库时钟取当前月，避免 JVM 与数据库时区不一致导致窗口错一个月。 */
-    private static final String CURRENT_MONTH_SQL = "SELECT to_char(CURRENT_DATE, 'YYYY-MM')";
-
     private final JdbcTemplate jdbcTemplate;
     private final OperationLogPartitionProperties properties;
     private final OperationLogPartitionMetrics metrics;
@@ -70,10 +53,8 @@ public class OperationLogPartitionCleanupService {
      * @return 本轮统计（扫描/删除/各类跳过/失败）
      */
     public CleanupSummary cleanupExpiredEmptyPartitions() {
-        YearMonth currentMonth = YearMonth.parse(Objects.requireNonNull(
-                jdbcTemplate.queryForObject(CURRENT_MONTH_SQL, String.class),
-                "无法从数据库读取当前月"));
-        List<String> partitions = jdbcTemplate.queryForList(LIST_MONTH_PARTITIONS_SQL, String.class);
+        YearMonth currentMonth = OperationLogPartitionCatalog.currentMonth(jdbcTemplate);
+        List<String> partitions = OperationLogPartitionCatalog.listMonthPartitionNames(jdbcTemplate);
 
         int dropped = 0;
         int keptInWindow = 0;
@@ -127,32 +108,23 @@ public class OperationLogPartitionCleanupService {
     }
 
     private boolean hasAnyRow(String partitionName) {
+        String qualifiedName = OperationLogPartitionCatalog.qualifiedPartitionName(partitionName);
         Boolean present = jdbcTemplate.queryForObject(
-                "SELECT EXISTS (SELECT 1 FROM " + qualifiedName(partitionName) + " LIMIT 1)",
-                Boolean.class);
+                "SELECT EXISTS (SELECT 1 FROM " + qualifiedName + " LIMIT 1)", Boolean.class);
         return Boolean.TRUE.equals(present);
     }
 
     /** 删除分区；失败返回 false（只记日志，不中断整轮清理）。 */
     private boolean dropPartition(String partitionName) {
+        String qualifiedName = OperationLogPartitionCatalog.qualifiedPartitionName(partitionName);
         try {
-            jdbcTemplate.execute("DROP TABLE IF EXISTS " + qualifiedName(partitionName));
+            jdbcTemplate.execute("DROP TABLE IF EXISTS " + qualifiedName);
             log.info("已删除超出保留期且为空的操作日志分区: {}", partitionName);
             return true;
         } catch (RuntimeException ex) {
             log.warn("删除操作日志分区失败，已跳过: {}", partitionName, ex);
             return false;
         }
-    }
-
-    /**
-     * 分区名的 public schema 限定形式。
-     *
-     * <p>分区名在进入这里之前已被严格正则限定为 {@code sys_operation_log_y[0-9]{4}m[0-9]{2}}，
-     * 但 {@code DROP TABLE} 无法用参数占位，仍按标识符加双引号做防御性包裹。</p>
-     */
-    private static String qualifiedName(String partitionName) {
-        return "\"public\".\"" + partitionName + "\"";
     }
 
     /** 一轮清理的统计结果。 */

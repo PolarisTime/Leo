@@ -20,6 +20,8 @@ public class OperationLogPartitionMetrics {
     /** 最近一轮分区清理结果：Gauge 为瞬时值，每轮覆盖而不是累计。 */
     private final AtomicLong cleanupDropped = new AtomicLong();
     private final AtomicLong cleanupSkipped = new AtomicLong();
+    /** 最近一轮分区预建成功创建的分区数。 */
+    private final AtomicLong precreated = new AtomicLong();
 
     public OperationLogPartitionMetrics(JdbcTemplate jdbcTemplate,
                                         MeterRegistry meterRegistry,
@@ -47,6 +49,9 @@ public class OperationLogPartitionMetrics {
         Gauge.builder("leo.operation.log.partition.cleanup.skipped", cleanupSkipped, AtomicLong::get)
                 .description("最近一轮操作日志分区清理跳过的分区数（窗口内/非空/非法名）")
                 .register(meterRegistry);
+        Gauge.builder("leo.operation.log.partition.precreated", precreated, AtomicLong::get)
+                .description("最近一轮操作日志分区预建成功创建的分区数")
+                .register(meterRegistry);
     }
 
     /**
@@ -58,6 +63,11 @@ public class OperationLogPartitionMetrics {
     public void recordPartitionCleanup(int dropped, int skipped) {
         cleanupDropped.set(dropped);
         cleanupSkipped.set(skipped);
+    }
+
+    /** 由分区预建任务回填最近一轮结果。 */
+    public void recordPartitionPrecreate(int created) {
+        precreated.set(created);
     }
 
     @Scheduled(fixedDelayString = "${leo.observability.partition-metrics-refresh-interval:5m}")

@@ -9,15 +9,14 @@ import com.leo.erp.inventory.api.InventoryTransactionInput;
 import com.leo.erp.inventory.api.InventoryTransactionType;
 import com.leo.erp.inventory.repository.InventoryTransactionRepository;
 import com.leo.erp.inventory.web.dto.InventoryBackfillResponse;
-import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
-import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
-import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
-import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
-import com.leo.erp.sales.returns.domain.entity.SalesReturn;
-import com.leo.erp.sales.returns.repository.SalesReturnRepository;
+import com.leo.erp.purchase.api.PurchaseInboundPostedQuery;
+import com.leo.erp.purchase.api.PurchaseInboundPostedQuery.PostedInboundSnapshot;
+import com.leo.erp.sales.api.SalesOutboundPostedQuery;
+import com.leo.erp.sales.api.SalesOutboundPostedQuery.PostedOutboundSnapshot;
+import com.leo.erp.sales.api.SalesReturnPostedQuery;
+import com.leo.erp.sales.api.SalesReturnPostedQuery.PostedReturnSnapshot;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -45,6 +44,10 @@ import java.util.stream.Collectors;
  * <p>来源单据按 (业务日期, id) keyset 分页扫描并多路归并，避免一次性全量装载；
  * 每个批次记账前收集全部 (materialId, warehouseId) 维度全局升序加锁，
  * 与常规记账共用同一加锁顺序，消除 AB-BA 死锁。
+ *
+ * <p>来源读取全部走 api 只读端口（{@link PurchaseInboundPostedQuery}、
+ * {@link SalesOutboundPostedQuery}、{@link SalesReturnPostedQuery}）：本类不再依赖
+ * purchase / sales 的实体与仓储，跨模块依赖只保留在 api 契约上（模块边界门禁要求）。</p>
  */
 @Slf4j
 @Service
@@ -61,27 +64,27 @@ public class InventoryBackfillService {
             .thenComparing(PostedDocument::sourceDocumentId,
                     Comparator.nullsFirst(Comparator.naturalOrder()));
 
-    private final PurchaseInboundRepository purchaseInboundRepository;
-    private final SalesOutboundRepository salesOutboundRepository;
-    private final SalesReturnRepository salesReturnRepository;
+    private final PurchaseInboundPostedQuery purchaseInboundPostedQuery;
+    private final SalesOutboundPostedQuery salesOutboundPostedQuery;
+    private final SalesReturnPostedQuery salesReturnPostedQuery;
     private final InventoryTransactionRepository transactionRepository;
     private final InventoryTransactionLockService lockService;
     private final InventoryTransactionCommand inventoryCommand;
     /** 每个扫描批次一个独立事务，避免长事务与长持锁（见 backfill 方法注释）。 */
     private final TransactionTemplate transactionTemplate;
-    /** 扫描阶段只读事务：让来源单据的 LAZY 明细集合可初始化（见 scanAndBackfill 注释）。 */
+    /** 扫描阶段只读事务：让来源单据的明细在端口实现内初始化（见 scanAndBackfill 注释）。 */
     private final TransactionTemplate readOnlyTransactionTemplate;
 
-    public InventoryBackfillService(PurchaseInboundRepository purchaseInboundRepository,
-                                    SalesOutboundRepository salesOutboundRepository,
-                                    SalesReturnRepository salesReturnRepository,
+    public InventoryBackfillService(PurchaseInboundPostedQuery purchaseInboundPostedQuery,
+                                    SalesOutboundPostedQuery salesOutboundPostedQuery,
+                                    SalesReturnPostedQuery salesReturnPostedQuery,
                                     InventoryTransactionRepository transactionRepository,
                                     InventoryTransactionLockService lockService,
                                     InventoryTransactionCommand inventoryCommand,
                                     PlatformTransactionManager transactionManager) {
-        this.purchaseInboundRepository = purchaseInboundRepository;
-        this.salesOutboundRepository = salesOutboundRepository;
-        this.salesReturnRepository = salesReturnRepository;
+        this.purchaseInboundPostedQuery = purchaseInboundPostedQuery;
+        this.salesOutboundPostedQuery = salesOutboundPostedQuery;
+        this.salesReturnPostedQuery = salesReturnPostedQuery;
         this.transactionRepository = transactionRepository;
         this.lockService = lockService;
         this.inventoryCommand = inventoryCommand;
@@ -235,71 +238,38 @@ public class InventoryBackfillService {
 
     private SourceStream<PostedDocument> purchaseInboundStream() {
         return new SourceStream<>(
-                cursor -> {
-                    List<PurchaseInbound> page = purchaseInboundRepository.findPostedAfter(
-                            POSTED_PURCHASE_INBOUND_STATUSES, cursor.date(), cursor.id(),
-                            PageRequest.of(0, SCAN_BATCH_SIZE));
-                    loadInboundItems(page);
-                    return page.stream()
-                            .map(inbound -> new PostedDocument(inbound.getInboundDate(), 0,
-                                    InventoryTransactionType.PURCHASE_IN, purchaseInput(inbound)))
-                            .toList();
-                },
+                cursor -> purchaseInboundPostedQuery
+                        .findPostedAfter(POSTED_PURCHASE_INBOUND_STATUSES, cursor.date(), cursor.id(), SCAN_BATCH_SIZE)
+                        .stream()
+                        .map(inbound -> new PostedDocument(inbound.inboundDate(), 0,
+                                InventoryTransactionType.PURCHASE_IN, purchaseInput(inbound)))
+                        .toList(),
                 PostedDocument::occurredAt,
                 PostedDocument::sourceDocumentId);
     }
 
     private SourceStream<PostedDocument> salesOutboundStream() {
         return new SourceStream<>(
-                cursor -> {
-                    List<SalesOutbound> page = salesOutboundRepository.findPostedAfter(
-                            StatusConstants.AUDITED, cursor.date(), cursor.id(),
-                            PageRequest.of(0, SCAN_BATCH_SIZE));
-                    loadOutboundItems(page);
-                    return page.stream()
-                            .map(outbound -> new PostedDocument(outbound.getOutboundDate(), 1,
-                                    InventoryTransactionType.SALES_OUT, salesOutInput(outbound)))
-                            .toList();
-                },
+                cursor -> salesOutboundPostedQuery
+                        .findPostedAfter(StatusConstants.AUDITED, cursor.date(), cursor.id(), SCAN_BATCH_SIZE)
+                        .stream()
+                        .map(outbound -> new PostedDocument(outbound.outboundDate(), 1,
+                                InventoryTransactionType.SALES_OUT, salesOutInput(outbound)))
+                        .toList(),
                 PostedDocument::occurredAt,
                 PostedDocument::sourceDocumentId);
     }
 
     private SourceStream<PostedDocument> salesReturnStream() {
         return new SourceStream<>(
-                cursor -> {
-                    List<SalesReturn> page = salesReturnRepository.findPostedAfter(
-                            StatusConstants.AUDITED, cursor.date(), cursor.id(),
-                            PageRequest.of(0, SCAN_BATCH_SIZE));
-                    loadReturnItems(page);
-                    return page.stream()
-                            .map(salesReturn -> new PostedDocument(salesReturn.getReturnDate(), 2,
-                                    InventoryTransactionType.SALES_RETURN_IN, salesReturnInput(salesReturn)))
-                            .toList();
-                },
+                cursor -> salesReturnPostedQuery
+                        .findPostedAfter(StatusConstants.AUDITED, cursor.date(), cursor.id(), SCAN_BATCH_SIZE)
+                        .stream()
+                        .map(salesReturn -> new PostedDocument(salesReturn.returnDate(), 2,
+                                InventoryTransactionType.SALES_RETURN_IN, salesReturnInput(salesReturn)))
+                        .toList(),
                 PostedDocument::occurredAt,
                 PostedDocument::sourceDocumentId);
-    }
-
-    private void loadInboundItems(List<PurchaseInbound> page) {
-        if (page.isEmpty()) {
-            return;
-        }
-        purchaseInboundRepository.findAllByIdIn(page.stream().map(PurchaseInbound::getId).toList());
-    }
-
-    private void loadOutboundItems(List<SalesOutbound> page) {
-        if (page.isEmpty()) {
-            return;
-        }
-        salesOutboundRepository.findAllByIdIn(page.stream().map(SalesOutbound::getId).toList());
-    }
-
-    private void loadReturnItems(List<SalesReturn> page) {
-        if (page.isEmpty()) {
-            return;
-        }
-        salesReturnRepository.findAllByIdIn(page.stream().map(SalesReturn::getId).toList());
     }
 
     /**
@@ -314,80 +284,77 @@ public class InventoryBackfillService {
         }
     }
 
-    private InventoryTransactionInput purchaseInput(PurchaseInbound inbound) {
-        List<InventoryTransactionInput.Line> lines = inbound.getItems().stream()
-                .filter(Objects::nonNull)
+    private InventoryTransactionInput purchaseInput(PostedInboundSnapshot inbound) {
+        List<InventoryTransactionInput.Line> lines = inbound.lines().stream()
                 .map(item -> new InventoryTransactionInput.Line(
-                        item.getId(),
-                        item.getMaterialId(),
-                        item.getMaterialCode(),
-                        item.getWarehouseId(),
-                        item.getWarehouseName(),
-                        item.getBatchNo(),
-                        item.getQuantity() == null ? 0 : item.getQuantity(),
-                        item.getQuantityUnit(),
-                        item.getUnitPrice()
+                        item.id(),
+                        item.materialId(),
+                        item.materialCode(),
+                        item.warehouseId(),
+                        item.warehouseName(),
+                        item.batchNo(),
+                        item.quantity() == null ? 0 : item.quantity(),
+                        item.quantityUnit(),
+                        item.unitPrice()
                 ))
                 .toList();
         return new InventoryTransactionInput(
                 InventorySourceDocumentType.PURCHASE_INBOUND.name(),
-                inbound.getId(),
-                inbound.getInboundNo(),
-                inbound.getInboundDate(),
-                inbound.getWarehouseId(),
-                inbound.getWarehouseName(),
+                inbound.id(),
+                inbound.inboundNo(),
+                inbound.inboundDate(),
+                inbound.warehouseId(),
+                inbound.warehouseName(),
                 lines
         );
     }
 
-    private InventoryTransactionInput salesOutInput(SalesOutbound outbound) {
-        List<InventoryTransactionInput.Line> lines = outbound.getItems().stream()
-                .filter(Objects::nonNull)
+    private InventoryTransactionInput salesOutInput(PostedOutboundSnapshot outbound) {
+        List<InventoryTransactionInput.Line> lines = outbound.lines().stream()
                 .map(item -> new InventoryTransactionInput.Line(
-                        item.getId(),
-                        item.getMaterialId(),
-                        item.getMaterialCode(),
-                        item.getWarehouseId(),
-                        item.getWarehouseName(),
-                        item.getBatchNo(),
-                        item.getQuantity() == null ? 0 : item.getQuantity(),
-                        item.getQuantityUnit(),
-                        item.getUnitPrice()
+                        item.id(),
+                        item.materialId(),
+                        item.materialCode(),
+                        item.warehouseId(),
+                        item.warehouseName(),
+                        item.batchNo(),
+                        item.quantity() == null ? 0 : item.quantity(),
+                        item.quantityUnit(),
+                        item.unitPrice()
                 ))
                 .toList();
         return new InventoryTransactionInput(
                 InventorySourceDocumentType.SALES_OUTBOUND.name(),
-                outbound.getId(),
-                outbound.getOutboundNo(),
-                outbound.getOutboundDate(),
-                outbound.getWarehouseId(),
-                outbound.getWarehouseName(),
+                outbound.id(),
+                outbound.outboundNo(),
+                outbound.outboundDate(),
+                outbound.warehouseId(),
+                outbound.warehouseName(),
                 lines
         );
     }
 
-    private InventoryTransactionInput salesReturnInput(SalesReturn salesReturn) {
-        List<InventoryTransactionInput.Line> lines = salesReturn.getItems().stream()
-                .filter(Objects::nonNull)
+    private InventoryTransactionInput salesReturnInput(PostedReturnSnapshot salesReturn) {
+        List<InventoryTransactionInput.Line> lines = salesReturn.lines().stream()
                 .map(item -> new InventoryTransactionInput.Line(
-                        item.getId(),
-                        item.getMaterialId(),
-                        item.getMaterialCode(),
-                        item.getWarehouseId(),
-                        item.getWarehouseName(),
-                        item.getBatchNo(),
-                        item.getQuantity() == null ? 0 : item.getQuantity(),
-                        item.getQuantityUnit(),
-                        item.getUnitPrice()
+                        item.id(),
+                        item.materialId(),
+                        item.materialCode(),
+                        item.warehouseId(),
+                        item.warehouseName(),
+                        item.batchNo(),
+                        item.quantity() == null ? 0 : item.quantity(),
+                        item.quantityUnit(),
+                        item.unitPrice()
                 ))
                 .toList();
         return new InventoryTransactionInput(
                 InventorySourceDocumentType.SALES_RETURN.name(),
-                salesReturn.getId(),
-                salesReturn.getReturnNo(),
-                salesReturn.getReturnDate(),
-                salesReturn.getWarehouseId(),
-                salesReturn.getWarehouseName(),
+                salesReturn.id(),
+                salesReturn.returnNo(),
+                salesReturn.returnDate(),
+                salesReturn.warehouseId(),
+                salesReturn.warehouseName(),
                 lines
         );
     }

@@ -289,6 +289,11 @@ leo:
       # 每天 02:05 导出附件恢复清单到附件存储的隔离前缀
       enabled: ${LEO_MAINTENANCE_ATTACHMENT_MANIFEST_EXPORT_ENABLED:true}
       cron: ${LEO_MAINTENANCE_ATTACHMENT_MANIFEST_EXPORT_CRON:0 5 2 * * *}
+    operation-log-partition-precreate:
+      # 每天 03:10 预建缺失的月分区（当前月起连续 partition-lookahead-months 个月）；
+      # 已存在分区跳过，避免窗口末尾之后的新月份写入落到 sys_operation_log_default
+      enabled: ${LEO_MAINTENANCE_OPERATION_LOG_PARTITION_PRECREATE_ENABLED:true}
+      cron: ${LEO_MAINTENANCE_OPERATION_LOG_PARTITION_PRECREATE_CRON:0 10 3 * * *}
     operation-log-partition-cleanup:
       # 每月 01 日 03:20 清理超出保留窗口的空月分区（过去按 retention-months、
       # 未来按 partition-lookahead-months，默认即当前月 ±12 个月）；
