@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
@@ -66,7 +67,7 @@ public class V2AttachmentController {
 
     @GetMapping("/{id}/access-url")
     @RequirePermission(PermissionCodes.ATTACHMENTS_READ)
-    public AttachmentAccessUrlResponse accessUrl(@AuthenticationPrincipal SecurityPrincipal principal, @PathVariable Long id, @RequestParam String moduleKey, @RequestParam String accessKey, @RequestParam(defaultValue = "false") boolean inline) {
+    public AttachmentAccessUrlResponse accessUrl(@AuthenticationPrincipal SecurityPrincipal principal, @PathVariable @SnowflakeId Long id, @RequestParam String moduleKey, @RequestParam String accessKey, @RequestParam(defaultValue = "false") boolean inline) {
         String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
         attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, id);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
@@ -86,7 +87,7 @@ public class V2AttachmentController {
             description = "读取附件二进制内容。disposition=attachment 触发浏览器下载（默认），disposition=inline 用于内联预览；非法的 disposition 返回 400。")
     @RequirePermission(PermissionCodes.ATTACHMENTS_READ)
     public ResponseEntity<Resource> content(@AuthenticationPrincipal SecurityPrincipal principal,
-                                            @PathVariable Long id,
+                                            @PathVariable @SnowflakeId Long id,
                                             @RequestParam String moduleKey,
                                             @RequestParam String accessKey,
                                             @RequestParam(defaultValue = "attachment") String disposition) {

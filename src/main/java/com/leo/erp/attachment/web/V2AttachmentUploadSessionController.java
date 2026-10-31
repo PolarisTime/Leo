@@ -7,6 +7,7 @@ import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareResponse;
 import com.leo.erp.attachment.web.dto.AttachmentUploadCompletionRequest;
 import com.leo.erp.attachment.web.dto.AttachmentUploadResponse;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
@@ -83,7 +84,7 @@ public class V2AttachmentUploadSessionController {
     @RequirePermission(PermissionCodes.ATTACHMENT_UPLOAD_SESSIONS_COMPLETE)
     public ResponseEntity<AttachmentUploadResponse> complete(
             @AuthenticationPrincipal SecurityPrincipal principal,
-            @PathVariable Long sessionId,
+            @PathVariable @SnowflakeId Long sessionId,
             @RequestParam @NotBlank(message = "模块标识不能为空") String moduleKey,
             @Valid @RequestBody AttachmentUploadCompletionRequest request) {
         String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);

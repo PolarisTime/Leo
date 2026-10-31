@@ -8,7 +8,6 @@ import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.http.MediaType;
@@ -24,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -63,14 +63,14 @@ public class V2PrintTemplateController {
     @PutMapping("/{id}")
     @OperationLoggable(moduleName = "打印模板", actionType = "编辑", businessNoFields = {"billType", "templateName"})
     @RequirePermission(PermissionCodes.PRINT_TEMPLATES_UPDATE)
-    public PrintTemplateResponse update(@PathVariable @Positive Long id, @Valid @RequestBody PrintTemplateRequest request) {
+    public PrintTemplateResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody PrintTemplateRequest request) {
         return printTemplateService.update(id, request);
     }
 
     @PutMapping(value = "/{id}/content", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @OperationLoggable(moduleName = "打印模板", actionType = "替换内容", businessNoFields = {"id"})
     @RequirePermission(PermissionCodes.PRINT_TEMPLATES_UPDATE)
-    public PrintTemplateResponse replaceContent(@PathVariable @Positive Long id, @RequestParam("file") MultipartFile file) {
+    public PrintTemplateResponse replaceContent(@PathVariable @SnowflakeId Long id, @RequestParam("file") MultipartFile file) {
         // 全局 multipart 限额为 20MB，本端点业务上限 1MB：入口早拒，避免超限文件完整传输后才被拒。
         if (file != null && file.getSize() > MAX_UPLOAD_JSON_BYTES) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件不能超过 1MB");
@@ -82,7 +82,7 @@ public class V2PrintTemplateController {
     @OperationLoggable(moduleName = "打印模板", actionType = "删除")
     @V2NoContent
     @RequirePermission(PermissionCodes.PRINT_TEMPLATES_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable @Positive Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         printTemplateService.delete(id);
         return V2ResponseSupport.noContent();
     }

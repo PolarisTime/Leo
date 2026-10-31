@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2NoContent;
@@ -60,7 +61,7 @@ public class V2PaymentController {
     @Operation(summary = "查询付款单详情")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.PAYMENTS_READ)
-    public PaymentResponse detail(@PathVariable Long id) {
+    public PaymentResponse detail(@PathVariable @SnowflakeId Long id) {
         return paymentService.detail(id);
     }
 
@@ -75,14 +76,14 @@ public class V2PaymentController {
     @Operation(summary = "更新付款单")
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.PAYMENTS_UPDATE)
-    public PaymentResponse update(@PathVariable Long id, @Valid @RequestBody PaymentRequest request) {
+    public PaymentResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody PaymentRequest request) {
         return paymentService.update(id, request);
     }
 
     @Operation(summary = "更新付款单状态")
     @PatchMapping("/{id}/status")
     @RequirePermission(PermissionCodes.PAYMENTS_UPDATE)
-    public PaymentResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+    public PaymentResponse updateStatus(@PathVariable @SnowflakeId Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return paymentService.updateStatus(id, request.status());
     }
 
@@ -90,7 +91,7 @@ public class V2PaymentController {
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.PAYMENTS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         paymentService.delete(id);
         return V2ResponseSupport.noContent();
     }

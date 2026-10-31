@@ -1,6 +1,7 @@
 package com.leo.erp.security.rbac.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
@@ -34,13 +35,13 @@ public class V2UserRoleController {
 
     @GetMapping("/{id}/roles")
     @RequirePermission(PermissionCodes.USER_ACCOUNTS_READ)
-    public UserRolesResponse roles(@PathVariable Long id) {
+    public UserRolesResponse roles(@PathVariable @SnowflakeId Long id) {
         return userRoleService.rolesOf(id);
     }
 
     @PutMapping("/{id}/roles")
     @RequirePermission(PermissionCodes.USER_ACCOUNTS_UPDATE)
-    public UserRolesResponse replaceRoles(@PathVariable Long id,
+    public UserRolesResponse replaceRoles(@PathVariable @SnowflakeId Long id,
                                           @AuthenticationPrincipal SecurityPrincipal principal,
                                           @Valid @RequestBody UserRolesUpdateRequest request) {
         // 防止权限自提升: 任何用户(含管理员)不得修改自己的角色分配。

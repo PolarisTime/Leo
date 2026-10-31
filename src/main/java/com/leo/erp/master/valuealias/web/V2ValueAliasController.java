@@ -1,6 +1,7 @@
 package com.leo.erp.master.valuealias.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.api.V2Created;
@@ -54,7 +55,7 @@ public class V2ValueAliasController {
 
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.VALUE_ALIASES_READ)
-    public ValueAliasResponse detail(@PathVariable Long id) {
+    public ValueAliasResponse detail(@PathVariable @SnowflakeId Long id) {
         return valueAliasService.detail(id);
     }
 
@@ -67,14 +68,14 @@ public class V2ValueAliasController {
 
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.VALUE_ALIASES_UPDATE)
-    public ValueAliasResponse update(@PathVariable Long id, @Valid @RequestBody ValueAliasRequest request) {
+    public ValueAliasResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody ValueAliasRequest request) {
         return valueAliasService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.VALUE_ALIASES_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         valueAliasService.delete(id);
         return V2ResponseSupport.noContent();
     }

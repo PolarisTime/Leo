@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
@@ -53,7 +54,7 @@ public class V2SupplierController {
 
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.SUPPLIERS_READ)
-    public SupplierResponse detail(@PathVariable Long id) {
+    public SupplierResponse detail(@PathVariable @SnowflakeId Long id) {
         return supplierService.detail(id);
     }
 
@@ -66,14 +67,14 @@ public class V2SupplierController {
 
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.SUPPLIERS_UPDATE)
-    public SupplierResponse update(@PathVariable Long id, @Valid @RequestBody SupplierRequest request) {
+    public SupplierResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody SupplierRequest request) {
         return supplierService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.SUPPLIERS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         supplierService.delete(id);
         return V2ResponseSupport.noContent();
     }

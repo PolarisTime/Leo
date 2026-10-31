@@ -1,6 +1,7 @@
 package com.leo.erp.market.supplierprice.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2NoContent;
 import com.leo.erp.common.api.V2ResponseSupport;
@@ -85,7 +86,7 @@ public class V2SupplierPriceListController {
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_DELETE)
-    public ResponseEntity<Void> removeColumn(@PathVariable Long id) {
+    public ResponseEntity<Void> removeColumn(@PathVariable @SnowflakeId Long id) {
         service.removeColumn(id);
         return V2ResponseSupport.noContent();
     }
@@ -99,7 +100,7 @@ public class V2SupplierPriceListController {
     @PutMapping("/{id}/items")
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_UPDATE)
     public SupplierPriceGridResponse.Column saveItems(
-            @PathVariable Long id,
+            @PathVariable @SnowflakeId Long id,
             @Valid @RequestBody SupplierPriceListRequests.SaveItems request) {
         return service.saveItems(id, request);
     }

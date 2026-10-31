@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2NoContent;
@@ -60,7 +61,7 @@ public class V2ReceiptController {
     @Operation(summary = "查询收款单详情")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.RECEIPTS_READ)
-    public ReceiptResponse detail(@PathVariable Long id) {
+    public ReceiptResponse detail(@PathVariable @SnowflakeId Long id) {
         return receiptService.detail(id);
     }
 
@@ -75,14 +76,14 @@ public class V2ReceiptController {
     @Operation(summary = "更新收款单")
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.RECEIPTS_UPDATE)
-    public ReceiptResponse update(@PathVariable Long id, @Valid @RequestBody ReceiptRequest request) {
+    public ReceiptResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody ReceiptRequest request) {
         return receiptService.update(id, request);
     }
 
     @Operation(summary = "更新收款单状态")
     @PatchMapping("/{id}/status")
     @RequirePermission(PermissionCodes.RECEIPTS_UPDATE)
-    public ReceiptResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+    public ReceiptResponse updateStatus(@PathVariable @SnowflakeId Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return receiptService.updateStatus(id, request.status());
     }
 
@@ -90,7 +91,7 @@ public class V2ReceiptController {
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.RECEIPTS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         receiptService.delete(id);
         return V2ResponseSupport.noContent();
     }

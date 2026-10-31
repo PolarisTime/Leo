@@ -111,7 +111,9 @@ class V2SalesOutboundControllerTest {
 
         ResponseEntity<SalesOutboundResponse> result = controller.createAudit(5L, null);
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        // 审核是状态迁移而非创建资源: 200, 不发 Location
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getHeaders().getLocation()).isNull();
         assertThat(result.getBody()).isSameAs(response);
         verify(service).audit(5L);
         verify(service, never()).updateAndAudit(anyLong(), any());
@@ -124,7 +126,8 @@ class V2SalesOutboundControllerTest {
 
         ResponseEntity<SalesOutboundResponse> result = controller.createAudit(5L, request());
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getHeaders().getLocation()).isNull();
         assertThat(result.getBody()).isSameAs(response);
         verify(service).updateAndAudit(5L, request());
         verify(service, never()).audit(anyLong());

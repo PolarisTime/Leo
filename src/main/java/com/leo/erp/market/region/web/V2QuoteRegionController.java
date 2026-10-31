@@ -1,6 +1,7 @@
 package com.leo.erp.market.region.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.api.V2Created;
@@ -57,7 +58,7 @@ public class V2QuoteRegionController {
 
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.QUOTE_REGIONS_READ)
-    public QuoteRegionResponse detail(@PathVariable Long id) {
+    public QuoteRegionResponse detail(@PathVariable @SnowflakeId Long id) {
         return quoteRegionService.detail(id);
     }
 
@@ -70,14 +71,14 @@ public class V2QuoteRegionController {
 
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.QUOTE_REGIONS_UPDATE)
-    public QuoteRegionResponse update(@PathVariable Long id, @Valid @RequestBody QuoteRegionRequest request) {
+    public QuoteRegionResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody QuoteRegionRequest request) {
         return quoteRegionService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.QUOTE_REGIONS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         quoteRegionService.delete(id);
         return V2ResponseSupport.noContent();
     }

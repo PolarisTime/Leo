@@ -1,6 +1,7 @@
 package com.leo.erp.market.quotation.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.api.V2Created;
@@ -74,7 +75,7 @@ public class V2QuoteSheetController {
     @Operation(summary = "报价单详情")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_READ)
-    public QuoteSheetResponse detail(@PathVariable Long id) {
+    public QuoteSheetResponse detail(@PathVariable @SnowflakeId Long id) {
         return quoteSheetService.detail(id);
     }
 
@@ -111,7 +112,7 @@ public class V2QuoteSheetController {
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public ResponseEntity<QuoteSheetResponse> update(
             @AuthenticationPrincipal SecurityPrincipal principal,
-            @PathVariable Long id,
+            @PathVariable @SnowflakeId Long id,
             @Parameter(description = "资源版本(强比较), 如 3")
             @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
             @Parameter(description = "兼容别名, 非标准弱验证器用法")
@@ -133,7 +134,7 @@ public class V2QuoteSheetController {
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public ResponseEntity<QuoteSheetResponse> reorderItems(
             @AuthenticationPrincipal SecurityPrincipal principal,
-            @PathVariable Long id,
+            @PathVariable @SnowflakeId Long id,
             @Parameter(description = "资源版本(强比较), 如 3")
             @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
             @Parameter(description = "兼容别名, 非标准弱验证器用法")
@@ -149,7 +150,7 @@ public class V2QuoteSheetController {
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         quoteSheetService.delete(id);
         return V2ResponseSupport.noContent();
     }
@@ -162,7 +163,7 @@ public class V2QuoteSheetController {
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public ResponseEntity<QuoteSheetResponse.ItemResponse> addItem(
             @AuthenticationPrincipal SecurityPrincipal principal,
-            @PathVariable Long id,
+            @PathVariable @SnowflakeId Long id,
             @Parameter(description = "资源版本(强比较), 如 3")
             @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
             @Parameter(description = "兼容别名, 非标准弱验证器用法")
@@ -186,8 +187,8 @@ public class V2QuoteSheetController {
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public ResponseEntity<QuoteSheetResponse.ItemResponse> updateItem(
             @AuthenticationPrincipal SecurityPrincipal principal,
-            @PathVariable Long id,
-            @PathVariable Long itemId,
+            @PathVariable @SnowflakeId Long id,
+            @PathVariable @SnowflakeId Long itemId,
             @Parameter(description = "资源版本(强比较), 如 3")
             @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
             @Parameter(description = "兼容别名, 非标准弱验证器用法")
@@ -207,8 +208,8 @@ public class V2QuoteSheetController {
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public ResponseEntity<Void> deleteItem(
             @AuthenticationPrincipal SecurityPrincipal principal,
-            @PathVariable Long id,
-            @PathVariable Long itemId,
+            @PathVariable @SnowflakeId Long id,
+            @PathVariable @SnowflakeId Long itemId,
             @Parameter(description = "资源版本(强比较), 如 3")
             @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
             @Parameter(description = "兼容别名, 非标准弱验证器用法")

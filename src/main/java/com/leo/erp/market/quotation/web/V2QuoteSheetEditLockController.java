@@ -1,6 +1,7 @@
 package com.leo.erp.market.quotation.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2NoContent;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.market.quotation.service.QuoteSheetEditLockService;
@@ -43,7 +44,7 @@ public class V2QuoteSheetEditLockController {
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public QuoteSheetEditLockResponse acquire(
             @AuthenticationPrincipal SecurityPrincipal principal,
-            @PathVariable Long id,
+            @PathVariable @SnowflakeId Long id,
             @Parameter(description = "强制接管未过期的他人锁(需二次确认)", example = "false")
             @RequestParam(value = "force", defaultValue = "false") boolean force) {
         SecurityPrincipal current = principal == null ? SecurityPrincipal.system() : principal;
@@ -54,7 +55,7 @@ public class V2QuoteSheetEditLockController {
     @GetMapping
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_READ)
     public QuoteSheetEditLockResponse find(@AuthenticationPrincipal SecurityPrincipal principal,
-                                           @PathVariable Long id) {
+                                           @PathVariable @SnowflakeId Long id) {
         return service.find(id, principal == null ? 0L : principal.id());
     }
 
@@ -63,7 +64,7 @@ public class V2QuoteSheetEditLockController {
     @V2NoContent
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public ResponseEntity<Void> release(@AuthenticationPrincipal SecurityPrincipal principal,
-                                        @PathVariable Long id) {
+                                        @PathVariable @SnowflakeId Long id) {
         service.release(id, principal == null ? 0L : principal.id());
         return V2ResponseSupport.noContent();
     }

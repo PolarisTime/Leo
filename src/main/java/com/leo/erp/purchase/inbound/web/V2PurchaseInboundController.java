@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2NoContent;
@@ -69,7 +70,7 @@ public class V2PurchaseInboundController {
     @GetMapping("/{id}")
     @Operation(summary = "查询采购入库详情")
     @RequirePermission(PermissionCodes.PURCHASE_INBOUNDS_READ)
-    public PurchaseInboundResponse detail(@PathVariable Long id) {
+    public PurchaseInboundResponse detail(@PathVariable @SnowflakeId Long id) {
         return service.detail(id);
     }
 
@@ -86,34 +87,34 @@ public class V2PurchaseInboundController {
     @Operation(summary = "更新采购入库")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.PURCHASE_INBOUNDS_UPDATE)
-    public PurchaseInboundResponse update(@PathVariable Long id, @Valid @RequestBody PurchaseInboundRequest request) {
+    public PurchaseInboundResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody PurchaseInboundRequest request) {
         return service.update(id, request);
     }
 
     /**
-     * 资源型审核端点：创建“审核记录”子资源即完成审核。
-     * 携带请求体时先保存再审核（等价于旧 save-and-audit），省略时仅审核既有草稿。
-     * 子资源无独立可回读路径，Location 指向父单据 {@code GET /api/v2.0/purchase-inbounds/{id}}。
+     * 审核动作端点：完成审核，返回审核后的父单据表示。
+     * <p>携带请求体时先保存再审核（等价于旧 save-and-audit），省略时仅审核既有草稿。</p>
+     * <p>这是状态迁移，不是创建资源——不返回 201，也不发 Location（无独立可回读的审核记录资源）；
+     * 成功一律 200 + 最新单据。</p>
      */
-    @Operation(summary = "创建采购入库审核记录（审核既有草稿或保存并审核）")
+    @Operation(summary = "审核采购入库（状态迁移，200 + 最新单据）")
     @IdempotencyRequired
     @PostMapping("/{id}/audits")
     @DomainEventAudited
-    @V2Created
     @RequirePermission(PermissionCodes.PURCHASE_INBOUNDS_AUDIT)
-    public ResponseEntity<PurchaseInboundResponse> createAudit(@PathVariable Long id,
+    public ResponseEntity<PurchaseInboundResponse> createAudit(@PathVariable @SnowflakeId Long id,
                                                                @Valid @RequestBody(required = false) PurchaseInboundRequest request) {
         PurchaseInboundResponse response = request == null
                 ? service.audit(id)
                 : service.updateAndAudit(id, request);
-        return V2ResponseSupport.created("/purchase-inbounds", response);
+        return ResponseEntity.ok(response);
     }
 
     @PatchMapping("/{id}/status")
     @Operation(summary = "更新采购入库状态")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.PURCHASE_INBOUNDS_UPDATE)
-    public PurchaseInboundResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+    public PurchaseInboundResponse updateStatus(@PathVariable @SnowflakeId Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return service.updateStatus(id, request.status());
     }
 
@@ -122,7 +123,7 @@ public class V2PurchaseInboundController {
     @DomainEventAudited
     @V2NoContent
     @RequirePermission(PermissionCodes.PURCHASE_INBOUNDS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         service.delete(id);
         return V2ResponseSupport.noContent();
     }

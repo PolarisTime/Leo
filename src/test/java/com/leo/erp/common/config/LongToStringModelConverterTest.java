@@ -138,6 +138,47 @@ class LongToStringModelConverterTest {
         assertStringInt64((Schema<?>) second.schema.getProperties().get("id"));
     }
 
+    /**
+     * 雪花 ID 字段除 string/int64 外还必须带正整数约束与 19 位示例；
+     * 非 ID 的 Long（分页 totalElements、行数等）保持 string/int64，不附加 ID 约束。
+     */
+    @Test
+    void snowflakeIdFieldsCarryPositivePatternAnd19DigitExample() {
+        Schema<?> schema = resolveSchema(SnowflakeAnnotatedSample.class);
+
+        Schema<?> id = schema.getProperties().get("id");
+        assertStringInt64(id);
+        assertThat(id.getPattern()).isEqualTo("^[1-9]\\d{0,18}$");
+        assertThat(id.getExample()).isEqualTo("1234567890123456789");
+
+        Schema<?> customerId = schema.getProperties().get("customerId");
+        assertStringInt64(customerId);
+        assertThat(customerId.getPattern()).isEqualTo("^[1-9]\\d{0,18}$");
+
+        Schema<?> totalElements = schema.getProperties().get("totalElements");
+        assertStringInt64(totalElements);
+        assertThat(totalElements.getPattern()).isNull();
+        assertThat(totalElements.getExample()).isNull();
+    }
+
+    /** 真实 DTO 验证：@SnowflakeId 标注的请求字段在 OpenAPI 中带约束。 */
+    @Test
+    void realRequestDtoSnowflakeIdFieldsCarryConstraints() {
+        Schema<?> schema = resolveSchema(com.leo.erp.sales.order.web.dto.SalesOrderRequest.class);
+
+        Schema<?> customerId = schema.getProperties().get("customerId");
+        assertThat(customerId.getType()).isEqualTo("string");
+        assertThat(customerId.getPattern()).isEqualTo("^[1-9]\\d{0,18}$");
+        assertThat(customerId.getExample()).isEqualTo("1234567890123456789");
+    }
+
+    record SnowflakeAnnotatedSample(
+            @com.leo.erp.common.validation.SnowflakeId Long id,
+            @com.leo.erp.common.validation.SnowflakeId Long customerId,
+            Long totalElements
+    ) {
+    }
+
     record LongCoverageSample(
             Long id,
             long primitiveId,

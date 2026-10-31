@@ -219,17 +219,16 @@ class V2SalesOrderControllerTest {
     }
 
     @Test
-    void createDeliveryVerification_shouldReturnCreatedPointingToParentOrder() {
+    void createDeliveryVerification_shouldReturnOkPointingToParentOrder() {
         SalesOrderResponse response = mock(SalesOrderResponse.class);
-        when(response.id()).thenReturn(5L);
         when(service.updateAndComplete(eq(5L), any(SalesOrderRequest.class))).thenReturn(response);
 
         ResponseEntity<SalesOrderResponse> result = controller.createDeliveryVerification(5L, request());
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        // 交付核定是状态迁移 + 保存, 不是创建资源: 200 + 最新订单, 不发 Location
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody()).isSameAs(response);
-        assertThat(result.getHeaders().getLocation()).isNotNull();
-        assertThat(result.getHeaders().getLocation().getPath()).endsWith("/v2.0/sales-orders/5");
+        assertThat(result.getHeaders().getLocation()).isNull();
         verify(service).updateAndComplete(eq(5L), any(SalesOrderRequest.class));
     }
 
@@ -244,17 +243,16 @@ class V2SalesOrderControllerTest {
     }
 
     @Test
-    void createCompletion_shouldReturnCreatedPointingToParentOrder() {
+    void createCompletion_shouldReturnOkPointingToParentOrder() {
         SalesOrderResponse response = mock(SalesOrderResponse.class);
-        when(response.id()).thenReturn(5L);
         when(service.completeSalesOrder(eq(5L))).thenReturn(response);
 
         ResponseEntity<SalesOrderResponse> result = controller.createCompletion(5L);
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        // 完成销售是状态迁移, 不是创建资源: 200 + 最新订单, 不发 Location
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody()).isSameAs(response);
-        assertThat(result.getHeaders().getLocation()).isNotNull();
-        assertThat(result.getHeaders().getLocation().getPath()).endsWith("/v2.0/sales-orders/5");
+        assertThat(result.getHeaders().getLocation()).isNull();
         verify(service).completeSalesOrder(5L);
     }
 

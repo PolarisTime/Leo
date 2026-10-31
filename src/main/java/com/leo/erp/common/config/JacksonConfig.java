@@ -1,6 +1,7 @@
 package com.leo.erp.common.config;
 
 import com.leo.erp.common.json.ScaledBigDecimalSerializer;
+import com.leo.erp.common.json.SnowflakeIdStrictModule;
 import com.leo.erp.common.json.TrimmingStringDeserializer;
 import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.fasterxml.jackson.core.JsonGenerator;
@@ -41,6 +42,8 @@ public class JacksonConfig {
     @Bean
     public Jackson2ObjectMapperBuilderCustomizer jackson2ObjectMapperBuilderCustomizer() {
         return builder -> builder
+                // 请求体里带 @SnowflakeId 的 Long 只接受十进制字符串；非 ID 的 Long 仍走下方宽松反序列化
+                .modulesToInstall(new SnowflakeIdStrictModule())
                 .serializerByType(Long.class, ToStringSerializer.instance)
                 .serializerByType(Long.TYPE, ToStringSerializer.instance)
                 .deserializerByType(Long.class, new SnowflakeSafeLongDeserializer())

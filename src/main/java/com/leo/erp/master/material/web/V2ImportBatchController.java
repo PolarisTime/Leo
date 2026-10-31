@@ -1,8 +1,6 @@
 package com.leo.erp.master.material.web;
 
 import com.leo.erp.common.api.ApiVersion;
-import com.leo.erp.common.api.V2Created;
-import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.master.material.service.MaterialBatchRollbackService;
 import com.leo.erp.master.material.web.dto.MaterialBatchRollbackResponse;
@@ -19,8 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 商品资料导入批次资源接口。
- * 导入批次是一等父资源，回滚是创建其 rollbacks 子资源的操作：
- * {@code POST /import-batches/{importBatchNo}/rollbacks}。
+ * 导入批次是一等父资源，回滚是对该批次执行的一次同步命令：
+ * {@code POST /import-batches/{importBatchNo}/rollbacks}，成功返回 200 + 回滚统计。
  */
 @RestController
 @Validated
@@ -35,14 +33,14 @@ public class V2ImportBatchController {
         this.materialBatchRollbackService = materialBatchRollbackService;
     }
 
+    /**
+     * 回滚命令端点：CREATED 行软删、UPDATED 行还原 before 快照。
+     * <p>同步命令语义（不是创建可回读资源）：成功 200 + 回滚统计，不返回 201，也不发 Location。</p>
+     */
     @PostMapping("/{importBatchNo}/rollbacks")
-    @V2Created
-    @Operation(summary = "创建导入批次回滚任务")
+    @Operation(summary = "回滚导入批次（同步命令，200 + 回滚统计）")
     @RequirePermission(PermissionCodes.IMPORT_BATCHES_ROLLBACK)
     public ResponseEntity<MaterialBatchRollbackResponse> rollback(@PathVariable String importBatchNo) {
-        return V2ResponseSupport.created(
-                "/import-batches/" + importBatchNo + "/rollbacks",
-                materialBatchRollbackService.rollback(importBatchNo)
-        );
+        return ResponseEntity.ok(materialBatchRollbackService.rollback(importBatchNo));
     }
 }

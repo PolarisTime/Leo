@@ -198,17 +198,16 @@ class V2CustomerStatementControllerTest {
     }
 
     @Test
-    void createConfirmation_shouldReturnCreatedPointingToParentStatement() {
+    void createConfirmation_shouldReturnOkPointingToParentStatement() {
         CustomerStatementResponse response = mock(CustomerStatementResponse.class);
-        when(response.id()).thenReturn(5L);
         when(customerStatementService.updateStatus(5L, StatusConstants.CONFIRMED)).thenReturn(response);
 
         ResponseEntity<CustomerStatementResponse> result = controller.createConfirmation(5L);
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        // 确认是状态迁移而非创建资源: 200 + 最新对账单, 不发 Location
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody()).isSameAs(response);
-        assertThat(result.getHeaders().getLocation()).isNotNull();
-        assertThat(result.getHeaders().getLocation().getPath()).endsWith("/v2.0/customer-statements/5");
+        assertThat(result.getHeaders().getLocation()).isNull();
         verify(customerStatementService).updateStatus(5L, StatusConstants.CONFIRMED);
     }
 

@@ -123,7 +123,9 @@ public class QuoteSheetService {
                     return action.get();
                 } catch (DataIntegrityViolationException | CannotAcquireLockException ex) {
                     // 只重试唯一键/取锁类瞬时冲突; ObjectOptimisticLockingFailureException 表示版本已变更,
-                    // 原样重试注定失败, 直接冒泡由全局异常按 412 语义返回。
+                    // 原样重试注定失败, 直接冒泡由全局异常按并发冲突(409 CONCURRENT_MODIFICATION)返回。
+                    // 资源版本前置条件语义(412 PRECONDITION_FAILED / 428 PRECONDITION_REQUIRED)
+                    // 由存储层按 X-Resource-Version 比较后显式抛 BusinessException 表达, 与 JPA 乐观锁分流。
                     lastError = ex;
                     log.warn("比价报价单保存冲突, 重试 {}/{}: sheetId={}, {}",
                             attempt, MAX_ATTEMPTS, sheetId, ex.getMessage());

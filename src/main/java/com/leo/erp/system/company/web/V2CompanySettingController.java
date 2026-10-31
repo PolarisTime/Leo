@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
@@ -56,7 +57,7 @@ public class V2CompanySettingController {
 
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.COMPANY_SETTINGS_READ)
-    public CompanySettingResponse detail(@PathVariable Long id) {
+    public CompanySettingResponse detail(@PathVariable @SnowflakeId Long id) {
         return companySettingService.detail(id);
     }
 
@@ -82,14 +83,14 @@ public class V2CompanySettingController {
 
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.COMPANY_SETTINGS_UPDATE)
-    public CompanySettingResponse update(@PathVariable Long id, @Valid @RequestBody CompanySettingRequest request) {
+    public CompanySettingResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody CompanySettingRequest request) {
         return companySettingService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.COMPANY_SETTINGS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         companySettingService.delete(id);
         return V2ResponseSupport.noContent();
     }

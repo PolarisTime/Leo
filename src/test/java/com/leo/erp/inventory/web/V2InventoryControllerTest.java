@@ -46,7 +46,7 @@ import static org.mockito.Mockito.when;
  * V2InventoryController 委托、状态码、权限/幂等契约与雪花 ID 字符串化测试。
  * <p>
  * 校验 balances 的 materialId/warehouseId 参数换序不会传错、transactions 全参数透传、
- * backfills 与 balance-rebuilds 返回 201、balance-mismatches 分页白名单，
+ * backfills 与 balance-rebuilds 作为同步命令返回 200 且不发 Location、balance-mismatches 分页白名单，
  * 以及对外 JSON 中雪花 ID 必须为十进制字符串。
  */
 @ExtendWith(MockitoExtension.class)
@@ -94,13 +94,15 @@ class V2InventoryControllerTest {
     }
 
     @Test
-    void createBackfill_shouldReturnCreated() {
+    void createBackfill_shouldReturnOk() {
         InventoryBackfillResponse response = new InventoryBackfillResponse(1, 2, 3, 4);
         when(backfillService.backfill()).thenReturn(response);
 
         ResponseEntity<InventoryBackfillResponse> result = controller.createBackfill();
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        // 期初回填是同步命令, 不是创建可回读资源: 200 + 统计, 不发 Location
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getHeaders().getLocation()).isNull();
         assertThat(result.getBody()).isSameAs(response);
         verify(backfillService).backfill();
     }
@@ -143,12 +145,14 @@ class V2InventoryControllerTest {
     }
 
     @Test
-    void createBalanceRebuild_shouldReturnCreatedWithRebuiltRows() {
+    void createBalanceRebuild_shouldReturnOkWithRebuiltRows() {
         when(maintenanceService.rebuild()).thenReturn(7);
 
         ResponseEntity<InventoryBalanceRebuildResponse> result = controller.createBalanceRebuild();
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        // 余额重建是同步命令, 不是创建可回读资源: 200 + 统计, 不发 Location
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getHeaders().getLocation()).isNull();
         assertThat(result.getBody()).isEqualTo(new InventoryBalanceRebuildResponse(7));
         verify(maintenanceService).rebuild();
     }

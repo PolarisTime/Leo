@@ -55,9 +55,12 @@ public class V2MaterialImportController {
         return V2ResponseSupport.created("/material-imports", importFile(file, format));
     }
 
+    /**
+     * 导入预览（dry-run）端点：只解析文件并返回将要发生的变化，不落库、不写历史。
+     * <p>dry-run 不是创建资源：成功返回 200 + 预览结果，不返回 201，也不发 Location。</p>
+     */
     @PostMapping(value = "/previews", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @V2Created
-    @Operation(summary = "创建商品资料导入预览资源（dry-run，不落库）")
+    @Operation(summary = "预览商品资料导入（dry-run，不落库，200 + 预览结果）")
     @RequirePermission(PermissionCodes.MATERIAL_IMPORTS_PREVIEW)
     public ResponseEntity<MaterialImportPreviewResponse> preview(@RequestParam("file") MultipartFile file,
                                                                  @RequestParam(required = false) String format)
@@ -68,7 +71,7 @@ public class V2MaterialImportController {
         } else {
             previewResponse = materialImportFileAdapter.previewSpreadsheet(file);
         }
-        return V2ResponseSupport.created("/material-imports/previews", previewResponse);
+        return ResponseEntity.ok(previewResponse);
     }
 
     private MaterialImportResultResponse importFile(MultipartFile file, String format) throws IOException {

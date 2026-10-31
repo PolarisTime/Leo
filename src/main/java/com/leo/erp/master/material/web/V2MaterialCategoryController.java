@@ -11,7 +11,6 @@ import com.leo.erp.master.material.web.dto.MaterialCategoryResponse;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
@@ -50,7 +50,7 @@ public class V2MaterialCategoryController {
 
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_READ)
-    public MaterialCategoryResponse detail(@PathVariable @Positive Long id) {
+    public MaterialCategoryResponse detail(@PathVariable @SnowflakeId Long id) {
         return service.detail(id);
     }
 
@@ -63,14 +63,14 @@ public class V2MaterialCategoryController {
 
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_UPDATE)
-    public MaterialCategoryResponse update(@PathVariable @Positive Long id, @Valid @RequestBody MaterialCategoryRequest request) {
+    public MaterialCategoryResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody MaterialCategoryRequest request) {
         return service.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable @Positive Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         service.delete(id);
         return V2ResponseSupport.noContent();
     }

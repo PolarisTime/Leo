@@ -7,6 +7,7 @@ import com.leo.erp.auth.web.dto.UserAccountUpdateRequest;
 import com.leo.erp.auth.web.dto.UserPasswordResetRequest;
 import com.leo.erp.auth.web.dto.UserStatusUpdateRequest;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.api.V2Created;
@@ -59,7 +60,7 @@ public class V2UserAdminController {
     @Operation(summary = "查询用户账号详情")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.USER_ACCOUNTS_READ)
-    public UserAccountResponse detail(@PathVariable Long id) {
+    public UserAccountResponse detail(@PathVariable @SnowflakeId Long id) {
         return userAdminService.detail(id);
     }
 
@@ -76,7 +77,7 @@ public class V2UserAdminController {
     @PutMapping("/{id}")
     @OperationLoggable(moduleName = "用户账号", actionType = "编辑")
     @RequirePermission(PermissionCodes.USER_ACCOUNTS_WRITE)
-    public UserAccountResponse update(@PathVariable Long id,
+    public UserAccountResponse update(@PathVariable @SnowflakeId Long id,
                                       @Valid @RequestBody UserAccountUpdateRequest request) {
         return userAdminService.update(id, request);
     }
@@ -85,7 +86,7 @@ public class V2UserAdminController {
     @PatchMapping("/{id}/status")
     @OperationLoggable(moduleName = "用户账号", actionType = "状态变更")
     @RequirePermission(PermissionCodes.USER_ACCOUNTS_WRITE)
-    public UserAccountResponse updateStatus(@PathVariable Long id,
+    public UserAccountResponse updateStatus(@PathVariable @SnowflakeId Long id,
                                             @Valid @RequestBody UserStatusUpdateRequest request) {
         return userAdminService.updateStatus(id, request.status());
     }
@@ -95,7 +96,7 @@ public class V2UserAdminController {
     @V2NoContent
     @OperationLoggable(moduleName = "用户账号", actionType = "重置密码")
     @RequirePermission(PermissionCodes.USER_ACCOUNTS_WRITE)
-    public ResponseEntity<Void> resetPassword(@PathVariable Long id,
+    public ResponseEntity<Void> resetPassword(@PathVariable @SnowflakeId Long id,
                                               @Valid @RequestBody UserPasswordResetRequest request) {
         userAdminService.resetPassword(id, request.newPassword());
         return V2ResponseSupport.noContent();
@@ -106,7 +107,7 @@ public class V2UserAdminController {
     @V2NoContent
     @OperationLoggable(moduleName = "用户账号", actionType = "删除")
     @RequirePermission(PermissionCodes.USER_ACCOUNTS_WRITE)
-    public ResponseEntity<Void> delete(@PathVariable Long id,
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id,
                                        @AuthenticationPrincipal SecurityPrincipal principal) {
         userAdminService.delete(id, principal == null ? null : principal.id());
         return V2ResponseSupport.noContent();

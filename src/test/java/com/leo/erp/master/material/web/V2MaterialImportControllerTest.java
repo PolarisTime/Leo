@@ -16,11 +16,12 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * V2MaterialImportController 资源型导入端点测试：导入/预览属于创建，校验 201 与结果资源体。
+ * V2MaterialImportController 端点语义测试：导入属于创建资源（201），dry-run 预览属于同步命令（200）。
  */
 @ExtendWith(MockitoExtension.class)
 class V2MaterialImportControllerTest {
@@ -53,7 +54,7 @@ class V2MaterialImportControllerTest {
     }
 
     @Test
-    void preview_shouldReturnCreatedForSpreadsheetUpload() throws Exception {
+    void preview_shouldReturnOkForSpreadsheetUpload() throws Exception {
         when(materialImportFileAdapter.previewSpreadsheet(any()))
                 .thenReturn(new MaterialImportPreviewResponse(2, 1, 1, 0, 0, List.of()));
 
@@ -61,8 +62,10 @@ class V2MaterialImportControllerTest {
                 "file", "material.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx".getBytes());
 
+        // dry-run 预览不是创建资源: 200 + 预览结果, 不发 Location
         mockMvc.perform(multipart("/v2.0/material-imports/previews").file(file))
-                .andExpect(status().isCreated())
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("Location"))
                 .andExpect(jsonPath("$.totalRows").value(2))
                 .andExpect(jsonPath("$.createdCount").value(1))
                 .andExpect(jsonPath("$.updatedCount").value(1));

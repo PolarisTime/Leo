@@ -1,6 +1,7 @@
 package com.leo.erp.market.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.Basis;
@@ -49,7 +50,7 @@ public class V2ProjectPricingQuoteResolutionController {
     @GetMapping
     @RequirePermission(PermissionCodes.MATERIAL_PRICE_MATCHES_READ)
     public PricingQuoteResolutionResponse resolve(
-            @PathVariable Long projectId,
+            @PathVariable @SnowflakeId Long projectId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate orderDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate deliveryDate,
             @RequestParam(required = false) String basis,

@@ -32,6 +32,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.nio.charset.StandardCharsets;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
@@ -72,7 +73,7 @@ public class V2MaterialController {
     @GetMapping("/{id}")
     @Operation(summary = "查询商品资料详情")
     @RequirePermission(PermissionCodes.MATERIALS_READ)
-    public MaterialResponse detail(@PathVariable Long id) {
+    public MaterialResponse detail(@PathVariable @SnowflakeId Long id) {
         return materialService.detail(id);
     }
 
@@ -80,7 +81,7 @@ public class V2MaterialController {
     @Operation(summary = "分页查询商品资料版本历史")
     @RequirePermission(PermissionCodes.MATERIALS_READ)
     public PageResponse<MaterialHistoryResponse> histories(
-            @PathVariable Long id,
+            @PathVariable @SnowflakeId Long id,
             @BindPageQuery(sortFieldKey = "material") PageQuery query) {
         return PageResponse.from(materialHistoryQueryService.page(id, query));
     }
@@ -126,7 +127,7 @@ public class V2MaterialController {
     @PutMapping("/{id}")
     @Operation(summary = "更新商品资料")
     @RequirePermission(PermissionCodes.MATERIALS_UPDATE)
-    public MaterialResponse update(@PathVariable Long id, @Valid @RequestBody MaterialRequest request) {
+    public MaterialResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody MaterialRequest request) {
         return materialService.update(id, request);
     }
 
@@ -139,7 +140,7 @@ public class V2MaterialController {
     @PatchMapping("/{id}/status")
     @Operation(summary = "启用或禁用商品资料")
     @RequirePermission(PermissionCodes.MATERIALS_UPDATE)
-    public MaterialResponse updateStatus(@PathVariable Long id, @Valid @RequestBody MaterialStatusUpdateRequest request) {
+    public MaterialResponse updateStatus(@PathVariable @SnowflakeId Long id, @Valid @RequestBody MaterialStatusUpdateRequest request) {
         return materialService.updateStatus(id, request.status());
     }
 
@@ -147,7 +148,7 @@ public class V2MaterialController {
     @V2NoContent
     @Operation(summary = "删除商品资料")
     @RequirePermission(PermissionCodes.MATERIALS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         materialService.delete(id);
         return V2ResponseSupport.noContent();
     }

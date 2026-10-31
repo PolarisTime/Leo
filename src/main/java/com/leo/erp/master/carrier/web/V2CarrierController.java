@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
@@ -54,7 +55,7 @@ public class V2CarrierController {
 
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.CARRIERS_READ)
-    public CarrierResponse detail(@PathVariable Long id) {
+    public CarrierResponse detail(@PathVariable @SnowflakeId Long id) {
         return carrierService.detail(id);
     }
 
@@ -67,14 +68,14 @@ public class V2CarrierController {
 
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.CARRIERS_UPDATE)
-    public CarrierResponse update(@PathVariable Long id, @Valid @RequestBody CarrierRequest request) {
+    public CarrierResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody CarrierRequest request) {
         return carrierService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.CARRIERS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         carrierService.delete(id);
         return V2ResponseSupport.noContent();
     }

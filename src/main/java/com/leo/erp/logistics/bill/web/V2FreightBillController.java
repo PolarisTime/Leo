@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2NoContent;
@@ -91,7 +92,7 @@ public class V2FreightBillController {
 
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.FREIGHT_BILLS_READ)
-    public FreightBillResponse detail(@PathVariable Long id) {
+    public FreightBillResponse detail(@PathVariable @SnowflakeId Long id) {
         return service.detail(id);
     }
 
@@ -106,39 +107,38 @@ public class V2FreightBillController {
     @PutMapping("/{id}")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.FREIGHT_BILLS_UPDATE)
-    public FreightBillResponse update(@PathVariable Long id, @Valid @RequestBody FreightBillRequest request) {
+    public FreightBillResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody FreightBillRequest request) {
         return service.update(id, request);
     }
 
     @PatchMapping("/{id}/status")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.FREIGHT_BILLS_UPDATE)
-    public FreightBillResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+    public FreightBillResponse updateStatus(@PathVariable @SnowflakeId Long id, @Valid @RequestBody StatusUpdateRequest request) {
         // 入口 fail-closed：无已认证主体直接 403；目标态需要的动作权限与 POST /audits 同一迁移表。
         StatusTransitionPermissionGuard.requireForTransitionAtEntry(ModuleKeys.FREIGHT_BILL, request.status());
         return service.updateStatus(id, request.status());
     }
 
     /**
-     * 资源型审核端点：创建“审核记录”子资源即把物流单推进到已审核。
-     * 子资源无独立可回读路径，Location 指向父资源 {@code GET /freight-bills/{id}}。
-     * 反审核仍使用 {@code PATCH /freight-bills/{id}/status}。
+     * 审核动作端点：把物流单推进到已审核，返回推进后的父资源表示。
+     * <p>这是状态迁移，不是创建资源——不返回 201，也不发 Location（无独立可回读的审核记录资源）；
+     * 成功一律 200 + 最新物流单。反审核仍使用 {@code PATCH /freight-bills/{id}/status}。</p>
      */
-    @Operation(summary = "创建物流单审核记录（审核）")
+    @Operation(summary = "审核物流单（状态迁移，200 + 最新单据）")
     @IdempotencyRequired
     @PostMapping("/{id}/audits")
     @DomainEventAudited
-    @V2Created
     @RequirePermission(PermissionCodes.FREIGHT_BILLS_AUDIT)
-    public ResponseEntity<FreightBillResponse> createAudit(@PathVariable Long id) {
-        return V2ResponseSupport.created("/freight-bills", service.updateStatus(id, StatusConstants.AUDITED));
+    public ResponseEntity<FreightBillResponse> createAudit(@PathVariable @SnowflakeId Long id) {
+        return ResponseEntity.ok(service.updateStatus(id, StatusConstants.AUDITED));
     }
 
     @DeleteMapping("/{id}")
     @DomainEventAudited
     @V2NoContent
     @RequirePermission(PermissionCodes.FREIGHT_BILLS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         service.delete(id);
         return V2ResponseSupport.noContent();
     }

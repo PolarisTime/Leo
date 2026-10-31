@@ -1,6 +1,7 @@
 package com.leo.erp.finance.ledgeradjustment.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
@@ -66,7 +67,7 @@ public class V2LedgerAdjustmentController {
     @Operation(summary = "查询台账调整单详情")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.LEDGER_ADJUSTMENTS_READ)
-    public LedgerAdjustmentResponse detail(@PathVariable Long id) {
+    public LedgerAdjustmentResponse detail(@PathVariable @SnowflakeId Long id) {
         return ledgerAdjustmentService.detail(id);
     }
 }

@@ -1,6 +1,7 @@
 package com.leo.erp.security.rbac.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.api.V2Created;
@@ -52,7 +53,7 @@ public class V2RoleController {
 
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.ROLES_READ)
-    public RoleDetailResponse detail(@PathVariable Long id) {
+    public RoleDetailResponse detail(@PathVariable @SnowflakeId Long id) {
         return roleService.detail(id);
     }
 
@@ -65,27 +66,27 @@ public class V2RoleController {
 
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.ROLES_WRITE)
-    public RoleResponse update(@PathVariable Long id, @Valid @RequestBody RoleRequest request) {
+    public RoleResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody RoleRequest request) {
         return roleService.update(id, request);
     }
 
     @PatchMapping("/{id}/status")
     @RequirePermission(PermissionCodes.ROLES_WRITE)
-    public RoleResponse updateStatus(@PathVariable Long id, @Valid @RequestBody RoleStatusRequest request) {
+    public RoleResponse updateStatus(@PathVariable @SnowflakeId Long id, @Valid @RequestBody RoleStatusRequest request) {
         return roleService.updateStatus(id, request.status());
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.ROLES_WRITE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         roleService.delete(id);
         return V2ResponseSupport.noContent();
     }
 
     @PutMapping("/{id}/permissions")
     @RequirePermission(PermissionCodes.ROLES_WRITE)
-    public RoleDetailResponse replacePermissions(@PathVariable Long id,
+    public RoleDetailResponse replacePermissions(@PathVariable @SnowflakeId Long id,
                                                  @Valid @RequestBody RolePermissionUpdateRequest request) {
         return roleService.replacePermissions(id, request.permissions());
     }

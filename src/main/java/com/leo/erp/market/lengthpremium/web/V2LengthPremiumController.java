@@ -1,6 +1,7 @@
 package com.leo.erp.market.lengthpremium.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.api.V2Created;
@@ -56,7 +57,7 @@ public class V2LengthPremiumController {
 
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.LENGTH_PREMIUMS_READ)
-    public LengthPremiumResponse detail(@PathVariable Long id) {
+    public LengthPremiumResponse detail(@PathVariable @SnowflakeId Long id) {
         return lengthPremiumService.detail(id);
     }
 
@@ -69,14 +70,14 @@ public class V2LengthPremiumController {
 
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.LENGTH_PREMIUMS_UPDATE)
-    public LengthPremiumResponse update(@PathVariable Long id, @Valid @RequestBody LengthPremiumRequest request) {
+    public LengthPremiumResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody LengthPremiumRequest request) {
         return lengthPremiumService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.LENGTH_PREMIUMS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         lengthPremiumService.delete(id);
         return V2ResponseSupport.noContent();
     }

@@ -34,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2NoContent;
@@ -88,7 +89,7 @@ public class V2FreightStatementController {
     @Operation(summary = "查询物流对账单详情")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_READ)
-    public FreightStatementResponse detail(@PathVariable Long id) {
+    public FreightStatementResponse detail(@PathVariable @SnowflakeId Long id) {
         return freightStatementService.responseDetail(id);
     }
 
@@ -106,7 +107,7 @@ public class V2FreightStatementController {
     @PutMapping("/{id}")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_UPDATE)
-    public FreightStatementResponse update(@PathVariable Long id, @Valid @RequestBody FreightStatementRequest request) {
+    public FreightStatementResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody FreightStatementRequest request) {
         return freightStatementService.responseUpdate(id, request);
     }
 
@@ -114,24 +115,22 @@ public class V2FreightStatementController {
     @PatchMapping("/{id}/status")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_UPDATE)
-    public FreightStatementResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+    public FreightStatementResponse updateStatus(@PathVariable @SnowflakeId Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return freightStatementService.responseUpdateStatus(id, request.status());
     }
 
     /**
-     * 资源型审核端点：创建“审核记录”子资源即把物流对账单推进到已审核。
-     * 子资源无独立可回读路径，Location 指向父资源 {@code GET /freight-statements/{id}}。
-     * 反审核仍使用 {@code PATCH /freight-statements/{id}/status}。
+     * 审核动作端点：把物流对账单推进到已审核，返回审核后的父资源表示。
+     * <p>这是状态迁移，不是创建资源——不返回 201，也不发 Location（无独立可回读的审核记录资源）；
+     * 成功一律 200 + 最新对账单。反审核仍使用 {@code PATCH /freight-statements/{id}/status}。</p>
      */
-    @Operation(summary = "创建物流对账单审核记录（审核）")
+    @Operation(summary = "审核物流对账单（状态迁移，200 + 最新对账单）")
     @IdempotencyRequired
     @PostMapping("/{id}/audits")
     @DomainEventAudited
-    @V2Created
     @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_AUDIT)
-    public ResponseEntity<FreightStatementResponse> createAudit(@PathVariable Long id) {
-        return V2ResponseSupport.created(
-                "/freight-statements", freightStatementService.responseUpdateStatus(id, StatusConstants.AUDITED));
+    public ResponseEntity<FreightStatementResponse> createAudit(@PathVariable @SnowflakeId Long id) {
+        return ResponseEntity.ok(freightStatementService.responseUpdateStatus(id, StatusConstants.AUDITED));
     }
 
     @Operation(summary = "删除物流对账单")
@@ -139,7 +138,7 @@ public class V2FreightStatementController {
     @DomainEventAudited
     @V2NoContent
     @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         freightStatementService.delete(id);
         return V2ResponseSupport.noContent();
     }

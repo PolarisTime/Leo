@@ -51,7 +51,7 @@ class V2PrintExportControllerTest {
     }
 
     @Test
-    void create_shouldReturnPdfFileAsCreated() {
+    void create_shouldReturnPdfFileAsOk() {
         byte[] pdfBytes = {1, 2, 3};
         PrintOutput output = PrintOutput.pdf(
                 payload(),
@@ -64,7 +64,9 @@ class V2PrintExportControllerTest {
 
         ResponseEntity<?> result = controller.create(new PrintRecordRequest("sales-order", "tpl-1", 123L, null));
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        // 打印输出是同步命令, 不是创建可回读资源: 200 + 文件表示, 不发 Location
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getHeaders().getLocation()).isNull();
         assertThat(result.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PDF);
         assertThat(result.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
                 .contains("attachment")
@@ -73,7 +75,7 @@ class V2PrintExportControllerTest {
     }
 
     @Test
-    void create_shouldReturnScriptResourceAsCreated() {
+    void create_shouldReturnScriptResourceAsOk() {
         Map<String, Object> payload = payload();
         payload.put("templateType", "COORD");
         payload.put("templateHtml", "<div>打印</div>");
@@ -83,11 +85,12 @@ class V2PrintExportControllerTest {
 
         ResponseEntity<?> result = controller.create(new PrintRecordRequest("sales-order", "tpl-2", 123L, null));
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody()).isInstanceOf(PrintRecordOutputResponse.class);
         PrintRecordOutputResponse body = (PrintRecordOutputResponse) result.getBody();
         assertThat(body.kind()).isEqualTo("LODOP_SCRIPT");
         assertThat(body.templateHtml()).isEqualTo("<div>打印</div>");
+        // 同步命令无独立可回读资源: 明确断言不发 Location
         assertThat(result.getHeaders().getLocation()).isNull();
     }
 }

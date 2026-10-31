@@ -50,6 +50,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import java.nio.charset.StandardCharsets;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2NoContent;
@@ -128,14 +129,14 @@ public class V2SalesOrderController {
     @Operation(summary = "查询销售订单详情")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.SALES_ORDERS_READ)
-    public SalesOrderResponse detail(@PathVariable Long id) {
+    public SalesOrderResponse detail(@PathVariable @SnowflakeId Long id) {
         return service.detail(id);
     }
 
     @Operation(summary = "查询销售订单单据流")
     @GetMapping("/{id}/document-flow")
     @RequirePermission(PermissionCodes.SALES_ORDERS_READ)
-    public SalesOrderDocumentFlowResponse documentFlow(@PathVariable Long id) {
+    public SalesOrderDocumentFlowResponse documentFlow(@PathVariable @SnowflakeId Long id) {
         return documentFlowService.documentFlow(id);
     }
 
@@ -143,7 +144,7 @@ public class V2SalesOrderController {
     @PostMapping("/{id}/xlsx-exports")
     @OperationLoggable(moduleName = "销售订单", actionType = "打印", businessNoFields = {"id"}, recordIdField = "id")
     @RequirePermission(PermissionCodes.SALES_ORDERS_EXPORT)
-    public ResponseEntity<byte[]> createXlsxExport(@PathVariable Long id, @Valid @RequestBody(required = false) SalesOrderPrintXlsxRequest payload, HttpServletRequest request) {
+    public ResponseEntity<byte[]> createXlsxExport(@PathVariable @SnowflakeId Long id, @Valid @RequestBody(required = false) SalesOrderPrintXlsxRequest payload, HttpServletRequest request) {
         SalesOrderPrintXlsxOptions options = payload == null
                 ? SalesOrderPrintXlsxOptions.defaults()
                 : payload.resolvedPrintOptions();
@@ -168,23 +169,22 @@ public class V2SalesOrderController {
     @PutMapping("/{id}")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.SALES_ORDERS_UPDATE)
-    public SalesOrderResponse update(@PathVariable Long id, @Valid @RequestBody SalesOrderRequest request) {
+    public SalesOrderResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody SalesOrderRequest request) {
         return service.update(id, request);
     }
 
     /**
-     * 资源型交付核定端点：创建“交付核定”子资源即保存订单并确认交付核定。
-     * 子资源无独立可回读路径，Location 指向父订单 {@code GET /api/v2.0/sales-orders/{id}}。
+     * 交付核定端点：保存订单并确认交付核定，返回更新后的父订单表示。
+     * <p>这是状态迁移 + 保存，不是创建资源——不返回 201，也不发 Location；成功一律 200 + 最新订单。</p>
      */
-    @Operation(summary = "创建销售订单交付核定（保存并确认交付核定）")
+    @Operation(summary = "确认销售订单交付核定（状态迁移，200 + 最新订单）")
     @IdempotencyRequired
     @PostMapping("/{id}/delivery-verifications")
     @DomainEventAudited
-    @V2Created
     @RequirePermission(PermissionCodes.SALES_ORDERS_CONFIRM)
-    public ResponseEntity<SalesOrderResponse> createDeliveryVerification(@PathVariable Long id,
+    public ResponseEntity<SalesOrderResponse> createDeliveryVerification(@PathVariable @SnowflakeId Long id,
                                                                          @Valid @RequestBody SalesOrderRequest request) {
-        return V2ResponseSupport.created("/sales-orders", service.updateAndComplete(id, request));
+        return ResponseEntity.ok(service.updateAndComplete(id, request));
     }
 
     @Operation(summary = "更新销售订单状态")
@@ -192,24 +192,23 @@ public class V2SalesOrderController {
     @PatchMapping("/{id}/status")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.SALES_ORDERS_UPDATE)
-    public SalesOrderResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+    public SalesOrderResponse updateStatus(@PathVariable @SnowflakeId Long id, @Valid @RequestBody StatusUpdateRequest request) {
         // 入口 fail-closed：目标态所需动作权限与 POST /completions、/delivery-verifications 同一迁移表。
         StatusTransitionPermissionGuard.requireForTransitionAtEntry(ModuleKeys.SALES_ORDER, request.status());
         return service.updateStatus(id, request.status());
     }
 
     /**
-     * 资源型完成销售端点：创建“完成记录”子资源即完成销售。
-     * 子资源无独立可回读路径，Location 指向父订单 {@code GET /api/v2.0/sales-orders/{id}}。
+     * 完成销售端点：把订单推进到完成态，返回完成后父订单表示。
+     * <p>这是状态迁移，不是创建资源——不返回 201，也不发 Location；成功一律 200 + 最新订单。</p>
      */
-    @Operation(summary = "创建销售订单完成记录（完成销售）")
+    @Operation(summary = "完成销售订单（状态迁移，200 + 最新订单）")
     @IdempotencyRequired
     @PostMapping("/{id}/completions")
     @DomainEventAudited
-    @V2Created
     @RequirePermission(PermissionCodes.SALES_ORDERS_COMPLETE)
-    public ResponseEntity<SalesOrderResponse> createCompletion(@PathVariable Long id) {
-        return V2ResponseSupport.created("/sales-orders", service.completeSalesOrder(id));
+    public ResponseEntity<SalesOrderResponse> createCompletion(@PathVariable @SnowflakeId Long id) {
+        return ResponseEntity.ok(service.completeSalesOrder(id));
     }
 
     @Operation(summary = "删除销售订单")
@@ -217,7 +216,7 @@ public class V2SalesOrderController {
     @DomainEventAudited
     @V2NoContent
     @RequirePermission(PermissionCodes.SALES_ORDERS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         service.delete(id);
         return V2ResponseSupport.noContent();
     }

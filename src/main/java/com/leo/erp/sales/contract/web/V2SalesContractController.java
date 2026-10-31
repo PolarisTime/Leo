@@ -1,6 +1,7 @@
 package com.leo.erp.sales.contract.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.api.V2Created;
@@ -64,7 +65,7 @@ public class V2SalesContractController {
     @Operation(summary = "销售合同详情")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.SALES_CONTRACTS_READ)
-    public SalesContractResponse detail(@PathVariable Long id) {
+    public SalesContractResponse detail(@PathVariable @SnowflakeId Long id) {
         return service.detail(id);
     }
 
@@ -84,7 +85,7 @@ public class V2SalesContractController {
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.SALES_CONTRACTS_UPDATE)
     public ResponseEntity<SalesContractResponse> update(
-            @PathVariable Long id,
+            @PathVariable @SnowflakeId Long id,
             @Parameter(description = "资源版本(强比较), 如 3")
             @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
             @Parameter(description = "兼容别名, 非标准弱验证器用法")
@@ -100,7 +101,7 @@ public class V2SalesContractController {
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.SALES_CONTRACTS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         service.delete(id);
         return V2ResponseSupport.noContent();
     }
@@ -112,7 +113,7 @@ public class V2SalesContractController {
                     + "作废为终态只读; 非法流转返回 422。")
     @PatchMapping("/{id}/status")
     @RequirePermission(PermissionCodes.SALES_CONTRACTS_UPDATE)
-    public ResponseEntity<SalesContractResponse> updateStatus(@PathVariable Long id,
+    public ResponseEntity<SalesContractResponse> updateStatus(@PathVariable @SnowflakeId Long id,
                                                               @Valid @RequestBody StatusUpdateRequest request) {
         SalesContractResponse response = service.updateStatus(id, request.status());
         return withVersion(response, response.version());

@@ -48,6 +48,7 @@ import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2NoContent;
@@ -129,7 +130,7 @@ public class V2PurchaseOrderController {
     @Operation(summary = "查询采购订单详情")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.PURCHASE_ORDERS_READ)
-    public PurchaseOrderResponse detail(@PathVariable Long id) {
+    public PurchaseOrderResponse detail(@PathVariable @SnowflakeId Long id) {
         return purchaseOrderService.detail(id);
     }
 
@@ -146,7 +147,7 @@ public class V2PurchaseOrderController {
     @PutMapping("/{id}")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.PURCHASE_ORDERS_UPDATE)
-    public PurchaseOrderResponse update(@PathVariable Long id, @Valid @RequestBody PurchaseOrderRequest request) {
+    public PurchaseOrderResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody PurchaseOrderRequest request) {
         return purchaseOrderService.update(id, request);
     }
 
@@ -154,31 +155,31 @@ public class V2PurchaseOrderController {
     @PatchMapping("/{id}/status")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.PURCHASE_ORDERS_UPDATE)
-    public PurchaseOrderResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+    public PurchaseOrderResponse updateStatus(@PathVariable @SnowflakeId Long id, @Valid @RequestBody StatusUpdateRequest request) {
         // 入口 fail-closed：目标态所需动作权限与动作端点共用同一迁移表。
         StatusTransitionPermissionGuard.requireForTransitionAtEntry(ModuleKeys.PURCHASE_ORDER, request.status());
         return purchaseOrderService.updateStatus(id, request.status());
     }
 
     /**
-     * 资源型强制结单端点：创建"强制结单记录"子资源即完成强制结单。
-     * 子资源无独立可回读路径(DELETE 作用于集合本身)，Location 指向父订单
-     * {@code GET /api/v2.0/purchase-orders/{id}}。
+     * 强制结单端点：把「已审核」的采购订单剩余未入库件数一次性作废并置为「完成采购」。
+     * <p>这是状态迁移，不是创建资源——不返回 201，也不发 Location；成功一律 200 + 最新订单。
+     * 撤销强制结单仍是 {@code DELETE /purchase-orders/{id}/force-closures}（204）。</p>
      */
     @Operation(
             summary = "强制结单(剩余未入库件数作废)",
             description = "把「已审核」的采购订单剩余未入库件数一次性作废, 并置为「完成采购」; 原因必填并留痕。"
                     + "已强制结单、无未入库件数、存在未审核采购入库单、或剩余件数已被销售直接占用时返回 422。"
+                    + "成功返回 200 + 最新采购订单(状态迁移不创建可回读资源, 不发 Location)。"
     )
     @PostMapping("/{id}/force-closures")
     @DomainEventAudited
-    @V2Created
     @RequirePermission(PermissionCodes.PURCHASE_ORDERS_FORCE_CLOSE)
-    public ResponseEntity<PurchaseOrderResponse> forceClose(@PathVariable Long id,
+    public ResponseEntity<PurchaseOrderResponse> forceClose(@PathVariable @SnowflakeId Long id,
                                                            @Valid @RequestBody PurchaseOrderForceCloseRequest request,
                                                            @AuthenticationPrincipal SecurityPrincipal principal) {
         PurchaseOrderResponse response = purchaseOrderForceCloseService.forceClose(id, request.reason(), principal);
-        return V2ResponseSupport.created("/purchase-orders", response);
+        return ResponseEntity.ok(response);
     }
 
     @Operation(
@@ -190,7 +191,7 @@ public class V2PurchaseOrderController {
     @DomainEventAudited
     @V2NoContent
     @RequirePermission(PermissionCodes.PURCHASE_ORDERS_FORCE_CLOSE)
-    public ResponseEntity<Void> cancelForceClose(@PathVariable Long id,
+    public ResponseEntity<Void> cancelForceClose(@PathVariable @SnowflakeId Long id,
                                                 @AuthenticationPrincipal SecurityPrincipal principal) {
         purchaseOrderForceCloseService.cancelForceClose(id, principal);
         return V2ResponseSupport.noContent();
@@ -201,7 +202,7 @@ public class V2PurchaseOrderController {
     @DomainEventAudited
     @V2NoContent
     @RequirePermission(PermissionCodes.PURCHASE_ORDERS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         purchaseOrderService.delete(id);
         return V2ResponseSupport.noContent();
     }

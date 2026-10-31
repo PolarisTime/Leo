@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2NoContent;
@@ -62,7 +63,7 @@ public class V2SalesOutboundController {
     @GetMapping("/{id}")
     @Operation(summary = "查询销售出库详情")
     @RequirePermission(PermissionCodes.SALES_OUTBOUNDS_READ)
-    public SalesOutboundResponse detail(@PathVariable Long id) {
+    public SalesOutboundResponse detail(@PathVariable @SnowflakeId Long id) {
         return service.detail(id);
     }
 
@@ -79,34 +80,34 @@ public class V2SalesOutboundController {
     @Operation(summary = "更新销售出库")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.SALES_OUTBOUNDS_UPDATE)
-    public SalesOutboundResponse update(@PathVariable Long id, @Valid @RequestBody SalesOutboundRequest request) {
+    public SalesOutboundResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody SalesOutboundRequest request) {
         return service.update(id, request);
     }
 
     /**
-     * 资源型审核端点：创建“审核记录”子资源即完成审核。
-     * 携带请求体时先保存再审核（等价于旧 save-and-audit），省略时仅审核既有草稿。
-     * 子资源无独立可回读路径，Location 指向父单据 {@code GET /api/v2.0/sales-outbounds/{id}}。
+     * 审核动作端点：完成审核，返回审核后的父单据表示。
+     * <p>携带请求体时先保存再审核（等价于旧 save-and-audit），省略时仅审核既有草稿。</p>
+     * <p>这是状态迁移，不是创建资源——不返回 201，也不发 Location（无独立可回读的审核记录资源）；
+     * 成功一律 200 + 最新单据。</p>
      */
-    @Operation(summary = "创建销售出库审核记录（审核既有草稿或保存并审核）")
+    @Operation(summary = "审核销售出库（状态迁移，200 + 最新单据）")
     @IdempotencyRequired
     @PostMapping("/{id}/audits")
     @DomainEventAudited
-    @V2Created
     @RequirePermission(PermissionCodes.SALES_OUTBOUNDS_AUDIT)
-    public ResponseEntity<SalesOutboundResponse> createAudit(@PathVariable Long id,
+    public ResponseEntity<SalesOutboundResponse> createAudit(@PathVariable @SnowflakeId Long id,
                                                              @Valid @RequestBody(required = false) SalesOutboundRequest request) {
         SalesOutboundResponse response = request == null
                 ? service.audit(id)
                 : service.updateAndAudit(id, request);
-        return V2ResponseSupport.created("/sales-outbounds", response);
+        return ResponseEntity.ok(response);
     }
 
     @PatchMapping("/{id}/status")
     @Operation(summary = "更新销售出库状态")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.SALES_OUTBOUNDS_UPDATE)
-    public SalesOutboundResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+    public SalesOutboundResponse updateStatus(@PathVariable @SnowflakeId Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return service.updateStatus(id, request.status());
     }
 
@@ -115,7 +116,7 @@ public class V2SalesOutboundController {
     @DomainEventAudited
     @V2NoContent
     @RequirePermission(PermissionCodes.SALES_OUTBOUNDS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         service.delete(id);
         return V2ResponseSupport.noContent();
     }

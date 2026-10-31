@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
@@ -55,7 +56,7 @@ public class V2WarehouseController {
 
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.WAREHOUSES_READ)
-    public WarehouseResponse detail(@PathVariable Long id) {
+    public WarehouseResponse detail(@PathVariable @SnowflakeId Long id) {
         return warehouseService.detail(id);
     }
 
@@ -68,14 +69,14 @@ public class V2WarehouseController {
 
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.WAREHOUSES_UPDATE)
-    public WarehouseResponse update(@PathVariable Long id, @Valid @RequestBody WarehouseRequest request) {
+    public WarehouseResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody WarehouseRequest request) {
         return warehouseService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.WAREHOUSES_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         warehouseService.delete(id);
         return V2ResponseSupport.noContent();
     }

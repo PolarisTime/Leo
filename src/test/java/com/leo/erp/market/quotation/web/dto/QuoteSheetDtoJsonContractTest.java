@@ -144,7 +144,7 @@ class QuoteSheetDtoJsonContractTest {
         String json = "{\"name\":\"9月9日报单\",\"orderDate\":\"2026-09-09\",\"refDate\":\"2026-09-10\","
                 + "\"refPeriod\":\"9:30 上午\",\"brands\":[{\"brandName\":\"中天\",\"freight\":30}],"
                 + "\"items\":[{\"category\":\"螺纹钢\",\"material\":\"HRB400E\",\"spec\":12,\"length\":\"9米\","
-                + "\"ton\":10,\"purchaseOrderId\":88,\"prices\":[{\"brandName\":\"中天\",\"spotPrice\":3280}]}]}";
+                + "\"ton\":10,\"purchaseOrderId\":\"88\",\"prices\":[{\"brandName\":\"中天\",\"spotPrice\":3280}]}]}";
 
         QuoteSheetRequest request = objectMapper.readValue(json, QuoteSheetRequest.class);
 

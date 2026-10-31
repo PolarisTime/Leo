@@ -1,6 +1,7 @@
 package com.leo.erp.market.quotation.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.market.quotation.QuotationProperties;
 import com.leo.erp.market.quotation.service.QuoteProjectConfigService;
 import com.leo.erp.market.quotation.service.QuoteProjectEffectiveBrandsService;
@@ -48,7 +49,7 @@ public class V2QuoteProjectConfigController {
     @Operation(summary = "查询项目比价配置", description = "按项目返回品牌/可选商品/指定品牌/兜底配置; 未配置时返回默认空配置")
     @GetMapping("/{projectId}")
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_READ)
-    public QuoteProjectConfigResponse find(@PathVariable Long projectId) {
+    public QuoteProjectConfigResponse find(@PathVariable @SnowflakeId Long projectId) {
         return service.find(projectId);
     }
 
@@ -59,7 +60,7 @@ public class V2QuoteProjectConfigController {
                     + "占位品牌「基准价」不计入结果。")
     @GetMapping("/{projectId}/effective-brands")
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_READ)
-    public QuoteProjectEffectiveBrandsResponse effectiveBrands(@PathVariable Long projectId) {
+    public QuoteProjectEffectiveBrandsResponse effectiveBrands(@PathVariable @SnowflakeId Long projectId) {
         return effectiveBrandsService.effectiveBrands(projectId);
     }
 
@@ -69,7 +70,7 @@ public class V2QuoteProjectConfigController {
     @PutMapping("/{projectId}")
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public ResponseEntity<QuoteProjectConfigResponse> save(
-            @PathVariable Long projectId,
+            @PathVariable @SnowflakeId Long projectId,
             @Parameter(description = "资源版本(强比较), 如 3")
             @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
             @Parameter(description = "兼容别名, 非标准弱验证器用法")

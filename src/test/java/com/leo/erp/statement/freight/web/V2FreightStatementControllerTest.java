@@ -143,17 +143,16 @@ class V2FreightStatementControllerTest {
     }
 
     @Test
-    void createAudit_shouldReturnCreatedPointingToParentStatement() {
+    void createAudit_shouldReturnOkPointingToParentStatement() {
         FreightStatementResponse response = mock(FreightStatementResponse.class);
-        when(response.id()).thenReturn(5L);
         when(freightStatementService.responseUpdateStatus(5L, StatusConstants.AUDITED)).thenReturn(response);
 
         ResponseEntity<FreightStatementResponse> result = controller.createAudit(5L);
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        // 审核是状态迁移而非创建资源: 200 + 最新对账单, 不发 Location
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody()).isSameAs(response);
-        assertThat(result.getHeaders().getLocation()).isNotNull();
-        assertThat(result.getHeaders().getLocation().getPath()).endsWith("/v2.0/freight-statements/5");
+        assertThat(result.getHeaders().getLocation()).isNull();
         verify(freightStatementService).responseUpdateStatus(5L, StatusConstants.AUDITED);
     }
 

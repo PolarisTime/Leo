@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
 import com.leo.erp.common.api.V2NoContent;
@@ -88,7 +89,7 @@ public class V2CustomerStatementController {
     @Operation(summary = "查询客户对账单详情")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_READ)
-    public CustomerStatementResponse detail(@PathVariable Long id) {
+    public CustomerStatementResponse detail(@PathVariable @SnowflakeId Long id) {
         return customerStatementService.detail(id);
     }
 
@@ -103,39 +104,37 @@ public class V2CustomerStatementController {
     @Operation(summary = "更新客户对账单")
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_UPDATE)
-    public CustomerStatementResponse update(@PathVariable Long id, @Valid @RequestBody CustomerStatementRequest request) {
+    public CustomerStatementResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody CustomerStatementRequest request) {
         return customerStatementService.update(id, request);
     }
 
     @Operation(summary = "更新客户对账单状态")
     @PatchMapping("/{id}/status")
     @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_UPDATE)
-    public CustomerStatementResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+    public CustomerStatementResponse updateStatus(@PathVariable @SnowflakeId Long id, @Valid @RequestBody StatusUpdateRequest request) {
         // 入口 fail-closed：目标态所需动作权限与 POST /confirmations 共用同一迁移表。
         StatusTransitionPermissionGuard.requireForTransitionAtEntry(ModuleKeys.CUSTOMER_STATEMENT, request.status());
         return customerStatementService.updateStatus(id, request.status());
     }
 
     /**
-     * 资源型确认端点：创建“确认记录”子资源即把客户对账单推进到已确认。
-     * 子资源无独立可回读路径，Location 指向父资源 {@code GET /customer-statements/{id}}。
-     * 反确认仍使用 {@code PATCH /customer-statements/{id}/status}。
+     * 确认动作端点：把客户对账单推进到已确认，返回确认后的父资源表示。
+     * <p>这是状态迁移，不是创建资源——不返回 201，也不发 Location（无独立可回读的确认记录资源）；
+     * 成功一律 200 + 最新对账单。反确认仍使用 {@code PATCH /customer-statements/{id}/status}。</p>
      */
-    @Operation(summary = "创建客户对账单确认记录（确认）")
+    @Operation(summary = "确认客户对账单（状态迁移，200 + 最新对账单）")
     @IdempotencyRequired
     @PostMapping("/{id}/confirmations")
-    @V2Created
     @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_CONFIRM)
-    public ResponseEntity<CustomerStatementResponse> createConfirmation(@PathVariable Long id) {
-        return V2ResponseSupport.created(
-                "/customer-statements", customerStatementService.updateStatus(id, StatusConstants.CONFIRMED));
+    public ResponseEntity<CustomerStatementResponse> createConfirmation(@PathVariable @SnowflakeId Long id) {
+        return ResponseEntity.ok(customerStatementService.updateStatus(id, StatusConstants.CONFIRMED));
     }
 
     @Operation(summary = "删除客户对账单")
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         customerStatementService.delete(id);
         return V2ResponseSupport.noContent();
     }

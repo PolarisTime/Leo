@@ -3,8 +3,6 @@ package com.leo.erp.inventory.web;
 import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
-import com.leo.erp.common.api.V2Created;
-import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.inventory.service.InventoryBackfillService;
@@ -82,38 +80,37 @@ public class V2InventoryController {
     }
 
     /**
-     * 资源型回填端点：创建“库存期初回填任务”。
-     * 在单事务内对尚无有效库存事务的已审核/完成来源明细补记账，天然幂等；重复调用只返回 skipped。
+     * 期初回填命令端点：在单事务内对尚无有效库存事务的已审核/完成来源明细补记账。
+     * <p>同步命令语义（不是创建可回读资源）：成功返回 200 + 本次统计，天然幂等，重复调用只返回 skipped；
+     * 因此不返回 201，也不发 Location。</p>
      */
     @PostMapping("/backfills")
-    @Operation(summary = "创建库存期初回填任务（扫描已审核来源单据补记库存事务，幂等）")
-    @V2Created
+    @Operation(summary = "执行库存期初回填（同步命令，200 + 本次统计）")
     @RequirePermission(PermissionCodes.INVENTORY_BACKFILL)
     public ResponseEntity<InventoryBackfillResponse> createBackfill() {
-        return V2ResponseSupport.created("/inventory/backfills", backfillService.backfill());
+        return ResponseEntity.ok(backfillService.backfill());
     }
 
     /**
-     * 资源型重建端点：创建“库存余额重建任务”。
-     * 从 inv_transaction 账本按 (materialId, warehouseId) 覆盖写回 inv_balance 并清理过期维度。
-     * 重建事务持有 {@code inv:backfill} 全局排他锁，与所有库存记账事务（同一键的事务级共享锁）互斥：
+     * 余额重建命令端点：从 inv_transaction 账本按 (materialId, warehouseId) 覆盖写回 inv_balance
+     * 并清理过期维度。
+     * <p>重建事务持有 {@code inv:backfill} 全局排他锁，与所有库存记账事务（同一键的事务级共享锁）互斥：
      * 重建会等待在途记账提交，并在执行期间阻塞新的库存写。因此<b>不能</b>视为可随时执行的轻量操作，
-     * 应在业务低峰触发。
+     * 应在业务低峰触发。</p>
+     * <p>同步命令语义（不是创建可回读资源）：成功返回 200 + 本次统计，不返回 201，也不发 Location。</p>
      */
     @PostMapping("/balance-rebuilds")
     @Operation(
-            summary = "创建库存余额重建任务（从账本重算快照，与记账互斥）",
+            summary = "执行库存余额重建（同步命令，200 + 本次统计）",
             description = "同步执行：按 (materialId, warehouseId) 从账本聚合覆盖写回 inv_balance，"
                     + "并删除账本已无对应维度的过期行。结果本身幂等（重复执行得到同一账本聚合值），"
                     + "但重建持有 inv:backfill 排他锁、与并发记账互斥，执行期间会阻塞库存写路径，"
                     + "应在业务低峰调用；按本控制器的写接口统一要求携带 X-Idempotency-Key，"
-                    + "权限与期初回填同为 inventory:backfill。")
-    @V2Created
+                    + "权限与期初回填同为 inventory:backfill。成功返回 200 + 本次重建行数，"
+                    + "不存在可回读的重建任务资源，因此不发 Location。")
     @RequirePermission(PermissionCodes.INVENTORY_BACKFILL)
     public ResponseEntity<InventoryBalanceRebuildResponse> createBalanceRebuild() {
-        return V2ResponseSupport.created(
-                "/inventory/balance-rebuilds",
-                new InventoryBalanceRebuildResponse(maintenanceService.rebuild()));
+        return ResponseEntity.ok(new InventoryBalanceRebuildResponse(maintenanceService.rebuild()));
     }
 
     /**

@@ -256,17 +256,16 @@ class V2FreightBillControllerTest {
     }
 
     @Test
-    void createAudit_shouldReturnCreatedPointingToParentBill() {
+    void createAudit_shouldReturnOkPointingToParentBill() {
         FreightBillResponse response = mock(FreightBillResponse.class);
-        when(response.id()).thenReturn(5L);
         when(service.updateStatus(5L, StatusConstants.AUDITED)).thenReturn(response);
 
         ResponseEntity<FreightBillResponse> result = controller.createAudit(5L);
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        // 审核是状态迁移而非创建资源: 200 + 最新单据, 不发 Location(无独立可回读的审核记录资源)
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody()).isSameAs(response);
-        assertThat(result.getHeaders().getLocation()).isNotNull();
-        assertThat(result.getHeaders().getLocation().getPath()).endsWith("/v2.0/freight-bills/5");
+        assertThat(result.getHeaders().getLocation()).isNull();
         verify(service).updateStatus(5L, StatusConstants.AUDITED);
     }
 

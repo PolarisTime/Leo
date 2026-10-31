@@ -18,8 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 /**
- * V2AttachmentManifestExportController 资源型清单导出端点测试：
- * 校验 201 Created、gzip Content-Type、Content-Disposition 文件名与响应字节。
+ * V2AttachmentManifestExportController 清单导出端点测试：
+ * 同步命令语义（200 + gzip 文件表示，不发 Location），并校验 Content-Type/Disposition 与响应字节。
  */
 @ExtendWith(MockitoExtension.class)
 class V2AttachmentManifestExportControllerTest {
@@ -31,7 +31,7 @@ class V2AttachmentManifestExportControllerTest {
     private V2AttachmentManifestExportController controller;
 
     @Test
-    void create_shouldReturnCreatedGzipFileWithDisposition() {
+    void create_shouldReturnOkGzipFileWithDisposition() {
         byte[] content = "manifest-content".getBytes(StandardCharsets.UTF_8);
         AttachmentManifestArchive archive = new AttachmentManifestArchive(
                 "attachment-manifests/daily/2026/01/02/manifest-20260102T000000Z.jsonl.gz",
@@ -46,7 +46,8 @@ class V2AttachmentManifestExportControllerTest {
 
         ResponseEntity<byte[]> result = controller.create();
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getHeaders().getLocation()).isNull();
         assertThat(result.getHeaders().getContentType()).isEqualTo(MediaType.parseMediaType("application/gzip"));
         assertThat(result.getHeaders().getContentLength()).isEqualTo(content.length);
         assertThat(result.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))

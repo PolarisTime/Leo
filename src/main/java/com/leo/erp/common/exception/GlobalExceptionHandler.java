@@ -272,22 +272,18 @@ public class GlobalExceptionHandler {
 
     /**
      * 乐观锁冲突映射。
-     * <p>报价资源使用资源版本前置条件语义(412 PRECONDITION_FAILED); 其它模块沿用既有的并发冲突语义
-     * (409 CONCURRENT_MODIFICATION), 避免全局改变历史调用方契约。</p>
+     * <p>判定只看异常类型，不再看请求 URI：JPA 乐观锁冲突统一按并发冲突语义返回
+     * 409(CONCURRENT_MODIFICATION)。资源版本前置条件语义（412 PRECONDITION_FAILED /
+     * 428 PRECONDITION_REQUIRED）由业务层显式抛 {@link BusinessException} 并携带对应
+     * {@link ErrorCode}，经 {@link #handleBusinessException} 按 ErrorCode 映射——同一语义只有一个入口，
+     * 不会因为路径改名而静默改变客户端契约。</p>
      */
     @ExceptionHandler({ObjectOptimisticLockingFailureException.class, OptimisticLockException.class})
     public ResponseEntity<?> handleOptimisticLockingFailure(
             Exception ex,
             HttpServletRequest request
     ) {
-        if (isQuoteResource(request)) {
-            return failure(
-                    request,
-                    HttpStatus.PRECONDITION_FAILED,
-                    ErrorCode.PRECONDITION_FAILED,
-                    ErrorCode.PRECONDITION_FAILED.getMessage()
-            );
-        }
+        log.debug("并发修改冲突: {}", ex.getMessage());
         return failure(
                 request,
                 HttpStatus.CONFLICT,
@@ -313,14 +309,6 @@ public class GlobalExceptionHandler {
                 ErrorCode.CONCURRENT_MODIFICATION,
                 ErrorCode.CONCURRENT_MODIFICATION.getMessage()
         );
-    }
-
-    private boolean isQuoteResource(HttpServletRequest request) {
-        if (request == null || request.getRequestURI() == null) {
-            return false;
-        }
-        String uri = request.getRequestURI();
-        return uri.contains("/quote-sheets") || uri.contains("/quote-project-configs");
     }
 
     @ExceptionHandler({BadCredentialsException.class, JwtException.class})

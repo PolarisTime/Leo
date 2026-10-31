@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.common.api.V2Created;
@@ -62,7 +63,7 @@ public class V2ProjectController {
 
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.PROJECTS_READ)
-    public ProjectResponse detail(@PathVariable Long id) {
+    public ProjectResponse detail(@PathVariable @SnowflakeId Long id) {
         return projectService.detail(id);
     }
 
@@ -75,14 +76,14 @@ public class V2ProjectController {
 
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.PROJECTS_UPDATE)
-    public ProjectResponse update(@PathVariable Long id, @Valid @RequestBody ProjectRequest request) {
+    public ProjectResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody ProjectRequest request) {
         return projectService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @V2NoContent
     @RequirePermission(PermissionCodes.PROJECTS_DELETE)
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
         projectService.delete(id);
         return V2ResponseSupport.noContent();
     }
@@ -90,7 +91,7 @@ public class V2ProjectController {
     @Operation(summary = "查询项目价格规定")
     @GetMapping("/{id}/price-rules")
     @RequirePermission(PermissionCodes.PROJECTS_READ)
-    public List<ProjectPriceRuleResponse> priceRules(@PathVariable Long id) {
+    public List<ProjectPriceRuleResponse> priceRules(@PathVariable @SnowflakeId Long id) {
         return priceRuleService.list(id);
     }
 
@@ -99,7 +100,7 @@ public class V2ProjectController {
     @PutMapping("/{id}/price-rules")
     @RequirePermission(PermissionCodes.PROJECTS_UPDATE)
     public List<ProjectPriceRuleResponse> replacePriceRules(
-            @PathVariable Long id,
+            @PathVariable @SnowflakeId Long id,
             @Valid @RequestBody List<ProjectPriceRuleRequest> requests) {
         return priceRuleService.replace(id, requests);
     }

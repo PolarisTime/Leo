@@ -125,12 +125,13 @@ class V2SalesReturnControllerTest {
     @Test
     void createAudit_shouldAuditExistingWhenBodyAbsent() {
         SalesReturnResponse response = mock(SalesReturnResponse.class);
-        when(response.id()).thenReturn(5L);
         when(service.audit(5L)).thenReturn(response);
 
         ResponseEntity<SalesReturnResponse> result = controller.createAudit(5L, null);
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        // 审核是状态迁移而非创建资源: 200, 不发 Location
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getHeaders().getLocation()).isNull();
         verify(service).audit(5L);
         verify(service, never()).updateAndAudit(anyLong(), any());
     }
@@ -138,12 +139,12 @@ class V2SalesReturnControllerTest {
     @Test
     void createAudit_shouldSaveAndAuditWhenBodyPresent() {
         SalesReturnResponse response = mock(SalesReturnResponse.class);
-        when(response.id()).thenReturn(5L);
         when(service.updateAndAudit(anyLong(), any())).thenReturn(response);
 
         ResponseEntity<SalesReturnResponse> result = controller.createAudit(5L, request());
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getHeaders().getLocation()).isNull();
         verify(service).updateAndAudit(5L, request());
         verify(service, never()).audit(anyLong());
     }

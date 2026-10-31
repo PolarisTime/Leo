@@ -12,11 +12,12 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * V2ImportBatchController 测试：回滚属于创建 import-batches 的 rollbacks 子资源，校验 201 与结果资源体。
+ * V2ImportBatchController 测试：回滚是对导入批次执行的同步命令（200 + 回滚统计），不返回 201 也不发 Location。
  */
 @ExtendWith(MockitoExtension.class)
 class V2ImportBatchControllerTest {
@@ -34,12 +35,13 @@ class V2ImportBatchControllerTest {
     }
 
     @Test
-    void rollback_shouldReturnCreated() throws Exception {
+    void rollback_shouldReturnOk() throws Exception {
         when(materialBatchRollbackService.rollback("B1"))
                 .thenReturn(new MaterialBatchRollbackResponse("B1", 3, 2, 1, 0));
 
         mockMvc.perform(post("/v2.0/import-batches/B1/rollbacks"))
-                .andExpect(status().isCreated())
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("Location"))
                 .andExpect(jsonPath("$.importBatchNo").value("B1"))
                 .andExpect(jsonPath("$.totalRows").value(3))
                 .andExpect(jsonPath("$.createdRolledBack").value(2))

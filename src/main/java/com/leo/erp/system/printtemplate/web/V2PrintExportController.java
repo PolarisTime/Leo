@@ -3,7 +3,6 @@ package com.leo.erp.system.printtemplate.web;
 import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.export.ExportConcurrencyGuard;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
-import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
@@ -17,7 +16,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -51,7 +49,11 @@ public class V2PrintExportController {
         this.exportConcurrencyGuard = exportConcurrencyGuard;
     }
 
-    @Operation(summary = "创建打印导出资源（同步返回 PDF 文件或打印脚本资源表示）")
+    /**
+     * 打印输出端点：同步生成 PDF 文件或打印脚本表示。
+     * <p>这是同步命令（不是创建可回读资源）：PDF 分支与脚本分支都返回 200，不发 Location。</p>
+     */
+    @Operation(summary = "生成打印输出（同步命令，200 + PDF 文件或打印脚本表示）")
     @PostMapping
     @OperationLoggable(
             moduleName = "打印",
@@ -75,7 +77,7 @@ public class V2PrintExportController {
         if (output.kind() == PrintOutput.Kind.PDF) {
             return pdfFileResponse(output);
         }
-        return V2ResponseSupport.created("/print-exports", PrintRecordOutputResponse.from(output));
+        return ResponseEntity.ok(PrintRecordOutputResponse.from(output));
     }
 
     private ResponseEntity<byte[]> pdfFileResponse(PrintOutput output) {
@@ -83,7 +85,7 @@ public class V2PrintExportController {
         ContentDisposition disposition = ContentDisposition.attachment()
                 .filename(output.fileName(), StandardCharsets.UTF_8)
                 .build();
-        return ResponseEntity.status(HttpStatus.CREATED)
+        return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(output.contentType()))
                 .contentLength(pdf.length)
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())

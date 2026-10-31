@@ -1,6 +1,7 @@
 package com.leo.erp.purchase.order.web;
 
 import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.common.api.V2NoContent;
 import com.leo.erp.common.api.V2ResponseSupport;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemIssuedDoneService;
@@ -54,7 +55,7 @@ public class V2PurchaseOrderItemController {
     @PutMapping("/{itemId}/issued-done")
     @RequirePermission(PermissionCodes.PURCHASE_ORDERS_UPDATE)
     public PurchaseOrderItemIssuedDoneResponse mark(
-            @PathVariable Long itemId,
+            @PathVariable @SnowflakeId Long itemId,
             @Valid @RequestBody PurchaseOrderItemIssuedDoneRequest request) {
         return issuedDoneService.mark(itemId, Boolean.TRUE.equals(request.issuedDone()),
                 currentUserId(), currentUserName());
@@ -65,7 +66,7 @@ public class V2PurchaseOrderItemController {
     @DeleteMapping("/{itemId}/issued-done")
     @V2NoContent
     @RequirePermission(PermissionCodes.PURCHASE_ORDERS_UPDATE)
-    public ResponseEntity<Void> clear(@PathVariable Long itemId) {
+    public ResponseEntity<Void> clear(@PathVariable @SnowflakeId Long itemId) {
         issuedDoneService.mark(itemId, false, currentUserId(), currentUserName());
         return V2ResponseSupport.noContent();
     }

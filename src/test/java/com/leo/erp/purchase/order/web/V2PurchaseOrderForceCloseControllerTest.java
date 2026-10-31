@@ -84,7 +84,7 @@ class V2PurchaseOrderForceCloseControllerTest {
     }
 
     @Test
-    void forceClose_shouldReturnCreatedWithSubResourceLocation() {
+    void forceClose_shouldReturnOkWithLatestOrder() {
         when(forceCloseService.forceClose(eq(1L), eq("剩余 1 件报废"), eq(OPERATOR)))
                 .thenReturn(response());
 
@@ -94,12 +94,10 @@ class V2PurchaseOrderForceCloseControllerTest {
                 OPERATOR
         );
 
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        // 强制结单是状态迁移, 不是创建资源: 200 + 最新订单, 不发 Location
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody()).isNotNull();
-        assertThat(result.getHeaders().getLocation()).isNotNull();
-        // 子资源无独立可回读路径: Location 指向父订单(与销售订单 completions 一致)
-        assertThat(result.getHeaders().getLocation().getPath())
-                .endsWith("/v2.0/purchase-orders/1");
+        assertThat(result.getHeaders().getLocation()).isNull();
         verify(forceCloseService).forceClose(1L, "剩余 1 件报废", OPERATOR);
     }
 
