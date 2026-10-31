@@ -1,1 +1,0 @@
-LODOP.PRINT_INIT("Sample");
