@@ -1,6 +1,7 @@
 package com.leo.erp.master.material.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -15,7 +16,7 @@ import java.math.BigDecimal;
 @Setter
 @Entity
 @Table(name = "md_material")
-public class Material extends AbstractAuditableEntity {
+public class Material extends AbstractAuditableEntity implements StatusAwareEntity {
 
     @Id
     private Long id;

@@ -1,5 +1,6 @@
 package com.leo.erp.master.material.service;
 
+import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -20,6 +21,9 @@ import java.util.Optional;
 
 @Service
 class MaterialImportProcessor {
+
+    /** 实体 status 的写入必须经 CrudStatusGuard（ArchUnit 规则），导入新建同样如此。 */
+    private static final CrudStatusGuard<Material> STATUS_GUARD = CrudStatusGuard.forStatusAwareEntities();
 
     private final MaterialRepository materialRepository;
     private final SnowflakeIdGenerator idGenerator;
@@ -129,7 +133,7 @@ class MaterialImportProcessor {
         Material material = new Material();
         material.setId(idGenerator.nextId());
         // 导入新建的商品一律「正常」；导入不提供、也不接受状态列。
-        material.setStatus(StatusConstants.NORMAL);
+        STATUS_GUARD.writeStatus(material, StatusConstants.NORMAL);
         return material;
     }
 

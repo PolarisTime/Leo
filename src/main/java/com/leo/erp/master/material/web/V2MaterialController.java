@@ -9,7 +9,7 @@ import com.leo.erp.master.material.service.MaterialService;
 import com.leo.erp.master.material.web.dto.MaterialHistoryResponse;
 import com.leo.erp.master.material.web.dto.MaterialRequest;
 import com.leo.erp.master.material.web.dto.MaterialResponse;
-import com.leo.erp.common.web.dto.StatusUpdateRequest;
+import com.leo.erp.master.material.web.dto.MaterialStatusUpdateRequest;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
@@ -139,7 +139,7 @@ public class V2MaterialController {
     @PatchMapping("/{id}/status")
     @Operation(summary = "启用或禁用商品资料")
     @RequirePermission(PermissionCodes.MATERIALS_UPDATE)
-    public MaterialResponse updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+    public MaterialResponse updateStatus(@PathVariable Long id, @Valid @RequestBody MaterialStatusUpdateRequest request) {
         return materialService.updateStatus(id, request.status());
     }
 

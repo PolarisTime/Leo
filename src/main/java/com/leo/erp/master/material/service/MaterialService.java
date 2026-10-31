@@ -35,7 +35,9 @@ import java.util.Set;
 public class MaterialService {
 
     private static final String CODE_MODULE_KEY = ModuleKeys.MATERIAL;
-    private static final CrudStatusGuard<Material> STATUS_GUARD = CrudStatusGuard.withoutStatus();
+    // forStatusAwareEntities（而不是 withoutStatus）：本模块的 status 由自身业务写入，
+    // ArchUnit 规则要求实体 status 只能经 CrudStatusGuard 写入，因此统一走它的 writeStatus。
+    private static final CrudStatusGuard<Material> STATUS_GUARD = CrudStatusGuard.forStatusAwareEntities();
     /**
      * 商品启停迁移：与其它模块「单向、禁止回退」不同，商品允许「正常↔禁用」双向切换
      * （禁用是运营纠错动作，误禁用必须能立即恢复）。
@@ -91,7 +93,7 @@ public class MaterialService {
         validateCreate(request);
         apply(entity, request);
         // 新建一律「正常」：禁用只能作用于既有商品，避免导入/前端在创建时写入禁用态。
-        entity.setStatus(StatusConstants.NORMAL);
+        STATUS_GUARD.writeStatus(entity, StatusConstants.NORMAL);
         Material saved = saveCreatedMaterial(entity);
         operationLogger.created(entity, entityId);
         materialHistoryRecorder.record(saved.getId(), MaterialHistoryRecorder.SOURCE_MANUAL,
@@ -134,7 +136,7 @@ public class MaterialService {
             return toResponse(entity);
         }
         STATUS_GUARD.validateStatusTransition(ACTIVE_STATUS_TRANSITIONS, currentStatus, nextStatus);
-        entity.setStatus(nextStatus);
+        STATUS_GUARD.writeStatus(entity, nextStatus);
         Material saved = saveMaterial(entity);
         operationLogger.updated(saved, id);
         materialDictionaryCache.evictAll();
@@ -255,7 +257,7 @@ public class MaterialService {
         if (request.status() == null) {
             return;
         }
-        entity.setStatus(StatusConstants.normalizeActiveStatus(request.status(), "商品状态"));
+        STATUS_GUARD.writeStatus(entity, StatusConstants.normalizeActiveStatus(request.status(), "商品状态"));
     }
 
     /** 附加费用类：物理属性列存空串/零值，名称即品名，类别固定"附加费用"。 */
