@@ -171,6 +171,33 @@ public class InventoryBalanceSnapshotRepository {
     }
 
     /**
+     * 不一致维度总数，供分页接口计算 totalElements。
+     */
+    public long countMismatches() {
+        Long total = jdbcTemplate.getJdbcTemplate()
+                .queryForObject("SELECT COUNT(*) FROM (" + RECONCILE_SQL + ") m", Long.class);
+        return total == null ? 0L : total;
+    }
+
+    /**
+     * 分页读取不一致维度。
+     *
+     * <p>{@code orderBy} 必须由服务层用白名单常量拼装（禁止把请求参数拼进 SQL）；
+     * 默认与固定兜底排序见 {@code InventoryBalanceMaintenanceService}。</p>
+     *
+     * @param orderBy 形如 {@code " ORDER BY ledger_quantity DESC, material_id ASC, warehouse_id ASC"}
+     * @param limit   页大小
+     * @param offset  偏移量，{@code page * size}
+     */
+    public List<BalanceMismatch> findMismatches(String orderBy, int limit, long offset) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("limit", limit)
+                .addValue("offset", offset);
+        return jdbcTemplate.query(
+                RECONCILE_SQL + orderBy + " LIMIT :limit OFFSET :offset", params, MISMATCH_MAPPER);
+    }
+
+    /**
      * 单个维度的账本/快照差异。
      */
     public record BalanceMismatch(

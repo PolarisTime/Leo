@@ -3,13 +3,22 @@ package com.leo.erp.inventory.web;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.api.PageSortFieldCatalog;
 import com.leo.erp.common.config.JacksonConfig;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.inventory.service.InventoryBackfillService;
+import com.leo.erp.inventory.service.InventoryBalanceMaintenanceService;
 import com.leo.erp.inventory.service.InventoryBalanceQueryService;
 import com.leo.erp.inventory.service.InventoryTransactionQueryService;
 import com.leo.erp.inventory.web.dto.InventoryBackfillResponse;
+import com.leo.erp.inventory.web.dto.InventoryBalanceMismatchResponse;
+import com.leo.erp.inventory.web.dto.InventoryBalanceRebuildResponse;
 import com.leo.erp.inventory.web.dto.InventoryBalanceResponse;
 import com.leo.erp.inventory.web.dto.InventoryTransactionResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
+import io.swagger.v3.oas.annotations.Operation;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -20,21 +29,25 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * V2InventoryController 委托与雪花 ID 字符串化测试。
+ * V2InventoryController 委托、状态码、权限/幂等契约与雪花 ID 字符串化测试。
  * <p>
  * 校验 balances 的 materialId/warehouseId 参数换序不会传错、transactions 全参数透传、
- * backfills 返回 201、以及对外 JSON 中雪花 ID 必须为十进制字符串。
+ * backfills 与 balance-rebuilds 返回 201、balance-mismatches 分页白名单，
+ * 以及对外 JSON 中雪花 ID 必须为十进制字符串。
  */
 @ExtendWith(MockitoExtension.class)
 class V2InventoryControllerTest {
@@ -47,6 +60,9 @@ class V2InventoryControllerTest {
 
     @Mock
     private InventoryBackfillService backfillService;
+
+    @Mock
+    private InventoryBalanceMaintenanceService maintenanceService;
 
     @InjectMocks
     private V2InventoryController controller;
@@ -124,6 +140,80 @@ class V2InventoryControllerTest {
         assertThat(json).contains("\"warehouseId\":\"" + warehouseId + "\"");
         assertThat(json).contains("\"sourceDocumentId\":\"" + sourceDocumentId + "\"");
         assertThat(json).contains("\"sourceItemId\":\"" + sourceItemId + "\"");
+    }
+
+    @Test
+    void createBalanceRebuild_shouldReturnCreatedWithRebuiltRows() {
+        when(maintenanceService.rebuild()).thenReturn(7);
+
+        ResponseEntity<InventoryBalanceRebuildResponse> result = controller.createBalanceRebuild();
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(result.getBody()).isEqualTo(new InventoryBalanceRebuildResponse(7));
+        verify(maintenanceService).rebuild();
+    }
+
+    @Test
+    void balanceMismatches_shouldDelegatePagedQuery() {
+        PageQuery query = PageQuery.of(1, 50, "ledgerQuantity", "desc",
+                PageSortFieldCatalog.fields("inventory-balance-mismatch"));
+        @SuppressWarnings("unchecked")
+        PageResponse<InventoryBalanceMismatchResponse> expected = mock(PageResponse.class);
+        when(maintenanceService.reconcile(query)).thenReturn(expected);
+
+        assertThat(controller.balanceMismatches(query)).isSameAs(expected);
+
+        verify(maintenanceService).reconcile(query);
+    }
+
+    @Test
+    void balanceMismatch_shouldSerializeSnowflakeIdsAsStrings() throws Exception {
+        long materialId = 9007199254740993L;
+        long warehouseId = 9007199254740995L;
+        InventoryBalanceMismatchResponse row = new InventoryBalanceMismatchResponse(
+                materialId, warehouseId, 5L, 4L, new BigDecimal("20000.00"), new BigDecimal("16000.00"));
+
+        String json = mapper().writeValueAsString(row);
+
+        assertThat(json).contains("\"materialId\":\"" + materialId + "\"");
+        assertThat(json).contains("\"warehouseId\":\"" + warehouseId + "\"");
+    }
+
+    @Test
+    void balanceMismatch_shouldSerializeNoWarehouseSentinelAsString() throws Exception {
+        InventoryBalanceMismatchResponse row = new InventoryBalanceMismatchResponse(
+                9007199254740993L, 0L, 5L, 5L, BigDecimal.ZERO, BigDecimal.ZERO);
+
+        String json = mapper().writeValueAsString(row);
+
+        assertThat(json).contains("\"warehouseId\":\"0\"");
+    }
+
+    @Test
+    void balanceRebuilds_shouldRequireBackfillPermissionAndIdempotencyKey() throws Exception {
+        Method rebuild = V2InventoryController.class.getMethod("createBalanceRebuild");
+        Method mismatches = V2InventoryController.class.getMethod("balanceMismatches", PageQuery.class);
+
+        assertThat(V2InventoryController.class.isAnnotationPresent(IdempotencyRequired.class)).isTrue();
+        assertThat(rebuild.getAnnotation(RequirePermission.class).value())
+                .containsExactly(PermissionCodes.INVENTORY_BACKFILL);
+        assertThat(mismatches.getAnnotation(RequirePermission.class).value())
+                .containsExactly(PermissionCodes.INVENTORY_READ);
+        assertThat(rebuild.getAnnotation(Operation.class)).isNotNull();
+        assertThat(mismatches.getAnnotation(Operation.class)).isNotNull();
+    }
+
+    @Test
+    void balanceMismatches_shouldRejectSortFieldOutsideWhitelist() {
+        Set<String> allowed = PageSortFieldCatalog.fields("inventory-balance-mismatch");
+        assertThat(allowed).contains("materialId", "warehouseId", "ledgerQuantity", "snapshotQuantity");
+
+        assertThatThrownBy(() -> PageQuery.of(0, 20, "quantity", "asc", allowed))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("sortBy 不支持当前列表");
+        assertThatThrownBy(() -> PageQuery.of(0, 201, null, "asc", allowed))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("size 必须在1到200之间");
     }
 
     private ObjectMapper mapper() {

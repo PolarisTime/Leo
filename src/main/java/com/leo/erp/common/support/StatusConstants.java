@@ -71,7 +71,6 @@ public final class StatusConstants {
 
     public static final Set<String> ALLOWED_ACTIVE_STATUS = Set.of(NORMAL, DISABLED);
     public static final Set<String> ALLOWED_AUDIT_STATUS = Set.of(DRAFT, AUDITED);
-    public static final Set<String> ALLOWED_RECEIVABLE_STATUS = Set.of(PENDING_CONFIRM, CONFIRMED, PENDING_AUDIT, AUDITED);
     public static final Set<String> ALLOWED_PURCHASE_ORDER_STATUS = Set.of(DRAFT, AUDITED, PURCHASE_COMPLETED);
     public static final Set<String> ALLOWED_PURCHASE_INBOUND_STATUS = Set.of(DRAFT, AUDITED, INBOUND_COMPLETED);
     public static final Set<String> ALLOWED_SALES_ORDER_STATUS = Set.of(
@@ -82,10 +81,6 @@ public final class StatusConstants {
     );
     public static final Set<String> ALLOWED_SALES_OUTBOUND_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_SALES_RETURN_STATUS = Set.of(DRAFT, AUDITED);
-    public static final Set<String> ALLOWED_CONTRACT_STATUS = Set.of(DRAFT, EXECUTING, SIGNED, ARCHIVED);
-    /** 销售合同合法状态集合: 草稿 / 审核 / 签发 / 归档 / 作废。 */
-    public static final Set<String> ALLOWED_SALES_CONTRACT_STATUS =
-            Set.of(DRAFT, CONTRACT_REVIEWED, CONTRACT_ISSUED, ARCHIVED, VOIDED);
     /**
      * 参与合同金额/吨位累计的销售合同状态: 审核 / 签发 / 归档。
      * 草稿与作废不计入有效合同额度。
@@ -102,7 +97,6 @@ public final class StatusConstants {
             STATEMENT_DIRECTION_RED
     );
     public static final Set<String> ALLOWED_FREIGHT_STATEMENT_STATUS = Set.of(DRAFT, AUDITED);
-    public static final Set<String> ALLOWED_SIGN_STATUS = Set.of(UNSIGNED, SIGNED);
     public static final Set<String> ALLOWED_FREIGHT_BILL_STATUS = Set.of(DRAFT, AUDITED);
     /**
      * 「物流单从销售订单导入」候选池允许的状态：已审核 / 送货核验 / 销售完成。
@@ -178,13 +172,6 @@ public final class StatusConstants {
             StatusTransition.of(AUDITED, DRAFT),
             StatusTransition.of(DELIVERY_VERIFICATION, SALES_COMPLETED),
             StatusTransition.of(SALES_COMPLETED, DELIVERY_VERIFICATION)
-    );
-    public static final Set<StatusTransition> CONTRACT_TRANSITIONS = Set.of(
-            StatusTransition.of(DRAFT, EXECUTING),
-            StatusTransition.of(EXECUTING, DRAFT),
-            StatusTransition.of(EXECUTING, SIGNED),
-            StatusTransition.of(SIGNED, EXECUTING),
-            StatusTransition.of(SIGNED, ARCHIVED)
     );
     /**
      * 销售合同状态迁移(定稿): 草稿 → 审核 → 签发 → 归档, 不支持逆向回退;

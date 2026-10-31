@@ -122,7 +122,6 @@ public final class PermissionCodes {
         public static final String PREVIEW = "preview";
         public static final String BACKFILL = "backfill";
         public static final String ROLLBACK = "rollback";
-        public static final String REBUILD = "rebuild";
         public static final String SYNC = "sync";
         /** 资源级通配动作，配合 {@link #ofResourceWildcard(String)} 使用。 */
         public static final String WILDCARD = "*";

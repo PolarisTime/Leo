@@ -97,7 +97,7 @@ scope: Leo 后端、Spring Security、方法级安全、权限目录
 - 不查询任何角色/权限表，仅为后续接入完整权限系统保留稳定契约；
 - 一旦出现自定义 `AuthorityProvider` Bean，`@ConditionalOnMissingBean` 使默认实现自动退让。
 
-## 6. 试点控制器与 33 处注解映射
+## 6. 试点控制器与端点权限映射
 
 | 控制器 | 端点 | 权限码 |
 | --- | --- | --- |
@@ -107,8 +107,8 @@ scope: Leo 后端、Spring Security、方法级安全、权限目录
 | | `PATCH /sales-returns/{id}/status` | `sales-returns:update` |
 | | `POST /sales-returns/{id}/audits` | `sales-returns:audit` |
 | | `DELETE /sales-returns/{id}` | `sales-returns:delete` |
-| `V2InventoryController` | `GET /inventory/balances`、`/transactions` | `inventory:read` |
-| | `POST /inventory/backfills` | `inventory:backfill` |
+| `V2InventoryController` | `GET /inventory/balances`、`/transactions`、`/balance-mismatches` | `inventory:read` |
+| | `POST /inventory/backfills`、`/balance-rebuilds` | `inventory:backfill` |
 | `V2MaterialController` | `GET /materials*`、`/{id}`、`/{id}/histories` | `materials:read` |
 | | `POST /materials` | `materials:create` |
 | | `PUT /materials/{id}` | `materials:update` |
