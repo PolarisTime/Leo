@@ -1,3 +1,10 @@
+# [17.3.0](https://github.com/PolarisTime/Leo/compare/v17.2.0...v17.3.0) (2026-10-31)
+
+
+### Features
+
+* **logging:** 生产主日志改为按天滚动（backend.log + backend.<日期>.log） ([6567bfb](https://github.com/PolarisTime/Leo/commit/6567bfb158a8e462f55243a6b42f05ce9f3df849))
+
 # [17.2.0](https://github.com/PolarisTime/Leo/compare/v17.1.0...v17.2.0) (2026-10-31)
 
 
