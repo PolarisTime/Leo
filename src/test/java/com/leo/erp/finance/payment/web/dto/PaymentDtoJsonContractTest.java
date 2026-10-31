@@ -39,7 +39,7 @@ class PaymentDtoJsonContractTest {
                 "SUP-001", "供应商甲", 888777666555444333L, "结算公司A", 999888777666555444L,
                 "基本户", "6222000011223344",
                 LocalDate.of(2026, 9, 1), "BANK_TRANSFER", new BigDecimal("1000"),
-                "PENDING_APPROVAL", true, "张三", "备注", List.of(allocation));
+                "PENDING_APPROVAL", true, "张三", "备注", List.of(allocation), 5L);
     }
 
     @Test
@@ -59,7 +59,9 @@ class PaymentDtoJsonContractTest {
                 + "\"deletedFlag\":true,\"operatorName\":\"张三\",\"remark\":\"备注\","
                 + "\"items\":[{\"id\":\"987654321098765432\",\"lineNo\":1,"
                 + "\"sourceStatementId\":\"111222333444555666\",\"sourceFreightStatementId\":\"111222333444555666\","
-                + "\"statementNo\":\"FS-2026-001\",\"statementBalanceAmount\":120.50,\"allocatedAmount\":80.00}]}");
+                + "\"statementNo\":\"FS-2026-001\",\"statementBalanceAmount\":120.50,\"allocatedAmount\":80.00}],"
+                // 资源版本前置条件（P1-2）: 列表/详情响应必须带 version，且按全局 Long→字符串序列化
+                + "\"version\":\"5\"}");
     }
 
     @Test

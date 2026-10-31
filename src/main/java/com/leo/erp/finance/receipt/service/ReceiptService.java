@@ -14,6 +14,7 @@ import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
+import com.leo.erp.common.web.ResourceVersionPrecondition;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import com.leo.erp.finance.receipt.domain.entity.ReceiptPurposes;
 import com.leo.erp.finance.receipt.domain.entity.ReceiptAllocation;
@@ -118,14 +119,25 @@ public class ReceiptService {
         return created;
     }
 
+    /**
+     * 整体替换写路径（{@code PUT /api/v2.0/receipts/{id}}）。
+     *
+     * <p><b>版本前置条件：</b>{@code expectedVersion} 来自 {@code X-Resource-Version}（兼容
+     * {@code If-Match}），与实体 {@code @Version} 比对：不一致抛 412
+     * （{@link ErrorCode#PRECONDITION_FAILED}），避免「A 打开表单 → B 保存 → A 保存」静默覆盖。
+     * 缺少版本头返回 428 由入口（控制器）负责。</p>
+     *
+     * <p><b>响应必须带最终版本：</b>收尾统一走 {@link #refreshedDetail}（flush 后重新装配）——
+     * {@code @Version} 在 flush 时才自增，返回中途快照会让客户端拿到旧版本，下一次保存必然 412。</p>
+     */
     @Transactional
-    public ReceiptResponse update(Long id, ReceiptRequest request) {
-        ReceiptResponse updated = updateReceipt(id,
-                request.audit() ? withStatus(request, StatusConstants.DRAFT) : request);
+    public ReceiptResponse update(Long id, ReceiptRequest request, Long expectedVersion) {
+        updateReceipt(id, request.audit() ? withStatus(request, StatusConstants.DRAFT) : request,
+                expectedVersion);
         if (request.audit()) {
-            return updateStatus(id, StatusConstants.AUDITED);
+            updateStatus(id, StatusConstants.AUDITED);
         }
-        return updated;
+        return refreshedDetail(id);
     }
 
     @Transactional
@@ -163,12 +175,17 @@ public class ReceiptService {
 
     /**
      * 基类 update 的显式内联，状态断言序列逐字保持：
-     * 编辑状态守卫 → 更新校验 → 快照当前状态 → 应用请求 →
+     * 版本前置条件 → 编辑状态守卫 → 更新校验 → 快照当前状态 → 应用请求 →
      * assertRequestStatusTransitionAllowed → allowRequestToWriteFinalStatus 分支下的
      * assertRequestDidNotWriteFinalStatus → 保存。
+     *
+     * <p>版本校验紧跟在「加载实体」之后、任何业务校验之前：前置条件的语义是
+     * 「你编辑的这一版是否仍然是最新版」，它先于字段合法性判断才有意义；
+     * 实体不存在仍先由 {@link #requireEntity} 返回 404。</p>
      */
-    private ReceiptResponse updateReceipt(Long id, ReceiptRequest request) {
+    private ReceiptResponse updateReceipt(Long id, ReceiptRequest request, Long expectedVersion) {
         Receipt entity = requireEntity(id);
+        ResourceVersionPrecondition.verify(expectedVersion, entity.getVersion(), "收款单");
         ReceiptRequest normalized = normalizeUpdateRequest(entity, request);
         // 基类 allowProtectedStatusUpdate 默认 false：受保护状态单据不允许普通编辑。
         STATUS_GUARD.assertEditAllowed(entity, false);
@@ -389,7 +406,10 @@ public class ReceiptService {
                 response.deletedFlag(),
                 response.operatorName(),
                 response.remark(),
-                allocationResponseAssembler.toResponses(entity)
+                allocationResponseAssembler.toResponses(entity),
+                // 版本是写接口的前置条件来源: 列表/详情/更新响应都必须带上，
+                // 否则客户端无从表达「我编辑的是哪一版」。
+                response.version()
         );
     }
 
@@ -414,6 +434,19 @@ public class ReceiptService {
 
     protected Receipt saveUpdatedEntity(Receipt entity, ReceiptRequest request) {
         return saveEntity(entity);
+    }
+
+    /**
+     * 写路径收尾：先 flush 把 {@code @Version} 推进到本事务的最终值，再重新装配详情。
+     *
+     * <p><b>为什么必须 flush：</b>{@code @Version} 在 flush 时才自增。整体替换写路径里
+     * 「保存单据 → 同步客户对账单 → 状态迁移（audit 分支）」会连续写同一实体，
+     * 直接返回中途装配的响应会让客户端拿到**旧版本号**，下一次保存必然 412。
+     * 重新装配而不是只改版本号，是为了让响应里其它字段与被推进的版本自洽。</p>
+     */
+    private ReceiptResponse refreshedDetail(Long id) {
+        receiptRepository.flush();
+        return toDetailResponse(requireEntity(id));
     }
 
     protected ReceiptResponse toResponse(Receipt entity) {

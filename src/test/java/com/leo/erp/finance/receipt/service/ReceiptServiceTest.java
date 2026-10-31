@@ -4,12 +4,14 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.common.service.SupplierPrepaymentBalanceService;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import com.leo.erp.finance.receipt.mapper.ReceiptMapper;
 import com.leo.erp.finance.receipt.repository.ReceiptRepository;
+import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptResponse;
 import com.leo.erp.system.company.api.SettlementAccountSnapshot;
 import com.leo.erp.system.company.service.CompanySettingService;
@@ -111,7 +113,9 @@ class ReceiptServiceTest {
                 "CUSTOMER_STATEMENT_SETTLEMENT", 10L, "C001", "客户A",
                 20L, "项目A", 1L, "主体A", accountId, null, null, null,
                 LocalDate.of(2026, 9, 1), "银行转账", new BigDecimal("100.00"),
-                StatusConstants.DRAFT, false, "操作员", null, List.of()
+                StatusConstants.DRAFT, false, "操作员", null, List.of(),
+                // 版本随响应透出（P1-2）
+                3L
         );
     }
 
@@ -138,6 +142,27 @@ class ReceiptServiceTest {
     }
 
     // ---------- 非法迁移 ----------
+
+    /** 资源版本前置条件（P1-2）：客户端带来的版本与实体 @Version 不一致时必须 412 且不落库。 */
+    @Test
+    void update_shouldRejectStaleVersionWith412() {
+        Receipt receipt = entity(StatusConstants.DRAFT);
+        receipt.setVersion(3L);
+        givenExistingEntity(receipt);
+
+        ReceiptRequest request = new ReceiptRequest(
+                "RC001", "客户A", "项目A", null, LocalDate.of(2026, 9, 1), "银行转账",
+                new BigDecimal("100.00"), StatusConstants.DRAFT, "操作员", null, List.of());
+
+        assertThatThrownBy(() -> service.update(ID, request, 2L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("收款单版本已变更")
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.PRECONDITION_FAILED));
+
+        verify(receiptRepository, never()).save(any());
+        verify(settlementSyncService, never()).syncCustomerStatements(any());
+    }
 
     @Test
     void updateStatus_shouldRejectTransitionOutsideTransitionTable() {

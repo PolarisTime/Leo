@@ -1,6 +1,7 @@
 package com.leo.erp.finance.payment.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.payment.domain.entity.Payment;
@@ -159,9 +160,26 @@ class PaymentServiceTest {
         Payment payment = entity(StatusConstants.AUDITED);
         givenExistingEntity(payment);
 
-        assertThatThrownBy(() -> service.update(ID, request()))
+        assertThatThrownBy(() -> service.update(ID, request(), null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("当前单据状态为「已审核」，不能编辑");
+
+        verify(applyService, never()).apply(any(), any(), any());
+        verify(paymentRepository, never()).save(any());
+    }
+
+    /** 资源版本前置条件（P1-2）：客户端带来的版本与实体 @Version 不一致时必须 412 且不落库。 */
+    @Test
+    void update_shouldRejectStaleVersionWith412() {
+        Payment payment = entity(StatusConstants.DRAFT);
+        payment.setVersion(3L);
+        givenExistingEntity(payment);
+
+        assertThatThrownBy(() -> service.update(ID, request(), 2L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("付款单版本已变更")
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.PRECONDITION_FAILED));
 
         verify(applyService, never()).apply(any(), any(), any());
         verify(paymentRepository, never()).save(any());

@@ -30,7 +30,15 @@ public record PaymentResponse(
         boolean deletedFlag,
         String operatorName,
         String remark,
-        List<PaymentAllocationResponse> items
+        List<PaymentAllocationResponse> items,
+        /**
+         * 资源版本（实体 {@code @Version}，乐观并发前置条件）。
+         *
+         * <p>列表与详情都返回：客户端保存时必须把这一版原样回送到
+         * {@code X-Resource-Version}，服务端据此判定「我编辑的是哪一版」（不一致 412）。
+         * 全局 {@code Long} → 字符串序列化即输出 {@code "3"} 这样的十进制字符串。</p>
+         */
+        Long version
 ) {
     public PaymentResponse(Long id,
                            String paymentNo,
@@ -57,7 +65,7 @@ public record PaymentResponse(
         this(id, paymentNo, counterpartyType, counterpartyId, paymentPurpose, counterpartyCode,
                 counterpartyName, sourceStatementId, sourcePurchaseOrderId, purchaseOrderNo,
                 supplierCode, supplierName, settlementCompanyId, settlementCompanyName, null, null, null,
-                paymentDate, payType, amount, status, deletedFlag, operatorName, remark, items);
+                paymentDate, payType, amount, status, deletedFlag, operatorName, remark, items, null);
     }
 
     public PaymentResponse(Long id,
@@ -213,6 +221,6 @@ public record PaymentResponse(
                 counterpartyCode, counterpartyName, sourceStatementId, sourcePurchaseOrderId,
                 purchaseOrderNo, supplierCode, supplierName, settlementCompanyId, settlementCompanyName,
                 accountId, accountName, accountNo, paymentDate, payType, amount, status, deletedFlag,
-                operatorName, remark, items);
+                operatorName, remark, items, version);
     }
 }

@@ -5,6 +5,8 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.common.web.ResourceVersionPrecondition;
+import com.leo.erp.finance.receipt.ReceiptProperties;
 import com.leo.erp.finance.receipt.service.ReceiptService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
@@ -12,6 +14,7 @@ import com.leo.erp.finance.receipt.web.dto.ReceiptResponse;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -42,9 +46,11 @@ import org.springframework.http.ResponseEntity;
 public class V2ReceiptController {
 
     private final ReceiptService receiptService;
+    private final ReceiptProperties properties;
 
-    public V2ReceiptController(ReceiptService receiptService) {
+    public V2ReceiptController(ReceiptService receiptService, ReceiptProperties properties) {
         this.receiptService = receiptService;
+        this.properties = properties;
     }
 
     @Operation(summary = "分页查询收款单")
@@ -73,11 +79,23 @@ public class V2ReceiptController {
         return V2ResponseSupport.created("/receipts", receiptService.create(request));
     }
 
-    @Operation(summary = "更新收款单")
+    @Operation(summary = "更新收款单",
+            description = "整体替换收款单。写操作要求资源版本前置条件头 "
+                    + ResourceVersionPrecondition.HEADER + "（兼容别名 If-Match）："
+                    + "缺少版本返回 428，与单据当前版本不一致返回 412，一致才更新；"
+                    + "成功返回 200 + 更新后的收款单表示（含新 version）。"
+                    + "版本号即列表/详情响应里的 version 字段。")
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.RECEIPTS_UPDATE)
-    public ReceiptResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody ReceiptRequest request) {
-        return receiptService.update(id, request);
+    public ReceiptResponse update(
+            @PathVariable @SnowflakeId Long id,
+            @Parameter(description = "资源版本(强比较), 取详情/列表响应的 version 字段")
+            @RequestHeader(value = ResourceVersionPrecondition.HEADER, required = false) String resourceVersion,
+            @Parameter(description = "兼容别名, 非标准弱验证器用法")
+            @RequestHeader(value = ResourceVersionPrecondition.LEGACY_HEADER, required = false) String ifMatch,
+            @Valid @RequestBody ReceiptRequest request) {
+        return receiptService.update(id, request,
+                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()));
     }
 
     @Operation(summary = "更新收款单状态")

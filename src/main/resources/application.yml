@@ -315,6 +315,14 @@ leo:
       # 相邻两次尝试之间的退避毫秒数，避免并发方在同一时刻反复撞同一版本号。
       # 实测(10 路并发同单据)：10ms 冲突率 74.6%，100ms 冲突率 53.1%、失败率 4.70%
       backoff-millis: ${LEO_SALES_ORDER_RETRY_BACKOFF_MILLIS:100}
+  payment:
+    # PUT /payments/{id} 是否强制要求资源版本前置条件头 X-Resource-Version(缺失返回 428，
+    # 与单据 @Version 不一致返回 412); 灰度兼容旧客户端时可临时关闭(关闭后带了版本仍校验 412)
+    require-resource-version: ${LEO_PAYMENT_REQUIRE_RESOURCE_VERSION:true}
+  receipt:
+    # PUT /receipts/{id} 是否强制要求资源版本前置条件头 X-Resource-Version(缺失返回 428，
+    # 与单据 @Version 不一致返回 412); 灰度兼容旧客户端时可临时关闭(关闭后带了版本仍校验 412)
+    require-resource-version: ${LEO_RECEIPT_REQUIRE_RESOURCE_VERSION:true}
   market:
     quotation:
       # 写接口是否强制要求资源版本前置条件头 X-Resource-Version(缺失返回 428); 灰度兼容期可临时关闭

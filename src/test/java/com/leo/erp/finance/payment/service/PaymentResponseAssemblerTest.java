@@ -152,7 +152,9 @@ class PaymentResponseAssemblerTest {
                 false,
                 "操作员",
                 null,
-                List.of()
+                List.of(),
+                // 版本随响应透出（P1-2）；此处为装配契约样本
+                4L
         );
     }
 }
