@@ -1,6 +1,6 @@
 package com.leo.erp.sales.order.service;
 
-import com.leo.erp.system.printtemplate.service.PrintItemOptions;
+import com.leo.erp.system.printtemplate.api.PrintItemOptions;
 
 import java.util.List;
 import java.util.Map;

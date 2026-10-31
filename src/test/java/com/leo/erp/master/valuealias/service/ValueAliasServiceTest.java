@@ -1,5 +1,7 @@
 package com.leo.erp.master.valuealias.service;
 
+import com.leo.erp.common.cache.AfterCommitCacheEvictor;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -8,6 +10,7 @@ import com.leo.erp.master.valuealias.domain.entity.MdValueAlias;
 import com.leo.erp.master.valuealias.repository.MdValueAliasRepository;
 import com.leo.erp.master.valuealias.web.dto.ValueAliasRequest;
 import com.leo.erp.master.valuealias.web.dto.ValueAliasResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -43,8 +46,17 @@ class ValueAliasServiceTest {
     @Mock
     private SnowflakeIdGenerator snowflakeIdGenerator;
 
+    @Mock
+    private AfterCommitCacheEvictor cacheEvictor;
+
     @InjectMocks
     private ValueAliasService service;
+
+    @BeforeEach
+    void wireCacheEvictor() {
+        // 服务用 setter 注入 after-commit helper（包内可见，Mockito 不会自动注入），这里显式接线
+        service.setCacheEvictor(cacheEvictor);
+    }
 
     private MdValueAlias alias(long id, String dimension, String source, String target) {
         MdValueAlias entity = new MdValueAlias();
@@ -270,5 +282,31 @@ class ValueAliasServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.BUSINESS_ERROR);
+    }
+
+    // ---------- 缓存失效：统一走 after-commit helper ----------
+
+    @Test
+    void create_shouldEvictDimensionCacheThroughAfterCommitHelper() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(7L);
+        when(repository.existsByDimensionAndSourceValueAndDeletedFlagFalse(anyString(), anyString()))
+                .thenReturn(false);
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(service.create(request("CATEGORY", "直条", "螺纹钢"))).isNotNull();
+
+        // 提交后失效：与 @Cacheable mappingOf 的 key 同口径（维度级）
+        verify(cacheEvictor).evict(CacheConfig.CACHE_OPTIONS, "value-alias:CATEGORY");
+    }
+
+    @Test
+    void delete_shouldClearOptionsRegionThroughAfterCommitHelper() {
+        when(repository.findByIdAndDeletedFlagFalse(5L))
+                .thenReturn(Optional.of(alias(5L, "CATEGORY", "直条", "螺纹钢")));
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.delete(5L);
+
+        verify(cacheEvictor).evictAll(CacheConfig.CACHE_OPTIONS);
     }
 }

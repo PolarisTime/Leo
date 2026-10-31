@@ -1,5 +1,7 @@
 package com.leo.erp.market.lengthpremium.service;
 
+import com.leo.erp.common.cache.AfterCommitCacheEvictor;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -7,6 +9,7 @@ import com.leo.erp.market.lengthpremium.domain.entity.MdLengthPremium;
 import com.leo.erp.market.lengthpremium.repository.MdLengthPremiumRepository;
 import com.leo.erp.market.lengthpremium.web.dto.LengthPremiumRequest;
 import com.leo.erp.market.lengthpremium.web.dto.LengthPremiumResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -21,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,8 +42,17 @@ class LengthPremiumServiceTest {
     @Mock
     private SnowflakeIdGenerator snowflakeIdGenerator;
 
+    @Mock
+    private AfterCommitCacheEvictor cacheEvictor;
+
     @InjectMocks
     private LengthPremiumService service;
+
+    @BeforeEach
+    void wireCacheEvictor() {
+        // 服务用 setter 注入 after-commit helper（包内可见，Mockito 不会自动注入），这里显式接线
+        service.setCacheEvictor(cacheEvictor);
+    }
 
     private MdLengthPremium rule(long id, String lengthName, int premium, String status) {
         MdLengthPremium entity = new MdLengthPremium();
@@ -346,5 +359,31 @@ class LengthPremiumServiceTest {
         assertThat(service.activeSpecSuffixMap()).isEmpty();
         // 但定尺名称仍在, 打印解析据此判断「主数据已维护、只是没有后缀」
         assertThat(service.activeLengthNames()).isNotEmpty();
+    }
+
+    // ---------- 缓存失效：统一走 after-commit helper ----------
+
+    @Test
+    void create_shouldEvictOptionsCacheThroughAfterCommitHelper() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(7L);
+        when(repository.existsByLengthNameAndDeletedFlagFalse(anyString())).thenReturn(false);
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(service.create(new LengthPremiumRequest("12米", 30, 1,
+                StatusConstants.NORMAL, null, null))).isNotNull();
+
+        verify(cacheEvictor).evictAll(CacheConfig.CACHE_OPTIONS);
+    }
+
+    @Test
+    void delete_shouldEvictOptionsCacheThroughAfterCommitHelper() {
+        MdLengthPremium entity = rule(7L, "12米", 30, StatusConstants.NORMAL);
+        when(repository.findByIdAndDeletedFlagFalse(7L)).thenReturn(Optional.of(entity));
+        when(repository.saveAndFlush(any(MdLengthPremium.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.delete(7L);
+
+        verify(cacheEvictor).evictAll(CacheConfig.CACHE_OPTIONS);
     }
 }

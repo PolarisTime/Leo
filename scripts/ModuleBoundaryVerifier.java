@@ -56,16 +56,14 @@ public final class ModuleBoundaryVerifier {
      * 直接依赖其它模块 {@code *.service} 内部实现属于"改一处断一片"。存量例外必须逐条登记在此，
      * 写明来源模块、目标模块、目标包前缀与理由，且一旦抽取端口完成必须删除；
      * 任何未登记的新增 service 依赖都会让门禁失败。</p>
+     *
+     * <p><b>当前为空</b>：`sales -> system.printtemplate.service` 的布局 DSL 例外已于
+     * printtemplate 抽出 {@code system.printtemplate.api} 只读端口
+     * （{@code PrintLayoutQuery} / {@code PrintExportFilenameQuery} / {@code PrintSpecLengthQuery}
+     * + 不可变的 {@code PrintXlsxExportLayout} / {@code PrintItemOptions} / {@code PrintItemSplitter}）
+     * 后删除。新增例外必须逐条登记并写清"为什么不走 api 端口"与解除条件。</p>
      */
-    private static final List<AllowedServiceDependency> ALLOWED_SERVICE_DEPENDENCIES = List.of(
-            new AllowedServiceDependency(
-                    "sales", "system", "com.leo.erp.system.printtemplate.service",
-                    "销售订单 XLSX 打印导出复用 printtemplate 的布局模型（PrintXlsxExportLayout 及其嵌套列/汇总/"
-                            + "件重抑制规则、PrintItemSplitter、PrintSpecLengthResolver、PrintExportFilenameService）。"
-                            + "这些类型是 print-forms 布局 DSL 的运行期契约，抽取 system::printtemplate::api 端口属于"
-                            + "一次独立的契约迁移（涉及 print-forms JSON 约定与既有打印链），本轮 P2 不做；"
-                            + "登记为显式例外并在端口抽取完成后删除。")
-    );
+    private static final List<AllowedServiceDependency> ALLOWED_SERVICE_DEPENDENCIES = List.of();
 
     private ModuleBoundaryVerifier() {
     }

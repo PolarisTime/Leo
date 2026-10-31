@@ -3,13 +3,15 @@ package com.leo.erp.system.printtemplate.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.system.printtemplate.api.PrintLayoutQuery;
+import com.leo.erp.system.printtemplate.api.PrintXlsxExportLayout;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
-public class PrintXlsxExportLayoutProvider {
+public class PrintXlsxExportLayoutProvider implements PrintLayoutQuery {
 
     private final PrintRuntimeProperties runtimeProperties;
 

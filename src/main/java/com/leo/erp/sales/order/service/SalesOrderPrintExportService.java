@@ -11,9 +11,9 @@ import com.leo.erp.sales.order.service.print.SalesOrderPrintDocument;
 import com.leo.erp.sales.order.service.print.SalesOrderPrintDocumentFactory;
 import com.leo.erp.sales.order.service.print.SalesOrderPrintLine;
 import com.leo.erp.sales.order.service.print.SalesOrderPrintPage;
-import com.leo.erp.system.printtemplate.service.PrintExportFilenameService;
-import com.leo.erp.system.printtemplate.service.PrintXlsxExportLayout;
-import com.leo.erp.system.printtemplate.service.PrintXlsxExportLayoutProvider;
+import com.leo.erp.system.printtemplate.api.PrintExportFilenameQuery;
+import com.leo.erp.system.printtemplate.api.PrintLayoutQuery;
+import com.leo.erp.system.printtemplate.api.PrintXlsxExportLayout;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.PrintSetup;
 import org.apache.poi.ss.usermodel.Row;
@@ -54,8 +54,8 @@ public class SalesOrderPrintExportService {
 
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOrderPrintDocumentFactory printDocumentFactory;
-    private final PrintXlsxExportLayoutProvider layoutProvider;
-    private final PrintExportFilenameService filenameService;
+    private final PrintLayoutQuery layoutProvider;
+    private final PrintExportFilenameQuery filenameService;
 
     /**
      * 套打模板字节缓存（key = 模板 classpath 资源路径）。
@@ -68,8 +68,8 @@ public class SalesOrderPrintExportService {
     public SalesOrderPrintExportService(
             SalesOrderRepository salesOrderRepository,
             SalesOrderPrintDocumentFactory printDocumentFactory,
-            PrintXlsxExportLayoutProvider layoutProvider,
-            PrintExportFilenameService filenameService
+            PrintLayoutQuery layoutProvider,
+            PrintExportFilenameQuery filenameService
     ) {
         this.salesOrderRepository = salesOrderRepository;
         this.printDocumentFactory = printDocumentFactory;

@@ -1,4 +1,4 @@
-package com.leo.erp.system.printtemplate.service;
+package com.leo.erp.system.printtemplate.api;
 
 import com.leo.erp.common.support.PrecisionConstants;
 
@@ -21,7 +21,7 @@ import java.util.Set;
  *
  * <p>拆分范围由「逐行勾选」的明细 ID 集合决定：集合为 {@code null} 时兼容旧语义拆分所有明细，
  * 非空集合仅拆分列出的行，空集合不拆分任何行；合并产生的行由
- * {@link PrintRecordItemMerger} 写入 {@link #SPLIT_REQUEST_FIELD} 标记后同样参与拆分。</p>
+ * {@code PrintRecordItemMerger} 写入 {@link #SPLIT_REQUEST_FIELD} 标记后同样参与拆分。</p>
  *
  * <p>重量与金额按「该份数量 / 原数量」比例缩放。为保证拆分后各份之和与原值一致，
  * 采用累计舍入法：第 i 份 = round(原值 × 累计数量_i / 原数量) − round(原值 × 累计数量_{i-1} / 原数量)。
@@ -34,7 +34,8 @@ public final class PrintItemSplitter {
     static final String AMOUNT_FIELD = "amount";
     static final String SPLIT_INDEX_FIELD = "_splitIndex";
     static final String SPLIT_TOTAL_FIELD = "_splitTotal";
-    static final String SPLIT_REQUEST_FIELD = "_splitRequested";
+    /** 逐行拆分标记：合并行在该字段为 {@code "true"} 时参与拆分；属于打印明细的跨模块契约字段。 */
+    public static final String SPLIT_REQUEST_FIELD = "_splitRequested";
 
     private static final int WEIGHT_SCALE = PrecisionConstants.WEIGHT_SCALE;
     private static final int AMOUNT_SCALE = PrecisionConstants.AMOUNT_SCALE;

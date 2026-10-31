@@ -1,6 +1,7 @@
 package com.leo.erp.master.valuealias.service;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.cache.AfterCommitCacheEvictor;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -12,7 +13,7 @@ import com.leo.erp.master.valuealias.domain.entity.MdValueAlias;
 import com.leo.erp.master.valuealias.repository.MdValueAliasRepository;
 import com.leo.erp.master.valuealias.web.dto.ValueAliasRequest;
 import com.leo.erp.master.valuealias.web.dto.ValueAliasResponse;
-import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -41,10 +42,30 @@ public class ValueAliasService {
     private final MdValueAliasRepository repository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(ValueAliasService.class);
+    private AfterCommitCacheEvictor cacheEvictor;
 
     public ValueAliasService(MdValueAliasRepository repository, SnowflakeIdGenerator snowflakeIdGenerator) {
         this.repository = repository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
+    }
+
+    /** 缓存失效统一走 after-commit helper；单测直接构造服务时为 null，跳过失效即可。 */
+    @Autowired(required = false)
+    void setCacheEvictor(AfterCommitCacheEvictor cacheEvictor) {
+        this.cacheEvictor = cacheEvictor;
+    }
+
+    /** 单个维度的归一映射缓存 key（与 {@code mappingOf} 的 @Cacheable key 同口径）。 */
+    private void evictMappingCache(String dimension) {
+        if (cacheEvictor != null) {
+            cacheEvictor.evict(CacheConfig.CACHE_OPTIONS, "value-alias:" + dimension);
+        }
+    }
+
+    private void evictAllOptionsCache() {
+        if (cacheEvictor != null) {
+            cacheEvictor.evictAll(CacheConfig.CACHE_OPTIONS);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -68,7 +89,6 @@ public class ValueAliasService {
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'value-alias:' + #result.dimension()")
     public ValueAliasResponse create(ValueAliasRequest request) {
         String dimension = ValueAliasDimension.require(request.dimension()).name();
         String sourceValue = normalizeValue(request.sourceValue(), "源写法");
@@ -87,11 +107,11 @@ public class ValueAliasService {
         entity.setRemark(trimToNull(request.remark()));
         MdValueAlias saved = repository.saveAndFlush(entity);
         operationLogger.created(saved, entityId);
+        evictMappingCache(dimension);
         return toResponse(saved);
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'value-alias:' + #result.dimension()")
     public ValueAliasResponse update(Long id, ValueAliasRequest request) {
         MdValueAlias entity = requireActive(id);
         String dimension = ValueAliasDimension.require(request.dimension()).name();
@@ -108,17 +128,18 @@ public class ValueAliasService {
         entity.setRemark(trimToNull(request.remark()));
         MdValueAlias saved = repository.saveAndFlush(entity);
         operationLogger.updated(saved, id);
+        evictMappingCache(dimension);
         return toResponse(saved);
     }
 
     @Transactional
-    // 删除无法从返回值取维度, 且属低频操作, 直接清空下拉缓存区
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, allEntries = true)
+    // 删除无法从返回值取维度, 且属低频操作, 直接清空下拉缓存区（提交后执行）
     public void delete(Long id) {
         MdValueAlias entity = requireActive(id);
         entity.setDeletedFlag(true);
         repository.saveAndFlush(entity);
         operationLogger.deleted(entity, id);
+        evictAllOptionsCache();
     }
 
     /**

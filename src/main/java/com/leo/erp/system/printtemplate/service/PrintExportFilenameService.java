@@ -2,6 +2,7 @@ package com.leo.erp.system.printtemplate.service;
 
 import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.leo.erp.master.api.ProjectQuery;
+import com.leo.erp.system.printtemplate.api.PrintExportFilenameQuery;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -11,7 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 
 @Service
-public class PrintExportFilenameService {
+public class PrintExportFilenameService implements PrintExportFilenameQuery {
 
     private static final String EMPTY_COMPONENT = "-";
     private static final int BUSINESS_NO_MAX_LENGTH = 64;

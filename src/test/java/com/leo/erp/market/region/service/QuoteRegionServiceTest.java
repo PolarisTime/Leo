@@ -1,5 +1,7 @@
 package com.leo.erp.market.region.service;
 
+import com.leo.erp.common.cache.AfterCommitCacheEvictor;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -7,6 +9,7 @@ import com.leo.erp.market.region.domain.entity.MdQuoteRegion;
 import com.leo.erp.market.region.repository.MdQuoteRegionRepository;
 import com.leo.erp.market.region.web.dto.QuoteRegionRequest;
 import com.leo.erp.market.region.web.dto.QuoteRegionResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -21,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,8 +42,17 @@ class QuoteRegionServiceTest {
     @Mock
     private SnowflakeIdGenerator snowflakeIdGenerator;
 
+    @Mock
+    private AfterCommitCacheEvictor cacheEvictor;
+
     @InjectMocks
     private QuoteRegionService service;
+
+    @BeforeEach
+    void wireCacheEvictor() {
+        // 服务用 setter 注入 after-commit helper（包内可见，Mockito 不会自动注入），这里显式接线
+        service.setCacheEvictor(cacheEvictor);
+    }
 
     private MdQuoteRegion region(long id, String name, String slug, int sortOrder, String status) {
         MdQuoteRegion entity = new MdQuoteRegion();
@@ -218,5 +231,32 @@ class QuoteRegionServiceTest {
                         region(2L, "杭州", "hz", 2, StatusConstants.NORMAL)));
 
         assertThat(service.activeRegionMap()).containsEntry("杭州", "hangzhou");
+    }
+
+    // ---------- 缓存失效：统一走 after-commit helper ----------
+
+    @Test
+    void create_shouldEvictOptionsCacheThroughAfterCommitHelper() {
+        when(snowflakeIdGenerator.nextId()).thenReturn(7L);
+        when(repository.existsByRegionNameAndDeletedFlagFalse(anyString())).thenReturn(false);
+        when(repository.existsBySlugAndDeletedFlagFalse(anyString())).thenReturn(false);
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(service.create(new QuoteRegionRequest("杭州", "hangzhou", 1,
+                StatusConstants.NORMAL, null))).isNotNull();
+
+        verify(cacheEvictor).evictAll(CacheConfig.CACHE_OPTIONS);
+    }
+
+    @Test
+    void delete_shouldEvictOptionsCacheThroughAfterCommitHelper() {
+        MdQuoteRegion entity = region(7L, "杭州", "hangzhou", 1, StatusConstants.NORMAL);
+        when(repository.findByIdAndDeletedFlagFalse(7L)).thenReturn(Optional.of(entity));
+        when(repository.saveAndFlush(any(MdQuoteRegion.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.delete(7L);
+
+        verify(cacheEvictor).evictAll(CacheConfig.CACHE_OPTIONS);
     }
 }

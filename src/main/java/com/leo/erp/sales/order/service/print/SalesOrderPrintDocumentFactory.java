@@ -3,9 +3,9 @@ package com.leo.erp.sales.order.service.print;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderPrintXlsxOptions;
-import com.leo.erp.system.printtemplate.service.PrintItemOptions;
-import com.leo.erp.system.printtemplate.service.PrintItemSplitter;
-import com.leo.erp.system.printtemplate.service.PrintSpecLengthResolver;
+import com.leo.erp.system.printtemplate.api.PrintItemOptions;
+import com.leo.erp.system.printtemplate.api.PrintItemSplitter;
+import com.leo.erp.system.printtemplate.api.PrintSpecLengthQuery;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -20,10 +20,10 @@ import java.util.Set;
 @Component
 public class SalesOrderPrintDocumentFactory {
 
-    /** 规格后缀来自定尺主数据（见 PrintSpecLengthResolver），不再写死 12米。 */
-    private final PrintSpecLengthResolver specLengthResolver;
+    /** 规格后缀来自定尺主数据（见 PrintSpecLengthQuery），不再写死 12米。 */
+    private final PrintSpecLengthQuery specLengthResolver;
 
-    public SalesOrderPrintDocumentFactory(PrintSpecLengthResolver specLengthResolver) {
+    public SalesOrderPrintDocumentFactory(PrintSpecLengthQuery specLengthResolver) {
         this.specLengthResolver = specLengthResolver;
     }
 

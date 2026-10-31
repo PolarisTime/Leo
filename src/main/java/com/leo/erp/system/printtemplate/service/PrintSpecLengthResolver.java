@@ -1,6 +1,7 @@
 package com.leo.erp.system.printtemplate.service;
 
 import com.leo.erp.common.api.LengthSpecCatalog;
+import com.leo.erp.system.printtemplate.api.PrintSpecLengthQuery;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -13,7 +14,7 @@ import java.util.Map;
  * 重启；现在后缀来自 {@code md_length_premium.spec_suffix}，由定尺加价维护统一维护。</p>
  */
 @Component
-public class PrintSpecLengthResolver {
+public class PrintSpecLengthResolver implements PrintSpecLengthQuery {
 
     /**
      * 迁移兜底：定尺主数据为空（未初始化 / 回滚到改造前的库）时沿用改造前写死的

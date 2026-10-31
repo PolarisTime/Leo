@@ -2,6 +2,7 @@ package com.leo.erp.market.lengthpremium.service;
 
 import com.leo.erp.common.api.LengthSpecCatalog;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.cache.AfterCommitCacheEvictor;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -14,7 +15,7 @@ import com.leo.erp.market.lengthpremium.domain.entity.MdLengthPremium;
 import com.leo.erp.market.lengthpremium.repository.MdLengthPremiumRepository;
 import com.leo.erp.market.lengthpremium.web.dto.LengthPremiumRequest;
 import com.leo.erp.market.lengthpremium.web.dto.LengthPremiumResponse;
-import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -53,10 +54,23 @@ public class LengthPremiumService implements LengthSpecCatalog {
     private final MdLengthPremiumRepository repository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(LengthPremiumService.class);
+    private AfterCommitCacheEvictor cacheEvictor;
 
     public LengthPremiumService(MdLengthPremiumRepository repository, SnowflakeIdGenerator snowflakeIdGenerator) {
         this.repository = repository;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
+    }
+
+    /** 缓存失效统一走 after-commit helper；单测直接构造服务时为 null，跳过失效即可。 */
+    @Autowired(required = false)
+    void setCacheEvictor(AfterCommitCacheEvictor cacheEvictor) {
+        this.cacheEvictor = cacheEvictor;
+    }
+
+    private void evictOptionsCache() {
+        if (cacheEvictor != null) {
+            cacheEvictor.evictAll(CacheConfig.CACHE_OPTIONS);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -73,7 +87,6 @@ public class LengthPremiumService implements LengthSpecCatalog {
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, allEntries = true)
     public LengthPremiumResponse create(LengthPremiumRequest request) {
         String lengthName = normalizeLengthName(request.lengthName());
         String status = requireStatus(request.status());
@@ -91,11 +104,11 @@ public class LengthPremiumService implements LengthSpecCatalog {
         entity.setSpecSuffix(trimToNull(request.specSuffix()));
         MdLengthPremium saved = repository.saveAndFlush(entity);
         operationLogger.created(saved, entityId);
+        evictOptionsCache();
         return toResponse(saved);
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, allEntries = true)
     public LengthPremiumResponse update(Long id, LengthPremiumRequest request) {
         MdLengthPremium entity = requireActive(id);
         String lengthName = normalizeLengthName(request.lengthName());
@@ -117,16 +130,17 @@ public class LengthPremiumService implements LengthSpecCatalog {
         }
         MdLengthPremium saved = repository.saveAndFlush(entity);
         operationLogger.updated(saved, id);
+        evictOptionsCache();
         return toResponse(saved);
     }
 
     @Transactional
-    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, allEntries = true)
     public void delete(Long id) {
         MdLengthPremium entity = requireActive(id);
         entity.setDeletedFlag(true);
         repository.saveAndFlush(entity);
         operationLogger.deleted(entity, id);
+        evictOptionsCache();
     }
 
     /**
