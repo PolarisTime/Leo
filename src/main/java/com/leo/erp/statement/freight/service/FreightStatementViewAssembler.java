@@ -59,11 +59,37 @@ public class FreightStatementViewAssembler {
                 joinAttachmentNames(attachments),
                 attachments,
                 entity.getRemark(),
+                sourceBillNos(entity),
                 entity.getItems().stream()
-                        .map(item -> toItemView(item, sourceBillsById.get(item.getSourceFreightBillId())))
+                        .map(item -> toItemView(item, sourceBill(sourceBillsById, item)))
                         .toList(),
                 entity.getCarrierId()
         );
+    }
+
+    /**
+     * 关联物流单号：按明细来源单号（{@code sourceNo}）去重并保持明细顺序。
+     * 列表页「关联物流单」列与详情共用该唯一口径（前端不再自行推导）。
+     */
+    private List<String> sourceBillNos(FreightStatement entity) {
+        return entity.getItems().stream()
+                .map(FreightStatementItem::getSourceNo)
+                .filter(Objects::nonNull)
+                .filter(sourceNo -> !sourceNo.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * 明细来源物流单快照：{@code sourceFreightBillId} 可能为空（手工录入明细），
+     * 且列表路径传入的是不可变空 Map（{@code Map.of().get(null)} 会抛 NPE），必须先判空。
+     */
+    private BillSnapshot sourceBill(Map<Long, BillSnapshot> sourceBillsById, FreightStatementItem item) {
+        Long sourceFreightBillId = item.getSourceFreightBillId();
+        if (sourceFreightBillId == null) {
+            return null;
+        }
+        return sourceBillsById.get(sourceFreightBillId);
     }
 
     private FreightStatementItemView toItemView(FreightStatementItem item, BillSnapshot sourceBill) {

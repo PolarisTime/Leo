@@ -7,6 +7,11 @@
 > 口径：端点数字由源码注解**结构化解析**（括号配对 + 常量求值）得到，非 grep 行数。
 > 交叉校验：`grep` 映射注解 322 行 − 类级 `@RequestMapping` 63 行 = **259** 方法级端点。
 
+> **现状提示（2026-11-01，非审计原文）**：本文是 2026-10-18 基线 `0ba7f12c` 的历史审计，未回填后续变更。
+> 阅读现状时请注意已知差异：台账调整写端点（`POST/PUT/PATCH/DELETE /ledger-adjustments*`）已下线
+> （`docs/legacy-retired-modules.md` §4.3）；`POST /inventory/backfills` 现返回 **200**（同步命令语义，
+> 见 `docs/ops/inventory-maintenance.md`）；V207/V208 已删除 9 个 deprecated 列。现状以代码与上述文档为准。
+
 ---
 
 ## 一、端点全景

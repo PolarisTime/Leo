@@ -183,7 +183,9 @@ V207 删除 6 个零读写历史列，V208 删除 3 个「先停代码读写、�
 ## 4.3 已下线的 HTTP 端点：台账调整写操作（2026-10-31）
 
 台账余额不得通过独立调整单直接改写（余额变更必须有明确业务来源），服务层早已全部拒绝写入，
-但控制器仍暴露 4 个写端点。现已删除，请求落到 404（无调用方，无需 405/410 兼容层）。
+但控制器仍暴露 4 个写端点。现已删除（实现侧只有 GET 映射）：与 GET 同路径的写动词由 Spring 返回
+**405 Method Not Allowed**（路径匹配、方法不允许），已删除的状态子资源 `PATCH /{id}/status`
+因路径不存在返回 **404**；无调用方，因此无需 405/410 兼容层。
 
 | 端点 | 处置 | 权限码 |
 | --- | --- | --- |
@@ -197,10 +199,12 @@ V207 删除 6 个零读写历史列，V208 删除 3 个「先停代码读写、�
   `StatusTransitionPermissionGuard` 删除 `LEDGER_ADJUSTMENT → :audit` 映射。
 - 服务层停用桩（`LedgerAdjustmentService.create/update/updateStatus/delete` 抛「台账调整单已停用」）
   与其单测**保留**，作为「禁止绕过来源单据直接改余额」的显式拒绝口径。
-- 遗留：`aries` 的权限模板仍列 `ledger-adjustments:{create,update,delete,audit}`
-  （`src/views/system/permission-templates.ts`、`permission-domains.ts`），需前端清理；
-  `sys_permission` 中这 4 行历史数据只能靠后续迁移清理（`PermissionCatalogService.syncCatalog`
-  只 upsert、不删除过期码），当前库内 0 条角色授权引用。
+- 权限残留已清理：`V209__retire_ledger_adjustment_write_permissions.sql` 删除 `sys_permission`
+  中 4 个写权限码（删除前已确认 0 条角色授权），库内只剩 `ledger-adjustments:read`；
+  `aries` 模板也已收敛到只保留 `ledger-adjustments:read`（`permission-templates.ts`）。
+- 交叉引用：库存余额运维 API（`POST /inventory/backfills`、`POST /inventory/balance-rebuilds`、
+  `GET /inventory/balance-mismatches`）是**无前端入口的运维 API**，契约见
+  `docs/ops/inventory-maintenance.md`。
 
 ---
 
@@ -434,3 +438,4 @@ psql "$LEO_DB_URL" -c "SELECT to_regclass('public.flyway_seed_history');"   # �
 | 2026-10-31（V206 死列/孤儿表） | V206 删除 `fm_payment_allocation.source_supplier_statement_id`、`fm_supplier_refund_receipt.purchase_refund_id` 两列与 `sys_general_setting`（10 行全软删孤儿数据）；依据 `remaining-checks.md` A1/A3（见 §4.1） |
 | 2026-10-31（V207/V208 列退役） | 代码侧先行摘除 V207 的 6 列与 V208 的 3 列的读写（实体/打印列/导出列/native SQL/响应 DTO）；保留 `lg_freight_bill_item.source_sales_outbound_item_id`（历史单据流只读）与 `so_sales_order_item.source_purchase_order_item_id`（仍可写）；对账候选响应两字段暂留恒 `null`（见 §4.2） |
 | 2026-10-31（台账写端点下线） | 删除 `POST/PUT/PATCH/DELETE /ledger-adjustments*` 与 `ledger-adjustments:{create,update,delete,audit}` 权限码，仅保留 GET 与 `:read`；登记见 §4.3 |
+| 2026-11-01（文档失真实修） | §4.3 状态码口径修正：同路径写动词实际返回 **405**（路径匹配、方法不允许），仅已删除的 `PATCH /{id}/status` 子资源 404；补记 V209 已清理权限残留、`aries` 模板已收敛；新增「无前端入口」库存运维 API 交叉引用（`docs/ops/inventory-maintenance.md`）。同时修正迁移演练清单 `POST /inventory/backfills` 的 201→200、定价规则草案中两个「待清理发布删除」旧列的现状（V207 已删） |

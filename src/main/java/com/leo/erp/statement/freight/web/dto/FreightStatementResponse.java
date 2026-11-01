@@ -22,6 +22,7 @@ public record FreightStatementResponse(
         String attachment,
         List<FreightStatementAttachmentResponse> attachments,
         String remark,
+        List<String> sourceBillNos,
         List<FreightStatementItemResponse> items,
         Long carrierId
 ) {

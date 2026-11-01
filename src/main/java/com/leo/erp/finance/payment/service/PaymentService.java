@@ -69,8 +69,8 @@ public class PaymentService {
 
     @Transactional(readOnly = true)
     public Page<PaymentResponse> page(PageQuery query, PageFilter filter) {
-        Specification<Payment> spec = Specs.<Payment>keywordLike(filter.keyword(), "paymentNo", "businessType", "counterpartyName")
-                .and(Specs.equalIfPresent("businessType", filter.businessType()))
+        Specification<Payment> spec = Specs.<Payment>keywordLike(filter.keyword(), "paymentNo", "counterpartyType", "counterpartyName")
+                .and(Specs.equalIfPresent("counterpartyType", filter.businessType()))
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("paymentDate", filter.startDate(), filter.endDate()));
         Page<Payment> entities = pageEntities(query, spec);

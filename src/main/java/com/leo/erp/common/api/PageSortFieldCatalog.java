@@ -23,7 +23,7 @@ public final class PageSortFieldCatalog {
             Map.entry(ModuleKeys.CUSTOMER_STATEMENT, Set.of("id", "statementNo", "customerName", "projectName", "startDate", "endDate", "salesAmount", "receiptAmount", "closingAmount", "status")),
             Map.entry(ModuleKeys.FREIGHT_STATEMENT, Set.of("id", "statementNo", "carrierCode", "carrierName", "startDate", "endDate", "totalWeight", "totalFreight", "paidAmount", "unpaidAmount", "status", "signStatus")),
             Map.entry(ModuleKeys.RECEIPT, Set.of("id", "receiptNo", "customerName", "projectName", "receiptDate", "payType", "amount", "status", "operatorName")),
-            Map.entry(ModuleKeys.PAYMENT, Set.of("id", "paymentNo", "businessType", "counterpartyCode", "counterpartyName", "paymentDate", "payType", "amount", "status", "operatorName")),
+            Map.entry(ModuleKeys.PAYMENT, Set.of("id", "paymentNo", "counterpartyType", "counterpartyCode", "counterpartyName", "paymentDate", "payType", "amount", "status", "operatorName")),
             Map.entry(ModuleKeys.LEDGER_ADJUSTMENT, Set.of("id", "adjustmentNo", "direction", "counterpartyType", "counterpartyCode", "counterpartyName", "projectName", "adjustmentDate", "amount", "adjustmentType", "effect", "status", "operatorName")),
             Map.entry("company-setting", Set.of("id", "companyName", "taxNo", "bankName", "bankAccount", "status")),
             Map.entry("operation-log", Set.of("id", "logNo", "operatorName", "loginName", "moduleName", "actionType", "businessNo", "requestMethod", "requestPath", "clientIp", "resultStatus", "statusCode", "durationMs", "operationCategory", "operationTime")),

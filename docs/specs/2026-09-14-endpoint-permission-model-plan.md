@@ -124,6 +124,11 @@ scope: Leo 后端、Spring Security、方法级安全、权限目录
 | | `DELETE /customer-statements/{id}` | `customer-statements:delete` |
 | `V2LedgerAdjustmentController` | `GET /ledger-adjustments`、`/{id}`（写端点已于 2026-10-31 下线） | `ledger-adjustments:read` |
 
+> 库存运维三端点（`POST /inventory/backfills`、`POST /inventory/balance-rebuilds`、
+> `GET /inventory/balance-mismatches`）是**无前端入口的运维 API**：均返回 `200`
+> （同步命令/查询语义，不是 `201` 创建，无 `Location`），写接口要求 `X-Idempotency-Key`。
+> 用途/幂等/错误语义见 `docs/ops/inventory-maintenance.md`。
+
 ## 7. 扩展到全仓库的路线
 
 1. **补齐权限码**：为新模块在 `PermissionCodes` 增加资源常量、动作权限码，并加入 `all()`；`PermissionCodesTest` 会反射校验漏登记。

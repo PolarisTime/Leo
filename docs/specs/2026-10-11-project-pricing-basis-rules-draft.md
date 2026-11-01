@@ -55,7 +55,7 @@
 
 业务校验（422，**唯一实现** `ProjectPricingBasisQuery#requireValidClosedSettle`，项目写入 / 交付核定快照 / 取价解析三处共用）：天数统一 0..30（**所有基准**都校验）；`DELIVERY` 必须 ≥1；`ORDER`+`PREV` 必须 ≥1；`ORDER`+`NEXT` 允许 0；`MANUAL` 不参与解析，**只做 0..30 范围校验**，不限制方向与 0 的组合（项目从 `ORDER+NEXT+0` 切到 `MANUAL` 时表单里这两个字段是禁用态、用户改不了，不能因此 422 卡死保存）。另有：`FIXED` 时 `price_period_fixed` 必填，非 `FIXED` 时强制置空（避免脏配置影响后续策略切换）。
 
-旧列 `price_closed_day_prev_settle`（boolean）自 V195 起 **deprecated**：不再被代码读写，只为历史只读与回滚留痕保留，待清理发布删除。V195 回填映射（保证历史行为零漂移）：`ORDER & true → (PREV,1)`；`ORDER & false & offset=0 → (NEXT,1)`；`ORDER & false & offset>0 → (NEXT,0)`；其余（`DELIVERY`/`MANUAL`）→ `(PREV,1)`。
+旧列 `price_closed_day_prev_settle`（boolean）自 V195 起 **deprecated**：不再被代码读写，只为历史只读与回滚留痕保留，并**已由 V207（2026-10-31）删除**；本段保留 V195 回填映射作历史说明。V195 回填映射（保证历史行为零漂移）：`ORDER & true → (PREV,1)`；`ORDER & false & offset=0 → (NEXT,1)`；`ORDER & false & offset>0 → (NEXT,0)`；其余（`DELIVERY`/`MANUAL`）→ `(PREV,1)`。
 
 ### 3.2 销售订单取价快照（新增列）
 
@@ -69,7 +69,7 @@
 | `price_closed_settle_direction` | varchar(8) | 本次生效的「基准日休市位移方向」：`PREV` / `NEXT` |
 | `price_closed_settle_days` | integer | 本次生效的「基准日休市位移交易日数」（0..30） |
 
-历史单据若**从未记录取价过程**（`price_date_basis` 为空），这些列保持为空，前端按「未记录取价日」展示；V195 只对**已记录取价过程**的历史行按 md_project 同一映射做等价回填。旧列 `price_closed_settle_prev` 自 V195 起 deprecated，保留待清理发布删除。
+历史单据若**从未记录取价过程**（`price_date_basis` 为空），这些列保持为空，前端按「未记录取价日」展示；V195 只对**已记录取价过程**的历史行按 md_project 同一映射做等价回填。旧列 `price_closed_settle_prev` 自 V195 起 deprecated，并已由 V207（2026-10-31）删除。
 
 ## 4. 基准日与时段解析算法
 

@@ -49,7 +49,7 @@ class FreightStatementDtoJsonContractTest {
                 new BigDecimal("28"), new BigDecimal("9800"),
                 new BigDecimal("5000"), new BigDecimal("4800"),
                 "PENDING_APPROVAL", false, "a.pdf", List.of(), "备注",
-                List.of(sampleItemResponse()), 151515151515151515L);
+                List.of("FB-2026-001"), List.of(sampleItemResponse()), 151515151515151515L);
 
         String json = objectMapper.writeValueAsString(response);
 
@@ -60,6 +60,7 @@ class FreightStatementDtoJsonContractTest {
                 + "\"totalWeight\":28.00000000,\"totalFreight\":9800.00,"
                 + "\"paidAmount\":5000.00,\"unpaidAmount\":4800.00,\"status\":\"PENDING_APPROVAL\","
                 + "\"deletedFlag\":false,\"attachment\":\"a.pdf\",\"attachments\":[],\"remark\":\"备注\","
+                + "\"sourceBillNos\":[\"FB-2026-001\"],"
                 + "\"items\":[{\"id\":\"121212121212121212\",\"lineNo\":1,\"sourceNo\":\"FB-2026-001\","
                 + "\"settlementCompanyId\":\"888777666555444333\",\"settlementCompanyName\":\"结算公司A\","
                 + "\"customerId\":\"666555444333222111\",\"customerName\":\"客户乙\","
@@ -161,7 +162,7 @@ class FreightStatementDtoJsonContractTest {
                 new BigDecimal("28"), new BigDecimal("9800"),
                 new BigDecimal("5000"), new BigDecimal("4800"),
                 "PENDING_APPROVAL", false, "a.pdf", List.of(), "备注",
-                List.of(sampleItemResponse()), 151515151515151515L);
+                List.of("FB-2026-001"), List.of(sampleItemResponse()), 151515151515151515L);
 
         FreightStatementResponse deserialized = objectMapper.readValue(
                 objectMapper.writeValueAsString(response), FreightStatementResponse.class);

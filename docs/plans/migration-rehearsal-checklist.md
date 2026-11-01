@@ -819,7 +819,7 @@ HAVING (array_agg(h.change_type ORDER BY h.created_at DESC, h.id DESC))[1]
 | 4 | 迁移 | 以 `SPRING_FLYWAY_TARGET=138` 启动新版本（或独立 Flyway 执行）；见下 |
 | 5 | 对账校验 | 执行第 3 节全部 SQL（回填前基线） |
 | 6 | 启动应用 | `sudo systemctl start leo-backend`，健康检查通过 |
-| 7 | 期初回填 | `POST /api/v2.0/inventory/backfills`（幂等） |
+| 7 | 期初回填 | `POST /api/v2.0/inventory/backfills`（同步命令，返回 200；需 `X-Idempotency-Key`，天然幂等） |
 | 8 | 回填后复核对账 | 重跑 3.1–3.3，尤其 3.3 库存守恒 |
 | 9 | 人工验收 | 按第 6 节勾选，异常打印留档并由第二人复核 |
 
@@ -849,10 +849,14 @@ IDEMPOTENCY_KEY=$(cat /proc/sys/kernel/random/uuid)
 curl -sS -X POST "$BASE_URL/api/v2.0/inventory/backfills" \
   -H "X-Idempotency-Key: $IDEMPOTENCY_KEY" \
   -H "Accept: application/json"
-# 返回 201 Created，体为 InventoryBackfillResponse：
+# 返回 200 OK，体为 InventoryBackfillResponse（同步命令语义，非 REST 201 创建，无 Location）：
 #   purchaseInCreated / salesOutCreated / salesReturnCreated / skipped
 # 回填天然幂等：重复调用只累加 skipped，不重复记账
 ```
+
+> 库存运维三个端点（`POST /inventory/backfills`、`POST /inventory/balance-rebuilds`、
+> `GET /inventory/balance-mismatches`）的完整契约（用途/权限/幂等/守恒校验）见
+> `docs/ops/inventory-maintenance.md`。
 
 **步骤 8 复核对账**
 
@@ -951,7 +955,7 @@ sudo systemctl start leo-backend
 
 ### 应用与回填
 - [ ] 应用启动成功，健康检查通过
-- [ ] `POST /api/v2.0/inventory/backfills` 返回 201，计数符合预期
+- [ ] `POST /api/v2.0/inventory/backfills` 返回 200（同步命令语义，非 201），计数符合预期
 - [ ] 重复调用回填接口只累加 `skipped`，无重复记账
 - [ ] 回填后重跑 3.3 库存守恒，仍 0 差异
 - [ ] 关键页面人工验收：库存余额、库存流水、销售退货、红字对账、单据流

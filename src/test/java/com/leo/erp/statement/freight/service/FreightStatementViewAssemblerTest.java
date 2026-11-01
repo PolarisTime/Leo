@@ -45,4 +45,33 @@ class FreightStatementViewAssemblerTest {
                 .extracting("sourceFreightBillTime")
                 .isEqualTo(billTime);
     }
+
+    @Test
+    void shouldExposeDistinctSourceBillNosInItemOrder() {
+        AttachmentQuery attachmentQuery = mock(AttachmentQuery.class);
+        FreightBillStatementSourceQuery sourceQuery = mock(FreightBillStatementSourceQuery.class);
+        FreightStatementViewAssembler assembler = new FreightStatementViewAssembler(attachmentQuery, sourceQuery);
+
+        FreightStatement statement = new FreightStatement();
+        statement.setId(10L);
+        statement.setItems(List.of(
+                item(1, "FB-001"),
+                item(2, "FB-001"),
+                item(3, "FB-002"),
+                item(4, null),
+                item(5, "  ")
+        ));
+
+        FreightStatementView result = assembler.toView(statement, List.of());
+
+        // 列表「关联物流单」列依赖该字段：去重、保持明细顺序、忽略空值/空白
+        assertThat(result.sourceBillNos()).containsExactly("FB-001", "FB-002");
+    }
+
+    private FreightStatementItem item(int lineNo, String sourceNo) {
+        FreightStatementItem item = new FreightStatementItem();
+        item.setLineNo(lineNo);
+        item.setSourceNo(sourceNo);
+        return item;
+    }
 }

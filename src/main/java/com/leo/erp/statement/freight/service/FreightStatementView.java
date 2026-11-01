@@ -24,6 +24,7 @@ public record FreightStatementView(
         String attachment,
         List<AttachmentView> attachments,
         String remark,
+        List<String> sourceBillNos,
         List<FreightStatementItemView> items,
         Long carrierId
 ) {

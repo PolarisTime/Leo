@@ -188,7 +188,7 @@ public class ModuleExportCatalog {
         definitions.put(ModuleKeys.PAYMENT, definition(
                 ModuleKeys.PAYMENT, "fm_payment", PermissionCodes.PAYMENTS_READ,
                 column("payment_no", "付款单号"),
-                column("business_type", "业务类型"),
+                column("counterparty_type", "往来方类型"),
                 column("counterparty_name", "往来单位"),
                 column("counterparty_code", "往来单位编码"),
                 column("payment_date", "付款日期"),

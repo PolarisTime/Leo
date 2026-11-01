@@ -55,7 +55,8 @@ public class CashLedgerQueryRepository {
                     2 AS flow_order,
                     payment.id AS document_id,
                     payment.payment_no AS document_no,
-                    COALESCE(payment.counterparty_type, payment.business_type) AS counterparty_type,
+                    -- counterparty_type 是唯一口径；business_type 已于 V210 删除（原 COALESCE 会引用不存在的列）
+                    payment.counterparty_type AS counterparty_type,
                     payment.counterparty_id,
                     payment.counterparty_code,
                     payment.counterparty_name,
