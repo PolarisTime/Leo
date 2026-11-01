@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -69,6 +70,9 @@ class PurchaseOrderForceCloseServiceTest {
     @Mock
     private AccountQuery accountQuery;
 
+    @Mock
+    private com.leo.erp.common.concurrency.SourceAllocationLockService sourceAllocationLockService;
+
     private PurchaseOrderForceCloseService service;
 
     private static final SecurityPrincipal OPERATOR =
@@ -84,7 +88,8 @@ class PurchaseOrderForceCloseServiceTest {
                 supplierLedgerLock,
                 auditPublisher,
                 queryService,
-                accountQuery
+                accountQuery,
+                sourceAllocationLockService
         );
         lenient().when(purchaseOrderRepository.saveAndFlush(any(PurchaseOrder.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -125,7 +130,9 @@ class PurchaseOrderForceCloseServiceTest {
     }
 
     private void stubOrder(PurchaseOrder order) {
-        when(purchaseOrderRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        // 强制结单走 FOR UPDATE 读订单行（锁内重判），撤销结单走普通读；两个入口按用例二选一
+        lenient().when(purchaseOrderRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        lenient().when(purchaseOrderRepository.findByIdAndDeletedFlagFalseForUpdate(1L)).thenReturn(Optional.of(order));
     }
 
     // ---------- 结单成功 ----------
@@ -149,6 +156,7 @@ class PurchaseOrderForceCloseServiceTest {
         assertThat(order.getForceClosedName()).isEqualTo("系统管理员");
         assertThat(order.getForceClosedAt()).isNotNull();
         verify(supplierLedgerLock).lock(10L, 20L);
+        verify(sourceAllocationLockService).lockTradeItemSources(List.of(100L), List.of(), List.of());
         verify(directSalesCapacityGuard).assertCovered(List.of(100L));
         verify(auditPublisher).publish(order, "PURCHASE_ORDER_FORCE_CLOSED", "强制结单",
                 "采购订单状态 已审核 -> 完成采购(强制结单), 作废未入库 1 件; 原因: 剩余 1 件报废");
@@ -317,6 +325,7 @@ class PurchaseOrderForceCloseServiceTest {
         assertThat(order.getForceClosedBy()).isNull();
         assertThat(order.getForceClosedName()).isNull();
         assertThat(order.getForceClosedAt()).isNull();
+        verify(sourceAllocationLockService).lockTradeItemSources(List.of(100L), List.of(), List.of());
         ArgumentCaptor<String> remark = ArgumentCaptor.forClass(String.class);
         verify(auditPublisher).publish(
                 org.mockito.ArgumentMatchers.eq(order),
@@ -348,12 +357,86 @@ class PurchaseOrderForceCloseServiceTest {
                 .hasMessageContaining("无法撤销强制结单");
     }
 
+    /** 撤销结单与结单同一模式：订单 FOR UPDATE → 来源明细锁 → 校验 → 保存 → 审计。 */
+    @Test
+    void cancelForceClose_shouldLockOrderAndSourceItemsBeforeValidationAndSave() {
+        PurchaseOrder order = order(StatusConstants.PURCHASE_COMPLETED, 10, 9);
+        order.setForceClosed(true);
+        order.setForceCloseRemainingQuantity(1);
+        stubOrder(order);
+        when(accountQuery.findById(9L)).thenReturn(Optional.empty());
+
+        service.cancelForceClose(1L, OPERATOR);
+
+        InOrder inOrder = org.mockito.Mockito.inOrder(
+                purchaseOrderRepository, sourceAllocationLockService, auditPublisher);
+        inOrder.verify(purchaseOrderRepository).findByIdAndDeletedFlagFalseForUpdate(1L);
+        inOrder.verify(sourceAllocationLockService).lockTradeItemSources(List.of(100L), List.of(), List.of());
+        inOrder.verify(purchaseOrderRepository).saveAndFlush(order);
+        inOrder.verify(auditPublisher).publish(
+                org.mockito.ArgumentMatchers.eq(order),
+                org.mockito.ArgumentMatchers.eq("PURCHASE_ORDER_FORCE_CLOSE_CANCELLED"),
+                org.mockito.ArgumentMatchers.eq("撤销强制结单"),
+                any());
+    }
+
+    /** 状态校验失败也必须发生在「订单 FOR UPDATE + 来源明细锁」之后，且不得保存。 */
+    @Test
+    void cancelForceClose_shouldLockBeforeRejectingNonForceClosedOrder() {
+        PurchaseOrder order = order(StatusConstants.AUDITED, 10, 9);
+        stubOrder(order);
+
+        assertThatThrownBy(() -> service.cancelForceClose(1L, OPERATOR))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不是强制结单");
+
+        InOrder inOrder = org.mockito.Mockito.inOrder(purchaseOrderRepository, sourceAllocationLockService);
+        inOrder.verify(purchaseOrderRepository).findByIdAndDeletedFlagFalseForUpdate(1L);
+        inOrder.verify(sourceAllocationLockService).lockTradeItemSources(List.of(100L), List.of(), List.of());
+        verify(purchaseOrderRepository, never()).saveAndFlush(any(PurchaseOrder.class));
+    }
+
     @Test
     void forceClose_shouldRejectMissingOrder() {
-        when(purchaseOrderRepository.findByIdAndDeletedFlagFalse(anyLong())).thenReturn(Optional.empty());
+        when(purchaseOrderRepository.findByIdAndDeletedFlagFalseForUpdate(anyLong())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.forceClose(404L, "作废", OPERATOR))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("采购订单不存在");
+    }
+
+    /** 结单必须先 FOR UPDATE 读订单、再按全局加锁序锁来源明细，最后才在锁内重查入库草稿。 */
+    @Test
+    void forceClose_shouldLockOrderAndSourceItemsBeforeRecheckingInboundDrafts() {
+        PurchaseOrder order = order(StatusConstants.AUDITED, 10, 9);
+        stubOrder(order);
+        when(purchaseInboundItemQueryService.findAllActiveBySourcePurchaseOrderItemIds(List.of(100L)))
+                .thenReturn(List.of());
+
+        service.forceClose(1L, "作废", OPERATOR);
+
+        InOrder inOrder = org.mockito.Mockito.inOrder(
+                purchaseOrderRepository, sourceAllocationLockService, purchaseInboundItemQueryService);
+        inOrder.verify(purchaseOrderRepository).findByIdAndDeletedFlagFalseForUpdate(1L);
+        inOrder.verify(sourceAllocationLockService).lockTradeItemSources(List.of(100L), List.of(), List.of());
+        inOrder.verify(purchaseInboundItemQueryService)
+                .findAllActiveBySourcePurchaseOrderItemIds(List.of(100L));
+        inOrder.verify(purchaseOrderRepository).saveAndFlush(order);
+    }
+
+    /** 锁内重判：FOR UPDATE 后取到的最新快照若已结单，必须拒绝（并发二次结单）。 */
+    @Test
+    void forceClose_shouldRejectWhenLockedSnapshotAlreadyForceClosed() {
+        PurchaseOrder order = order(StatusConstants.PURCHASE_COMPLETED, 10, 9);
+        order.setForceClosed(true);
+        stubOrder(order);
+
+        assertThatThrownBy(() -> service.forceClose(1L, "作废", OPERATOR))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已强制结单");
+
+        verify(sourceAllocationLockService).lockTradeItemSources(List.of(100L), List.of(), List.of());
+        verify(purchaseOrderRepository, never()).saveAndFlush(any(PurchaseOrder.class));
+        verify(auditPublisher, never()).publish(any(), any(), any(), any());
     }
 }

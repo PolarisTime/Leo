@@ -14,10 +14,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -51,7 +53,10 @@ public class PurchaseInboundSourceValidator {
                 .toList();
         Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap =
                 loadSourcePurchaseOrderItemMap(affectedSourcePurchaseOrderItemIds);
-        assertSingleSourcePurchaseOrder(sourcePurchaseOrderItemIds, sourcePurchaseOrderItemMap);
+        assertSingleSourcePurchaseOrder(sourcePurchaseOrderItemIds.stream()
+                .map(sourcePurchaseOrderItemMap::get)
+                .filter(Objects::nonNull)
+                .toList());
         return new SourceValidationContext(
                 sourcePurchaseOrderItemIds,
                 affectedSourcePurchaseOrderItemIds,
@@ -92,17 +97,15 @@ public class PurchaseInboundSourceValidator {
     }
 
     /**
-     * 一张采购入库单只能关联一张采购订单：本次保存请求中的所有来源明细必须指向同一张采购订单。
+     * 一张采购入库单只能关联一张采购订单：所有来源明细必须指向同一张采购订单。
      *
-     * <p>历史版本允许合并多张订单，因此旧单再次保存时同样会被拒绝，需按订单拆分为多张入库单；
-     * 来源明细不存在或尚未换算出采购订单的行不在此判定，交由 {@link #validateLine} 给出带行号的
-     * 精确错误，避免掩盖更具体的来源失效提示。</p>
+     * <p>保存（{@link #prepareContext}）与审核（{@code PurchaseInboundSourceStatusGuard}）共用本口径，
+     * 保证历史多订单草稿「不保存直接审核」也会被拦下；来源明细不存在或尚未换算出采购订单的行
+     * 跳过，交由调用方的行级校验给出带行号的精确错误，避免掩盖更具体的来源失效提示。</p>
      */
-    private void assertSingleSourcePurchaseOrder(List<Long> sourcePurchaseOrderItemIds,
-                                                 Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap) {
+    static void assertSingleSourcePurchaseOrder(Collection<PurchaseOrderItem> sourceItems) {
         Set<Long> purchaseOrderIds = new LinkedHashSet<>();
-        for (Long sourcePurchaseOrderItemId : sourcePurchaseOrderItemIds) {
-            PurchaseOrderItem sourceItem = sourcePurchaseOrderItemMap.get(sourcePurchaseOrderItemId);
+        for (PurchaseOrderItem sourceItem : sourceItems) {
             if (sourceItem == null || sourceItem.getPurchaseOrder() == null
                     || sourceItem.getPurchaseOrder().getId() == null) {
                 continue;

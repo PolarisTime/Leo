@@ -31,6 +31,22 @@ public interface SalesReturnItemRepository extends JpaRepository<SalesReturnItem
     int detachSourceReferencesOfDeletedReturn(@Param("returnId") Long returnId);
 
     /**
+     * 按来源销售出库明细反查仍被未删除退货单引用的明细 ID，供销售出库反审核/删除前拦截。
+     *
+     * <p>过滤父单 {@code deleted_flag = false}：软删退货单的明细来源列已解绑（见
+     * {@link #detachSourceReferencesOfDeletedReturn}），这里再兜一层历史残留。</p>
+     */
+    @Query("""
+            select distinct item.sourceSalesOutboundItemId
+            from SalesReturnItem item
+            join item.salesReturn ret
+            where ret.deletedFlag = false
+              and item.sourceSalesOutboundItemId in :sourceSalesOutboundItemIds
+            """)
+    List<Long> findReferencedSourceSalesOutboundItemIds(
+            @Param("sourceSalesOutboundItemIds") Collection<Long> sourceSalesOutboundItemIds);
+
+    /**
      * 按来源销售出库明细汇总已审核退货数量，用于累计超退校验。
      * 排除当前退货单自身，避免保存后二次校验重复累计。
      */

@@ -191,9 +191,9 @@ class PurchaseInboundSourceStatusGuardTest {
                 .hasMessageContaining("数量必须大于0");
     }
 
-    /** 多张采购订单来源行的合并入库允许审核。 */
+    /** 跨采购订单来源行的合并入库必须在审核入口被拦下（历史多订单草稿不保存直接审核）。 */
     @Test
-    void audit_shouldAllowMultipleSourcePurchaseOrders() {
+    void audit_shouldRejectMultipleSourcePurchaseOrders() {
         PurchaseInbound inbound = new PurchaseInbound();
         inbound.setId(5L);
         PurchaseInboundItem first = new PurchaseInboundItem();
@@ -213,6 +213,37 @@ class PurchaseInboundSourceStatusGuardTest {
                 .thenReturn(List.of(firstSource, secondSource));
         when(allocationService.loadAllocatedQuantityMap(List.of(11L, 12L), 5L))
                 .thenReturn(Map.of(11L, 5, 12L, 3));
+
+        assertThatThrownBy(() -> guard.assertStatusTransitionAllowed(
+                inbound, StatusConstants.DRAFT, StatusConstants.AUDITED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("一张采购入库单只能关联一张采购订单，请拆分为多张入库单");
+    }
+
+    /** 同一张采购订单的多行来源明细在审核入口仍然放行。 */
+    @Test
+    void audit_shouldAllowMultipleLinesFromSamePurchaseOrder() {
+        PurchaseInbound inbound = new PurchaseInbound();
+        inbound.setId(5L);
+        PurchaseInboundItem first = new PurchaseInboundItem();
+        first.setId(21L);
+        first.setLineNo(1);
+        first.setSourcePurchaseOrderItemId(11L);
+        first.setQuantity(5);
+        PurchaseInboundItem second = new PurchaseInboundItem();
+        second.setId(22L);
+        second.setLineNo(2);
+        second.setSourcePurchaseOrderItemId(12L);
+        second.setQuantity(3);
+        inbound.setItems(List.of(first, second));
+        PurchaseOrderItem firstSource = orderItem(100L, 11L);
+        firstSource.setQuantity(5);
+        PurchaseOrderItem secondSource = orderItem(100L, 12L);
+        secondSource.setQuantity(5);
+        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(11L, 12L)))
+                .thenReturn(List.of(firstSource, secondSource));
+        when(allocationService.loadAllocatedQuantityMap(List.of(11L, 12L), 5L))
+                .thenReturn(Map.of());
 
         assertThatCode(() -> guard.assertStatusTransitionAllowed(
                 inbound, StatusConstants.DRAFT, StatusConstants.AUDITED)).doesNotThrowAnyException();

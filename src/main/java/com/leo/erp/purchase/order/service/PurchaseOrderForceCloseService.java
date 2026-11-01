@@ -1,6 +1,7 @@
 package com.leo.erp.purchase.order.service;
 
 import com.leo.erp.auth.api.AccountQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
@@ -36,6 +37,8 @@ import java.util.Objects;
  *       承载, 并对外暴露为响应里的 {@code forceClose};</li>
  *   <li>结单时按自动完成的同一套守卫: 校验直接销售占用不超过已入库量, 并锁定供应商台账;</li>
  *   <li>存在引用该订单的未审核入库草稿时拒绝结单(草稿一旦审核, 完成度会与终态冲突);</li>
+ *   <li>强制结单/撤销结单前均先 {@code FOR UPDATE} 读订单行，并按全局加锁序锁来源采购订单明细，
+ *       与采购入库的保存/审核串行化，避免「结单与入库并发」落出脏数据;</li>
  *   <li>撤销结单把订单退回「已审核」并清空留痕; 供应商台账锁为"顺序锁定"一次性闩锁, 与入库
  *       反审核回退一致, 不做解锁。</li>
  * </ul>
@@ -51,6 +54,7 @@ public class PurchaseOrderForceCloseService {
     private final PurchaseOrderAuditPublisher auditPublisher;
     private final PurchaseOrderQueryService queryService;
     private final AccountQuery accountQuery;
+    private final SourceAllocationLockService sourceAllocationLockService;
 
     public PurchaseOrderForceCloseService(PurchaseOrderRepository purchaseOrderRepository,
                                           PurchaseOrderAvailabilityService availabilityService,
@@ -59,7 +63,8 @@ public class PurchaseOrderForceCloseService {
                                           PurchaseSupplierLedgerLock supplierLedgerLock,
                                           PurchaseOrderAuditPublisher auditPublisher,
                                           PurchaseOrderQueryService queryService,
-                                          AccountQuery accountQuery) {
+                                          AccountQuery accountQuery,
+                                          SourceAllocationLockService sourceAllocationLockService) {
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.availabilityService = availabilityService;
         this.directSalesCapacityGuard = directSalesCapacityGuard;
@@ -68,13 +73,19 @@ public class PurchaseOrderForceCloseService {
         this.auditPublisher = auditPublisher;
         this.queryService = queryService;
         this.accountQuery = accountQuery;
+        this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
     /** 强制结单: 剩余未入库件数作废, 订单置为「完成采购」并留痕。 */
     @Transactional
     public PurchaseOrderResponse forceClose(Long id, String reason, SecurityPrincipal principal) {
+        // 先 FOR UPDATE 读订单行（锁 po_purchase_order），再按全局加锁序（采购订单 30 → 明细 31）
+        // 锁来源明细；采购入库保存/审核锁的是同一批 po_purchase_order_item 行，先锁后判才能挡住
+        // 「结单与入库并发」下落到库里的「来源订单已结单」入库单。
         PurchaseOrder order = requireEntity(id);
         String trimmedReason = normalizeReason(reason);
+        List<Long> sourceItemIds = sourceItemIds(order);
+        sourceAllocationLockService.lockTradeItemSources(sourceItemIds, List.of(), List.of());
         if (order.isForceClosed()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "该采购订单已强制结单");
         }
@@ -92,7 +103,6 @@ public class PurchaseOrderForceCloseService {
                     "该采购订单已无未入库件数，请由采购入库审核自动完成"
             );
         }
-        List<Long> sourceItemIds = sourceItemIds(order);
         directSalesCapacityGuard.assertCovered(sourceItemIds);
         lockSupplierLedger(order);
         OperatorDisplay operator = resolveOperator(principal);
@@ -118,7 +128,11 @@ public class PurchaseOrderForceCloseService {
     /** 撤销强制结单: 清空留痕并退回「已审核」, 未入库件数重新可入库。 */
     @Transactional
     public PurchaseOrderResponse cancelForceClose(Long id, SecurityPrincipal principal) {
+        // 与强制结单同一模式：先 FOR UPDATE 读订单行（锁内重判），再按全局加锁序（采购订单 30 → 明细 31）
+        // 锁来源明细，最后才做状态/留痕判定与保存；撤销与结单、入库审核由此串行化。
         PurchaseOrder order = requireEntity(id);
+        List<Long> sourceItemIds = sourceItemIds(order);
+        sourceAllocationLockService.lockTradeItemSources(sourceItemIds, List.of(), List.of());
         if (!order.isForceClosed()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "该采购订单不是强制结单，无需撤销");
         }
@@ -233,8 +247,9 @@ public class PurchaseOrderForceCloseService {
                 .toList();
     }
 
+    /** 强制结单/撤销结单共用：以 FOR UPDATE 读订单行，保证「锁内重判」拿到的是库内最新状态。 */
     private PurchaseOrder requireEntity(Long id) {
-        return purchaseOrderRepository.findByIdAndDeletedFlagFalse(id)
+        return purchaseOrderRepository.findByIdAndDeletedFlagFalseForUpdate(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "采购订单不存在"));
     }
 }

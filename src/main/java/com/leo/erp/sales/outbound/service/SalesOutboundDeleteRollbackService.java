@@ -72,16 +72,18 @@ public class SalesOutboundDeleteRollbackService {
         if (StatusConstants.AUDITED.equals(entity.getStatus())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核销售出库必须先反审核为草稿才能删除");
         }
-        downstreamMutationGuard.assertDeleteAllowed(entity);
         List<Long> sourceSalesOrderIds = applyService.sourceSalesOrderIds(entity).stream()
                 .sorted()
                 .toList();
+        // 先按全局 rank 锁销售订单(40)/本出库单(50)，再进下游守卫（守卫会锁出库明细 50/51）：
+        // 保持 40 → 50 → 51 升序，避免与反审核路径（40/41 → 50 → 51）形成 AB-BA。
         sourceAllocationLockService.lockDocumentSources(
                 List.of(),
                 sourceSalesOrderIds,
                 List.of(entity.getId()),
                 List.of()
         );
+        downstreamMutationGuard.assertDeleteAllowed(entity);
         rollbackSourceSalesOrders(entity, sourceSalesOrderIds);
     }
 

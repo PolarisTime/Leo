@@ -100,6 +100,8 @@ public class PurchaseInboundSourceStatusGuard {
         if (sourceOrderMissing) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购入库的来源采购订单不存在");
         }
+        // 与保存入口同一口径：一张入库单只能关联一张采购订单（历史多订单草稿不保存直接审核也拦下）
+        PurchaseInboundSourceValidator.assertSingleSourcePurchaseOrder(inboundSourceItems);
 
         Map<Long, Integer> allocatedQuantityMap =
                 allocationService.loadAllocatedQuantityMap(inboundSourceItemIds, inbound.getId());
