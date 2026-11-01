@@ -66,7 +66,18 @@ class DocumentFlowServiceTest {
             String sql = invocation.getArgument(0);
             RowCallbackHandler handler = invocation.getArgument(2);
             ResultSet row = null;
-            if (sql.contains("LIKE :p")) {
+            // 关系边引用量聚合(四条明细级链路)：按下游 id 批量聚合 SQL 的别名特征分派
+            if (sql.contains(" AS from_id") && sql.contains(" AS to_id")) {
+                if (sql.contains("SUM(COALESCE(pii.weigh_weight_ton, pii.weight_ton))")) {
+                    row = metricRow(ORDER_ID, INBOUND_ID, "5", "6.25000000");
+                } else if (sql.contains("pii.inbound_id AS from_id")) {
+                    row = metricRow(INBOUND_ID, SALES_ORDER_ID, "4", "5.50000000");
+                } else if (sql.contains("oi.outbound_id AS to_id")) {
+                    row = metricRow(SALES_ORDER_ID, OUTBOUND_ID, "3", "4.00000000");
+                } else if (sql.contains("bi.bill_id AS to_id")) {
+                    row = metricRow(SALES_ORDER_ID, FREIGHT_BILL_ID, "2", "1.50000000");
+                }
+            } else if (sql.contains("LIKE :p")) {
                 if (sql.contains("FROM po_purchase_inbound")) {
                     row = row(INBOUND_ID, "IN-1", "PO-1");
                 } else if (sql.contains("FROM so_sales_order") && sql.contains("purchase_inbound_no LIKE")) {
@@ -163,6 +174,43 @@ class DocumentFlowServiceTest {
         assertThat(response.links().get(4).toType()).isEqualTo("freight-bill");
     }
 
+    /**
+     * 四条明细级链路的关系边必须带引用数量/重量；其余链路（如 出库→物流）保持 null 以向后兼容。
+     */
+    @Test
+    void documentFlow_shouldAttachReferenceQuantityAndWeightOnlyForSupportedEdges() {
+        DocumentFlowResponse response = new DocumentFlowService(jdbcTemplate).documentFlow("PO-1");
+
+        assertThat(response.links()).hasSize(5);
+        DocumentFlowLink purchaseToInbound = response.links().get(0);
+        assertThat(purchaseToInbound.fromType()).isEqualTo("purchase-order");
+        assertThat(purchaseToInbound.toType()).isEqualTo("purchase-inbound");
+        assertThat(purchaseToInbound.quantity()).isEqualByComparingTo(new BigDecimal("5"));
+        assertThat(purchaseToInbound.weight()).isEqualByComparingTo(new BigDecimal("6.25"));
+
+        DocumentFlowLink inboundToSales = response.links().get(1);
+        assertThat(inboundToSales.fromType()).isEqualTo("purchase-inbound");
+        assertThat(inboundToSales.toType()).isEqualTo("sales-order");
+        assertThat(inboundToSales.quantity()).isEqualByComparingTo(new BigDecimal("4"));
+        assertThat(inboundToSales.weight()).isEqualByComparingTo(new BigDecimal("5.5"));
+
+        DocumentFlowLink salesToOutbound = response.links().get(2);
+        assertThat(salesToOutbound.fromType()).isEqualTo("sales-order");
+        assertThat(salesToOutbound.toType()).isEqualTo("sales-outbound");
+        assertThat(salesToOutbound.quantity()).isEqualByComparingTo(new BigDecimal("3"));
+
+        DocumentFlowLink salesToFreight = response.links().get(3);
+        assertThat(salesToFreight.fromType()).isEqualTo("sales-order");
+        assertThat(salesToFreight.toType()).isEqualTo("freight-bill");
+        assertThat(salesToFreight.quantity()).isEqualByComparingTo(new BigDecimal("2"));
+
+        DocumentFlowLink outboundToFreight = response.links().get(4);
+        assertThat(outboundToFreight.fromType()).isEqualTo("sales-outbound");
+        assertThat(outboundToFreight.toType()).isEqualTo("freight-bill");
+        assertThat(outboundToFreight.quantity()).isNull();
+        assertThat(outboundToFreight.weight()).isNull();
+    }
+
     private static ResultSet row(long id, String no, String refValue) throws Exception {
         ResultSet resultSet = mock(ResultSet.class);
         lenient().when(resultSet.getLong("id")).thenReturn(id);
@@ -178,6 +226,15 @@ class DocumentFlowServiceTest {
     private static ResultSet rowWithSource(long id, String no, long sourceId) throws Exception {
         ResultSet resultSet = row(id, no, null);
         lenient().when(resultSet.getLong("source_id")).thenReturn(sourceId);
+        return resultSet;
+    }
+
+    private static ResultSet metricRow(long fromId, long toId, String quantity, String weight) throws Exception {
+        ResultSet resultSet = mock(ResultSet.class);
+        lenient().when(resultSet.getLong("from_id")).thenReturn(fromId);
+        lenient().when(resultSet.getLong("to_id")).thenReturn(toId);
+        lenient().when(resultSet.getBigDecimal("quantity")).thenReturn(new BigDecimal(quantity));
+        lenient().when(resultSet.getBigDecimal("weight")).thenReturn(new BigDecimal(weight));
         return resultSet;
     }
 }

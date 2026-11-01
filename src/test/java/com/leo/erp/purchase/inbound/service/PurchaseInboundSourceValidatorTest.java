@@ -29,8 +29,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 采购入库来源校验测试：放开「单订单」限制，允许同一入库单合并多张已审核采购订单；
- * 保留单内重复来源行拒绝，并校验多订单拼接后的表头单号长度。
+ * 采购入库来源校验测试：一张入库单只允许一张采购订单（跨订单来源拒绝、同订单多行放行），
+ * 保留单内重复来源行拒绝，并校验表头单号长度。
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -75,8 +75,9 @@ class PurchaseInboundSourceValidatorTest {
                 LocalDate.of(2026, 8, 1), "现结", StatusConstants.DRAFT, null, items, false);
     }
 
+    /** 一张入库单只能关联一张采购订单：跨采购订单来源必须被拒绝。 */
     @Test
-    void prepareContext_shouldAllowMultipleSourcePurchaseOrders() {
+    void prepareContext_shouldRejectMultipleSourcePurchaseOrders() {
         PurchaseOrder firstOrder = order(100L, "PO001", StatusConstants.AUDITED);
         PurchaseOrder secondOrder = order(200L, "PO002", StatusConstants.AUDITED);
         when(allocationService.extractSourcePurchaseOrderItemIds(any())).thenReturn(List.of(11L, 22L));
@@ -84,8 +85,23 @@ class PurchaseInboundSourceValidatorTest {
         when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(11L, 22L)))
                 .thenReturn(List.of(item(11L, firstOrder), item(22L, secondOrder)));
 
-        assertThatCode(() -> validator.prepareContext(
+        assertThatThrownBy(() -> validator.prepareContext(
                 request("PO001, PO002", List.of(line(11L), line(22L))), null, List.of()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("一张采购入库单只能关联一张采购订单");
+    }
+
+    /** 同一张采购订单的多行来源明细仍然允许（禁止的是跨订单，不是多行）。 */
+    @Test
+    void prepareContext_shouldAllowMultipleLinesFromSamePurchaseOrder() {
+        PurchaseOrder sourceOrder = order(100L, "PO001", StatusConstants.AUDITED);
+        when(allocationService.extractSourcePurchaseOrderItemIds(any())).thenReturn(List.of(11L, 12L));
+        when(allocationService.prepareContext(any(), any())).thenReturn(null);
+        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(11L, 12L)))
+                .thenReturn(List.of(item(11L, sourceOrder), item(12L, sourceOrder)));
+
+        assertThatCode(() -> validator.prepareContext(
+                request("PO001", List.of(line(11L), line(12L))), null, List.of()))
                 .doesNotThrowAnyException();
     }
 

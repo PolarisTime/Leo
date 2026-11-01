@@ -131,6 +131,9 @@ public class PurchaseInboundApplyService {
         managedItems.clear();
         managedItems.addAll(items);
         managedItems.sort(Comparator.comparing(PurchaseInboundItem::getLineNo));
+        // 来源采购订单号正常情况下只有一个：PurchaseInboundSourceValidator 已强制
+        // 「一张采购入库单只能关联一张采购订单」，因此这里的 join 不会再产生 ", " 拼接的多值；
+        // 保留 join 仅为兼容请求直传单号与历史数据，不在此处再放宽业务口径。
         String purchaseOrderNo = sourcePurchaseOrderNos.isEmpty()
                 ? request.purchaseOrderNo()
                 : String.join(", ", sourcePurchaseOrderNos);

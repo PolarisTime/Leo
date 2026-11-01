@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -50,6 +51,7 @@ public class PurchaseInboundSourceValidator {
                 .toList();
         Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap =
                 loadSourcePurchaseOrderItemMap(affectedSourcePurchaseOrderItemIds);
+        assertSingleSourcePurchaseOrder(sourcePurchaseOrderItemIds, sourcePurchaseOrderItemMap);
         return new SourceValidationContext(
                 sourcePurchaseOrderItemIds,
                 affectedSourcePurchaseOrderItemIds,
@@ -59,7 +61,8 @@ public class PurchaseInboundSourceValidator {
     }
 
     /**
-     * 多来源合并后表头采购订单号由各来源订单号拼接而成，必须校验不超出列长度，避免数据库截断/写入失败。
+     * 表头采购订单号长度校验：一张入库单只允许一个来源采购订单，正常不会再出现多单号拼接串；
+     * 但历史数据与请求直传单号仍可能超长，必须校验避免数据库截断/写入失败。
      */
     void assertPurchaseOrderNoWithinLength(String purchaseOrderNo) {
         if (purchaseOrderNo != null && purchaseOrderNo.length() > MAX_PURCHASE_ORDER_NO_LENGTH) {
@@ -83,6 +86,32 @@ public class PurchaseInboundSourceValidator {
                 throw new BusinessException(
                         ErrorCode.BUSINESS_ERROR,
                         "第" + lineNo + "行重复引用来源采购订单明细（首次出现在第" + firstLine + "行）"
+                );
+            }
+        }
+    }
+
+    /**
+     * 一张采购入库单只能关联一张采购订单：本次保存请求中的所有来源明细必须指向同一张采购订单。
+     *
+     * <p>历史版本允许合并多张订单，因此旧单再次保存时同样会被拒绝，需按订单拆分为多张入库单；
+     * 来源明细不存在或尚未换算出采购订单的行不在此判定，交由 {@link #validateLine} 给出带行号的
+     * 精确错误，避免掩盖更具体的来源失效提示。</p>
+     */
+    private void assertSingleSourcePurchaseOrder(List<Long> sourcePurchaseOrderItemIds,
+                                                 Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap) {
+        Set<Long> purchaseOrderIds = new LinkedHashSet<>();
+        for (Long sourcePurchaseOrderItemId : sourcePurchaseOrderItemIds) {
+            PurchaseOrderItem sourceItem = sourcePurchaseOrderItemMap.get(sourcePurchaseOrderItemId);
+            if (sourceItem == null || sourceItem.getPurchaseOrder() == null
+                    || sourceItem.getPurchaseOrder().getId() == null) {
+                continue;
+            }
+            purchaseOrderIds.add(sourceItem.getPurchaseOrder().getId());
+            if (purchaseOrderIds.size() > 1) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "一张采购入库单只能关联一张采购订单，请拆分为多张入库单"
                 );
             }
         }

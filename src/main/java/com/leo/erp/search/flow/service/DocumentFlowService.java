@@ -36,6 +36,9 @@ import java.util.regex.Pattern;
  * <p>
  * 为避免逐节点反查的 N+1，扩展按"层"进行：同层同类型的引用反查与按单号查询均批量执行
  * （引用列已由 V152 建立 pg_trgm GIN 索引，{@code LIKE '%单号%'} 走索引）。
+ * <p>
+ * 关系边附带引用数量/重量：仅「采购订单→采购入库、采购入库→销售订单、销售订单→销售出库、
+ * 销售订单→物流单」四条明细级链路按下游单据 id 批量聚合，其余链路为 {@code null}。
  */
 @Service
 public class DocumentFlowService {
@@ -79,6 +82,44 @@ public class DocumentFlowService {
     private static final String LINK_OUTBOUND = "出库";
     private static final String LINK_RETURN = "退货";
     private static final String LINK_FREIGHT = "物流";
+
+    /**
+     * 关系边引用量聚合：仅四条明细级来源关联链路可算。全部按「下游单据 id IN (:ids)」一次批量聚合，
+     * 与节点/边装配同层复用，避免逐边 N+1；软删过滤与节点查询口径一致。
+     */
+    private static final String METRIC_PURCHASE_ORDER_INBOUND_SQL =
+            "SELECT poi.order_id AS from_id, pii.inbound_id AS to_id, "
+                    + "SUM(pii.quantity) AS quantity, "
+                    + "SUM(COALESCE(pii.weigh_weight_ton, pii.weight_ton)) AS weight "
+                    + "FROM po_purchase_inbound_item pii "
+                    + "JOIN po_purchase_inbound pi ON pi.id = pii.inbound_id AND pi.deleted_flag = FALSE "
+                    + "JOIN po_purchase_order_item poi ON poi.id = pii.source_purchase_order_item_id "
+                    + "WHERE pii.inbound_id IN (:ids) AND pii.source_purchase_order_item_id IS NOT NULL "
+                    + "GROUP BY poi.order_id, pii.inbound_id";
+    private static final String METRIC_PURCHASE_INBOUND_SALES_ORDER_SQL =
+            "SELECT pii.inbound_id AS from_id, soi.order_id AS to_id, "
+                    + "SUM(soi.quantity) AS quantity, SUM(soi.weight_ton) AS weight "
+                    + "FROM so_sales_order_item soi "
+                    + "JOIN so_sales_order so ON so.id = soi.order_id AND so.deleted_flag = FALSE "
+                    + "JOIN po_purchase_inbound_item pii ON pii.id = soi.source_inbound_item_id "
+                    + "WHERE soi.order_id IN (:ids) AND soi.source_inbound_item_id IS NOT NULL "
+                    + "GROUP BY pii.inbound_id, soi.order_id";
+    private static final String METRIC_SALES_ORDER_OUTBOUND_SQL =
+            "SELECT soi.order_id AS from_id, oi.outbound_id AS to_id, "
+                    + "SUM(oi.quantity) AS quantity, SUM(oi.weight_ton) AS weight "
+                    + "FROM so_sales_outbound_item oi "
+                    + "JOIN so_sales_outbound so ON so.id = oi.outbound_id AND so.deleted_flag = FALSE "
+                    + "JOIN so_sales_order_item soi ON soi.id = oi.source_sales_order_item_id "
+                    + "WHERE oi.outbound_id IN (:ids) AND oi.source_sales_order_item_id IS NOT NULL "
+                    + "GROUP BY soi.order_id, oi.outbound_id";
+    private static final String METRIC_SALES_ORDER_FREIGHT_BILL_SQL =
+            "SELECT soi.order_id AS from_id, bi.bill_id AS to_id, "
+                    + "SUM(bi.quantity) AS quantity, SUM(bi.weight_ton) AS weight "
+                    + "FROM lg_freight_bill_item bi "
+                    + "JOIN lg_freight_bill b ON b.id = bi.bill_id AND b.deleted_flag = FALSE "
+                    + "JOIN so_sales_order_item soi ON soi.id = bi.source_sales_order_item_id "
+                    + "WHERE bi.bill_id IN (:ids) AND bi.source_sales_order_item_id IS NOT NULL "
+                    + "GROUP BY soi.order_id, bi.bill_id";
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -141,10 +182,19 @@ public class DocumentFlowService {
                 DocumentFlowLink link = new DocumentFlowLink(
                         edge.from().type(), edge.from().id(),
                         edge.to().type(), edge.to().id(),
-                        edge.linkType());
+                        edge.linkType(), null, null);
                 links.putIfAbsent(edge.from().key() + "->" + edge.to().key(), link);
             }
             currentLayer = nextLayer;
+        }
+
+        Map<String, LinkMetric> linkMetrics = loadLinkMetrics(links.values());
+        List<DocumentFlowLink> linkList = new ArrayList<>(links.size());
+        for (DocumentFlowLink link : links.values()) {
+            LinkMetric metric = linkMetrics.get(linkKey(link));
+            linkList.add(metric == null ? link : new DocumentFlowLink(
+                    link.fromType(), link.fromId(), link.toType(), link.toId(), link.linkType(),
+                    metric.quantity(), metric.weight()));
         }
 
         List<DocumentFlowNode> nodeList = nodes.values().stream()
@@ -153,7 +203,7 @@ public class DocumentFlowService {
                         node.amount(), node.weight(), node.date()))
                 .toList();
         return new DocumentFlowResponse(
-                target, nodeList, List.copyOf(links.values()), truncated);
+                target, nodeList, List.copyOf(linkList), truncated);
     }
 
     private List<FlowNode> findSeeds(String no) {
@@ -217,6 +267,81 @@ public class DocumentFlowService {
             addOutboundsByFreightBillIdEdges(freightBills, edges);
         }
         return edges;
+    }
+
+    /**
+     * 关系边引用数量/重量：只对四条明细级链路聚合，其余链路保持 {@code null}。
+     *
+     * <p>每次请求最多 4 条聚合 SQL，按下游单据 id 批量查询，不随边数量增长（无 N+1）；
+     * 聚合结果缺失（无来源明细关联、历史数据解绑等）时该边保持 null，不影响链路装配。</p>
+     */
+    private Map<String, LinkMetric> loadLinkMetrics(Collection<DocumentFlowLink> links) {
+        if (links.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, List<DocumentFlowLink>> byPair = new LinkedHashMap<>();
+        for (DocumentFlowLink link : links) {
+            byPair.computeIfAbsent(link.fromType() + "->" + link.toType(), key -> new ArrayList<>())
+                    .add(link);
+        }
+        Map<String, LinkMetric> metrics = new LinkedHashMap<>();
+        fillLinkMetrics(byPair.get(TYPE_PURCHASE_ORDER + "->" + TYPE_PURCHASE_INBOUND),
+                METRIC_PURCHASE_ORDER_INBOUND_SQL, TYPE_PURCHASE_ORDER, TYPE_PURCHASE_INBOUND, metrics);
+        fillLinkMetrics(byPair.get(TYPE_PURCHASE_INBOUND + "->" + TYPE_SALES_ORDER),
+                METRIC_PURCHASE_INBOUND_SALES_ORDER_SQL, TYPE_PURCHASE_INBOUND, TYPE_SALES_ORDER, metrics);
+        fillLinkMetrics(byPair.get(TYPE_SALES_ORDER + "->" + TYPE_SALES_OUTBOUND),
+                METRIC_SALES_ORDER_OUTBOUND_SQL, TYPE_SALES_ORDER, TYPE_SALES_OUTBOUND, metrics);
+        fillLinkMetrics(byPair.get(TYPE_SALES_ORDER + "->" + TYPE_FREIGHT_BILL),
+                METRIC_SALES_ORDER_FREIGHT_BILL_SQL, TYPE_SALES_ORDER, TYPE_FREIGHT_BILL, metrics);
+        return metrics;
+    }
+
+    /** 单链路批量聚合：按下游单据 id 一次查回 (from_id, to_id) → 数量/重量。 */
+    private void fillLinkMetrics(List<DocumentFlowLink> pairLinks,
+                                 String sql,
+                                 String fromType,
+                                 String toType,
+                                 Map<String, LinkMetric> target) {
+        if (pairLinks == null || pairLinks.isEmpty()) {
+            return;
+        }
+        Set<Long> toIds = new LinkedHashSet<>();
+        for (DocumentFlowLink link : pairLinks) {
+            Long toId = parseId(link.toId());
+            if (toId != null) {
+                toIds.add(toId);
+            }
+        }
+        if (toIds.isEmpty()) {
+            return;
+        }
+        forEachRow(sql, new MapSqlParameterSource("ids", toIds), resultSet ->
+                target.putIfAbsent(
+                        linkKey(fromType, Long.toString(resultSet.getLong("from_id")),
+                                toType, Long.toString(resultSet.getLong("to_id"))),
+                        new LinkMetric(
+                                resultSet.getBigDecimal("quantity"),
+                                resultSet.getBigDecimal("weight"))));
+    }
+
+    private static String linkKey(DocumentFlowLink link) {
+        return linkKey(link.fromType(), link.fromId(), link.toType(), link.toId());
+    }
+
+    private static String linkKey(String fromType, String fromId, String toType, String toId) {
+        return fromType + ":" + fromId + "->" + toType + ":" + toId;
+    }
+
+    /** 边端点 id 来自数据库主键，正常为十进制字符串；异常值跳过，避免拖垮整条单据流查询。 */
+    private static Long parseId(String id) {
+        if (id == null || id.isEmpty()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(id);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     /** 源节点按单号被下游引用(反向): 批量查目标表中引用列包含任一源单号的记录。边方向 源 → 目标。 */
@@ -610,5 +735,9 @@ public class DocumentFlowService {
     }
 
     private record FlowEdge(FlowNode from, FlowNode to, String linkType) {
+    }
+
+    /** 关系边引用量：数量(件) / 重量(吨)，均可能为 null（来源明细无重量或聚合缺失）。 */
+    private record LinkMetric(BigDecimal quantity, BigDecimal weight) {
     }
 }
