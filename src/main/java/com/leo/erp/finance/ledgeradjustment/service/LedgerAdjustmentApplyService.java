@@ -1,7 +1,7 @@
 package com.leo.erp.finance.ledgeradjustment.service;
 
 import com.leo.erp.common.support.ValidationMessages;
-import com.leo.erp.common.support.PrecisionConstants;
+import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessStatusValidator;
@@ -137,7 +137,7 @@ public class LedgerAdjustmentApplyService {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, ValidationMessages.AMOUNT_POSITIVE);
         }
-        return amount.setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
+        return TradeItemCalculator.scaleAmount(amount);
     }
 
     private ResolvedCounterparty resolveCounterparty(String counterpartyType,

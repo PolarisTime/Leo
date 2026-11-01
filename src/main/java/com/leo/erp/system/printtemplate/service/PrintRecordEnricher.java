@@ -146,7 +146,13 @@ class PrintRecordEnricher {
             return decimal;
         }
         if (value instanceof Number number) {
-            return BigDecimal.valueOf(number.doubleValue());
+            // 整数类型必须走 longValue：doubleValue() 对大整数（雪花 ID / 长金额）会丢精度；
+            // 浮点类型用十进制字面量构造，避免多一次二进制中间转换。
+            if (number instanceof Integer || number instanceof Long
+                    || number instanceof Short || number instanceof Byte) {
+                return BigDecimal.valueOf(number.longValue());
+            }
+            return new BigDecimal(number.toString());
         }
         try {
             return new BigDecimal(String.valueOf(value).trim());

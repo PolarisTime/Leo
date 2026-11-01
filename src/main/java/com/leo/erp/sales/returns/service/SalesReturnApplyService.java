@@ -148,7 +148,7 @@ public class SalesReturnApplyService {
         item.setWeightTon(weightTon);
         BigDecimal unitPrice = TradeItemCalculator.scaleAmount(source.unitPrice());
         item.setUnitPrice(unitPrice);
-        item.setAmount(TradeItemCalculator.scaleAmount(weightTon.multiply(unitPrice)));
+        item.setAmount(TradeItemCalculator.calculateAmount(weightTon, unitPrice));
     }
 
     private void applyHeaderSettlementCompany(SalesReturn entity,

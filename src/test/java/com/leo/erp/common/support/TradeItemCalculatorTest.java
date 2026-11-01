@@ -36,6 +36,19 @@ class TradeItemCalculatorTest {
     }
 
     @Test
+    void calculateAmount_shouldRoundHalfUpOnDecimalMidpoint() {
+        // 前端 double + toFixed(2) 会得到 33333.32；十进制 HALF_UP 必须与后端一致为 33333.33。
+        assertThat(TradeItemCalculator.calculateAmount(new BigDecimal("9.995"), new BigDecimal("3335")))
+                .isEqualByComparingTo("33333.33");
+        assertThat(TradeItemCalculator.calculateAmount(new BigDecimal("1.005"), new BigDecimal("1")))
+                .isEqualByComparingTo("1.01");
+        assertThat(TradeItemCalculator.calculateAmount(new BigDecimal("2.675"), new BigDecimal("1")))
+                .isEqualByComparingTo("2.68");
+        assertThat(TradeItemCalculator.calculateAmount(new BigDecimal("0.125"), new BigDecimal("1")))
+                .isEqualByComparingTo("0.13");
+    }
+
+    @Test
     void calculateAmount_shouldUseZeroForNullWeight() {
         assertThat(TradeItemCalculator.calculateAmount(null, new BigDecimal("4000.00")))
                 .isEqualByComparingTo("0.00");

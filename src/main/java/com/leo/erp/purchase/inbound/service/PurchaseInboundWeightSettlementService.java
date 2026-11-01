@@ -109,7 +109,7 @@ public class PurchaseInboundWeightSettlementService {
                     baseWeightTon,
                     null,
                     BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE),
-                    BigDecimal.ZERO.setScale(PrecisionConstants.AMOUNT_SCALE),
+                    TradeItemCalculator.scaleAmount(BigDecimal.ZERO),
                     sourcePieceWeightTon,
                     baseWeightTon
             );
@@ -122,7 +122,7 @@ public class PurchaseInboundWeightSettlementService {
                     baseWeightTon,
                     null,
                     BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE),
-                    BigDecimal.ZERO.setScale(PrecisionConstants.AMOUNT_SCALE),
+                    TradeItemCalculator.scaleAmount(BigDecimal.ZERO),
                     sourcePieceWeightTon,
                     baseWeightTon
             );

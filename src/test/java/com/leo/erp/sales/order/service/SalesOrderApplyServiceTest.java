@@ -277,6 +277,24 @@ class SalesOrderApplyServiceTest {
     }
 
     @Test
+    void apply_shouldIgnoreClientProvidedAmountAndRecalculate() {
+        stubHappyPath();
+        when(sourceAllocationService.resolveSourceInbound(any(), any())).thenReturn(null);
+        // 客户端传入"前端 double 舍入"的错误金额：后端必须以服务端重算值覆盖，落库金额不可被客户端篡改。
+        SalesOrderItemRequest tampered = new SalesOrderItemRequest(
+                null, 500L, "M001", "品牌A", "型钢", "螺纹钢", "HRB400", "12m", "吨",
+                1L, null, 1L, "库房A", "B001", 5, "件", new BigDecimal("1.250"), 100,
+                new BigDecimal("6.250"), new BigDecimal("4000"), new BigDecimal("33333.32"));
+        SalesOrder entity = new SalesOrder();
+
+        service.apply(entity, requestWithItems(List.of(tampered)), () -> 100L);
+
+        assertThat(entity.getItems()).hasSize(1);
+        assertThat(entity.getItems().get(0).getAmount()).isEqualByComparingTo("25000.00");
+        assertThat(entity.getTotalAmount()).isEqualByComparingTo("25000.00");
+    }
+
+    @Test
     void apply_shouldUseRequestedSettlementCompanyWhenProjectHasNone() {
         when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(customer()));
         when(projectQuery.findActiveById(20L)).thenReturn(Optional.of(project()));

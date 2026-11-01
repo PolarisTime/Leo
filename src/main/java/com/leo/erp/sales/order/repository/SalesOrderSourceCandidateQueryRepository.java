@@ -1,6 +1,6 @@
 package com.leo.erp.sales.order.repository;
 
-import com.leo.erp.common.support.PrecisionConstants;
+import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.sales.order.web.dto.SalesOrderSourceCandidateItemResponse;
@@ -322,8 +322,7 @@ public class SalesOrderSourceCandidateQueryRepository {
                     ? BigDecimal.ZERO
                     : line.remainingWeightTon();
             BigDecimal unitPrice = line.unitPrice() == null ? BigDecimal.ZERO : line.unitPrice();
-            BigDecimal amount = remainingWeight.multiply(unitPrice)
-                    .setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
+            BigDecimal amount = TradeItemCalculator.calculateAmount(remainingWeight, unitPrice);
             totalQuantity += line.remainingQuantity();
             totalWeight = totalWeight.add(remainingWeight);
             totalAmount = totalAmount.add(amount);
