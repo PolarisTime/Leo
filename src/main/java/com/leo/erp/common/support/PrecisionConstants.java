@@ -18,6 +18,14 @@ public final class PrecisionConstants {
     /** 金额精度（元），2 位小数 */
     public static final int AMOUNT_SCALE = 2;
 
+    /**
+     * 额度使用率精度（比值，非百分比），4 位小数。
+     *
+     * <p>使用率既参与计算（{@code SalesContractQuota}）又要序列化出参，两处必须共用本常量；
+     * 否则出参会被字段名启发式截断（{@code amountUsageRate} 含 {@code amount} 而落到 2 位）。</p>
+     */
+    public static final int USAGE_RATE_SCALE = 4;
+
     /** 默认舍入模式 */
     public static final RoundingMode DEFAULT_ROUNDING = RoundingMode.HALF_UP;
 

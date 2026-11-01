@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -126,6 +127,34 @@ public interface SalesOutboundRepository extends JpaRepository<SalesOutbound, Lo
             @Param("status") String status,
             @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds
     );
+
+    /**
+     * 项目维度「已审核出库」金额合计（{@code deleted_flag = false}），供项目销售汇总。
+     *
+     * <p>只做单条 {@code sum(...)} 聚合，不逐单查询；无匹配行时由 {@code coalesce} 返回 0。</p>
+     */
+    @Query("""
+            select coalesce(sum(outbound.totalAmount), 0)
+            from SalesOutbound outbound
+            where outbound.projectId = :projectId
+              and outbound.status = :status
+              and outbound.deletedFlag = false
+            """)
+    BigDecimal sumTotalAmountByProjectIdAndStatus(@Param("projectId") Long projectId,
+                                                  @Param("status") String status);
+
+    /**
+     * 项目维度「已审核出库」吨位合计（{@code deleted_flag = false}），供项目销售汇总。
+     */
+    @Query("""
+            select coalesce(sum(outbound.totalWeight), 0)
+            from SalesOutbound outbound
+            where outbound.projectId = :projectId
+              and outbound.status = :status
+              and outbound.deletedFlag = false
+            """)
+    BigDecimal sumTotalWeightByProjectIdAndStatus(@Param("projectId") Long projectId,
+                                                  @Param("status") String status);
 
     interface SourceOutboundStatusProjection {
         Long getItemId();

@@ -9,6 +9,18 @@ public interface ProjectQuery {
 
     Optional<ProjectSnapshot> findActiveById(Long id);
 
+    /**
+     * 按 ID 查询「启用态」项目（未删除且 {@code status=正常}）。
+     *
+     * <p>与 {@link #findActiveById(Long)} 的区别：后者只排除软删除，不区分「正常 / 禁用」状态。
+     * 需要「已停用即视为不存在」的只读查询（例如项目销售数据汇总要求停用项目返回 404）
+     * 必须走本方法，不能自行用 {@code findActiveById} 代替。</p>
+     *
+     * @param id 项目 ID
+     * @return 启用态项目快照；不存在、已软删除或已停用时为空
+     */
+    Optional<ProjectSnapshot> findEnabledById(Long id);
+
     List<ProjectSnapshot> findActiveByCustomerCodeAndNameOrderByCode(String customerCode, String projectName);
 
     /**

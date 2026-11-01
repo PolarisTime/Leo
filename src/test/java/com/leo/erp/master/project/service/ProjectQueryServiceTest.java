@@ -1,5 +1,6 @@
 package com.leo.erp.master.project.service;
 
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.api.ProjectQuery.ProjectSnapshot;
 import com.leo.erp.master.project.domain.entity.Project;
 import com.leo.erp.master.project.repository.ProjectRepository;
@@ -48,6 +49,25 @@ class ProjectQueryServiceTest {
         assertThat(service.findActiveById(20L)).contains(new ProjectSnapshot(
                 20L, "项目A", "项A", 10L, "CUST001", 40L, "项目结算公司"
         ));
+    }
+
+    @Test
+    void findEnabledById_shouldReturnSnapshotOnlyForNormalStatusProject() {
+        Project project = project(20L, "项目A", "项A", false);
+        project.setStatus(StatusConstants.NORMAL);
+        when(repository.findByIdAndDeletedFlagFalse(20L)).thenReturn(Optional.of(project));
+
+        assertThat(service.findEnabledById(20L)).contains(
+                new ProjectSnapshot(20L, "项目A", "项A", 10L, "CUST001"));
+    }
+
+    @Test
+    void findEnabledById_shouldReturnEmptyWhenProjectDisabled() {
+        Project project = project(20L, "项目A", "项A", false);
+        project.setStatus(StatusConstants.DISABLED);
+        when(repository.findByIdAndDeletedFlagFalse(20L)).thenReturn(Optional.of(project));
+
+        assertThat(service.findEnabledById(20L)).isEmpty();
     }
 
     @Test

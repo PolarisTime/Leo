@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -130,4 +131,34 @@ public interface CustomerStatementRepository extends JpaRepository<CustomerState
               and statement.direction = '蓝字'
             """)
     Optional<CustomerStatement> findActiveBlueById(@Param("id") Long id);
+
+    /**
+     * 项目维度「未删除客户对账单明细」金额合计，供项目销售汇总计算已对账金额。
+     *
+     * <p>口径：{@code statement.deletedFlag = false}，蓝字与红字都计入；红字明细落库时金额即为负数，
+     * 按项目求和后自然抵消，不按 {@code direction} 翻转符号。按单据头 {@code project_id} 过滤
+     * （对账单头与明细的项目在同一生成流程内同源）。无匹配行时由 {@code coalesce} 返回 0。</p>
+     */
+    @Query("""
+            select coalesce(sum(item.amount), 0)
+            from CustomerStatement statement
+            join statement.items item
+            where statement.projectId = :projectId
+              and statement.deletedFlag = false
+            """)
+    BigDecimal sumItemAmountByProjectId(@Param("projectId") Long projectId);
+
+    /**
+     * 项目维度「未删除客户对账单明细」吨位合计，供项目销售汇总计算已对账吨位。
+     *
+     * <p>口径与 {@link #sumItemAmountByProjectId(Long)} 一致；红字明细吨位为负数，求和后自然抵消。</p>
+     */
+    @Query("""
+            select coalesce(sum(item.weightTon), 0)
+            from CustomerStatement statement
+            join statement.items item
+            where statement.projectId = :projectId
+              and statement.deletedFlag = false
+            """)
+    BigDecimal sumItemWeightTonByProjectId(@Param("projectId") Long projectId);
 }

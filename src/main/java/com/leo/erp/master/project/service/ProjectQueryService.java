@@ -1,6 +1,7 @@
 package com.leo.erp.master.project.service;
 
 import com.leo.erp.common.support.CsvValues;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.api.ProjectPricingBasisQuery;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.ClosedSettleDirection;
 import com.leo.erp.master.api.ProjectProcurementScopeQuery;
@@ -36,6 +37,19 @@ public class ProjectQueryService implements ProjectQuery, ProjectProcurementScop
     @Override
     public Optional<ProjectSnapshot> findActiveById(Long id) {
         return repository.findByIdAndDeletedFlagFalse(id).map(this::toSnapshot);
+    }
+
+    /**
+     * 按 ID 查询「启用态」项目：未删除且状态为「正常」。
+     *
+     * <p>{@link #findActiveById(Long)} 只过滤软删除，无法表达「已停用视为不存在」；
+     * 项目销售数据汇总等只读端点要求停用项目返回 404，故单独提供本方法。</p>
+     */
+    @Override
+    public Optional<ProjectSnapshot> findEnabledById(Long id) {
+        return repository.findByIdAndDeletedFlagFalse(id)
+                .filter(project -> StatusConstants.NORMAL.equals(project.getStatus()))
+                .map(this::toSnapshot);
     }
 
     @Override

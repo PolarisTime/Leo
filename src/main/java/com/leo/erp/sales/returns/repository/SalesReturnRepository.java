@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -73,4 +74,32 @@ public interface SalesReturnRepository extends JpaRepository<SalesReturn, Long>,
      */
     @EntityGraph(attributePaths = "items")
     List<SalesReturn> findAllByIdIn(Collection<Long> ids);
+
+    /**
+     * 项目维度「已审核退货」金额合计（{@code deleted_flag = false}），供项目销售汇总抵扣出库。
+     *
+     * <p>只做单条 {@code sum(...)} 聚合，不逐单查询；无匹配行时由 {@code coalesce} 返回 0。</p>
+     */
+    @Query("""
+            select coalesce(sum(ret.totalAmount), 0)
+            from SalesReturn ret
+            where ret.projectId = :projectId
+              and ret.status = :status
+              and ret.deletedFlag = false
+            """)
+    BigDecimal sumTotalAmountByProjectIdAndStatus(@Param("projectId") Long projectId,
+                                                  @Param("status") String status);
+
+    /**
+     * 项目维度「已审核退货」吨位合计（{@code deleted_flag = false}），供项目销售汇总抵扣出库。
+     */
+    @Query("""
+            select coalesce(sum(ret.totalWeight), 0)
+            from SalesReturn ret
+            where ret.projectId = :projectId
+              and ret.status = :status
+              and ret.deletedFlag = false
+            """)
+    BigDecimal sumTotalWeightByProjectIdAndStatus(@Param("projectId") Long projectId,
+                                                  @Param("status") String status);
 }
