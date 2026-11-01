@@ -7,6 +7,9 @@ import com.leo.erp.inventory.api.InventoryTransactionCommand;
 import com.leo.erp.inventory.api.InventoryTransactionInput;
 import com.leo.erp.sales.api.SalesReturnReversalCommand;
 import com.leo.erp.sales.returns.domain.entity.SalesReturn;
+import com.leo.erp.sales.returns.domain.entity.SalesReturnItem;
+import com.leo.erp.sales.returns.web.dto.SalesReturnItemRequest;
+import com.leo.erp.sales.returns.web.dto.SalesReturnRequest;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,8 +21,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -116,5 +124,62 @@ class SalesReturnWorkflowServiceTest {
 
         verify(sourceAllocationLockService, never()).lockSalesOutboundItemSources(any());
         verify(coverageValidator, never()).assertCoverage(any());
+    }
+
+    // ---------- 保存路径（含草稿）来源出库明细锁 ----------
+
+    private SalesReturnRequest request(String status, Long... sourceOutboundItemIds) {
+        List<SalesReturnItemRequest> items = java.util.Arrays.stream(sourceOutboundItemIds)
+                .map(id -> new SalesReturnItemRequest(
+                        null, id, null, null, null, null, null, null, null, null, null,
+                        null, null, null, 1, null, new BigDecimal("1.00000000"), 1, null,
+                        new BigDecimal("0.00"), null))
+                .toList();
+        return new SalesReturnRequest("SR001", null, null, null, null, null, null, null,
+                LocalDate.of(2026, 9, 1), status, null, items, false);
+    }
+
+    /** 草稿保存也必须先取来源出库明细锁（50→51），再做来源校验/明细应用。 */
+    @Test
+    void apply_shouldLockRequestedSourceOutboundItemsBeforeApplyingItemsOnDraftSave() {
+        SalesReturn salesReturn = entity(null);
+        SalesReturnRequest request = request(StatusConstants.DRAFT, 11L, 12L);
+
+        service.apply(salesReturn, request, () -> 100L);
+
+        InOrder inOrder = Mockito.inOrder(sourceAllocationLockService, applyService);
+        inOrder.verify(sourceAllocationLockService).lockSalesOutboundItemSources(List.of(11L, 12L));
+        inOrder.verify(applyService).applyItems(eq(salesReturn), eq(request), any());
+        verify(coverageValidator, never()).assertCoverage(any());
+    }
+
+    /** 编辑草稿换来源时，单据已有明细与本次请求明细的来源出库明细都要锁（新旧两端）。 */
+    @Test
+    void apply_shouldLockBothExistingAndRequestedSourceOutboundItemsOnUpdate() {
+        SalesReturn salesReturn = entity(StatusConstants.DRAFT);
+        SalesReturnItem existing = new SalesReturnItem();
+        existing.setId(7L);
+        existing.setSourceSalesOutboundItemId(9L);
+        salesReturn.setItems(List.of(existing));
+        SalesReturnRequest request = request(StatusConstants.DRAFT, 11L);
+
+        service.apply(salesReturn, request, () -> 100L);
+
+        verify(sourceAllocationLockService).lockSalesOutboundItemSources(List.of(9L, 11L));
+    }
+
+    /** 保存并审核：先锁请求来源 → 应用明细 → 再锁应用后的来源 → 覆盖校验。 */
+    @Test
+    void apply_shouldLockThenApplyThenValidateCoverageForAuditedSave() {
+        SalesReturn salesReturn = entity(null);
+        SalesReturnRequest request = request(StatusConstants.AUDITED, 11L);
+
+        service.apply(salesReturn, request, () -> 100L);
+
+        InOrder inOrder = Mockito.inOrder(sourceAllocationLockService, applyService, coverageValidator);
+        inOrder.verify(sourceAllocationLockService).lockSalesOutboundItemSources(List.of(11L));
+        inOrder.verify(applyService).applyItems(eq(salesReturn), eq(request), any());
+        inOrder.verify(sourceAllocationLockService).lockSalesOutboundItemSources(List.of());
+        inOrder.verify(coverageValidator).assertCoverage(salesReturn);
     }
 }

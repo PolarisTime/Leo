@@ -11,6 +11,7 @@ import com.leo.erp.inventory.api.InventoryTransactionInput;
 import com.leo.erp.sales.api.SalesReturnReversalCommand;
 import com.leo.erp.sales.returns.domain.entity.SalesReturn;
 import com.leo.erp.sales.returns.domain.entity.SalesReturnItem;
+import com.leo.erp.sales.returns.web.dto.SalesReturnItemRequest;
 import com.leo.erp.sales.returns.web.dto.SalesReturnRequest;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -62,6 +63,9 @@ public class SalesReturnWorkflowService {
         entity.setReturnDate(request.returnDate());
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
+        // 草稿保存也要先取来源出库明细锁（50 → 51）：与出库反审核/删除守卫、审核覆盖校验同一加锁序，
+        // 封住「退货草稿保存 ↔ 出库反审核」的并发窗口；空明细短路。
+        lockSourceOutboundItems(entity, request);
         applyService.applyItems(entity, request, nextIdSupplier);
         if (StatusConstants.AUDITED.equals(nextStatus)) {
             lockSourceOutboundItems(entity);
@@ -128,6 +132,27 @@ public class SalesReturnWorkflowService {
      */
     private void lockSourceOutboundItems(SalesReturn entity) {
         sourceAllocationLockService.lockSalesOutboundItemSources(sourceOutboundItemIds(entity));
+    }
+
+    /**
+     * 保存（含草稿）前锁定来源销售出库明细及其父出库单：加锁序与
+     * {@link #lockSourceOutboundItems(SalesReturn)} 一致（出库单 50 → 出库明细 51）。
+     *
+     * <p>取「单据已有明细 + 本次请求明细」的并集：换来源时新旧两端都被锁住，避免草稿保存与
+     * 出库反审核/删除并发。空明细短路，不产生无意义的加锁调用。</p>
+     */
+    private void lockSourceOutboundItems(SalesReturn entity, SalesReturnRequest request) {
+        TreeSet<Long> ids = new TreeSet<>(sourceOutboundItemIds(entity));
+        if (request != null && request.items() != null) {
+            request.items().stream()
+                    .map(SalesReturnItemRequest::sourceSalesOutboundItemId)
+                    .filter(Objects::nonNull)
+                    .forEach(ids::add);
+        }
+        if (ids.isEmpty()) {
+            return;
+        }
+        sourceAllocationLockService.lockSalesOutboundItemSources(List.copyOf(ids));
     }
 
     private InventoryTransactionInput toInventoryInput(SalesReturn salesReturn) {
