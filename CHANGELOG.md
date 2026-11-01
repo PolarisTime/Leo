@@ -1,3 +1,24 @@
+# [17.4.0](https://github.com/PolarisTime/Leo/compare/v17.3.0...v17.4.0) (2026-11-01)
+
+
+### Bug Fixes
+
+* **finance:** 修复付款单孤立列导致的创建/筛选 500，补齐物流对账单关联单号 ([1b0fcb1](https://github.com/PolarisTime/Leo/commit/1b0fcb19942b8860e306e13ed178081590c19451))
+* **leo:** 收敛库存互斥、采购收满口径与状态写契约 ([5651dd8](https://github.com/PolarisTime/Leo/commit/5651dd83ac093905c538bf811825e539345177e7))
+* **purchase,sales:** 补齐导入来源的生命周期守卫与并发锁 ([b361a68](https://github.com/PolarisTime/Leo/commit/b361a68cf0b411160fae67c69712bab4359e8ac5))
+* **sales:** 销售退货保存前锁定来源出库明细 ([c255c87](https://github.com/PolarisTime/Leo/commit/c255c87f51aa05de85960b17619d5d06cec45be2))
+
+
+### Features
+
+* **db:** 清理 deprecated 列（V207/V208）并下线台账调整写端点 ([fac03fd](https://github.com/PolarisTime/Leo/commit/fac03fd53a861ffb09fc54f5f766e32685461cdd))
+* **inventory:** 库存余额重建/对账接入 REST 端点，清理零引用死符号 ([4ff265a](https://github.com/PolarisTime/Leo/commit/4ff265a2ba529ee240a79dadc091677d20ea5ad1))
+* **leo:** 付款单/收款单接入资源版本前置条件 ([5d94970](https://github.com/PolarisTime/Leo/commit/5d94970f6553df6a8bc1510fc15adc557b9a0e7c))
+* **leo:** 修正 REST 语义、雪花 ID 入站与并发冲突契约 ([f7caa1f](https://github.com/PolarisTime/Leo/commit/f7caa1f68575c34bceb93306db33b427c60d06ab))
+* **leo:** 补齐写接口幂等键与资金导出边界，订单更新强制版本前置条件 ([1aeba5c](https://github.com/PolarisTime/Leo/commit/1aeba5c5c5a8cb20aa0c7f9382687aa90f0dfee0))
+* **purchase,search:** 采购入库强制单一来源订单，单据流关系边带引用数量 ([a7a0ffa](https://github.com/PolarisTime/Leo/commit/a7a0ffa78bd582e984828d8ad11db778806318cf))
+* **sales:** 新增项目销售汇总只读端点 ([66487a6](https://github.com/PolarisTime/Leo/commit/66487a6fe024ba10299d86323101c9afbf0283b2))
+
 # [17.3.0](https://github.com/PolarisTime/Leo/compare/v17.2.0...v17.3.0) (2026-10-31)
 
 
