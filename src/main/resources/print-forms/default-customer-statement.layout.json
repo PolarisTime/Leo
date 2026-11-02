@@ -125,16 +125,18 @@
     "emptyText": "暂无对账明细",
     "lineWidth": 0.5,
     "grouping": {
-      "by": "billTime",
+      "by": "sourceNo",
       "inline": true,
       "indexField": "groupIndex",
       "blankRepeatedFields": [
         "groupIndex",
-        "billTime"
+        "billTime",
+        "remark"
       ],
       "continuationFillFields": [
         "groupIndex",
-        "billTime"
+        "billTime",
+        "remark"
       ],
       "sortBy": "billTime",
       "sortDirection": "asc"
@@ -144,9 +146,7 @@
       "billTime",
       "remark"
     ],
-    "mergeEqualColumns": [
-      "remark"
-    ],
+    "mergeEqualColumns": [],
     "columns": [
       {
         "key": "groupIndex",

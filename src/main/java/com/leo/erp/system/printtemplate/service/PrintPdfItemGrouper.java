@@ -64,10 +64,26 @@ public final class PrintPdfItemGrouper {
              * 视觉上等价于 Excel 的合并单元格（序号/日期/备注只出现一次），
              * 这样一张对账单就是一张连续明细表，不再被组头与小计切碎。
              */
+            String indexFieldName = indexField(grouping);
+            Map<String, String> groupFirstValues = new LinkedHashMap<>();
+            for (String field : blankRepeatedFields) {
+                if (field.equals(indexFieldName)) {
+                    continue;
+                }
+                for (Map<String, String> row : groupItems) {
+                    String value = row.get(field);
+                    if (value != null && !value.isBlank()) {
+                        groupFirstValues.put(field, value);
+                        break;
+                    }
+                }
+            }
             for (int index = 0; index < groupItems.size(); index++) {
                 Map<String, String> detail = new LinkedHashMap<>(groupItems.get(index));
-                detail.put(indexField(grouping), index == 0 ? String.valueOf(groupIndex) : "");
-                if (index > 0) {
+                detail.put(indexFieldName, index == 0 ? String.valueOf(groupIndex) : "");
+                if (index == 0) {
+                    detail.putAll(groupFirstValues);
+                } else {
                     for (String field : blankRepeatedFields) {
                         detail.put(field, "");
                     }

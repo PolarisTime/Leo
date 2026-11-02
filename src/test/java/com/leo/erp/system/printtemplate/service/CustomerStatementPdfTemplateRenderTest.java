@@ -162,7 +162,7 @@ class CustomerStatementPdfTemplateRenderTest {
             String amount
     ) {
         Map<String, String> item = new LinkedHashMap<>();
-        item.put("sourceNo", "SO-202608-001");
+        item.put("sourceNo", "SO-" + billTime);
         item.put("billTime", billTime);
         item.put("category", "盘螺");
         item.put("brand", "永钢");

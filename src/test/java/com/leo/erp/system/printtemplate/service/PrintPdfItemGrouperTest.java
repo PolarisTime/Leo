@@ -74,7 +74,7 @@ class PrintPdfItemGrouperTest {
             JsonNode root = objectMapper.readTree(stream);
             JsonNode table = root.path("table");
             JsonNode grouping = table.path("grouping");
-            assertThat(grouping.path("by").asText()).isEqualTo("billTime");
+            assertThat(grouping.path("by").asText()).isEqualTo("sourceNo");
             assertThat(grouping.path("inline").asBoolean()).isTrue();
             assertThat(grouping.path("sortBy").asText()).isEqualTo("billTime");
             assertThat(grouping.path("sortDirection").asText()).isEqualTo("asc");
@@ -83,7 +83,7 @@ class PrintPdfItemGrouperTest {
                             grouping.path("blankRepeatedFields").spliterator(), false)
                     .map(JsonNode::asText)
                     .toList())
-                    .contains("groupIndex", "billTime");
+                    .contains("groupIndex", "billTime", "remark");
 
             List<String> labels = StreamSupport.stream(
                             table.path("columns").spliterator(), false)
@@ -98,14 +98,14 @@ class PrintPdfItemGrouperTest {
                             grouping.path("continuationFillFields").spliterator(), false)
                     .map(JsonNode::asText)
                     .toList())
-                    .contains("groupIndex", "billTime");
+                    .contains("groupIndex", "billTime", "remark");
             assertThat(table.path("repeatHeaderPerPage").asBoolean()).isTrue();
             assertThat(StreamSupport.stream(
                             table.path("mergeColumns").spliterator(), false)
                     .map(JsonNode::asText)
                     .toList())
                     .as("序号/进货日期用真正的跨行合并单元格")
-                    .contains("groupIndex", "billTime");
+                    .contains("groupIndex", "billTime", "remark");
             assertThat(root.path("summary").path("grid").path("rows").size())
                     .as("底部累计信息块按参考样式两行")
                     .isEqualTo(2);
