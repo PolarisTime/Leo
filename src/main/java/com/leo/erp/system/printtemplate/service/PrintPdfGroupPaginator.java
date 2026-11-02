@@ -145,9 +145,15 @@ public class PrintPdfGroupPaginator {
     ) {
         String groupType = items.get(groupHeaderIndex).get(GROUP_HEADER_KEY);
         boolean detailHeaderAfterProject = isDetailHeaderAfterProject(tableConfig, repeatHeaderPerSourceGroup);
+        /*
+         * 组头不能"孤零零"落在页尾：至少要能跟 minDetailRows 行明细一起放下，否则整组挪到下一页。
+         * 默认仍为 1 行（保持既有模板行为），物流对账单模板显式配置 3 行。
+         */
+        int minDetailRows = Math.max(1, tableConfig.path("minDetailRows").asInt(1));
         float height = repeatHeaderPerSourceGroup
                 && !detailHeaderAfterProject
                 && GROUP_HEADER_SOURCE.equals(groupType) ? headerHeight : 0f;
+        int detailRows = 0;
         for (int index = groupHeaderIndex; index < items.size(); index++) {
             Map<String, String> item = items.get(index);
             if (index > groupHeaderIndex && (isBlankRow(item) || startsNextGroup(item, groupType))) {
@@ -165,11 +171,14 @@ public class PrintPdfGroupPaginator {
                 return height;
             }
             height += rowHeight;
+            detailRows++;
             // 明细行后若紧跟小计行，一并计入，避免小计与明细分页分离
             if (index + 1 < items.size() && isSubtotalRow(items.get(index + 1))) {
                 height += subtotalHeight(tableConfig);
             }
-            return height;
+            if (detailRows >= minDetailRows) {
+                return height;
+            }
         }
         return height;
     }

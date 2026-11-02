@@ -119,4 +119,52 @@ class PrintPdfGroupPaginatorTest {
                 items, 0, 400f, 200f, 28f, tableConfig, 26f, 23f, true);
         assertThat(shouldBreak).isFalse();
     }
+
+    @Test
+    void shouldStartGroupOnNextPage_shouldHonorMinDetailRows() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode threeRows = mapper.readTree("""
+                {
+                  "rowHeight": 23,
+                  "headerHeight": 26,
+                  "detailHeaderPlacement": "afterProjectHeader",
+                  "repeatGroupContextOnContinuation": false,
+                  "minDetailRows": 3,
+                  "groupHeader": {
+                    "height": 18,
+                    "source": {"height": 34},
+                    "project": {"height": 26},
+                    "subtotal": {"height": 22}
+                  }
+                }
+                """);
+        JsonNode oneRow = mapper.readTree("""
+                {
+                  "rowHeight": 23,
+                  "headerHeight": 26,
+                  "detailHeaderPlacement": "afterProjectHeader",
+                  "repeatGroupContextOnContinuation": false,
+                  "minDetailRows": 1,
+                  "groupHeader": {
+                    "height": 18,
+                    "source": {"height": 34},
+                    "project": {"height": 26},
+                    "subtotal": {"height": 22}
+                  }
+                }
+                """);
+        List<Map<String, String>> items = new ArrayList<>();
+        items.add(row(SOURCE));
+        items.add(row(PROJECT));
+        for (int index = 0; index < 5; index++) {
+            items.add(detail());
+        }
+
+        // 剩余 120：只放得下组头(86)+2 行(46)=132>120，不足 minDetailRows=3 → 整组换页
+        assertThat(paginator.shouldStartGroupOnNextPage(
+                items, 0, 80f, 200f, 28f, threeRows, 26f, 23f, true)).isTrue();
+        // minDetailRows=1 时 86+23=109 能放下（80+109=189 ≤ 200）→ 不换页，保留原行为
+        assertThat(paginator.shouldStartGroupOnNextPage(
+                items, 0, 80f, 200f, 28f, oneRow, 26f, 23f, true)).isFalse();
+    }
 }

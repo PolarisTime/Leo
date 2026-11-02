@@ -217,6 +217,8 @@ public class PrintScriptService {
     private Map<String, String> projectGroupHeader(List<Map<String, String>> projectItems) {
         Map<String, String> header = new LinkedHashMap<>();
         header.put("isGroupHeader", GROUP_HEADER_PROJECT);
+        // 单号上提到「客户 / 项目」这一行：明细里不再重复打印同一张物流单号，列宽让给品牌/规格/仓库。
+        header.put("sourceNo", distinctText(projectItems, "sourceNo"));
         header.put("customerName", distinctText(projectItems, "customerName"));
         header.put("projectName", distinctText(projectItems, "projectName"));
         header.put("totalQuantity", String.valueOf(sumInteger(projectItems, "quantity")));
