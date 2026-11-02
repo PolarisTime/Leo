@@ -2,6 +2,7 @@ package com.leo.erp.sales.contract.service;
 
 import com.leo.erp.sales.contract.domain.entity.SalesContract;
 import com.leo.erp.sales.contract.web.dto.SalesContractRequest;
+import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import org.springframework.stereotype.Service;
 
 /**
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
  * 其它服务必须通过这里变更状态, 避免绕过状态迁移校验。</p>
  */
 @Service
+@SanctionedStatusWriter("状态写入是该类自身的受控业务入口（自带前置状态校验与下游守卫）")
 public class SalesContractApplyService {
 
     public void apply(SalesContract entity,

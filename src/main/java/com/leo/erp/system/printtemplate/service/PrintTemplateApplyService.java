@@ -1,6 +1,7 @@
 package com.leo.erp.system.printtemplate.service;
 
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
+import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import org.springframework.stereotype.Service;
 
 /**
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
  * CRUD 更新统一经由此类变更 ACTIVE/DISABLED 状态。
  */
 @Service
+@SanctionedStatusWriter("状态写入是该类自身的受控业务入口（自带前置状态校验与下游守卫）")
 public class PrintTemplateApplyService {
 
     static final String STATUS_ACTIVE = "ACTIVE";

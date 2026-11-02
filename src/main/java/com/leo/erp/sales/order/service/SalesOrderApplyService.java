@@ -20,6 +20,7 @@ import com.leo.erp.system.company.api.CompanySettingQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.function.LongSupplier;
 
 @Service
+@SanctionedStatusWriter("状态写入是该类自身的受控业务入口（自带前置状态校验与下游守卫）")
 public class SalesOrderApplyService {
 
     private static final Logger log = LoggerFactory.getLogger(SalesOrderApplyService.class);

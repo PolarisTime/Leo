@@ -15,6 +15,7 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.security.support.SecurityPrincipal;
+import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +45,7 @@ import java.util.Objects;
  * </ul>
  */
 @Service
+@SanctionedStatusWriter("状态写入是该类自身的受控业务入口（自带前置状态校验与下游守卫）")
 public class PurchaseOrderForceCloseService {
 
     private final PurchaseOrderRepository purchaseOrderRepository;

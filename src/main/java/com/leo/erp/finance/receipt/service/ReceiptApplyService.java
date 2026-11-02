@@ -7,12 +7,14 @@ import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import com.leo.erp.finance.receipt.domain.entity.ReceiptPurposes;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
+import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import org.springframework.stereotype.Service;
 
 import java.util.function.LongSupplier;
 import java.math.BigDecimal;
 
 @Service
+@SanctionedStatusWriter("状态写入是该类自身的受控业务入口（自带前置状态校验与下游守卫）")
 public class ReceiptApplyService {
 
     private final ReceiptAllocationService receiptAllocationService;

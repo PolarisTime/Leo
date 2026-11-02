@@ -10,6 +10,7 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
 import com.leo.erp.purchase.order.service.PurchaseOrderDirectSalesCapacityGuard;
+import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
  * 不得在任一分支重新拼一套 SQL 或比较规则。</p>
  */
 @Service
+@SanctionedStatusWriter("状态写入是该类自身的受控业务入口（自带前置状态校验与下游守卫）")
 public class PurchaseInboundCompletionSyncService {
 
     private final PurchaseInboundSourceValidator sourceValidator;

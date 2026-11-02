@@ -14,6 +14,7 @@ import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.api.SupplierQuery;
 import com.leo.erp.system.company.api.CompanySettingQuery;
 import com.leo.erp.system.company.api.SettlementCompanySnapshot;
+import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -21,6 +22,7 @@ import java.util.Objects;
 import java.util.Set;
 
 @Service
+@SanctionedStatusWriter("状态写入是该类自身的受控业务入口（自带前置状态校验与下游守卫）")
 public class LedgerAdjustmentApplyService {
 
     private static final Set<String> ALLOWED_DIRECTIONS = Set.of("应收", "应付");

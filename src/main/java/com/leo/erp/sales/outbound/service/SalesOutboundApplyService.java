@@ -14,6 +14,7 @@ import com.leo.erp.sales.outbound.web.dto.SalesOutboundItemRequest;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -25,6 +26,7 @@ import java.util.Objects;
 import java.util.function.LongSupplier;
 
 @Service
+@SanctionedStatusWriter("状态写入是该类自身的受控业务入口（自带前置状态校验与下游守卫）")
 public class SalesOutboundApplyService {
 
     private final TradeItemMaterialSupport tradeItemMaterialSupport;

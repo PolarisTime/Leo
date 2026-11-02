@@ -1,5 +1,6 @@
 package com.leo.erp;
 
+import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import com.tngtech.archunit.ArchConfiguration;
 import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.domain.JavaClass;
@@ -22,6 +23,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -212,6 +214,12 @@ public final class ModuleBoundaryVerifier {
                 if (originModule == null) {
                     return;
                 }
+                /*
+                 * 按 (kind, 源类, 目标类) 去重：getDirectDependenciesFromSelf() 对同一个目标类
+                 * 会按引用次数重复产出（字段 + 方法调用 + 泛型签名各算一条），不去重时基线里
+                 * 同一对类会堆成多行——2026-11-02 之前 32 条基线实为 9 个不同的类对。
+                 */
+                Set<String> messages = new LinkedHashSet<>();
                 for (Dependency dependency : clazz.getDirectDependenciesFromSelf()) {
                     JavaClass target = dependency.getTargetClass().getBaseComponentType();
                     String targetModule = topLevelModuleOf(target);
@@ -223,11 +231,11 @@ public final class ModuleBoundaryVerifier {
                         continue;
                     }
                     // 描述中不含行号，保证基线条目在代码位移后仍稳定匹配。
-                    String message = String.format(Locale.ROOT,
+                    messages.add(String.format(Locale.ROOT,
                             "restricted %s dependency: %s (module %s) -> %s (module %s)",
-                            kind, clazz.getName(), originModule, target.getName(), targetModule);
-                    events.add(SimpleConditionEvent.violated(clazz, message));
+                            kind, clazz.getName(), originModule, target.getName(), targetModule));
                 }
+                messages.forEach(message -> events.add(SimpleConditionEvent.violated(clazz, message)));
             }
         };
     }
@@ -338,28 +346,32 @@ public final class ModuleBoundaryVerifier {
                 if (topLevelModuleOf(clazz) == null || isSanctionedStatusWriter(clazz)) {
                     return;
                 }
+                // 同一类对同一实体的多处 setStatus 只记一条：基线条目按类对计，不按调用点数计。
+                Set<String> messages = new LinkedHashSet<>();
                 for (JavaMethodCall call : clazz.getMethodCallsFromSelf()) {
                     JavaClass target = call.getTargetOwner();
                     if (!"setStatus".equals(call.getName())
                             || !"domain.entity".equals(restrictedKindOf(target))) {
                         continue;
                     }
-                    String message = String.format(Locale.ROOT,
+                    messages.add(String.format(Locale.ROOT,
                             "unsanctioned entity status write: %s -> %s.setStatus",
-                            clazz.getName(), target.getName());
-                    events.add(SimpleConditionEvent.violated(clazz, message));
+                            clazz.getName(), target.getName()));
                 }
+                messages.forEach(message -> events.add(SimpleConditionEvent.violated(clazz, message)));
             }
         };
     }
 
+    /**
+     * 状态写白名单判定：<b>只认显式注解</b>，不再按类名后缀放行。
+     *
+     * <p>按后缀放行等于「改个类名就获得写状态权限」：新增一个 {@code *ApplyService} 会被静默豁免，
+     * 评审 diff 里也看不出谁被放行。改为 {@link SanctionedStatusWriter} 后，豁免必须在代码里
+     * 显式声明并写明理由，构建期门禁才认。</p>
+     */
     private static boolean isSanctionedStatusWriter(JavaClass clazz) {
-        String simpleName = clazz.getSimpleName();
-        return simpleName.endsWith("ApplyService")
-                || simpleName.endsWith("CompletionSyncService")
-                // 采购订单强制结单: 人工终结/回转单据状态的受控入口, 自带状态与下游守卫,
-                // 不能走 updateStatus(完成采购被明确禁止手工置位)。
-                || simpleName.endsWith("ForceCloseService")
+        return clazz.isAnnotatedWith(SanctionedStatusWriter.class)
                 || "com.leo.erp.common.service.CrudStatusGuard".equals(clazz.getName());
     }
 

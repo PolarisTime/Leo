@@ -8,11 +8,13 @@ import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.service.StatementBalanceRule;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
+import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import org.springframework.stereotype.Service;
 
 import java.util.function.LongSupplier;
 
 @Service
+@SanctionedStatusWriter("状态写入是该类自身的受控业务入口（自带前置状态校验与下游守卫）")
 public class CustomerStatementApplyService {
 
     private final CustomerStatementSourceService sourceService;

@@ -17,6 +17,7 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.api.SalesOrderLogisticsSourceQuery;
 import com.leo.erp.sales.api.SalesOrderSourceItemSnapshot;
 import com.leo.erp.sales.api.SalesOrderSourceSnapshot;
+import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -30,6 +31,7 @@ import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
 
 @Service
+@SanctionedStatusWriter("状态写入是该类自身的受控业务入口（自带前置状态校验与下游守卫）")
 public class FreightBillApplyService {
 
     private static final Set<String> ALLOWED_SOURCE_STATUS = Set.of(

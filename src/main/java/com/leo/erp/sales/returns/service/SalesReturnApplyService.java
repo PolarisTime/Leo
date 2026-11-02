@@ -10,6 +10,7 @@ import com.leo.erp.sales.returns.domain.entity.SalesReturn;
 import com.leo.erp.sales.returns.domain.entity.SalesReturnItem;
 import com.leo.erp.sales.returns.web.dto.SalesReturnItemRequest;
 import com.leo.erp.sales.returns.web.dto.SalesReturnRequest;
+import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -26,6 +27,7 @@ import java.util.function.LongSupplier;
  * 金额口径为 重量（吨） × 单价，与销售订单/销售出库一致；总金额为各明细金额之和，总重量为各明细重量之和。
  */
 @Service
+@SanctionedStatusWriter("状态写入是该类自身的受控业务入口（自带前置状态校验与下游守卫）")
 public class SalesReturnApplyService {
 
     private final SalesReturnSourceService sourceService;

@@ -5,12 +5,14 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
+import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.function.LongSupplier;
 
 @Service
+@SanctionedStatusWriter("状态写入是该类自身的受控业务入口（自带前置状态校验与下游守卫）")
 public class FreightStatementApplyService {
 
     private final FreightStatementCarrierResolver carrierResolver;

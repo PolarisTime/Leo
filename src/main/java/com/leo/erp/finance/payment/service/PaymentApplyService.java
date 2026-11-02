@@ -14,12 +14,14 @@ import com.leo.erp.master.api.CarrierQuery;
 import com.leo.erp.master.api.SupplierQuery;
 import com.leo.erp.system.company.api.CompanySettingQuery;
 import com.leo.erp.system.company.api.SettlementCompanySnapshot;
+import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.function.LongSupplier;
 
 @Service
+@SanctionedStatusWriter("状态写入是该类自身的受控业务入口（自带前置状态校验与下游守卫）")
 public class PaymentApplyService {
 
     private final PaymentAllocationService paymentAllocationService;
