@@ -119,6 +119,30 @@
       "templateCode": "SALES_ORDER_A5_YIQI_COORD",
       "isDefault": false,
       "settlementCompanyName": "嘉兴熠祺建材有限公司"
+    },
+    {
+      "sourceRef": "print-forms/default-sales-return.layout.json",
+      "billType": "sales-return",
+      "templateName": "默认销售退货 PDF",
+      "templateCode": "DEFAULT_SALES_RETURN_PDF_FORM",
+      "isDefault": true,
+      "settlementCompanyName": null
+    },
+    {
+      "sourceRef": "print-forms/default-payment.layout.json",
+      "billType": "payment",
+      "templateName": "默认付款单 PDF",
+      "templateCode": "DEFAULT_PAYMENT_PDF_FORM",
+      "isDefault": true,
+      "settlementCompanyName": null
+    },
+    {
+      "sourceRef": "print-forms/default-receipt.layout.json",
+      "billType": "receipt",
+      "templateName": "默认收款单 PDF",
+      "templateCode": "DEFAULT_RECEIPT_PDF_FORM",
+      "isDefault": true,
+      "settlementCompanyName": null
     }
   ]
 }
