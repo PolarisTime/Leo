@@ -139,6 +139,22 @@ public class CompanySettingService implements RedisCacheHealthCheck, CompanySett
     }
 
     /**
+     * {@inheritDoc}
+     *
+     * <p>只过滤软删除，<b>不校验 status</b>：收付款单等「已有单据续用原主体」的场景需要它，
+     * 否则主体停用会让历史单据无法保存。禁用校验由 {@link #requireActiveSettlementCompany} 负责。</p>
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<SettlementCompanySnapshot> findSettlementCompanySnapshot(Long id) {
+        if (id == null) {
+            return Optional.empty();
+        }
+        return companySettingRepository.findByIdAndDeletedFlagFalse(id)
+                .map(company -> new SettlementCompanySnapshot(company.getId(), company.getCompanyName()));
+    }
+
+    /**
      * 批量解析结算主体下的资金账户快照，返回 {@code accountId -> 快照}（雪花 ID 全局唯一，可按账户 ID 索引）。
      * <p>
      * 一次查询覆盖整批单据，列表装配不会逐行查库（无 N+1）；账户不存在、已禁用，或所属结算主体

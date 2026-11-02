@@ -12,8 +12,8 @@ import com.leo.erp.finance.payment.domain.entity.PaymentPurposes;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.master.api.CarrierQuery;
 import com.leo.erp.master.api.SupplierQuery;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
-import com.leo.erp.system.company.repository.CompanySettingRepository;
+import com.leo.erp.system.company.api.CompanySettingQuery;
+import com.leo.erp.system.company.api.SettlementCompanySnapshot;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -26,18 +26,18 @@ public class PaymentApplyService {
     private final PaymentSettlementSyncService settlementSyncService;
     private final SupplierQuery supplierQuery;
     private final CarrierQuery carrierQuery;
-    private final CompanySettingRepository companySettingRepository;
+    private final CompanySettingQuery companySettingQuery;
 
     public PaymentApplyService(PaymentAllocationService paymentAllocationService,
                                PaymentSettlementSyncService settlementSyncService,
                                SupplierQuery supplierQuery,
                                CarrierQuery carrierQuery,
-                               CompanySettingRepository companySettingRepository) {
+                               CompanySettingQuery companySettingQuery) {
         this.paymentAllocationService = paymentAllocationService;
         this.settlementSyncService = settlementSyncService;
         this.supplierQuery = supplierQuery;
         this.carrierQuery = carrierQuery;
-        this.companySettingRepository = companySettingRepository;
+        this.companySettingQuery = companySettingQuery;
     }
 
     void apply(Payment entity, PaymentRequest request, LongSupplier nextIdSupplier) {
@@ -120,11 +120,12 @@ public class PaymentApplyService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "简单付款单不能关联采购或对账核销明细");
         }
         CounterpartySnapshot counterparty = resolveCounterparty(request);
-        CompanySetting company = companySettingRepository
-                .findByIdAndDeletedFlagFalse(request.settlementCompanyId())
+        // 走 system 模块的只读端口：只排除软删除、不校验启用（付款单沿用请求里的原结算主体）。
+        SettlementCompanySnapshot company = companySettingQuery
+                .findSettlementCompanySnapshot(request.settlementCompanyId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.SETTLEMENT_COMPANY_NOT_FOUND));
         BusinessDocumentValidator.requireSameText(
-                request.settlementCompanyName(), company.getCompanyName(), "结算主体名称与ID不一致"
+                request.settlementCompanyName(), company.name(), "结算主体名称与ID不一致"
         );
         entity.setCounterpartyType(counterparty.type());
         entity.setCounterpartyType(counterparty.type());
@@ -137,8 +138,8 @@ public class PaymentApplyService {
         entity.setSupplierName(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(counterparty.type())
                 ? counterparty.name()
                 : null);
-        entity.setSettlementCompanyId(company.getId());
-        entity.setSettlementCompanyName(company.getCompanyName());
+        entity.setSettlementCompanyId(company.id());
+        entity.setSettlementCompanyName(company.name());
         entity.setSourceStatementId(null);
         entity.setSourcePurchaseOrderId(null);
         entity.setPurchaseOrderNo(null);

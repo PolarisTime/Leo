@@ -8,8 +8,8 @@ import com.leo.erp.finance.payment.web.dto.PaymentAllocationRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.master.api.CarrierQuery;
 import com.leo.erp.master.api.SupplierQuery;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
-import com.leo.erp.system.company.repository.CompanySettingRepository;
+import com.leo.erp.system.company.api.CompanySettingQuery;
+import com.leo.erp.system.company.api.SettlementCompanySnapshot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -48,10 +48,7 @@ class PaymentApplyServiceTest {
     private CarrierQuery carrierQuery;
 
     @Mock
-    private CompanySettingRepository companySettingRepository;
-
-    @Mock
-    private CompanySetting company;
+    private CompanySettingQuery companySettingQuery;
 
     private PaymentApplyService service;
 
@@ -62,7 +59,7 @@ class PaymentApplyServiceTest {
                 settlementSyncService,
                 supplierQuery,
                 carrierQuery,
-                companySettingRepository
+                companySettingQuery
         );
     }
 
@@ -246,8 +243,8 @@ class PaymentApplyServiceTest {
                 new BigDecimal("100.00"), null, null);
         when(supplierQuery.findActiveById(5L)).thenReturn(Optional.of(
                 new SupplierQuery.SupplierSnapshot(5L, "S001", "供应商A")));
-        when(companySettingRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(company));
-        when(company.getCompanyName()).thenReturn("别的主体");
+        when(companySettingQuery.findSettlementCompanySnapshot(1L))
+                .thenReturn(Optional.of(new SettlementCompanySnapshot(1L, "别的主体")));
 
         assertThatThrownBy(() -> service.apply(entity, request, NEXT_ID))
                 .isInstanceOf(BusinessException.class)
@@ -262,9 +259,8 @@ class PaymentApplyServiceTest {
                 new BigDecimal("100.555"), null, null);
         when(supplierQuery.findActiveById(5L)).thenReturn(Optional.of(
                 new SupplierQuery.SupplierSnapshot(5L, "S001", "供应商A")));
-        when(companySettingRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(company));
-        when(company.getId()).thenReturn(1L);
-        when(company.getCompanyName()).thenReturn("主体A");
+        when(companySettingQuery.findSettlementCompanySnapshot(1L))
+                .thenReturn(Optional.of(new SettlementCompanySnapshot(1L, "主体A")));
 
         service.apply(entity, request, NEXT_ID);
 

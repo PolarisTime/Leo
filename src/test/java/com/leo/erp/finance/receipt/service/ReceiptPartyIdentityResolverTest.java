@@ -5,8 +5,8 @@ import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
 import com.leo.erp.master.api.CustomerQuery;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.api.SupplierQuery;
-import com.leo.erp.system.company.domain.entity.CompanySetting;
-import com.leo.erp.system.company.repository.CompanySettingRepository;
+import com.leo.erp.system.company.api.CompanySettingQuery;
+import com.leo.erp.system.company.api.SettlementCompanySnapshot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,7 +36,7 @@ class ReceiptPartyIdentityResolverTest {
     private SupplierQuery supplierQuery;
 
     @Mock
-    private CompanySettingRepository companySettingRepository;
+    private CompanySettingQuery companySettingQuery;
 
     private ReceiptPartyIdentityResolver resolver;
 
@@ -46,7 +46,7 @@ class ReceiptPartyIdentityResolverTest {
                 customerQuery,
                 projectQuery,
                 supplierQuery,
-                companySettingRepository
+                companySettingQuery
         );
         when(customerQuery.findActiveById(10L)).thenReturn(Optional.of(
                 new CustomerQuery.CustomerSnapshot(10L, "CUST001", "客户A", null)
@@ -58,8 +58,8 @@ class ReceiptPartyIdentityResolverTest {
 
     @Test
     void resolve_shouldFollowProjectSettlementCompany() {
-        when(companySettingRepository.findByIdAndDeletedFlagFalse(40L))
-                .thenReturn(Optional.of(company(40L, "项目主体")));
+        when(companySettingQuery.findSettlementCompanySnapshot(40L))
+                .thenReturn(Optional.of(new SettlementCompanySnapshot(40L, "项目主体")));
 
         ReceiptPartyIdentityResolver.PartySnapshot snapshot = resolver.resolve(
                 request(null, null)
@@ -96,12 +96,5 @@ class ReceiptPartyIdentityResolverTest {
                 null,
                 List.of()
         );
-    }
-
-    private CompanySetting company(Long id, String name) {
-        CompanySetting company = new CompanySetting();
-        company.setId(id);
-        company.setCompanyName(name);
-        return company;
     }
 }
