@@ -1,6 +1,5 @@
 package com.leo.erp.system.printtemplate.service;
 
-import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -81,7 +80,7 @@ class PrintRecordDataProvider {
             return "SELECT id, " + source.itemFkColumn() + " AS record_id, "
                     + "'' AS brand, '' AS category, '' AS settlement_mode, '' AS material, '' AS spec, '' AS length, "
                     + "'' AS quantity, '' AS piece_weight_ton, '' AS weight_ton, '' AS unit_price, "
-                    + amountColumn + " AS amount, " + statementGroupingColumns(moduleKey) + " "
+                    + amountColumn + " AS amount, " + PrintStatementGroupingSql.columns(moduleKey) + " "
                     + "FROM " + source.itemTableName()
                     + " WHERE " + source.itemFkColumn() + " IN (" + placeholders + ")"
                     + " ORDER BY " + source.itemFkColumn() + " ASC, line_no ASC, id ASC";
@@ -92,40 +91,10 @@ class PrintRecordDataProvider {
         return "SELECT id, " + source.itemFkColumn() + " AS record_id, brand, category, material, spec, length, "
                 + settlementMode + " AS settlement_mode, "
                 + "quantity, piece_weight_ton, weight_ton, " + unitPrice + " AS unit_price, " + amount + " AS amount, "
-                + statementGroupingColumns(moduleKey) + " "
+                + PrintStatementGroupingSql.columns(moduleKey) + " "
                 + "FROM " + source.itemTableName()
                 + " WHERE " + source.itemFkColumn() + " IN (" + placeholders + ")"
                 + " ORDER BY " + source.itemFkColumn() + " ASC, line_no ASC, id ASC";
-    }
-
-    private String statementGroupingColumns(String moduleKey) {
-        if (ModuleKeys.CUSTOMER_STATEMENT.equals(moduleKey)) {
-            // 销售订单明细表没有 deleted_flag（软删由主表 so_sales_order 控制）；
-            // 这里若引用 soi.deleted_flag，打印明细查询会直接 500（BadSqlGrammar）。
-            return "source_no, quantity_unit, source_sales_order_item_id, "
-                    + "COALESCE((SELECT so.delivery_date::text FROM so_sales_order_item soi "
-                    + "JOIN so_sales_order so ON so.id = soi.order_id "
-                    + "WHERE soi.id = source_sales_order_item_id "
-                    + "AND so.deleted_flag = FALSE LIMIT 1), '') AS delivery_date, "
-                    + "'' AS customer_name, '' AS project_name, '' AS source_freight_bill_id, "
-                    + "'' AS source_freight_bill_time, "
-                    + "'' AS source_freight_bill_unit_price, '' AS source_freight_bill_total_freight";
-        }
-        if (ModuleKeys.FREIGHT_STATEMENT.equals(moduleKey)) {
-            return "source_no, customer_name, project_name, quantity_unit, source_freight_bill_id, "
-                    + "source_freight_bill_time::text AS source_freight_bill_time, "
-                    + "'' AS delivery_date, '' AS source_sales_order_item_id, "
-                    + "COALESCE((SELECT fb.unit_price FROM lg_freight_bill fb "
-                    + "WHERE fb.id = source_freight_bill_id AND fb.deleted_flag = FALSE LIMIT 1), 0) "
-                    + "AS source_freight_bill_unit_price, "
-                    + "COALESCE((SELECT fb.total_freight FROM lg_freight_bill fb "
-                    + "WHERE fb.id = source_freight_bill_id AND fb.deleted_flag = FALSE LIMIT 1), 0) "
-                    + "AS source_freight_bill_total_freight";
-        }
-        return "'' AS source_no, '' AS delivery_date, '' AS quantity_unit, '' AS customer_name, "
-                + "'' AS project_name, '' AS source_sales_order_item_id, '' AS source_freight_bill_id, "
-                + "'' AS source_freight_bill_time, "
-                + "'' AS source_freight_bill_unit_price, '' AS source_freight_bill_total_freight";
     }
 
     private PrintRecordItem toPrintRecordItem(Map<String, Object> row) {
