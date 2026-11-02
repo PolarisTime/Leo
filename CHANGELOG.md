@@ -1,3 +1,10 @@
+# [17.5.0](https://github.com/PolarisTime/Leo/compare/v17.4.0...v17.5.0) (2026-11-02)
+
+
+### Features
+
+* **statement:** 物流对账单明细持久化来源物流单日期并回填历史 ([191116b](https://github.com/PolarisTime/Leo/commit/191116b0004c0284ec76b37b72de8bf1c0007474))
+
 # [17.4.0](https://github.com/PolarisTime/Leo/compare/v17.3.0...v17.4.0) (2026-11-01)
 
 
