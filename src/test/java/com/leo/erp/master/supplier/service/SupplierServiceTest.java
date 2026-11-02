@@ -357,28 +357,6 @@ class SupplierServiceTest {
     }
 
     @Test
-    void updateStatus_blank_rejectedWithValidationMessage() {
-        when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(new Supplier()));
-
-        assertThatThrownBy(() -> service().updateStatus(5L, null))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
-                .hasMessage("状态不能为空");
-    }
-
-    @Test
-    void updateStatus_anyStatus_rejectedAsUnsupported() {
-        when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(new Supplier()));
-
-        assertThatThrownBy(() -> service().updateStatus(5L, "正常"))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ErrorCode.BUSINESS_ERROR))
-                .hasMessage("当前模块不支持状态变更");
-    }
-
-    @Test
     void delete_referenced_blockedBeforeSoftDelete() {
         Supplier entity = new Supplier();
         entity.setId(5L);
@@ -429,11 +407,10 @@ class SupplierServiceTest {
     void cacheAnnotations_preservedOnPublicWriteAndReadMethods() throws Exception {
         Method create = SupplierService.class.getMethod("create", SupplierRequest.class);
         Method update = SupplierService.class.getMethod("update", Long.class, SupplierRequest.class);
-        Method updateStatus = SupplierService.class.getMethod("updateStatus", Long.class, String.class);
         Method delete = SupplierService.class.getMethod("delete", Long.class);
         Method listActiveOptions = SupplierService.class.getMethod("listActiveOptions");
 
-        for (Method method : List.of(create, update, updateStatus, delete)) {
+        for (Method method : List.of(create, update, delete)) {
             assertThat(method.getAnnotation(CacheEvict.class))
                     .as(method.getName() + " 不得再用提交前失效的 @CacheEvict，写路径统一走 after-commit helper")
                     .isNull();

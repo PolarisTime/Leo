@@ -14,14 +14,12 @@ import com.leo.erp.master.api.ProjectPricingBasisQuery.QuotePeriod;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.CrudOperationLogger;
-import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.CsvValues;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.master.api.ProjectProcurementScopeQuery.Enforcement;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
@@ -45,7 +43,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Set;
 
 @Service
 public class ProjectService {
@@ -73,9 +70,7 @@ public class ProjectService {
      */
     private static final String DEFAULT_PRICE_SOURCE = PRICE_SOURCE_MYSTEEL;
     private static final String DEFAULT_QUOTE_REGION = "杭州";
-    private static final CrudStatusGuard<Project> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
-    private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
 
     private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(ProjectService.class);
     private final SnowflakeIdGenerator snowflakeIdGenerator;
@@ -155,19 +150,6 @@ public class ProjectService {
         }
         evictOptionsCache();
         return response;
-    }
-
-    @Transactional
-    public ProjectResponse updateStatus(Long id, String status) {
-        Project entity = requireActiveProject(id);
-        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
-        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
-        if (currentStatus.equals(nextStatus)) {
-            evictOptionsCache();
-            return toResponse(entity);
-        }
-        STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
-        throw new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.STATUS_CHANGE_UNSUPPORTED);
     }
 
     @Transactional

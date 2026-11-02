@@ -161,28 +161,6 @@ class WarehouseServiceTest {
     }
 
     @Test
-    void updateStatus_blank_rejectedWithValidationMessage() {
-        when(warehouseRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(new Warehouse()));
-
-        assertThatThrownBy(() -> service().updateStatus(5L, null))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ErrorCode.VALIDATION_ERROR))
-                .hasMessage("状态不能为空");
-    }
-
-    @Test
-    void updateStatus_anyStatus_rejectedAsUnsupported() {
-        when(warehouseRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(new Warehouse()));
-
-        assertThatThrownBy(() -> service().updateStatus(5L, "正常"))
-                .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ErrorCode.BUSINESS_ERROR))
-                .hasMessage("当前模块不支持状态变更");
-    }
-
-    @Test
     void delete_referenced_blockedBeforeSoftDelete() {
         Warehouse entity = new Warehouse();
         entity.setId(5L);
@@ -248,11 +226,10 @@ class WarehouseServiceTest {
     void cacheAnnotations_coverOptionsReadAndAllWritePaths() throws Exception {
         Method create = WarehouseService.class.getMethod("create", WarehouseRequest.class);
         Method update = WarehouseService.class.getMethod("update", Long.class, WarehouseRequest.class);
-        Method updateStatus = WarehouseService.class.getMethod("updateStatus", Long.class, String.class);
         Method delete = WarehouseService.class.getMethod("delete", Long.class);
         Method listActiveOptions = WarehouseService.class.getMethod("listActiveOptions");
 
-        for (Method method : List.of(create, update, updateStatus, delete)) {
+        for (Method method : List.of(create, update, delete)) {
             assertThat(method.getAnnotation(CacheEvict.class))
                     .as(method.getName() + " 不得再用提交前失效的 @CacheEvict，写路径统一走 after-commit helper")
                     .isNull();

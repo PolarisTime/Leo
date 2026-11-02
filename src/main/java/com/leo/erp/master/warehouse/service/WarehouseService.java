@@ -1,7 +1,6 @@
 package com.leo.erp.master.warehouse.service;
 
 import com.leo.erp.common.cache.AfterCommitCacheEvictor;
-import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.support.ModuleKeys;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
@@ -9,12 +8,10 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.CrudOperationLogger;
-import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.warehouse.domain.entity.Warehouse;
 import com.leo.erp.master.warehouse.repository.WarehouseRepository;
@@ -30,16 +27,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Set;
 
 @Service
 public class WarehouseService {
 
     private static final String CODE_MODULE_KEY = ModuleKeys.WAREHOUSE;
     private static final String WAREHOUSE_OPTIONS_CACHE_KEY = "leo:warehouse:all";
-    private static final CrudStatusGuard<Warehouse> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
-    private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
 
     private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(WarehouseService.class);
     private final SnowflakeIdGenerator snowflakeIdGenerator;
@@ -109,19 +103,6 @@ public class WarehouseService {
         }
         evictOptionsCache();
         return response;
-    }
-
-    @Transactional
-    public WarehouseResponse updateStatus(Long id, String status) {
-        Warehouse entity = requireActiveWarehouse(id);
-        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
-        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
-        if (currentStatus.equals(nextStatus)) {
-            evictOptionsCache();
-            return toResponse(entity);
-        }
-        STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
-        throw new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.STATUS_CHANGE_UNSUPPORTED);
     }
 
     @Transactional

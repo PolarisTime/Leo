@@ -9,14 +9,12 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.CrudOperationLogger;
-import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.service.CrudVisibilityPolicy;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
@@ -44,9 +42,7 @@ public class CustomerService implements RedisCacheHealthCheck {
 
     private static final String CUSTOMER_CACHE_KEY = "leo:customer:all";
     private static final String CODE_MODULE_KEY = ModuleKeys.CUSTOMER;
-    private static final CrudStatusGuard<Customer> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
-    private static final Set<StatusTransition> NO_STATUS_TRANSITIONS = Set.of();
 
     private final CrudOperationLogger operationLogger = CrudOperationLogger.forOwner(CustomerService.class);
     private final SnowflakeIdGenerator snowflakeIdGenerator;
@@ -120,19 +116,6 @@ public class CustomerService implements RedisCacheHealthCheck {
         }
         evictOptionsCache();
         return response;
-    }
-
-    @Transactional
-    public CustomerResponse updateStatus(Long id, String status) {
-        Customer entity = requireActiveCustomer(id);
-        String currentStatus = STATUS_GUARD.resolveStatus(entity).orElse("");
-        String nextStatus = STATUS_GUARD.normalizeRequiredStatus(status);
-        if (currentStatus.equals(nextStatus)) {
-            evictOptionsCache();
-            return toResponse(entity);
-        }
-        STATUS_GUARD.validateStatusTransition(NO_STATUS_TRANSITIONS, currentStatus, nextStatus);
-        throw new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.STATUS_CHANGE_UNSUPPORTED);
     }
 
     @Transactional
