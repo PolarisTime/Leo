@@ -49,13 +49,12 @@
       "paddingTop": 3,
       "align": "left",
       "source": {
-        "height": 36,
+        "height": 20,
         "fillColor": "#dcebed",
         "textColor": "#173f46",
-        "lineAligns": ["left", "right"],
+        "lineAligns": ["left"],
         "lines": [
-          "单据日期：${billTime}    车号：${vehiclePlate}",
-          "数量 ${totalQuantity}    重量 ${totalWeightTon} 吨    运费单价 ${unitPrice} 元/吨    运费总价 ${totalFreight} 元"
+          "单据日期：${billTime}    车号：${vehiclePlate}    数量 ${totalQuantity}    重量 ${totalWeightTon} 吨    运费单价 ${unitPrice} 元/吨    运费总价 ${totalFreight} 元"
         ],
         "formats": {
           "billTime": "chineseDate"

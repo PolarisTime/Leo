@@ -55,22 +55,24 @@ class FreightStatementPdfTemplateRenderTest {
             root = objectMapper.readTree(stream);
         }
 
-        // 单号不再占明细列，而是上提到「客户 / 项目」这一行；来源分组头只保留日期与车号，
-        // 第二行是指标（右对齐），与详情卡片头一致。
+        // 单号不再占明细列，而是上提到「客户 / 项目」这一行；来源分组头压成一行：
+        // 日期/车号 + 数量/重量/运费单价/运费总价，减少每个分组的占高。
         JsonNode sourceHeader = root.path("table").path("groupHeader").path("source");
         JsonNode lines = sourceHeader.path("lines");
-        assertThat(lines).hasSize(2);
+        assertThat(lines).hasSize(1);
         assertThat(lines.get(0).asText())
                 .contains("单据日期")
                 .contains("车号")
-                .doesNotContain("来源物流单");
-        assertThat(lines.get(1).asText())
                 .contains("数量")
                 .contains("重量")
                 .contains("运费单价")
-                .contains("运费总价");
+                .contains("运费总价")
+                .doesNotContain("来源物流单");
+        assertThat(sourceHeader.path("height").asDouble())
+                .as("单行组头高度必须压到一行字号可容纳的范围")
+                .isLessThanOrEqualTo(24D);
+        assertThat(sourceHeader.path("lineAligns")).hasSize(1);
         assertThat(sourceHeader.path("lineAligns").get(0).asText()).isEqualTo("left");
-        assertThat(sourceHeader.path("lineAligns").get(1).asText()).isEqualTo("right");
 
         JsonNode projectHeader = root.path("table").path("groupHeader").path("project");
         assertThat(projectHeader.path("lines").get(0).asText())
@@ -200,6 +202,16 @@ class FreightStatementPdfTemplateRenderTest {
                     .contains("WL-202608-001")
                     .contains("项目")
                     .doesNotContain("null");
+            // 日期/车号与指标必须压在同一行：取含日期的行，必须同时含合计与运费
+            String headerLine = text.lines()
+                    .filter(line -> line.contains("2026年08月25日"))
+                    .findFirst()
+                    .orElse("");
+            assertThat(headerLine)
+                    .as("来源分组头应压缩为一行（日期/车号 + 数量/重量/运费）")
+                    .contains("车号")
+                    .contains("数量")
+                    .contains("运费总价");
         }
     }
 
