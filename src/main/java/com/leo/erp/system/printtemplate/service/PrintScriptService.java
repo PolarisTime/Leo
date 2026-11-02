@@ -147,8 +147,8 @@ public class PrintScriptService {
     List<Map<String, String>> groupItemsForPdf(List<Map<String, String>> items) {
         Map<String, List<Map<String, String>>> sourceGroups = new LinkedHashMap<>();
         for (Map<String, String> item : items) {
-            String sourceId = normalizeText(item.get("sourceFreightBillId"));
-            String sourceNo = normalizeText(item.get("sourceNo"));
+            String sourceId = PrintItemFormatting.normalizeText(item.get("sourceFreightBillId"));
+            String sourceNo = PrintItemFormatting.normalizeText(item.get("sourceNo"));
             String key = !sourceId.isBlank()
                     ? "source-id:" + sourceId
                     : !sourceNo.isBlank() ? "source-no:" + sourceNo : "unassigned";
@@ -166,7 +166,7 @@ public class PrintScriptService {
             rows.add(sourceGroupHeader(groupItems));
             Map<String, List<Map<String, String>>> projectGroups = new LinkedHashMap<>();
             for (Map<String, String> item : groupItems) {
-                String projectName = normalizeText(item.get("projectName"));
+                String projectName = PrintItemFormatting.normalizeText(item.get("projectName"));
                 String key = !projectName.isBlank() ? "project:" + projectName : "unassigned";
                 projectGroups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(item);
             }
@@ -188,8 +188,8 @@ public class PrintScriptService {
     }
 
     private Map<String, String> sourceGroupHeader(List<Map<String, String>> groupItems) {
-        BigDecimal totalWeight = sumDecimal(groupItems, "weightTon");
-        BigDecimal totalFreight = firstPositiveDecimal(groupItems, "amount");
+        BigDecimal totalWeight = PrintItemFormatting.sumDecimal(groupItems, "weightTon");
+        BigDecimal totalFreight = PrintItemFormatting.firstPositiveDecimal(groupItems, "amount");
         BigDecimal unitPrice = totalWeight.signum() > 0
                 ? totalFreight.divide(
                         totalWeight,
@@ -207,10 +207,10 @@ public class PrintScriptService {
                 ? distinctText(groupItems, "billTime")
                 : sourceFreightBillTime);
         header.put("vehiclePlate", distinctText(groupItems, "vehiclePlate"));
-        header.put("totalQuantity", String.valueOf(sumInteger(groupItems, "quantity")));
-        header.put("totalWeightTon", plainNumber(totalWeight));
-        header.put("totalFreight", plainAmount(totalFreight));
-        header.put("unitPrice", plainAmount(unitPrice));
+        header.put("totalQuantity", String.valueOf(PrintItemFormatting.sumInteger(groupItems, "quantity")));
+        header.put("totalWeightTon", PrintItemFormatting.plainNumber(totalWeight));
+        header.put("totalFreight", PrintItemFormatting.plainAmount(totalFreight));
+        header.put("unitPrice", PrintItemFormatting.plainAmount(unitPrice));
         return header;
     }
 
@@ -221,73 +221,25 @@ public class PrintScriptService {
         header.put("sourceNo", distinctText(projectItems, "sourceNo"));
         header.put("customerName", distinctText(projectItems, "customerName"));
         header.put("projectName", distinctText(projectItems, "projectName"));
-        header.put("totalQuantity", String.valueOf(sumInteger(projectItems, "quantity")));
-        header.put("totalWeightTon", plainNumber(sumDecimal(projectItems, "weightTon")));
+        header.put("totalQuantity", String.valueOf(PrintItemFormatting.sumInteger(projectItems, "quantity")));
+        header.put("totalWeightTon", PrintItemFormatting.plainNumber(PrintItemFormatting.sumDecimal(projectItems, "weightTon")));
         return header;
     }
 
     private String distinctText(List<Map<String, String>> items, String key) {
         return items.stream()
-                .map(item -> normalizeText(item.get(key)))
+                .map(item -> PrintItemFormatting.normalizeText(item.get(key)))
                 .filter(value -> !value.isBlank())
                 .distinct()
                 .collect(java.util.stream.Collectors.joining("、"));
-    }
-
-    private BigDecimal sumDecimal(List<Map<String, String>> items, String key) {
-        return items.stream()
-                .map(item -> decimalOf(item.get(key)))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    private int sumInteger(List<Map<String, String>> items, String key) {
-        return items.stream()
-                .mapToInt(item -> decimalOf(item.get(key)).intValue())
-                .sum();
-    }
-
-    private BigDecimal firstPositiveDecimal(List<Map<String, String>> items, String key) {
-        for (Map<String, String> item : items) {
-            BigDecimal value = decimalOf(item.get(key));
-            if (value.signum() > 0) {
-                return value;
-            }
-        }
-        return BigDecimal.ZERO;
-    }
-
-    private BigDecimal decimalOf(String value) {
-        if (value == null || value.isBlank()) {
-            return BigDecimal.ZERO;
-        }
-        try {
-            return new BigDecimal(value.trim());
-        } catch (NumberFormatException ignored) {
-            return BigDecimal.ZERO;
-        }
-    }
-
-    private String plainAmount(BigDecimal value) {
-        return value == null
-                ? "0.00"
-                : value
-                      .setScale(
-                          PrecisionConstants.AMOUNT_SCALE,
-                          PrecisionConstants.DEFAULT_ROUNDING
-                      )
-                      .toPlainString();
-    }
-
-    private String plainNumber(BigDecimal value) {
-        return value == null ? "0" : value.stripTrailingZeros().toPlainString();
     }
 
     private List<Map<String, String>> appendLengthToSpec(List<Map<String, String>> items) {
         return items.stream().map(item -> {
             Map<String, String> printableItem = new HashMap<>(item);
             printableItem.put("spec", specLengthResolver.apply(
-                    normalizeText(printableItem.get("spec")),
-                    normalizeText(printableItem.get("length"))));
+                    PrintItemFormatting.normalizeText(printableItem.get("spec")),
+                    PrintItemFormatting.normalizeText(printableItem.get("length"))));
             return printableItem;
         }).toList();
     }
@@ -300,12 +252,12 @@ public class PrintScriptService {
     }
 
     private boolean matchesSettlementCompany(PrintTemplate template, Map<String, String> data) {
-        String recordCompanyId = normalizeText(data.get("settlementCompanyId"));
-        String recordCompanyName = normalizeText(data.get("settlementCompanyName"));
+        String recordCompanyId = PrintItemFormatting.normalizeText(data.get("settlementCompanyId"));
+        String recordCompanyName = PrintItemFormatting.normalizeText(data.get("settlementCompanyName"));
         String templateCompanyId = template.getSettlementCompanyId() == null
                 ? ""
                 : String.valueOf(template.getSettlementCompanyId());
-        String templateCompanyName = normalizeText(template.getSettlementCompanyName());
+        String templateCompanyName = PrintItemFormatting.normalizeText(template.getSettlementCompanyName());
 
         if (!templateCompanyId.isBlank()) {
             if (!recordCompanyId.isBlank()) {
@@ -318,10 +270,6 @@ public class PrintScriptService {
         }
         // 模板未绑定结算主体时为通用模板，适用于任何主体的单据（兜底）。
         return true;
-    }
-
-    private String normalizeText(String value) {
-        return value == null ? "" : value.trim();
     }
 
     public List<PrintRecordItem> listPrintItems(String moduleKey, List<Long> recordIds) {
