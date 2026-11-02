@@ -7,12 +7,11 @@ import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.ser.ContextualSerializer;
 import com.fasterxml.jackson.databind.ser.std.StdScalarSerializer;
-import com.leo.erp.common.support.PrecisionConstants;
+import com.leo.erp.common.json.FieldPrecisionResolver;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.Locale;
 
 /**
  * 字段级权限感知的 {@link BigDecimal} 序列化器。
@@ -21,6 +20,9 @@ import java.util.Locale;
  *   <li>字段标注 {@link PermissionField} 且当前用户不具备该权限码时，输出 {@code null}；</li>
  *   <li>其余情况按属性名推断精度（与全局 {@code ScaledBigDecimalSerializer} 一致：金额/单价/运费 2 位，重量按内部精度），保证输出不变。</li>
  * </ul>
+ *
+ * <p>精度规则统一委托 {@link FieldPrecisionResolver}：两条序列化路径各写一份会漂移，
+ * 表现为同一字段「有权限时 2 位、其他出口 N 位」。</p>
  *
  * <p>用于响应 DTO 的金额/成本字段，集中实现"无权限则不可见"，无需在装配层逐个重建 record。</p>
  */
@@ -61,18 +63,7 @@ public class PermissionDecimalSerializer extends StdScalarSerializer<BigDecimal>
         }
         PermissionField annotation = property.getAnnotation(PermissionField.class);
         String required = annotation == null ? null : annotation.value();
-        Integer resolvedScale = resolveScale(property.getName());
+        Integer resolvedScale = FieldPrecisionResolver.resolveScale(property.getName());
         return new PermissionDecimalSerializer(required, resolvedScale);
-    }
-
-    private Integer resolveScale(String propertyName) {
-        String normalizedName = propertyName == null ? "" : propertyName.toLowerCase(Locale.ROOT);
-        if (normalizedName.contains("amount") || normalizedName.contains("price") || normalizedName.contains("freight")) {
-            return 2;
-        }
-        if (normalizedName.contains("weight")) {
-            return PrecisionConstants.WEIGHT_SCALE;
-        }
-        return null;
     }
 }

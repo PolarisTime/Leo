@@ -3,6 +3,7 @@ package com.leo.erp.inventory.web.dto;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.leo.erp.security.permission.PermissionDecimalSerializer;
+import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.PermissionField;
 
 import java.math.BigDecimal;
@@ -29,10 +30,10 @@ public record InventoryBalanceMismatchResponse(
         @JsonSerialize(using = ToStringSerializer.class) Long warehouseId,
         long ledgerQuantity,
         long snapshotQuantity,
-        @PermissionField("inventory:read:cost")
+        @PermissionField(PermissionCodes.INVENTORY_READ_COST)
         @JsonSerialize(using = PermissionDecimalSerializer.class)
         BigDecimal ledgerAmount,
-        @PermissionField("inventory:read:cost")
+        @PermissionField(PermissionCodes.INVENTORY_READ_COST)
         @JsonSerialize(using = PermissionDecimalSerializer.class)
         BigDecimal snapshotAmount
 ) {

@@ -3,6 +3,7 @@ package com.leo.erp.sales.order.web.dto;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.leo.erp.security.permission.PermissionDecimalSerializer;
+import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.PermissionField;
 
 import java.math.BigDecimal;
@@ -31,10 +32,10 @@ public record SalesOrderItemResponse(
         BigDecimal pieceWeightTon,
         Integer piecesPerBundle,
         BigDecimal weightTon,
-        @PermissionField("sales-orders:read:amount")
+        @PermissionField(PermissionCodes.SALES_ORDERS_READ_AMOUNT)
         @JsonSerialize(using = PermissionDecimalSerializer.class)
         BigDecimal unitPrice,
-        @PermissionField("sales-orders:read:amount")
+        @PermissionField(PermissionCodes.SALES_ORDERS_READ_AMOUNT)
         @JsonSerialize(using = PermissionDecimalSerializer.class)
         BigDecimal amount,
         BigDecimal originalWeightTon,
