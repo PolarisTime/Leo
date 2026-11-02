@@ -251,9 +251,8 @@
     "fontSize": 9,
     "align": "center",
     "border": true,
-    "fillColor": "#e6f4ff",
     "borderColor": "#d9d9d9",
-    "textColor": "#1677ff",
+    "textColor": "#1f1f1f",
     "lineWidth": 1,
     "defaults": {
       "receiptAmount": "0.00",
@@ -298,21 +297,23 @@
     },
     "alignToColumns": true,
     "cells": {
-      "groupIndex": "合计",
+      "category": "合计",
       "quantity": "${totalQuantity}",
       "weightTon": "${totalWeight}",
       "amount": "${salesAmount}"
     }
   },
   "clauses": {
-    "height": 66,
+    "height": 92,
     "fontSize": 9,
-    "lineHeight": 1.35,
-    "textColor": "#595959",
+    "lineHeight": 1.55,
+    "paddingTop": 8,
+    "textColor": "#1f1f1f",
     "lines": [
-      "1. 请在收到本对账单后按约定期限核对并反馈，逾期未反馈的，视为对账数据已确认。",
-      "2. 本对账单仅用于双方往来核对，最终结算以合同、发票、收付款凭证及双方确认资料为准。",
-      "3. 如对账数据存在差异，请提供对应单据编号、金额及差异说明以便复核。"
+      "备注：单价按我的钢铁网杭州地区到货当天上午价+20，",
+      "本对账单经双方核对无误，予以确认",
+      "供方盖章：                                需方盖章（或合同受权人）签字：",
+      "经办人签字："
     ]
   }
 }
