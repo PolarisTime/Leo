@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Getter
 @Setter
@@ -36,6 +37,15 @@ public class FreightStatementItem {
 
     @Column(name = "source_freight_bill_item_id")
     private Long sourceFreightBillItemId;
+
+    /**
+     * 来源物流单日期快照（{@code lg_freight_bill.bill_time} 的日期部分）。
+     *
+     * <p>由来源物流单决定，客户端不可改：保存时从来源物流单快照写入；详情按来源物流单分组时
+     * 直接读本列（来源物流单被软删后仍能显示日期）。历史数据由 V211 迁移回填。</p>
+     */
+    @Column(name = "source_freight_bill_time")
+    private LocalDate sourceFreightBillTime;
 
     @Column(name = "settlement_company_id")
     private Long settlementCompanyId;

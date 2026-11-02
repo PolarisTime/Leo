@@ -124,6 +124,8 @@ public class FreightStatementSourceService {
             item.setSourceNo(sourceBill.billNo());
             item.setSourceFreightBillId(sourceBill.id());
             item.setSourceFreightBillItemId(sourceBillItem.id());
+            // 来源物流单日期由来源单决定（客户端不改）：保存快照，避免来源单软删后详情日期丢失
+            item.setSourceFreightBillTime(sourceBill.billTime());
             item.setSettlementCompanyId(sourceBillItem.settlementCompanyId());
             item.setSettlementCompanyName(sourceBillItem.settlementCompanyName());
             item.setCustomerId(sourceBillItem.customerId());

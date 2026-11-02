@@ -68,6 +68,57 @@ class FreightStatementViewAssemblerTest {
         assertThat(result.sourceBillNos()).containsExactly("FB-001", "FB-002");
     }
 
+    /** 来源物流单被软删（实时反查为空）时，仍按落库快照返回日期，避免详情显示「-」。 */
+    @Test
+    void shouldPreferPersistedSourceFreightBillTimeWhenLiveSourceBillMissing() {
+        AttachmentQuery attachmentQuery = mock(AttachmentQuery.class);
+        FreightBillStatementSourceQuery sourceQuery = mock(FreightBillStatementSourceQuery.class);
+        FreightStatementViewAssembler assembler = new FreightStatementViewAssembler(attachmentQuery, sourceQuery);
+
+        FreightStatement statement = new FreightStatement();
+        statement.setId(1L);
+        FreightStatementItem item = new FreightStatementItem();
+        item.setId(2L);
+        item.setLineNo(1);
+        item.setSourceFreightBillId(3L);
+        item.setSourceFreightBillTime(LocalDate.of(2026, 7, 29));
+        statement.setItems(List.of(item));
+
+        when(attachmentQuery.list("freight-statement", 1L)).thenReturn(List.of());
+        when(sourceQuery.findByBillIds(any())).thenReturn(List.of());
+
+        FreightStatementView result = assembler.toDetailView(statement);
+
+        assertThat(result.items()).singleElement()
+                .extracting("sourceFreightBillTime")
+                .isEqualTo(LocalDate.of(2026, 7, 29));
+    }
+
+    /** 快照与实时反查都缺失时返回 null（历史行兜底），不得抛错。 */
+    @Test
+    void shouldReturnNullSourceFreightBillTimeWhenBothSnapshotAndLiveMissing() {
+        AttachmentQuery attachmentQuery = mock(AttachmentQuery.class);
+        FreightBillStatementSourceQuery sourceQuery = mock(FreightBillStatementSourceQuery.class);
+        FreightStatementViewAssembler assembler = new FreightStatementViewAssembler(attachmentQuery, sourceQuery);
+
+        FreightStatement statement = new FreightStatement();
+        statement.setId(1L);
+        FreightStatementItem item = new FreightStatementItem();
+        item.setId(2L);
+        item.setLineNo(1);
+        item.setSourceFreightBillId(3L);
+        statement.setItems(List.of(item));
+
+        when(attachmentQuery.list("freight-statement", 1L)).thenReturn(List.of());
+        when(sourceQuery.findByBillIds(any())).thenReturn(List.of());
+
+        FreightStatementView result = assembler.toDetailView(statement);
+
+        assertThat(result.items()).singleElement()
+                .extracting("sourceFreightBillTime")
+                .isNull();
+    }
+
     private FreightStatementItem item(int lineNo, String sourceNo) {
         FreightStatementItem item = new FreightStatementItem();
         item.setLineNo(lineNo);

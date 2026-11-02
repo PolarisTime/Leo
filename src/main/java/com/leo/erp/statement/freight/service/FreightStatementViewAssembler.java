@@ -124,7 +124,11 @@ public class FreightStatementViewAssembler {
                 item.getBatchNoNormalized(),
                 sourceBill == null ? null : sourceBill.unitPrice(),
                 sourceBill == null ? null : sourceBill.totalFreight(),
-                sourceBill == null ? null : sourceBill.billTime()
+                // 优先用保存时落库的来源单日期快照；历史行（迁移前写入）与来源单被软删的场景
+                // 用实时快照兜底，避免详情日期为空
+                item.getSourceFreightBillTime() != null
+                        ? item.getSourceFreightBillTime()
+                        : (sourceBill == null ? null : sourceBill.billTime())
         );
     }
 

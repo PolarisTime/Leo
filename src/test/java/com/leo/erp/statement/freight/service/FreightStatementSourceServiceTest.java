@@ -265,12 +265,36 @@ class FreightStatementSourceServiceTest {
 
         assertThat(entity.getItems()).hasSize(1);
         assertThat(entity.getItems().get(0).getSourceFreightBillItemId()).isEqualTo(11L);
+        // 来源物流单日期作为快照落到明细（详情分组组头的「单据日期」依赖它）
+        assertThat(entity.getItems().get(0).getSourceFreightBillTime()).isEqualTo(LocalDate.of(2026, 8, 1));
         assertThat(entity.getCarrierId()).isEqualTo(100L);
         assertThat(entity.getCarrierCode()).isEqualTo("C001");
         assertThat(entity.getSettlementCompanyId()).isEqualTo(30L);
         assertThat(result.totalWeight()).isEqualByComparingTo("12.500");
         assertThat(result.totalFreight()).isEqualByComparingTo("5000");
         assertThat(result.startDate()).isEqualTo(LocalDate.of(2026, 8, 1));
+    }
+
+    /** 多张来源物流单时，每行明细落各自来源单的日期快照（不是整单统一取第一张）。 */
+    @Test
+    void applyItems_shouldSnapshotEachSourceBillTime() {
+        BillSnapshot first = new BillSnapshot(1L, "FB001", 100L, "C001", "承运商A", 30L, "结算公司A",
+                LocalDate.of(2026, 8, 1), new BigDecimal("100"), new BigDecimal("5000"),
+                StatusConstants.AUDITED, List.of(item(11L)));
+        BillSnapshot second = new BillSnapshot(2L, "FB002", 100L, "C001", "承运商A", 30L, "结算公司A",
+                LocalDate.of(2026, 8, 5), new BigDecimal("50"), new BigDecimal("2500"),
+                StatusConstants.AUDITED, List.of(item(21L)));
+        FreightStatementCommand cmd = command(null, null, null,
+                List.of(itemCommand(1L, 11L, null), itemCommand(2L, 21L, null)));
+        when(sourceQuery.findByBillIds(any())).thenReturn(List.of(first, second));
+        when(repository.findMatchingOccupiedSourceFreightBillIdsExcludingCurrentStatement(any(), any()))
+                .thenReturn(List.of());
+        FreightStatement entity = new FreightStatement();
+
+        service.applyItems(entity, cmd, () -> 100L);
+
+        assertThat(entity.getItems()).extracting("sourceFreightBillTime")
+                .containsExactly(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 5));
     }
 
     // ---------- 补充边界 ----------
