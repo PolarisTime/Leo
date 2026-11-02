@@ -1,11 +1,12 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.security.permission.PermissionChecker;
 import com.leo.erp.security.permission.PermissionCodes;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
@@ -29,8 +30,15 @@ class PrintRecordAuthorizationTest {
     @Mock
     private PermissionChecker permissionChecker;
 
-    @InjectMocks
     private PrintRecordAuthorization authorization;
+
+    @BeforeEach
+    void setUp() {
+        authorization = new PrintRecordAuthorization(
+                permissionChecker,
+                new PrintRuntimeProperties(new ObjectMapper())
+        );
+    }
 
     @Test
     void requireReadable_shouldRequireModuleReadPermission() {

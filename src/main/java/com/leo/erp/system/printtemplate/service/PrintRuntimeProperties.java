@@ -67,6 +67,12 @@ public class PrintRuntimeProperties {
         return root.path("modules").path(moduleKey).path("printable").asBoolean(false);
     }
 
+    /** 该模块的读取权限码（与 PermissionCodes 的 xxx_READ 一致）；未配置返回 null。 */
+    String readPermission(String moduleKey) {
+        JsonNode value = root.path("modules").path(moduleKey).get("readPermission");
+        return value == null || value.isNull() ? null : value.asText();
+    }
+
     JsonNode pieceWeightConfig() {
         return root.path("fieldFormatting").path("pieceWeightTon");
     }

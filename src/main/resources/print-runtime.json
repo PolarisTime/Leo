@@ -2,6 +2,7 @@
   "modules": {
     "purchase-order": {
       "printable": true,
+      "readPermission": "purchase-orders:read",
       "tableName": "po_purchase_order",
       "printColumns": [
         "id", "order_no", "supplier_name", "order_date", "buyer_name",
@@ -21,6 +22,7 @@
     },
     "sales-order": {
       "printable": true,
+      "readPermission": "sales-orders:read",
       "tableName": "so_sales_order",
       "printColumns": [
         "id", "order_no", "purchase_inbound_no", "customer_name", "project_name",
@@ -42,6 +44,7 @@
     },
     "purchase-inbound": {
       "printable": true,
+      "readPermission": "purchase-inbounds:read",
       "tableName": "po_purchase_inbound",
       "printColumns": [
         "id", "inbound_no", "purchase_order_no", "supplier_name", "warehouse_name",
@@ -64,6 +67,7 @@
     },
     "sales-outbound": {
       "printable": true,
+      "readPermission": "sales-outbounds:read",
       "tableName": "so_sales_outbound",
       "printColumns": [
         "id", "outbound_no", "sales_order_no", "customer_name", "project_name",
@@ -84,6 +88,7 @@
     },
     "sales-return": {
       "printable": true,
+      "readPermission": "sales-returns:read",
       "tableName": "so_sales_return",
       "printColumns": [
         "id", "return_no", "sales_order_no", "customer_id", "customer_name", "project_id",
@@ -105,6 +110,7 @@
     },
     "freight-bill": {
       "printable": true,
+      "readPermission": "freight-bills:read",
       "tableName": "lg_freight_bill",
       "printColumns": [
         "id", "bill_no", "carrier_name", "bill_time",
@@ -125,6 +131,7 @@
     },
     "customer-statement": {
       "printable": true,
+      "readPermission": "customer-statements:read",
       "tableName": "st_customer_statement",
       "printColumns": [
         "id", "statement_no", "customer_name", "project_name", "start_date", "end_date",
@@ -144,6 +151,7 @@
     },
     "freight-statement": {
       "printable": true,
+      "readPermission": "freight-statements:read",
       "tableName": "st_freight_statement",
       "printColumns": [
         "id", "statement_no", "carrier_name", "start_date", "end_date", "total_weight",
@@ -164,6 +172,7 @@
     },
     "receipt": {
       "printable": true,
+      "readPermission": "receipts:read",
       "tableName": "fm_receipt",
       "printColumns": [
         "id", "receipt_no", "customer_name", "project_name", "receipt_date", "pay_type",
@@ -181,6 +190,7 @@
     },
     "payment": {
       "printable": true,
+      "readPermission": "payments:read",
       "tableName": "fm_payment",
       "printColumns": [
         "id", "payment_no", "counterparty_type", "counterparty_name", "payment_date", "pay_type",

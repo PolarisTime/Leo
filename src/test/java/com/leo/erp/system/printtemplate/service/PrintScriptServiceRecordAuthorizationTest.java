@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.security.permission.PermissionChecker;
 import com.leo.erp.security.permission.PermissionCodes;
@@ -59,7 +60,10 @@ class PrintScriptServiceRecordAuthorizationTest {
 
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
-        PrintRecordAuthorization authorization = new PrintRecordAuthorization(permissionChecker);
+        PrintRecordAuthorization authorization = new PrintRecordAuthorization(
+                permissionChecker,
+                new PrintRuntimeProperties(new ObjectMapper())
+        );
         printScriptService = new PrintScriptService(
                 templateRepository, dataProvider, recordEnricher, layoutPreparer,
                 layoutLodopRenderer, recordAccessService, runtimeProperties, authorization, specLengthResolver);

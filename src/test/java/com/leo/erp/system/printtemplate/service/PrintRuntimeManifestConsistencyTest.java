@@ -1,8 +1,10 @@
 package com.leo.erp.system.printtemplate.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leo.erp.security.permission.PermissionCodes;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -42,6 +44,31 @@ class PrintRuntimeManifestConsistencyTest {
             assertThat(hasDefaultTemplate)
                     .as("可打印模块缺少默认模板: " + moduleKey)
                     .isTrue();
+        }
+    }
+
+    @Test
+    void readPermissionShouldMatchPermissionCodes() {
+        Map<String, String> expected = Map.ofEntries(
+                Map.entry("purchase-order", PermissionCodes.PURCHASE_ORDERS_READ),
+                Map.entry("purchase-inbound", PermissionCodes.PURCHASE_INBOUNDS_READ),
+                Map.entry("sales-order", PermissionCodes.SALES_ORDERS_READ),
+                Map.entry("sales-outbound", PermissionCodes.SALES_OUTBOUNDS_READ),
+                Map.entry("sales-return", PermissionCodes.SALES_RETURNS_READ),
+                Map.entry("freight-bill", PermissionCodes.FREIGHT_BILLS_READ),
+                Map.entry("customer-statement", PermissionCodes.CUSTOMER_STATEMENTS_READ),
+                Map.entry("freight-statement", PermissionCodes.FREIGHT_STATEMENTS_READ),
+                Map.entry("receipt", PermissionCodes.RECEIPTS_READ),
+                Map.entry("payment", PermissionCodes.PAYMENTS_READ)
+        );
+
+        assertThat(properties.printableModules())
+                .as("可打印模块必须与权限码清单一一对应")
+                .containsExactlyInAnyOrderElementsOf(expected.keySet());
+        for (Map.Entry<String, String> entry : expected.entrySet()) {
+            assertThat(properties.readPermission(entry.getKey()))
+                    .as("模块 %s 的 readPermission 必须与 PermissionCodes 一致", entry.getKey())
+                    .isEqualTo(entry.getValue());
         }
     }
 }
