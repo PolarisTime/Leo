@@ -148,7 +148,7 @@
         "id", "statement_id", "line_no", "source_no", "customer_name", "project_name",
         "material_code", "material_name", "brand", "category", "material", "spec", "length",
         "quantity", "piece_weight_ton", "pieces_per_bundle", "batch_no", "weight_ton",
-        "warehouse_name", "quantity_unit",
+        "warehouse_name", "quantity_unit", "source_freight_bill_time",
         "settlement_company_id", "settlement_company_name"
       ],
       "productPrintItems": true,

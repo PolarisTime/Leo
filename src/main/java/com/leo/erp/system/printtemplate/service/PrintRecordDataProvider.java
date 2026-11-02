@@ -106,10 +106,12 @@ class PrintRecordDataProvider {
                     + "WHERE soi.id = source_sales_order_item_id AND soi.deleted_flag = FALSE "
                     + "AND so.deleted_flag = FALSE LIMIT 1), '') AS delivery_date, "
                     + "'' AS customer_name, '' AS project_name, '' AS source_freight_bill_id, "
+                    + "'' AS source_freight_bill_time, "
                     + "'' AS source_freight_bill_unit_price, '' AS source_freight_bill_total_freight";
         }
         if (ModuleKeys.FREIGHT_STATEMENT.equals(moduleKey)) {
             return "source_no, customer_name, project_name, quantity_unit, source_freight_bill_id, "
+                    + "source_freight_bill_time::text AS source_freight_bill_time, "
                     + "'' AS delivery_date, '' AS source_sales_order_item_id, "
                     + "COALESCE((SELECT fb.unit_price FROM lg_freight_bill fb "
                     + "WHERE fb.id = source_freight_bill_id AND fb.deleted_flag = FALSE LIMIT 1), 0) "
@@ -120,6 +122,7 @@ class PrintRecordDataProvider {
         }
         return "'' AS source_no, '' AS delivery_date, '' AS quantity_unit, '' AS customer_name, "
                 + "'' AS project_name, '' AS source_sales_order_item_id, '' AS source_freight_bill_id, "
+                + "'' AS source_freight_bill_time, "
                 + "'' AS source_freight_bill_unit_price, '' AS source_freight_bill_total_freight";
     }
 
@@ -146,6 +149,7 @@ class PrintRecordDataProvider {
                 formatter.value(item, "projectName"),
                 formatter.value(item, "sourceSalesOrderItemId"),
                 formatter.value(item, "sourceFreightBillId"),
+                formatter.value(item, "sourceFreightBillTime"),
                 formatter.value(item, "sourceFreightBillUnitPrice"),
                 formatter.value(item, "sourceFreightBillTotalFreight")
         );

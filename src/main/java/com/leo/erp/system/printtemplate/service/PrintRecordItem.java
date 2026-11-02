@@ -21,6 +21,7 @@ public record PrintRecordItem(
         String projectName,
         String sourceSalesOrderItemId,
         String sourceFreightBillId,
+        String sourceFreightBillTime,
         String sourceFreightBillUnitPrice,
         String sourceFreightBillTotalFreight
 ) {
@@ -38,6 +39,6 @@ public record PrintRecordItem(
             String amount
     ) {
         this(id, recordId, brand, category, "", material, spec, "", quantity, pieceWeightTon, weightTon, unitPrice, amount,
-                "", "", "", "", "", "", "", "", "");
+                "", "", "", "", "", "", "", "", "", "");
     }
 }

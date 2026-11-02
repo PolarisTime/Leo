@@ -54,7 +54,7 @@
         "lineAligns": ["left", "right"],
         "lines": [
           "来源物流单：${sourceNo}    单据日期：${billTime}    车号：${vehiclePlate}",
-          "本单合计：数量 ${totalQuantity}，重量 ${totalWeightTon} 吨，运费单价 ${unitPrice} 元/吨，运费 ${totalFreight} 元"
+          "数量 ${totalQuantity}    重量 ${totalWeightTon} 吨    运费单价 ${unitPrice} 元/吨    运费总价 ${totalFreight} 元"
         ],
         "formats": {
           "billTime": "chineseDate"
@@ -92,9 +92,9 @@
       {"key": "material", "label": "材质", "width": 51, "headerFontSize": 9, "fontSize": 9, "normalize": "compactAscii"},
       {"key": "spec", "label": "规格", "width": 45, "headerFontSize": 9, "fontSize": 9},
       {"key": "length", "label": "长度", "width": 32, "headerFontSize": 9, "fontSize": 9},
-      {"key": "quantity", "label": "件数", "width": 38, "headerFontSize": 9, "fontSize": 9},
-      {"key": "pieceWeightTon", "label": "件重", "width": 46, "headerFontSize": 9, "fontSize": 9},
-      {"key": "weightTon", "label": "重量", "width": 46, "headerFontSize": 9, "fontSize": 9},
+      {"key": "quantity", "label": "数量", "width": 38, "headerFontSize": 9, "fontSize": 9, "align": "right"},
+      {"key": "pieceWeightTon", "label": "件重", "width": 46, "headerFontSize": 9, "fontSize": 9, "align": "right"},
+      {"key": "weightTon", "label": "重量", "width": 46, "headerFontSize": 9, "fontSize": 9, "align": "right"},
       {"key": "warehouseName", "label": "仓库", "width": 67, "headerFontSize": 9, "fontSize": 9}
     ]
   },

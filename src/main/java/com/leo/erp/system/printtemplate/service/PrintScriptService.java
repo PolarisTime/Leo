@@ -200,7 +200,12 @@ public class PrintScriptService {
         Map<String, String> header = new LinkedHashMap<>();
         header.put("isGroupHeader", GROUP_HEADER_SOURCE);
         header.put("sourceNo", distinctText(groupItems, "sourceNo"));
-        header.put("billTime", distinctText(groupItems, "billTime"));
+        // 日期优先取明细上落库的来源物流单快照（st_freight_statement_item.source_freight_bill_time），
+        // 兼容旧数据/旧调用方仍只带 billTime 的场景；模板变量名仍是 billTime。
+        String sourceFreightBillTime = distinctText(groupItems, "sourceFreightBillTime");
+        header.put("billTime", sourceFreightBillTime.isBlank()
+                ? distinctText(groupItems, "billTime")
+                : sourceFreightBillTime);
         header.put("vehiclePlate", distinctText(groupItems, "vehiclePlate"));
         header.put("totalQuantity", String.valueOf(sumInteger(groupItems, "quantity")));
         header.put("totalWeightTon", plainNumber(totalWeight));

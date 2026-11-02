@@ -56,7 +56,7 @@ class PrintScriptServicePageItemsTest {
     private PrintRecordItem item(String id, String customerName) {
         return new PrintRecordItem(
                 id, "10", "品牌A", "类目A", "", "材质A", "规格A", "", "1", "0.1", "0.1", "100", "100",
-                "", "", "", customerName, "", "", "", "", ""
+                "", "", "", customerName, "", "", "", "", "", ""
         );
     }
 

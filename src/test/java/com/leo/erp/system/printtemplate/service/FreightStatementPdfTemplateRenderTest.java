@@ -46,6 +46,45 @@ class FreightStatementPdfTemplateRenderTest {
     }
 
     @Test
+    void defaultTemplateMatchesDetailCardLayoutForGroupsAndNumbers() throws Exception {
+        JsonNode root;
+        try (InputStream stream = getClass().getClassLoader().getResourceAsStream(
+                "print-forms/default-freight-statement.layout.json")) {
+            assertThat(stream).isNotNull();
+            root = objectMapper.readTree(stream);
+        }
+
+        // 分组头两行：第一行身份（来源物流单/单据日期/车号）左对齐，第二行指标右对齐，
+        // 与详情卡片头「来源物流单 + 单据日期 | 数量/重量/运费单价/运费总价」一致。
+        JsonNode sourceHeader = root.path("table").path("groupHeader").path("source");
+        JsonNode lines = sourceHeader.path("lines");
+        assertThat(lines).hasSize(2);
+        assertThat(lines.get(0).asText())
+                .contains("来源物流单")
+                .contains("单据日期")
+                .contains("车号");
+        assertThat(lines.get(1).asText())
+                .contains("数量")
+                .contains("重量")
+                .contains("运费单价")
+                .contains("运费总价");
+        assertThat(sourceHeader.path("lineAligns").get(0).asText()).isEqualTo("left");
+        assertThat(sourceHeader.path("lineAligns").get(1).asText()).isEqualTo("right");
+
+        // 数量/件重/重量三列右对齐，与详情只读表一致；文本列保持居中。
+        Map<String, String> alignByKey = new LinkedHashMap<>();
+        for (JsonNode column : root.path("table").path("columns")) {
+            alignByKey.put(column.path("key").asText(), column.path("align").asText("center"));
+        }
+        assertThat(alignByKey)
+                .containsEntry("quantity", "right")
+                .containsEntry("pieceWeightTon", "right")
+                .containsEntry("weightTon", "right")
+                .containsEntry("brand", "center")
+                .containsEntry("warehouseName", "center");
+    }
+
+    @Test
     void rendersPortraitPdfWithLongStatementNumberAndGroupedRows() throws Exception {
         String template;
         try (InputStream stream = getClass().getClassLoader().getResourceAsStream(
@@ -79,6 +118,56 @@ class FreightStatementPdfTemplateRenderTest {
             assertThat(document.getFirstPage().getPageSize().getHeight()).isEqualTo(842f);
             assertThat(PdfTextExtractor.getTextFromPage(document.getFirstPage()))
                     .contains("物流对账单", statementNo, "2026年08月31日", "示例物流运输有限公司")
+                    .doesNotContain("null");
+        }
+    }
+
+    @Test
+    void rendersSourceGroupHeaderWithSnapshotDateAndCardMetrics() throws Exception {
+        String template;
+        try (InputStream stream = getClass().getClassLoader().getResourceAsStream(
+                "print-forms/default-freight-statement.layout.json")) {
+            assertThat(stream).isNotNull();
+            template = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        }
+
+        // 与 PrintScriptService.groupItemsForPdf 产出的分组行一致：分组头行携带
+        // 来源物流单日期快照与合计/运费，字体与布局走模板的 groupHeader.source。
+        Map<String, String> groupHeader = new LinkedHashMap<>();
+        groupHeader.put("isGroupHeader", "source");
+        groupHeader.put("sourceNo", "WL-202608-001");
+        groupHeader.put("billTime", "2026-08-25");
+        groupHeader.put("vehiclePlate", "浙F12345");
+        groupHeader.put("totalQuantity", "12");
+        groupHeader.put("totalWeightTon", "2.400");
+        groupHeader.put("unitPrice", "160.00");
+        groupHeader.put("totalFreight", "384.00");
+
+        PrintPdfFormService service = new PrintPdfFormService(
+                null,
+                new PrintPdfFormTemplateValidator(objectMapper),
+                objectMapper
+        );
+        byte[] pdf = service.generateFromPayload(Map.of(
+                "templateType", "PDF_FORM",
+                "templateHtml", template,
+                "data", Map.of(
+                        "carrierName", "示例物流运输有限公司",
+                        "statementNo", "35314192407436492",
+                        "period", "2026-08-01 至 2026-08-31",
+                        "endDate", "2026-08-31"
+                ),
+                "items", List.of(groupHeader, freightItem())
+        ));
+
+        try (PdfDocument document = new PdfDocument(new PdfReader(new ByteArrayInputStream(pdf)))) {
+            String text = PdfTextExtractor.getTextFromPage(document.getFirstPage());
+            assertThat(text)
+                    .as("分组头要显示来源物流单日期（快照）与该单合计/运费，而不是空日期")
+                    .contains("来源物流单")
+                    .contains("2026年08月25日")
+                    .contains("运费总价")
+                    .contains("数量")
                     .doesNotContain("null");
         }
     }

@@ -26,6 +26,7 @@ public record PrintItemRowResponse(
         String projectName,
         String sourceSalesOrderItemId,
         String sourceFreightBillId,
+        String sourceFreightBillTime,
         String sourceFreightBillUnitPrice,
         String sourceFreightBillTotalFreight
 ) {
@@ -52,6 +53,7 @@ public record PrintItemRowResponse(
                 item.projectName(),
                 item.sourceSalesOrderItemId(),
                 item.sourceFreightBillId(),
+                item.sourceFreightBillTime(),
                 item.sourceFreightBillUnitPrice(),
                 item.sourceFreightBillTotalFreight()
         );
