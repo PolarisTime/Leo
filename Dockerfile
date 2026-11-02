@@ -1,4 +1,4 @@
-FROM maven:3.9.11-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-26 AS build
 
 WORKDIR /workspace
 
@@ -9,7 +9,7 @@ COPY src src
 
 RUN bash scripts/maven.sh -q -DskipTests package
 
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:25-jre-jammy
 
 WORKDIR /app
 
