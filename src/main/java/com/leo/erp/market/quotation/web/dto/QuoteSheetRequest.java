@@ -89,32 +89,62 @@ public record QuoteSheetRequest(
                 @Valid List<ItemPriceRequest> prices
         ) {
 
-            /** 兼容旧调用方: 未显式传行类型时按商品行处理。 */
+            /**
+             * 兼容旧调用方: 未显式传行类型时按商品行处理。
+             *
+             * @deprecated 生产代码零调用（LSP 核实：仅 8 个测试类的夹具使用 6 参/9 参简写）；
+             *             测试夹具改用规范构造器后删除。
+             */
+            @Deprecated(forRemoval = true)
             public ItemRequest(String category, String material, Integer spec, String length,
                                BigDecimal ton, List<ItemPriceRequest> prices) {
                 this(null, category, material, spec, length, null, ton, null, null, null, null, prices);
             }
 
-            /** 兼容旧调用方: 未携带行备注。 */
+            /**
+             * 兼容旧调用方: 未携带行备注。
+             *
+             * @deprecated 生产代码零调用（LSP 核实：仅 8 个测试类的夹具使用 6 参/9 参简写）；
+             *             测试夹具改用规范构造器后删除。
+             */
+            @Deprecated(forRemoval = true)
             public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
                                String length, BigDecimal ton, List<ItemPriceRequest> prices) {
                 this(rowType, category, material, spec, length, null, ton, null, null, null, null, prices);
             }
 
-            /** 兼容旧调用方: 未携带行备注。 */
+            /**
+             * 兼容旧调用方: 未携带行备注。
+             *
+             * @deprecated 生产代码零调用（LSP 核实：仅 8 个测试类的夹具使用 6 参/9 参简写）；
+             *             测试夹具改用规范构造器后删除。
+             */
+            @Deprecated(forRemoval = true)
             public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
                                String length, String remark, BigDecimal ton, List<ItemPriceRequest> prices) {
                 this(rowType, category, material, spec, length, remark, ton, null, null, null, null, prices);
             }
 
-            /** 兼容旧调用方: 未携带订单明细行关联。 */
+            /**
+             * 兼容旧调用方: 未携带订单明细行关联。
+             *
+             * @deprecated 生产代码零调用（LSP 核实：仅 8 个测试类的夹具使用 6 参/9 参简写）；
+             *             测试夹具改用规范构造器后删除。
+             */
+            @Deprecated(forRemoval = true)
             public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
                                String length, String remark, BigDecimal ton, Long purchaseOrderId,
                                List<ItemPriceRequest> prices) {
                 this(rowType, category, material, spec, length, remark, ton, null, purchaseOrderId, null, null, prices);
             }
 
-            /** 兼容旧调用方: 单值关联形态(物料...|locked|purchaseOrderId|purchaseOrderItemId|prices)。 */
+            /**
+             * 兼容旧调用方: 单值关联形态(物料...|locked|purchaseOrderId|purchaseOrderItemId|prices)。
+             *
+             * @deprecated 生产代码零调用（LSP 核实：仅 8 个测试类的夹具使用 6 参/9 参简写）；
+             *             测试夹具改用规范构造器后删除。
+             */
+            @Deprecated(forRemoval = true)
             public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
                                String length, String remark, BigDecimal ton, Boolean locked,
                                Long purchaseOrderId, Long purchaseOrderItemId,
@@ -123,7 +153,13 @@ public record QuoteSheetRequest(
                         purchaseOrderId, purchaseOrderItemId, null, prices);
             }
 
-            /** 兼容旧调用方: 单值关联形态, 未携带行备注。 */
+            /**
+             * 兼容旧调用方: 单值关联形态, 未携带行备注。
+             *
+             * @deprecated 生产代码零调用（LSP 核实：仅 8 个测试类的夹具使用 6 参/9 参简写）；
+             *             测试夹具改用规范构造器后删除。
+             */
+            @Deprecated(forRemoval = true)
             public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
                                String length, BigDecimal ton, Boolean locked,
                                Long purchaseOrderId, Long purchaseOrderItemId,
