@@ -43,19 +43,53 @@ public final class PrintPdfItemGrouper {
         List<Map<String, String>> result = new ArrayList<>(items.size() + orderedGroups.size() * 2);
         int groupIndex = 0;
         boolean separator = grouping.path("separator").asBoolean(false);
+        boolean inline = grouping.path("inline").asBoolean(false);
+        List<String> blankRepeatedFields = textList(grouping.path("blankRepeatedFields"));
         for (List<Map<String, String>> groupItems : orderedGroups) {
-            if (separator && !result.isEmpty()) {
+            if (!inline && separator && !result.isEmpty()) {
                 result.add(Map.of("isBlankRow", "true"));
             }
             groupIndex++;
-            result.add(buildHeader(groupItems, grouping, groupIndex));
-            for (Map<String, String> item : groupItems) {
-                Map<String, String> detail = new LinkedHashMap<>(item);
-                detail.put(indexField(grouping), String.valueOf(groupIndex));
+            if (!inline) {
+                result.add(buildHeader(groupItems, grouping, groupIndex));
+                for (Map<String, String> item : groupItems) {
+                    Map<String, String> detail = new LinkedHashMap<>(item);
+                    detail.put(indexField(grouping), String.valueOf(groupIndex));
+                    result.add(detail);
+                }
+                continue;
+            }
+            /*
+             * inline 分组：不插入"分组头行"，把序号写在组内第一行、组内其余行留空，
+             * 视觉上等价于 Excel 的合并单元格（序号/日期/备注只出现一次），
+             * 这样一张对账单就是一张连续明细表，不再被组头与小计切碎。
+             */
+            for (int index = 0; index < groupItems.size(); index++) {
+                Map<String, String> detail = new LinkedHashMap<>(groupItems.get(index));
+                detail.put(indexField(grouping), index == 0 ? String.valueOf(groupIndex) : "");
+                if (index > 0) {
+                    for (String field : blankRepeatedFields) {
+                        detail.put(field, "");
+                    }
+                }
                 result.add(detail);
             }
         }
         return result;
+    }
+
+    private List<String> textList(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>(node.size());
+        for (JsonNode entry : node) {
+            String value = entry.asText("").trim();
+            if (!value.isBlank()) {
+                values.add(value);
+            }
+        }
+        return values;
     }
 
     private Map<String, String> buildHeader(

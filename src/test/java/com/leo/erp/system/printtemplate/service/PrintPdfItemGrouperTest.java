@@ -67,29 +67,81 @@ class PrintPdfItemGrouperTest {
     }
 
     @Test
-    void customerStatementTemplateDeclaresSalesOrderGroupingAndRequiredColumns() throws Exception {
+    void customerStatementTemplateKeepsReferenceStyleInlineDateGrouping() throws Exception {
         try (var stream = getClass().getClassLoader().getResourceAsStream(
                 "print-forms/default-customer-statement.layout.json")) {
             assertThat(stream).isNotNull();
             JsonNode root = objectMapper.readTree(stream);
-            JsonNode grouping = root.path("table").path("grouping");
-            assertThat(grouping.path("by").asText()).isEqualTo("sourceNo");
+            JsonNode table = root.path("table");
+            JsonNode grouping = table.path("grouping");
+            assertThat(grouping.path("by").asText()).isEqualTo("billTime");
+            assertThat(grouping.path("inline").asBoolean()).isTrue();
             assertThat(grouping.path("sortBy").asText()).isEqualTo("billTime");
             assertThat(grouping.path("sortDirection").asText()).isEqualTo("asc");
-            JsonNode lineAligns = root.path("table").path("groupHeader").path("source").path("lineAligns");
-            assertThat(lineAligns.isArray()).isTrue();
-            assertThat(lineAligns.get(0).asText()).isEqualTo("left");
-            assertThat(lineAligns.get(1).asText()).isEqualTo("right");
+            assertThat(grouping.path("separator").asBoolean(false)).isFalse();
+            assertThat(StreamSupport.stream(
+                            grouping.path("blankRepeatedFields").spliterator(), false)
+                    .map(JsonNode::asText)
+                    .toList())
+                    .contains("groupIndex", "billTime");
 
             List<String> labels = StreamSupport.stream(
-                            root.path("table").path("columns").spliterator(), false)
+                            table.path("columns").spliterator(), false)
                     .map(column -> column.path("label").asText())
                     .toList();
             assertThat(labels).containsExactly(
-                    "分组序号", "销售单号", "交货日期", "品牌", "类别", "材质", "规格", "长度",
-                    "数量", "数量单位", "件重/吨", "重量(吨)", "单价", "金额"
+                    "序号", "进货日期", "产品名称", "产地", "牌号商标", "规格型号", "长度",
+                    "件重/吨", "件数", "重量小计/吨", "单价(元/吨)", "总金额/元", "备注"
             );
+
+            assertThat(StreamSupport.stream(
+                            grouping.path("continuationFillFields").spliterator(), false)
+                    .map(JsonNode::asText)
+                    .toList())
+                    .contains("groupIndex", "billTime");
+            assertThat(table.path("repeatHeaderPerPage").asBoolean()).isTrue();
+            assertThat(table.path("fillPage").asBoolean())
+                    .as("连续表应尽量画满页面，只在末页预留汇总/条款高度")
+                    .isTrue();
+            assertThat(table.path("maxRowsPerPage").asInt()).isGreaterThanOrEqualTo(40);
+            assertThat(table.path("repeatHeaderPerSourceGroup").asBoolean(false)).isFalse();
         }
+    }
+
+    @Test
+    void inlineGroupingKeepsGroupValuesOnFirstRowAndBlanksRepeats() throws Exception {
+        JsonNode grouping = objectMapper.readTree("""
+                {
+                  "by": "billTime",
+                  "inline": true,
+                  "indexField": "groupIndex",
+                  "blankRepeatedFields": ["groupIndex", "billTime"],
+                  "sortBy": "billTime",
+                  "sortDirection": "asc"
+                }
+                """);
+
+        List<Map<String, String>> items = List.of(
+                row("SO-A", "2026-08-25", "2", "0.400", "800.00"),
+                row("SO-B", "2026-08-20", "3", "0.600", "1200.00"),
+                row("SO-C", "2026-08-20", "4", "0.800", "1600.00")
+        );
+
+        List<Map<String, String>> grouped = grouper.group(items, grouping);
+
+        // 不插入分组头行：行数与原明细一致，日期升序后同组聚在一起
+        assertThat(grouped).hasSize(3);
+        assertThat(grouped.get(0))
+                .containsEntry("groupIndex", "1")
+                .containsEntry("billTime", "2026-08-20");
+        // 同组第二行留空，视觉上等价于合并单元格
+        assertThat(grouped.get(1))
+                .containsEntry("groupIndex", "")
+                .containsEntry("billTime", "");
+        assertThat(grouped.get(2))
+                .containsEntry("groupIndex", "2")
+                .containsEntry("billTime", "2026-08-25");
+        assertThat(grouped).noneMatch(item -> item.containsKey("isGroupHeader"));
     }
 
     private static Map<String, String> row(

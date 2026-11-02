@@ -475,9 +475,9 @@
       {
         "type": "itemLookupByField",
         "sourceField": "sourceNo",
-        "sql": "SELECT order_no, delivery_date FROM so_sales_order WHERE deleted_flag = FALSE AND order_no IN (:values)",
+        "sql": "SELECT order_no, delivery_date, remark FROM so_sales_order WHERE deleted_flag = FALSE AND order_no IN (:values)",
         "lookupKeyColumn": "order_no",
-        "targetFields": {"billTime": "delivery_date"}
+        "targetFields": {"billTime": "delivery_date", "remark": "remark"}
       }
     ],
     "freight-statement": [

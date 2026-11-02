@@ -369,7 +369,12 @@ public class PrintPdfTableRenderer {
             drawing.drawCanvasText(
                     canvas,
                     font,
-                    valueResolver.applyTemplate(line, variables),
+                    valueResolver.applyTemplate(
+                            line,
+                            variables,
+                            summaryConfig.path("formats"),
+                            summaryConfig.path("defaults")
+                    ),
                     left + paddingLeft,
                     lineTop + paddingTop,
                     width - paddingLeft * 2,

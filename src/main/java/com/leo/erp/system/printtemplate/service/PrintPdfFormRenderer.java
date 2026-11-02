@@ -12,6 +12,9 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -86,6 +89,12 @@ public class PrintPdfFormRenderer {
         List<JsonNode> columns = drawing.childObjects(tableConfig.path("columns"));
         boolean renderTable = tableConfig.isObject();
         boolean repeatHeaderPerSourceGroup = drawing.bool(tableConfig, "repeatHeaderPerSourceGroup", false);
+        /*
+         * 每页只画一次表头（含续页），与"每个来源分组前都画表头"区分开：
+         * 客户对账单这类按销售单分组、组数多的模板，按组重复表头会把页面切成一段段，
+         * 但续页又必须带表头才能读数，于是需要这个独立开关。
+         */
+        boolean repeatHeaderPerPage = drawing.bool(tableConfig, "repeatHeaderPerPage", false);
         boolean detailHeaderAfterProject = groupPaginator.isDetailHeaderAfterProject(
                 tableConfig, repeatHeaderPerSourceGroup
         );
@@ -93,6 +102,15 @@ public class PrintPdfFormRenderer {
                 tableConfig, "repeatGroupContextOnContinuation", true
         );
         float sourceGroupGap = Math.max(0f, drawing.number(tableConfig, "sourceGroupGap", 0f));
+        // fillPage：明细页尽量画到页底，只在"这一页就是最后一页"时预留汇总/条款高度，
+        // 避免非末页底部固定空出一大块（客户对账单这类连续表的诉求）。
+        boolean fillPage = drawing.bool(tableConfig, "fillPage", false);
+        float footerReserve = fillPage
+                ? footerReserveHeight(root.path("summary"), root.path("clauses"), tableConfig)
+                : 0f;
+        // inline 分组跨页时，新页首行要补回上一行的分组值（序号/进货日期），否则续页的行看不出属于哪一天
+        List<String> continuationFillFields = textList(tableConfig.path("grouping").path("continuationFillFields"));
+        Map<String, String> lastGroupValues = new HashMap<>();
 
         int itemIndex = 0;
         boolean firstPage = true;
@@ -102,10 +120,29 @@ public class PrintPdfFormRenderer {
                 pageContentRenderer.drawStatic(canvas, font, root.path("static"), variables, pageMetrics);
                 pageContentRenderer.drawFields(canvas, fieldsConfig, data, font, pageMetrics);
             }
-            boolean renderHeader = renderTable && firstPage && !repeatHeaderPerSourceGroup;
+            boolean renderHeader = renderTable
+                    && (repeatHeaderPerPage || (firstPage && !repeatHeaderPerSourceGroup));
             float currentTableTop = firstPage ? tableTop : continuationTableTop;
             float rowTop = currentTableTop + (renderHeader ? headerHeight : 0);
             int rowsOnPage = 0;
+            boolean pageFirstDetailRow = true;
+            float pageBottomLimit = tableBottom;
+            if (fillPage) {
+                float pageLimit = pageMetrics.height() - 14f;
+                int remainingRows = 0;
+                for (int index = itemIndex; index < items.size(); index++) {
+                    Map<String, String> pending = items.get(index);
+                    if (!groupPaginator.isBlankRow(pending)
+                            && !groupPaginator.isGroupHeader(pending)
+                            && !groupPaginator.isSubtotalRow(pending)) {
+                        remainingRows++;
+                    }
+                }
+                pageBottomLimit = pageLimit;
+                if (remainingRows * rowHeight + footerReserve <= pageLimit - rowTop) {
+                    pageBottomLimit = pageLimit - footerReserve;
+                }
+            }
             if (renderHeader) {
                 tableRenderer.drawHeader(canvas, font, tableConfig, columns, currentTableTop, pageMetrics);
             }
@@ -117,7 +154,7 @@ public class PrintPdfFormRenderer {
                     tableRenderer.drawHeader(canvas, font, tableConfig, columns, rowTop, pageMetrics);
                     rowTop += headerHeight;
                 } else if (repeatGroupContextOnContinuation) {
-                    if (!detailHeaderAfterProject) {
+                    if (!detailHeaderAfterProject && !repeatHeaderPerPage) {
                         tableRenderer.drawHeader(canvas, font, tableConfig, columns, rowTop, pageMetrics);
                         rowTop += headerHeight;
                     }
@@ -143,7 +180,7 @@ public class PrintPdfFormRenderer {
                             items,
                             itemIndex + 1,
                             rowTop + sourceGroupGap,
-                            tableBottom,
+                            pageBottomLimit,
                             continuationTableTop,
                             tableConfig,
                             headerHeight,
@@ -163,7 +200,7 @@ public class PrintPdfFormRenderer {
                         items,
                         itemIndex,
                         rowTop,
-                        tableBottom,
+                        pageBottomLimit,
                         continuationTableTop,
                         tableConfig,
                         headerHeight,
@@ -184,23 +221,40 @@ public class PrintPdfFormRenderer {
                         && groupPaginator.isProjectGroupHeader(item) ? headerHeight : 0f;
                 float followingSubtotalHeight = followingSubtotalHeight(items, itemIndex, tableConfig);
                 if (rowsOnPage >= maxRowsPerPage
-                        || rowTop + itemHeight + followingHeaderHeight + followingSubtotalHeight > tableBottom) {
+                        || rowTop + itemHeight + followingHeaderHeight + followingSubtotalHeight > pageBottomLimit) {
                     lastPage = false;
                     break;
                 }
                 if (repeatHeaderPerSourceGroup
+                        && !repeatHeaderPerPage
                         && !detailHeaderAfterProject
                         && groupPaginator.isSourceGroupHeader(item)) {
                     tableRenderer.drawHeader(canvas, font, tableConfig, columns, rowTop, pageMetrics);
                     rowTop += headerHeight;
                 }
-                tableRenderer.drawItemRow(canvas, font, tableConfig, columns, rowTop, item, pageMetrics);
+                Map<String, String> renderItem = item;
+                if (pageFirstDetailRow && !groupHeader && !subtotal) {
+                    renderItem = new LinkedHashMap<>(item);
+                    for (String field : continuationFillFields) {
+                        if (renderItem.getOrDefault(field, "").isBlank()) {
+                            renderItem.put(field, lastGroupValues.getOrDefault(field, ""));
+                        }
+                    }
+                }
+                tableRenderer.drawItemRow(canvas, font, tableConfig, columns, rowTop, renderItem, pageMetrics);
                 rowTop += itemHeight;
                 if (detailHeaderAfterProject && groupPaginator.isProjectGroupHeader(item)) {
                     tableRenderer.drawHeader(canvas, font, tableConfig, columns, rowTop, pageMetrics);
                     rowTop += headerHeight;
                 }
                 if (!groupHeader && !subtotal) {
+                    for (String field : continuationFillFields) {
+                        String value = item.get(field);
+                        if (value != null && !value.isBlank()) {
+                            lastGroupValues.put(field, value);
+                        }
+                    }
+                    pageFirstDetailRow = false;
                     rowsOnPage++;
                 }
                 itemIndex++;
@@ -226,6 +280,40 @@ public class PrintPdfFormRenderer {
      * 当前行之后若紧跟小计行，返回其高度；用于明细行绘制前预判，
      * 保证小计行与本组最后一条明细分页时不被拆开。
      */
+    private float footerReserveHeight(JsonNode summary, JsonNode clauses, JsonNode tableConfig) {
+        float reserve = 0f;
+        if (summary != null && summary.isObject()) {
+            int summaryLines = summary.path("lines").size();
+            if (summaryLines == 0 && summary.path("template").isTextual()) {
+                summaryLines = 1;
+            }
+            if (summaryLines > 0) {
+                reserve += summaryLines * drawing.number(
+                        summary, "height", drawing.number(tableConfig, "rowHeight", 26f));
+            }
+        }
+        if (clauses != null && clauses.isObject()
+                && drawing.childTextValues(clauses.path("lines")).size() > 0) {
+            reserve += drawing.number(clauses, "paddingTop", 8f)
+                    + drawing.number(clauses, "height", 96f);
+        }
+        return reserve <= 0f ? 0f : reserve + 6f;
+    }
+
+    private List<String> textList(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>(node.size());
+        for (JsonNode entry : node) {
+            String value = entry.asText("").trim();
+            if (!value.isBlank()) {
+                values.add(value);
+            }
+        }
+        return values;
+    }
+
     private float followingSubtotalHeight(
             List<Map<String, String>> items,
             int itemIndex,
