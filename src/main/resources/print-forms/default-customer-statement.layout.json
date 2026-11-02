@@ -1,7 +1,7 @@
 {
   "page": {
-    "width": 842,
-    "height": 595,
+    "width": 595,
+    "height": 842,
     "repeatHeader": false
   },
   "static": [
@@ -9,10 +9,10 @@
       "type": "text",
       "text": "${settlementCompanyName}对账单",
       "left": 28,
-      "top": 16,
-      "width": 786,
-      "height": 26,
-      "fontSize": 16,
+      "top": 14,
+      "width": 539,
+      "height": 24,
+      "fontSize": 15,
       "align": "center",
       "color": "#1f1f1f"
     },
@@ -20,8 +20,8 @@
       "type": "text",
       "text": "项目名称：",
       "left": 28,
-      "top": 52,
-      "width": 70,
+      "top": 50,
+      "width": 62,
       "height": 14,
       "fontSize": 10,
       "color": "#1f1f1f"
@@ -31,7 +31,7 @@
       "text": "需方：",
       "left": 28,
       "top": 92,
-      "width": 40,
+      "width": 36,
       "height": 14,
       "fontSize": 10,
       "color": "#1f1f1f"
@@ -39,9 +39,9 @@
     {
       "type": "text",
       "text": "时间：",
-      "left": 560,
+      "left": 386,
       "top": 92,
-      "width": 40,
+      "width": 34,
       "height": 14,
       "fontSize": 10,
       "color": "#1f1f1f"
@@ -53,22 +53,22 @@
         "statementNo",
         "billNo"
       ],
-      "left": 700,
-      "top": 18,
-      "width": 114,
-      "height": 16,
-      "fontSize": 9,
+      "left": 462,
+      "top": 16,
+      "width": 105,
+      "height": 14,
+      "fontSize": 8.5,
       "align": "right",
       "color": "#8c8c8c"
     },
     "projectName": {
       "source": "projectName",
-      "left": 100,
-      "top": 48,
-      "width": 714,
-      "height": 36,
-      "fontSize": 11,
-      "minimumFontSize": 9,
+      "left": 94,
+      "top": 46,
+      "width": 473,
+      "height": 38,
+      "fontSize": 10.5,
+      "minimumFontSize": 8.5,
       "maxLines": 2,
       "lineHeight": 1.2,
       "multiline": true,
@@ -80,11 +80,11 @@
         "customerName",
         "counterpartyName"
       ],
-      "left": 100,
+      "left": 68,
       "top": 90,
-      "width": 420,
+      "width": 282,
       "height": 18,
-      "fontSize": 11,
+      "fontSize": 10.5,
       "color": "#1f1f1f"
     },
     "endDate": {
@@ -93,27 +93,29 @@
         "statementDate"
       ],
       "format": "chineseDate",
-      "left": 610,
+      "left": 424,
       "top": 90,
-      "width": 176,
+      "width": 143,
       "height": 18,
-      "fontSize": 11,
+      "fontSize": 10.5,
       "color": "#1f1f1f"
     }
   },
   "table": {
     "source": "items",
     "left": 28,
-    "top": 118,
-    "continuationTop": 28,
-    "bottom": 462,
-    "width": 786,
-    "headerHeight": 24,
-    "rowHeight": 24,
+    "top": 116,
+    "continuationTop": 24,
+    "bottom": 640,
+    "width": 539,
+    "headerHeight": 22,
+    "rowHeight": 22,
+    "maxRowsPerPage": 60,
     "repeatHeaderPerSourceGroup": false,
     "repeatHeaderPerPage": true,
     "repeatGroupContextOnContinuation": false,
     "sourceGroupGap": 0,
+    "fillPage": true,
     "headerFillColor": "#f5f7fa",
     "borderColor": "#d9d9d9",
     "headerTextColor": "#1f1f1f",
@@ -121,7 +123,7 @@
     "emptyFillColor": "#fafafa",
     "emptyTextColor": "#8c8c8c",
     "emptyText": "暂无对账明细",
-    "lineWidth": 1,
+    "lineWidth": 0.5,
     "grouping": {
       "by": "billTime",
       "inline": true,
@@ -130,149 +132,163 @@
         "groupIndex",
         "billTime"
       ],
-      "sortBy": "billTime",
-      "sortDirection": "asc",
       "continuationFillFields": [
         "groupIndex",
         "billTime"
-      ]
+      ],
+      "sortBy": "billTime",
+      "sortDirection": "asc"
     },
+    "mergeColumns": [
+      "groupIndex",
+      "billTime",
+      "remark"
+    ],
+    "mergeEqualColumns": [
+      "remark"
+    ],
     "columns": [
       {
         "key": "groupIndex",
         "label": "序号",
-        "width": 40,
-        "headerFontSize": 8,
-        "fontSize": 8,
+        "width": 26,
+        "headerFontSize": 7,
+        "fontSize": 7.5,
         "align": "center"
       },
       {
         "key": "billTime",
         "label": "进货日期",
-        "width": 72,
-        "headerFontSize": 8,
-        "fontSize": 8,
+        "width": 66,
+        "headerFontSize": 7,
+        "fontSize": 7.5,
         "align": "center",
         "format": "chineseDate"
       },
       {
         "key": "category",
         "label": "产品名称",
-        "width": 66,
-        "headerFontSize": 8,
-        "fontSize": 8
+        "width": 40,
+        "headerFontSize": 7,
+        "fontSize": 7.5,
+        "align": "center"
       },
       {
         "key": "brand",
         "label": "产地",
-        "width": 62,
-        "headerFontSize": 8,
-        "fontSize": 8
+        "width": 34,
+        "headerFontSize": 7,
+        "fontSize": 7.5,
+        "align": "center"
       },
       {
         "key": "material",
         "label": "牌号商标",
-        "width": 74,
-        "headerFontSize": 8,
-        "fontSize": 8,
+        "width": 46,
+        "headerFontSize": 7,
+        "fontSize": 7.5,
+        "align": "center",
         "normalize": "compactAscii"
       },
       {
         "key": "spec",
         "label": "规格型号",
-        "width": 56,
-        "headerFontSize": 8,
-        "fontSize": 8
+        "width": 36,
+        "headerFontSize": 7,
+        "fontSize": 7.5,
+        "align": "center"
       },
       {
         "key": "length",
         "label": "长度",
-        "width": 38,
-        "headerFontSize": 8,
-        "fontSize": 8
+        "width": 24,
+        "headerFontSize": 7,
+        "fontSize": 7.5,
+        "align": "center"
       },
       {
         "key": "pieceWeightTon",
         "label": "件重/吨",
-        "width": 56,
-        "headerFontSize": 8,
-        "fontSize": 8,
-        "align": "right"
+        "width": 38,
+        "headerFontSize": 7,
+        "fontSize": 7.5,
+        "align": "center"
       },
       {
         "key": "quantity",
         "label": "件数",
-        "width": 40,
-        "headerFontSize": 8,
-        "fontSize": 8,
-        "align": "right"
+        "width": 28,
+        "headerFontSize": 7,
+        "fontSize": 7.5,
+        "align": "center"
       },
       {
         "key": "weightTon",
         "label": "重量小计/吨",
-        "width": 70,
-        "headerFontSize": 8,
-        "fontSize": 8,
-        "align": "right"
+        "width": 54,
+        "headerFontSize": 7,
+        "fontSize": 7.5,
+        "align": "center"
       },
       {
         "key": "unitPrice",
-        "label": "单价(元/吨)",
-        "width": 64,
-        "headerFontSize": 8,
-        "fontSize": 8,
-        "align": "right"
+        "label": "单价",
+        "width": 40,
+        "headerFontSize": 7,
+        "fontSize": 7.5,
+        "align": "center"
       },
       {
         "key": "amount",
-        "label": "总金额/元",
-        "width": 80,
-        "headerFontSize": 8,
-        "fontSize": 8,
-        "align": "right"
+        "label": "金额",
+        "width": 56,
+        "headerFontSize": 7,
+        "fontSize": 7.5,
+        "align": "center"
       },
       {
         "key": "remark",
         "label": "备注",
-        "width": 68,
-        "headerFontSize": 8,
-        "fontSize": 8
+        "width": 51,
+        "headerFontSize": 7,
+        "fontSize": 7,
+        "align": "center"
       }
-    ],
-    "maxRowsPerPage": 60,
-    "fillPage": true,
-    "mergeColumns": [
-      "groupIndex",
-      "billTime"
     ]
   },
   "summary": {
-    "height": 30,
-    "fontSize": 9,
+    "height": 22,
     "align": "center",
     "border": true,
     "borderColor": "#d9d9d9",
     "textColor": "#1f1f1f",
-    "lineWidth": 1,
+    "lineWidth": 0.5,
+    "alignToColumns": true,
     "defaults": {
       "receiptAmount": "0.00",
       "salesAmount": "0.00",
       "closingAmount": "0.00",
       "totalWeight": "0.000"
     },
+    "cells": {
+      "category": "合计",
+      "quantity": "${totalQuantity}",
+      "weightTon": "${totalWeight}",
+      "amount": "${salesAmount}"
+    },
     "grid": {
-      "rowHeight": 24,
-      "fontSize": 9,
+      "rowHeight": 22,
+      "fontSize": 8,
       "color": "#1f1f1f",
       "borderColor": "#d9d9d9",
       "columnWidths": [
-        120,
-        100,
-        140,
-        100,
-        130,
-        100,
-        96
+        96,
+        70,
+        96,
+        70,
+        96,
+        70,
+        41
       ],
       "rows": [
         [
@@ -294,25 +310,18 @@
           ""
         ]
       ]
-    },
-    "alignToColumns": true,
-    "cells": {
-      "category": "合计",
-      "quantity": "${totalQuantity}",
-      "weightTon": "${totalWeight}",
-      "amount": "${salesAmount}"
     }
   },
   "clauses": {
-    "height": 92,
-    "fontSize": 9,
+    "height": 104,
+    "fontSize": 8.5,
     "lineHeight": 1.55,
     "paddingTop": 8,
     "textColor": "#1f1f1f",
     "lines": [
       "备注：单价按我的钢铁网杭州地区到货当天上午价+20，",
       "本对账单经双方核对无误，予以确认",
-      "供方盖章：                                需方盖章（或合同受权人）签字：",
+      "供方盖章：                    需方盖章（或合同受权人）签字：",
       "经办人签字："
     ]
   }

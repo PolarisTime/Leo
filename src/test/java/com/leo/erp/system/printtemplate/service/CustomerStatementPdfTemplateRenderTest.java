@@ -31,8 +31,8 @@ class CustomerStatementPdfTemplateRenderTest {
         assertThat(new String(pdf, 0, 4, StandardCharsets.US_ASCII)).isEqualTo("%PDF");
         try (PdfDocument document = new PdfDocument(new PdfReader(new ByteArrayInputStream(pdf)))) {
             assertThat(document.getNumberOfPages()).isEqualTo(1);
-            assertThat(document.getFirstPage().getPageSize().getWidth()).isEqualTo(842f);
-            assertThat(document.getFirstPage().getPageSize().getHeight()).isEqualTo(595f);
+            assertThat(document.getFirstPage().getPageSize().getWidth()).isEqualTo(595f);
+            assertThat(document.getFirstPage().getPageSize().getHeight()).isEqualTo(842f);
             String text = PdfTextExtractor.getTextFromPage(document.getFirstPage());
 
             assertThat(text)
@@ -45,7 +45,7 @@ class CustomerStatementPdfTemplateRenderTest {
             assertThat(text)
                     .as("明细为一张连续表，列名照参考格式")
                     .contains("序号", "进货日期", "产品名称", "产地", "牌号商标", "规格型号",
-                            "件重/吨", "件数", "重量小计/吨", "单价(元/吨)", "总金额/元", "备注")
+                            "件重/吨", "件数", "重量小计/吨", "单价", "金额", "备注")
                     .doesNotContain("分组序号", "销售单号", "交货日期");
             assertThat(count(text, "进货日期"))
                     .as("整页只出现一次表头（不再按分组重复）")

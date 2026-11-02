@@ -91,7 +91,7 @@ class PrintPdfItemGrouperTest {
                     .toList();
             assertThat(labels).containsExactly(
                     "序号", "进货日期", "产品名称", "产地", "牌号商标", "规格型号", "长度",
-                    "件重/吨", "件数", "重量小计/吨", "单价(元/吨)", "总金额/元", "备注"
+                    "件重/吨", "件数", "重量小计/吨", "单价", "金额", "备注"
             );
 
             assertThat(StreamSupport.stream(

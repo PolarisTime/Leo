@@ -57,6 +57,7 @@ public class PrintPdfFormRenderer {
                     payload.items(),
                     payload.root().path("table").path("grouping")
             );
+            items = applyEqualValueMerges(items, payload.root().path("table"));
             drawContent(pdf, font, payload.root(), payload.data(), items);
         } catch (IOException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "生成 PDF 表单失败");
@@ -287,6 +288,36 @@ public class PrintPdfFormRenderer {
      * 当前行之后若紧跟小计行，返回其高度；用于明细行绘制前预判，
      * 保证小计行与本组最后一条明细分页时不被拆开。
      */
+    /**
+     * mergeEqualColumns：相邻行值相同的列只保留首行值、其余行置空，
+     * 之后再走 mergeColumns 的跨行合并逻辑（用于「备注」这类同值合并）。
+     */
+    private List<Map<String, String>> applyEqualValueMerges(List<Map<String, String>> items, JsonNode tableConfig) {
+        List<String> mergeEqualColumns = textList(tableConfig.path("mergeEqualColumns"));
+        if (mergeEqualColumns.isEmpty() || items.size() < 2) {
+            return items;
+        }
+        List<Map<String, String>> merged = new ArrayList<>(items.size());
+        for (Map<String, String> item : items) {
+            merged.add(item);
+        }
+        for (int index = 1; index < merged.size(); index++) {
+            Map<String, String> previous = merged.get(index - 1);
+            Map<String, String> current = merged.get(index);
+            for (String column : mergeEqualColumns) {
+                String currentValue = current.get(column);
+                if (currentValue != null && !currentValue.isBlank()
+                        && currentValue.equals(previous.get(column))) {
+                    Map<String, String> copy = new LinkedHashMap<>(current);
+                    copy.put(column, "");
+                    merged.set(index, copy);
+                    current = copy;
+                }
+            }
+        }
+        return merged;
+    }
+
     private Set<String> mergeColumnKeys(JsonNode node) {
         if (node == null || !node.isArray()) {
             return Set.of();
