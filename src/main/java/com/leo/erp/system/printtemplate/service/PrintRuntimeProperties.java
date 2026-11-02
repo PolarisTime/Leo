@@ -46,10 +46,25 @@ public class PrintRuntimeProperties {
         );
     }
 
+    /**
+     * 显式声明可打印的模块（`modules.*.printable = true`）。
+     *
+     * <p>缺省 false 是失败闭合：新增模块必须同时登记 `printable` 与模板清单，
+     * 否则打印入口/清单校验会把它当作"不可打印"，避免出现「有入口、无模板」。</p>
+     */
     List<String> printableModules() {
         List<String> result = new ArrayList<>();
-        root.path("modules").fieldNames().forEachRemaining(result::add);
+        root.path("modules").fieldNames().forEachRemaining(moduleKey -> {
+            if (root.path("modules").path(moduleKey).path("printable").asBoolean(false)) {
+                result.add(moduleKey);
+            }
+        });
         return result;
+    }
+
+    /** 该模块是否显式声明可打印（缺省 false）。 */
+    boolean isPrintable(String moduleKey) {
+        return root.path("modules").path(moduleKey).path("printable").asBoolean(false);
     }
 
     JsonNode pieceWeightConfig() {
