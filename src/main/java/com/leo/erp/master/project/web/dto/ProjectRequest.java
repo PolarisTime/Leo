@@ -84,7 +84,12 @@ public record ProjectRequest(
                 null, null, null, null, null, null, null, null, null, null, remark);
     }
 
-    /** 兼容旧调用方: 未携带取价数据源。 */
+    /**
+     * 兼容旧调用方: 未携带取价数据源。
+     *
+     * @deprecated 生产代码零调用（LSP 核实，仅测试便捷构造使用）；测试夹具统一改用规范构造器后删除。
+     */
+    @Deprecated(forRemoval = true)
     public ProjectRequest(String projectCode,
                           String projectName,
                           String projectNameAbbr,
@@ -104,7 +109,12 @@ public record ProjectRequest(
                 null, null, null, null, null, null, remark);
     }
 
-    /** 兼容旧调用方: 未携带网价浮动。 */
+    /**
+     * 兼容旧调用方: 未携带网价浮动。
+     *
+     * @deprecated 生产代码零调用（LSP 核实，仅测试便捷构造使用）；测试夹具统一改用规范构造器后删除。
+     */
+    @Deprecated(forRemoval = true)
     public ProjectRequest(String projectCode,
                           String projectName,
                           String projectNameAbbr,
@@ -122,7 +132,12 @@ public record ProjectRequest(
                 null, null, null, null, null, null, remark);
     }
 
-    /** 兼容旧调用方: 未携带允许品牌/材质的处理方式。 */
+    /**
+     * 兼容旧调用方: 未携带允许品牌/材质的处理方式。
+     *
+     * @deprecated 生产代码零调用（LSP 核实，仅测试便捷构造使用）；测试夹具统一改用规范构造器后删除。
+     */
+    @Deprecated(forRemoval = true)
     public ProjectRequest(String projectCode,
                           String projectName,
                           String projectNameAbbr,

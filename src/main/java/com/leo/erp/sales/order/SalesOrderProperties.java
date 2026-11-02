@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order;
 
+import com.leo.erp.common.config.ResourceVersionRequiredProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -12,20 +13,5 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * 仅在灰度兼容旧客户端时可临时关闭。</p>
  */
 @ConfigurationProperties(prefix = "leo.sales-order")
-public class SalesOrderProperties {
-
-    /**
-     * PUT 写接口是否强制要求资源版本前置条件头。
-     * <p>默认开启：缺少 {@code X-Resource-Version} 时返回 428，
-     * 避免无条件覆盖他人修改。关闭后缺少版本仍允许更新，但**带了版本照样校验 412**。</p>
-     */
-    private boolean requireResourceVersion = true;
-
-    public boolean isRequireResourceVersion() {
-        return requireResourceVersion;
-    }
-
-    public void setRequireResourceVersion(boolean requireResourceVersion) {
-        this.requireResourceVersion = requireResourceVersion;
-    }
+public class SalesOrderProperties extends ResourceVersionRequiredProperties {
 }

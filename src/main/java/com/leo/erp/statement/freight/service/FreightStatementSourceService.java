@@ -368,10 +368,6 @@ public class FreightStatementSourceService {
                 bill.carrierName(),
                 bill.settlementCompanyId(),
                 bill.settlementCompanyName(),
-                // 客户/项目已随 lg_freight_bill.customer_name/project_name 在 V208 删除，恒为 null；
-                // 响应字段暂时保留仅为兼容前端候选列，待前端移除该列后一并删除。
-                null,
-                null,
                 bill.billTime(),
                 bill.totalWeight(),
                 bill.totalFreight(),

@@ -97,9 +97,7 @@ class FreightStatementSourceServiceTest {
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).billNo()).isEqualTo("FB001");
-        // 客户/项目随 lg_freight_bill 废弃列删除后恒为 null（字段暂留以兼容前端候选列）
-        assertThat(result.getContent().get(0).customerName()).isNull();
-        assertThat(result.getContent().get(0).projectName()).isNull();
+        // 客户/项目字段已于 2026-11-02 的兼容清理删除（原恒为 null，V208 已删列）。
     }
 
     // ---------- applyItems 来源 ID 校验 ----------

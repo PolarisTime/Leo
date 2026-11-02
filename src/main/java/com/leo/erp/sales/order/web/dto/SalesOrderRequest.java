@@ -53,7 +53,12 @@ public record SalesOrderRequest(
         }
     }
 
-    /** 兼容旧调用方: 未携带价格规定。 */
+    /**
+     * 兼容旧调用方: 未携带价格规定。
+     *
+     * @deprecated 生产代码零调用（LSP 核实，仅测试便捷构造使用）；测试夹具统一改用规范构造器后删除。
+     */
+    @Deprecated(forRemoval = true)
     public SalesOrderRequest(String orderNo,
                              String purchaseInboundNo,
                              String purchaseOrderNo,
