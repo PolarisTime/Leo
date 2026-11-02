@@ -100,10 +100,12 @@ class PrintRecordDataProvider {
 
     private String statementGroupingColumns(String moduleKey) {
         if (ModuleKeys.CUSTOMER_STATEMENT.equals(moduleKey)) {
+            // 销售订单明细表没有 deleted_flag（软删由主表 so_sales_order 控制）；
+            // 这里若引用 soi.deleted_flag，打印明细查询会直接 500（BadSqlGrammar）。
             return "source_no, quantity_unit, source_sales_order_item_id, "
                     + "COALESCE((SELECT so.delivery_date::text FROM so_sales_order_item soi "
                     + "JOIN so_sales_order so ON so.id = soi.order_id "
-                    + "WHERE soi.id = source_sales_order_item_id AND soi.deleted_flag = FALSE "
+                    + "WHERE soi.id = source_sales_order_item_id "
                     + "AND so.deleted_flag = FALSE LIMIT 1), '') AS delivery_date, "
                     + "'' AS customer_name, '' AS project_name, '' AS source_freight_bill_id, "
                     + "'' AS source_freight_bill_time, "

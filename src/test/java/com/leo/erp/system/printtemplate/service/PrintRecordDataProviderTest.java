@@ -51,7 +51,9 @@ class PrintRecordDataProviderTest {
         assertThat(sql.getValue())
                 .contains("source_no")
                 .contains("delivery_date")
-                .contains("quantity_unit");
+                .contains("quantity_unit")
+                // 销售订单明细表没有 deleted_flag；带上它会 500（Postgres: column soi.deleted_flag does not exist）。
+                .doesNotContain("soi.deleted_flag");
     }
 
     @Test
