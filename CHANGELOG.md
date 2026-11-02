@@ -1,3 +1,10 @@
+# [17.7.0](https://github.com/PolarisTime/Leo/compare/v17.6.0...v17.7.0) (2026-11-02)
+
+
+### Features
+
+* **print:** 物流对账单打印模板把单号上提到客户行并优化换页 ([8396a55](https://github.com/PolarisTime/Leo/commit/8396a55f3ee81ae8afbf27e27e66edc73d09f87b))
+
 # [17.6.0](https://github.com/PolarisTime/Leo/compare/v17.5.0...v17.6.0) (2026-11-02)
 
 
