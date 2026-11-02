@@ -146,16 +146,15 @@ class V2SupplierBasePriceRuleControllerTest {
     }
 
     @Test
-    /** If-Match 是兼容别名: 只给别名时同样解析为前置条件版本。 */
-    void put_withIfMatchAlias_returns200() throws Exception {
-        when(service.save(any(), eq(2L))).thenReturn(response(3L));
-
+    /** 只给 If-Match 不再被解析: 强制前置条件时返回 428, 且不进入业务层。 */
+    void put_withOnlyIfMatchAlias_returns428ProblemDetail() throws Exception {
         mockMvc(true).perform(put(PATH)
                         .header("If-Match", "\"2\"")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody()))
-                .andExpect(status().isOk())
-                .andExpect(header().string(VERSION_HEADER, "3"));
+                .andExpect(status().isPreconditionRequired())
+                .andExpect(jsonPath("$.code").value(4280));
+        verify(service, never()).save(any(), any());
     }
 
     @Test
@@ -259,7 +258,7 @@ class V2SupplierBasePriceRuleControllerTest {
                 .containsExactly(PermissionCodes.SUPPLIER_PRICE_LISTS_READ);
 
         Method save = V2SupplierBasePriceRuleController.class
-                .getDeclaredMethod("save", String.class, String.class, SupplierBasePriceRuleRequest.class);
+                .getDeclaredMethod("save", String.class, SupplierBasePriceRuleRequest.class);
         assertThat(save.getAnnotation(RequirePermission.class).value())
                 .containsExactly(PermissionCodes.SUPPLIER_PRICE_LISTS_UPDATE);
     }

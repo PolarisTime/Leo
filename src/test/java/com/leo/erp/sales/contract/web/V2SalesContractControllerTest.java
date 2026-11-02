@@ -78,7 +78,7 @@ class V2SalesContractControllerTest {
     void update_withMatchingVersion_returnsVersionHeader() {
         when(service.update(eq(100L), any(), eq(3L))).thenReturn(response(3L));
 
-        ResponseEntity<SalesContractResponse> entity = controller(true).update(100L, "3", null, request());
+        ResponseEntity<SalesContractResponse> entity = controller(true).update(100L, "3", request());
 
         assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(entity.getHeaders().getFirst(ResourceVersionPrecondition.HEADER)).isEqualTo("3");
@@ -86,7 +86,7 @@ class V2SalesContractControllerTest {
 
     @Test
     void update_missingVersion_whenRequired_isRejectedWith428() {
-        assertThatThrownBy(() -> controller(true).update(100L, null, null, request()))
+        assertThatThrownBy(() -> controller(true).update(100L, null, request()))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.PRECONDITION_REQUIRED);
@@ -96,27 +96,18 @@ class V2SalesContractControllerTest {
     void update_missingVersion_whenOptional_forwardsNull() {
         when(service.update(eq(100L), any(), isNull())).thenReturn(response(3L));
 
-        ResponseEntity<SalesContractResponse> entity = controller(false).update(100L, null, null, request());
+        ResponseEntity<SalesContractResponse> entity = controller(false).update(100L, null, request());
 
         assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
         verify(service).update(eq(100L), any(), isNull());
     }
 
     @Test
-    void update_acceptsIfMatchAlias() {
-        when(service.update(eq(100L), any(), eq(3L))).thenReturn(response(3L));
-
-        ResponseEntity<SalesContractResponse> entity = controller(true).update(100L, null, "W/\"3\"", request());
-
-        assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
-    }
-
-    @Test
-    void update_conflictingVersionHeaders_isRejected() {
-        assertThatThrownBy(() -> controller(true).update(100L, "3", "\"4\"", request()))
+    void update_withOnlyIfMatchAlias_isRejectedAsMissingPrecondition() {
+        assertThatThrownBy(() -> controller(true).update(100L, null, request()))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+                .isEqualTo(ErrorCode.PRECONDITION_REQUIRED);
     }
 
     @Test

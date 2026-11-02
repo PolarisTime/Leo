@@ -139,8 +139,7 @@ public class SalesOrderService {
      * <p><b>自调用语义：</b>{@code request.audit()} 分支内部自调用 {@link #updateStatus} 时，
      * 执行器检测到活动事务会直接执行原逻辑（不新开事务、不重试），与改造前「自调用参与外层事务」完全一致。
      *
-     * <p><b>版本前置条件：</b>{@code expectedVersion} 来自 {@code X-Resource-Version}（兼容
-     * {@code If-Match}），在每次尝试加载实体后与 {@code @Version} 比对：不一致抛 412
+     * <p><b>版本前置条件：</b>{@code expectedVersion} 来自 {@code X-Resource-Version}，在每次尝试加载实体后与 {@code @Version} 比对：不一致抛 412
      * （{@link ErrorCode#PRECONDITION_FAILED}），因此「A 打开表单 → B 保存 → A 保存」不再静默覆盖。
      * 重试语义仍成立：冲突重试用的是新事务里重新加载的实体版本，客户端期望版本不变。</p>
      *

@@ -80,7 +80,7 @@ public class V2SalesContractController {
     }
 
     @Operation(summary = "整体替换销售合同",
-            description = "要求资源版本前置条件头 " + VERSION_HEADER + "(兼容别名 If-Match); "
+            description = "要求资源版本前置条件头 " + VERSION_HEADER + "; "
                     + "该前置条件是否必需由 leo.sales.contract.require-resource-version 控制, "
                     + "开启时缺少版本返回 428, 版本不匹配返回 412; 响应头回传最新版本。"
                     + "仅「草稿」可整体替换; 「审核/签发/归档/作废」为受保护状态, 返回 422。")
@@ -90,11 +90,9 @@ public class V2SalesContractController {
             @PathVariable @SnowflakeId Long id,
             @Parameter(description = "资源版本(强比较), 如 3")
             @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
-            @Parameter(description = "兼容别名, 非标准弱验证器用法")
-            @RequestHeader(value = "If-Match", required = false) String ifMatch,
             @Valid @RequestBody SalesContractRequest request) {
         SalesContractResponse response = service.update(id, request,
-                ResourceVersionPrecondition.parse(resourceVersion, ifMatch,
+                ResourceVersionPrecondition.parse(resourceVersion,
                         properties.isRequireResourceVersion()));
         return withVersion(response, response.version());
     }

@@ -2,6 +2,7 @@ package com.leo.erp.market.quotation.web;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.web.ResourceVersionPrecondition;
 import com.leo.erp.market.quotation.QuotationProperties;
 import com.leo.erp.market.quotation.service.QuoteSheetItemWrite;
 import com.leo.erp.market.quotation.service.QuoteSheetService;
@@ -68,7 +69,7 @@ class V2QuoteSheetControllerTest {
     void update_returnsVersionHeader() {
         when(quoteSheetService.update(eq(5L), any(), eq(3L), eq(0L))).thenReturn(response());
 
-        ResponseEntity<QuoteSheetResponse> entity = controller.update(null, 5L, "3", null, request());
+        ResponseEntity<QuoteSheetResponse> entity = controller.update(null, 5L, "3", request());
 
         assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(entity.getHeaders().getFirst(ResourceVersionPrecondition.HEADER)).isEqualTo("3");
@@ -76,19 +77,18 @@ class V2QuoteSheetControllerTest {
 
     @Test
     void update_missingVersionHeader_isRejectedWith428() {
-        assertThatThrownBy(() -> controller.update(null, 5L, null, null, request()))
+        assertThatThrownBy(() -> controller.update(null, 5L, null, request()))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.PRECONDITION_REQUIRED);
     }
 
     @Test
-    void update_acceptsIfMatchAlias() {
-        when(quoteSheetService.update(eq(5L), any(), eq(3L), eq(0L))).thenReturn(response());
-
-        ResponseEntity<QuoteSheetResponse> entity = controller.update(null, 5L, null, "W/\"3\"", request());
-
-        assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+    void update_withOnlyIfMatchAlias_isRejectedAsMissingPrecondition() {
+        assertThatThrownBy(() -> controller.update(null, 5L, null, request()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.PRECONDITION_REQUIRED);
     }
 
     @Test
@@ -99,7 +99,7 @@ class V2QuoteSheetControllerTest {
                 .thenReturn(new QuoteSheetItemWrite(item, 4L));
 
         ResponseEntity<QuoteSheetResponse.ItemResponse> entity =
-                controller.addItem(null, 5L, "3", null, itemRequest());
+                controller.addItem(null, 5L, "3", itemRequest());
 
         assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(entity.getHeaders().getLocation()).isNotNull();
@@ -115,7 +115,7 @@ class V2QuoteSheetControllerTest {
                 .thenReturn(new QuoteSheetItemWrite(item, 4L));
 
         ResponseEntity<QuoteSheetResponse.ItemResponse> entity =
-                controller.updateItem(null, 5L, 301L, "3", null, itemRequest());
+                controller.updateItem(null, 5L, 301L, "3", itemRequest());
 
         assertThat(entity.getBody()).isEqualTo(item);
         assertThat(entity.getHeaders().getFirst(ResourceVersionPrecondition.HEADER)).isEqualTo("4");
@@ -124,7 +124,7 @@ class V2QuoteSheetControllerTest {
     @Test
     void deleteItem_returnsNoContentWithVersion() {
         when(quoteSheetService.deleteItem(eq(5L), eq(301L), eq(3L), eq(0L))).thenReturn(4L);
-        ResponseEntity<Void> entity = controller.deleteItem(null, 5L, 301L, "3", null);
+        ResponseEntity<Void> entity = controller.deleteItem(null, 5L, 301L, "3");
         assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         assertThat(entity.getHeaders().getFirst(ResourceVersionPrecondition.HEADER)).isEqualTo("4");
     }

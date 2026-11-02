@@ -122,8 +122,7 @@ public class ReceiptService {
     /**
      * 整体替换写路径（{@code PUT /api/v2.0/receipts/{id}}）。
      *
-     * <p><b>版本前置条件：</b>{@code expectedVersion} 来自 {@code X-Resource-Version}（兼容
-     * {@code If-Match}），与实体 {@code @Version} 比对：不一致抛 412
+     * <p><b>版本前置条件：</b>{@code expectedVersion} 来自 {@code X-Resource-Version}，与实体 {@code @Version} 比对：不一致抛 412
      * （{@link ErrorCode#PRECONDITION_FAILED}），避免「A 打开表单 → B 保存 → A 保存」静默覆盖。
      * 缺少版本头返回 428 由入口（控制器）负责。</p>
      *

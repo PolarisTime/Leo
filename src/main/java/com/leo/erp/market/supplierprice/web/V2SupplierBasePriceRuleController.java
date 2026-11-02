@@ -46,9 +46,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class V2SupplierBasePriceRuleController {
 
     private static final String VERSION_HEADER = ResourceVersionPrecondition.HEADER;
-    private static final String VERSION_ALIAS_NOTE =
-            "也接受兼容别名 If-Match(非标准: 数据库版本号是弱验证器, 不符合 RFC 9110 强比较要求)。";
-
     private final SupplierBasePriceRuleService service;
     private final SupplierPriceProperties properties;
 
@@ -80,18 +77,15 @@ public class V2SupplierBasePriceRuleController {
      */
     @Operation(summary = "整组替换供应商品牌基价加价规则",
             description = "整体替换(先软删旧行再写入新行, 同一事务); items 为空表示清空该套规则, 版本号仍 +1;"
-                    + " 要求资源版本前置条件头 " + VERSION_HEADER + ", " + VERSION_ALIAS_NOTE
-                    + " 缺少版本返回 428, 版本不匹配返回 412; 响应头回传最新版本。")
+                    + " 要求资源版本前置条件头 " + VERSION_HEADER + "; 缺少版本返回 428, 版本不匹配返回 412; 响应头回传最新版本。")
     @PutMapping
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_UPDATE)
     public ResponseEntity<SupplierBasePriceRuleResponse> save(
             @Parameter(description = "资源版本(强比较), 如 3")
             @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
-            @Parameter(description = "兼容别名, 非标准弱验证器用法")
-            @RequestHeader(value = ResourceVersionPrecondition.LEGACY_HEADER, required = false) String ifMatch,
             @Valid @RequestBody SupplierBasePriceRuleRequest request) {
         SupplierBasePriceRuleResponse response = service.save(request,
-                ResourceVersionPrecondition.parse(resourceVersion, ifMatch,
+                ResourceVersionPrecondition.parse(resourceVersion,
                         properties.isRequireResourceVersion()));
         return ResponseEntity.ok()
                 .header(VERSION_HEADER, String.valueOf(response.version()))

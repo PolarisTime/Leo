@@ -81,7 +81,7 @@ public class V2ReceiptController {
 
     @Operation(summary = "更新收款单",
             description = "整体替换收款单。写操作要求资源版本前置条件头 "
-                    + ResourceVersionPrecondition.HEADER + "（兼容别名 If-Match）："
+                    + ResourceVersionPrecondition.HEADER + "："
                     + "缺少版本返回 428，与单据当前版本不一致返回 412，一致才更新；"
                     + "成功返回 200 + 更新后的收款单表示（含新 version）。"
                     + "版本号即列表/详情响应里的 version 字段。")
@@ -91,11 +91,9 @@ public class V2ReceiptController {
             @PathVariable @SnowflakeId Long id,
             @Parameter(description = "资源版本(强比较), 取详情/列表响应的 version 字段")
             @RequestHeader(value = ResourceVersionPrecondition.HEADER, required = false) String resourceVersion,
-            @Parameter(description = "兼容别名, 非标准弱验证器用法")
-            @RequestHeader(value = ResourceVersionPrecondition.LEGACY_HEADER, required = false) String ifMatch,
             @Valid @RequestBody ReceiptRequest request) {
         return receiptService.update(id, request,
-                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()));
+                ResourceVersionPrecondition.parse(resourceVersion, properties.isRequireResourceVersion()));
     }
 
     @Operation(summary = "更新收款单状态")

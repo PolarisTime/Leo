@@ -3,6 +3,7 @@ package com.leo.erp.market.quotation.web;
 import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.validation.SnowflakeId;
+import com.leo.erp.common.web.ResourceVersionPrecondition;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.api.V2Created;
@@ -52,9 +53,6 @@ import java.util.List;
 public class V2QuoteSheetController {
 
     private static final String VERSION_HEADER = ResourceVersionPrecondition.HEADER;
-    private static final String VERSION_ALIAS_NOTE =
-            "也接受兼容别名 If-Match(非标准: 数据库版本号是弱验证器, 不符合 RFC 9110 强比较要求)。";
-
     private final QuoteSheetService quoteSheetService;
     private final QuotationProperties properties;
 
@@ -108,8 +106,7 @@ public class V2QuoteSheetController {
 
     @Operation(summary = "更新报价单",
             description = "未携带 brands/items 时仅更新表头; 携带时按整体替换处理(向后兼容)。"
-                    + "写操作要求资源版本前置条件头 " + VERSION_HEADER + ", " + VERSION_ALIAS_NOTE
-                    + " 缺少版本返回 428, 版本不匹配返回 412; 响应头回传最新版本。")
+                    + "写操作要求资源版本前置条件头 " + VERSION_HEADER + "; 缺少版本返回 428, 版本不匹配返回 412; 响应头回传最新版本。")
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public ResponseEntity<QuoteSheetResponse> update(
@@ -117,11 +114,9 @@ public class V2QuoteSheetController {
             @PathVariable @SnowflakeId Long id,
             @Parameter(description = "资源版本(强比较), 如 3")
             @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
-            @Parameter(description = "兼容别名, 非标准弱验证器用法")
-            @RequestHeader(value = "If-Match", required = false) String ifMatch,
             @Valid @RequestBody QuoteSheetRequest request) {
         QuoteSheetResponse response = quoteSheetService.update(id, request,
-                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()),
+                ResourceVersionPrecondition.parse(resourceVersion, properties.isRequireResourceVersion()),
                 ownerId(principal));
         return withVersion(response, response.version());
     }
@@ -130,8 +125,7 @@ public class V2QuoteSheetController {
             description = "按请求 itemIds 的先后顺序排列这些行, 未列出的行保持原有相对顺序排在末尾; "
                     + "行号由服务端归一化为 1..N。itemIds 必须是十进制字符串(拒绝 JSON number), "
                     + "不属于该单据或重复的 id 返回 422。顺序未变化时不写库、不推进版本(PUT 幂等)。"
-                    + "要求 " + VERSION_HEADER + ", " + VERSION_ALIAS_NOTE
-                    + " 缺少版本返回 428, 版本不匹配返回 412; 响应头回传最新版本。")
+                    + "要求 " + VERSION_HEADER + "; 缺少版本返回 428, 版本不匹配返回 412; 响应头回传最新版本。")
     @PutMapping("/{id}/item-order")
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public ResponseEntity<QuoteSheetResponse> reorderItems(
@@ -139,11 +133,9 @@ public class V2QuoteSheetController {
             @PathVariable @SnowflakeId Long id,
             @Parameter(description = "资源版本(强比较), 如 3")
             @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
-            @Parameter(description = "兼容别名, 非标准弱验证器用法")
-            @RequestHeader(value = "If-Match", required = false) String ifMatch,
             @Valid @RequestBody QuoteSheetItemOrderRequest request) {
         QuoteSheetResponse response = quoteSheetService.reorderItems(id, request.itemIds(),
-                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()),
+                ResourceVersionPrecondition.parse(resourceVersion, properties.isRequireResourceVersion()),
                 ownerId(principal));
         return withVersion(response, response.version());
     }
@@ -158,8 +150,7 @@ public class V2QuoteSheetController {
     }
 
     @Operation(summary = "新增商品行",
-            description = "要求 " + VERSION_HEADER + ", " + VERSION_ALIAS_NOTE
-                    + " 缺少版本返回 428, 版本不匹配返回 412; 响应头回传单据最新版本。")
+            description = "要求 " + VERSION_HEADER + "; 缺少版本返回 428, 版本不匹配返回 412; 响应头回传单据最新版本。")
     @PostMapping("/{id}/items")
     @V2Created
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
@@ -168,11 +159,9 @@ public class V2QuoteSheetController {
             @PathVariable @SnowflakeId Long id,
             @Parameter(description = "资源版本(强比较), 如 3")
             @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
-            @Parameter(description = "兼容别名, 非标准弱验证器用法")
-            @RequestHeader(value = "If-Match", required = false) String ifMatch,
             @Valid @RequestBody QuoteSheetRequest.ItemRequest request) {
         QuoteSheetItemWrite write = quoteSheetService.addItem(id, request,
-                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()),
+                ResourceVersionPrecondition.parse(resourceVersion, properties.isRequireResourceVersion()),
                 ownerId(principal));
         ResponseEntity<QuoteSheetResponse.ItemResponse> created =
                 V2ResponseSupport.created("/quote-sheets/" + id + "/items", write.item());
@@ -183,8 +172,7 @@ public class V2QuoteSheetController {
     }
 
     @Operation(summary = "整行替换商品行",
-            description = "要求 " + VERSION_HEADER + ", " + VERSION_ALIAS_NOTE
-                    + " 缺少版本返回 428, 版本不匹配返回 412; 响应头回传单据最新版本。")
+            description = "要求 " + VERSION_HEADER + "; 缺少版本返回 428, 版本不匹配返回 412; 响应头回传单据最新版本。")
     @PutMapping("/{id}/items/{itemId}")
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public ResponseEntity<QuoteSheetResponse.ItemResponse> updateItem(
@@ -193,18 +181,15 @@ public class V2QuoteSheetController {
             @PathVariable @SnowflakeId Long itemId,
             @Parameter(description = "资源版本(强比较), 如 3")
             @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
-            @Parameter(description = "兼容别名, 非标准弱验证器用法")
-            @RequestHeader(value = "If-Match", required = false) String ifMatch,
             @Valid @RequestBody QuoteSheetRequest.ItemRequest request) {
         QuoteSheetItemWrite write = quoteSheetService.updateItem(id, itemId, request,
-                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()),
+                ResourceVersionPrecondition.parse(resourceVersion, properties.isRequireResourceVersion()),
                 ownerId(principal));
         return withVersion(write.item(), write.version());
     }
 
     @Operation(summary = "删除商品行",
-            description = "要求 " + VERSION_HEADER + ", " + VERSION_ALIAS_NOTE
-                    + " 缺少版本返回 428, 版本不匹配返回 412; 响应头回传单据最新版本。")
+            description = "要求 " + VERSION_HEADER + "; 缺少版本返回 428, 版本不匹配返回 412; 响应头回传单据最新版本。")
     @DeleteMapping("/{id}/items/{itemId}")
     @V2NoContent
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
@@ -213,11 +198,9 @@ public class V2QuoteSheetController {
             @PathVariable @SnowflakeId Long id,
             @PathVariable @SnowflakeId Long itemId,
             @Parameter(description = "资源版本(强比较), 如 3")
-            @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
-            @Parameter(description = "兼容别名, 非标准弱验证器用法")
-            @RequestHeader(value = "If-Match", required = false) String ifMatch) {
+            @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion) {
         Long version = quoteSheetService.deleteItem(id, itemId,
-                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()),
+                ResourceVersionPrecondition.parse(resourceVersion, properties.isRequireResourceVersion()),
                 ownerId(principal));
         return ResponseEntity.noContent().header(VERSION_HEADER, String.valueOf(version)).build();
     }

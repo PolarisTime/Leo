@@ -3,6 +3,7 @@ package com.leo.erp.market.quotation.web;
 import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.validation.SnowflakeId;
+import com.leo.erp.common.web.ResourceVersionPrecondition;
 import com.leo.erp.market.quotation.QuotationProperties;
 import com.leo.erp.market.quotation.service.QuoteProjectConfigService;
 import com.leo.erp.market.quotation.service.QuoteProjectEffectiveBrandsService;
@@ -33,9 +34,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class V2QuoteProjectConfigController {
 
     private static final String VERSION_HEADER = ResourceVersionPrecondition.HEADER;
-    private static final String VERSION_ALIAS_NOTE =
-            "也接受兼容别名 If-Match(非标准: 数据库版本号是弱验证器, 不符合 RFC 9110 强比较要求)。";
-
     private final QuoteProjectConfigService service;
     private final QuoteProjectEffectiveBrandsService effectiveBrandsService;
     private final QuotationProperties properties;
@@ -68,18 +66,16 @@ public class V2QuoteProjectConfigController {
 
     @Operation(summary = "保存项目比价配置",
             description = "整体替换该项目配置(幂等); 不存在则创建。要求资源版本前置条件头 " + VERSION_HEADER
-                    + ", " + VERSION_ALIAS_NOTE + " 缺少版本返回 428, 版本不匹配返回 412; 响应头回传最新版本。")
+                    + "; 缺少版本返回 428, 版本不匹配返回 412; 响应头回传最新版本。")
     @PutMapping("/{projectId}")
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
     public ResponseEntity<QuoteProjectConfigResponse> save(
             @PathVariable @SnowflakeId Long projectId,
             @Parameter(description = "资源版本(强比较), 如 3")
             @RequestHeader(value = VERSION_HEADER, required = false) String resourceVersion,
-            @Parameter(description = "兼容别名, 非标准弱验证器用法")
-            @RequestHeader(value = "If-Match", required = false) String ifMatch,
             @Valid @RequestBody QuoteProjectConfigRequest request) {
         QuoteProjectConfigResponse response = service.save(projectId, request,
-                ResourceVersionPrecondition.parse(resourceVersion, ifMatch, properties.isRequireResourceVersion()));
+                ResourceVersionPrecondition.parse(resourceVersion, properties.isRequireResourceVersion()));
         return ResponseEntity.ok()
                 .header(VERSION_HEADER, String.valueOf(response.version()))
                 .body(response);

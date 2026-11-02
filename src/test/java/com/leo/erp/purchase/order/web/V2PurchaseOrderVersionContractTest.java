@@ -119,15 +119,15 @@ class V2PurchaseOrderVersionContractTest {
     }
 
     @Test
-    void put_withIfMatchAlias_isAcceptedAsLegacyHeader() throws Exception {
-        when(purchaseOrderService.update(eq(ORDER_ID), any(), eq(3L)))
-                .thenReturn(response("草稿", 4L));
-
+    void put_withOnlyIfMatchAlias_returns428AndNeverCallsService() throws Exception {
         mockMvc(true).perform(put("/v2.0/purchase-orders/" + ORDER_ID)
                         .header("If-Match", "3")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody()))
-                .andExpect(status().isOk());
+                .andExpect(status().isPreconditionRequired())
+                .andExpect(jsonPath("$.code").value(4280));
+
+        verify(purchaseOrderService, never()).update(anyLong(), any(), any());
     }
 
     @Test

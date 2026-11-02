@@ -220,7 +220,7 @@ class V2SalesOrderControllerTest {
         when(properties.isRequireResourceVersion()).thenReturn(true);
         when(service.update(anyLong(), any(), eq(3L))).thenReturn(response);
 
-        assertThat(controller.update(5L, "3", null, request())).isSameAs(response);
+        assertThat(controller.update(5L, "3", request())).isSameAs(response);
     }
 
     @Test

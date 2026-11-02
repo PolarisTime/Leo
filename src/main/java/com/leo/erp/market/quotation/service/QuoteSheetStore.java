@@ -356,7 +356,7 @@ public class QuoteSheetStore {
      * 不会把父行标脏, 父 {@code @Version} 不递增; 这会让两台设备各自改一行却能同时通过旧版本校验。
      * 因此在 flush 前对父实体加 {@link LockModeType#OPTIMISTIC_FORCE_INCREMENT} 锁,
      * 保证任一子集合写都会推进父版本, 与既有 {@code @Version}、{@code checkVersion}、
-     * If-Match/412 语义一致。表头-only 更新不经过本入口, 由 {@code @Version} 自然递增一次, 不会重复自增。
+     * 412 版本冲突语义一致。表头-only 更新不经过本入口, 由 {@code @Version} 自然递增一次, 不会重复自增。
      */
     private QuoteSheet requireSheetForRowWrite(Long sheetId, Long expectedVersion) {
         QuoteSheet sheet = requireSheet(sheetId);

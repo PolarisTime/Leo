@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 收款单的「资源版本前置条件」HTTP 契约（质量报告 P1-2，财务单据扩展）。
  *
  * <p>三态与采购/销售订单、付款单完全一致：缺头 428、版本不一致 412、一致 200 + 新 version；
- * 另覆盖 {@code If-Match} 兼容别名、开关关闭时透传 null、详情响应暴露 version。</p>
+ * 另覆盖「只给 If-Match 已不再被解析(仍 428)」、开关关闭时透传 null、详情响应暴露 version。</p>
  */
 @ExtendWith(MockitoExtension.class)
 class V2ReceiptVersionContractTest {
@@ -100,16 +100,15 @@ class V2ReceiptVersionContractTest {
     }
 
     @Test
-    void put_withIfMatchAlias_isAcceptedAsLegacyHeader() throws Exception {
-        when(receiptService.update(eq(RECEIPT_ID), any(), eq(3L)))
-                .thenReturn(response("草稿", 4L));
-
+    void put_withOnlyIfMatchAlias_returns428AndNeverCallsService() throws Exception {
         mockMvc(true).perform(put("/v2.0/receipts/" + RECEIPT_ID)
                         .header("If-Match", "3")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.version").value("4"));
+                .andExpect(status().isPreconditionRequired())
+                .andExpect(jsonPath("$.code").value(4280));
+
+        verify(receiptService, never()).update(anyLong(), any(), any());
     }
 
     @Test
