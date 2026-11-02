@@ -108,8 +108,8 @@
     "continuationTop": 24,
     "bottom": 640,
     "width": 539,
-    "headerHeight": 22,
-    "rowHeight": 22,
+    "headerHeight": 24,
+    "rowHeight": 24,
     "maxRowsPerPage": 60,
     "repeatHeaderPerSourceGroup": false,
     "repeatHeaderPerPage": true,
@@ -152,16 +152,16 @@
         "key": "groupIndex",
         "label": "序号",
         "width": 26,
-        "headerFontSize": 7,
-        "fontSize": 7.5,
+        "headerFontSize": 7.5,
+        "fontSize": 8,
         "align": "center"
       },
       {
         "key": "billTime",
         "label": "进货日期",
-        "width": 66,
-        "headerFontSize": 7,
-        "fontSize": 7.5,
+        "width": 68,
+        "headerFontSize": 7.5,
+        "fontSize": 8,
         "align": "center",
         "format": "chineseDate"
       },
@@ -169,24 +169,24 @@
         "key": "category",
         "label": "产品名称",
         "width": 40,
-        "headerFontSize": 7,
-        "fontSize": 7.5,
+        "headerFontSize": 7.5,
+        "fontSize": 8,
         "align": "center"
       },
       {
         "key": "brand",
         "label": "产地",
         "width": 34,
-        "headerFontSize": 7,
-        "fontSize": 7.5,
+        "headerFontSize": 7.5,
+        "fontSize": 8,
         "align": "center"
       },
       {
         "key": "material",
         "label": "牌号商标",
         "width": 46,
-        "headerFontSize": 7,
-        "fontSize": 7.5,
+        "headerFontSize": 7.5,
+        "fontSize": 8,
         "align": "center",
         "normalize": "compactAscii"
       },
@@ -194,70 +194,70 @@
         "key": "spec",
         "label": "规格型号",
         "width": 36,
-        "headerFontSize": 7,
-        "fontSize": 7.5,
+        "headerFontSize": 7.5,
+        "fontSize": 8,
         "align": "center"
       },
       {
         "key": "length",
         "label": "长度",
         "width": 24,
-        "headerFontSize": 7,
-        "fontSize": 7.5,
+        "headerFontSize": 7.5,
+        "fontSize": 8,
         "align": "center"
       },
       {
         "key": "pieceWeightTon",
         "label": "件重/吨",
         "width": 38,
-        "headerFontSize": 7,
-        "fontSize": 7.5,
+        "headerFontSize": 7.5,
+        "fontSize": 8,
         "align": "center"
       },
       {
         "key": "quantity",
         "label": "件数",
         "width": 28,
-        "headerFontSize": 7,
-        "fontSize": 7.5,
+        "headerFontSize": 7.5,
+        "fontSize": 8,
         "align": "center"
       },
       {
         "key": "weightTon",
         "label": "重量小计/吨",
         "width": 54,
-        "headerFontSize": 7,
-        "fontSize": 7.5,
+        "headerFontSize": 7.5,
+        "fontSize": 8,
         "align": "center"
       },
       {
         "key": "unitPrice",
         "label": "单价",
         "width": 40,
-        "headerFontSize": 7,
-        "fontSize": 7.5,
+        "headerFontSize": 7.5,
+        "fontSize": 8,
         "align": "center"
       },
       {
         "key": "amount",
         "label": "金额",
         "width": 56,
-        "headerFontSize": 7,
-        "fontSize": 7.5,
+        "headerFontSize": 7.5,
+        "fontSize": 8,
         "align": "center"
       },
       {
         "key": "remark",
         "label": "备注",
-        "width": 51,
-        "headerFontSize": 7,
+        "width": 49,
+        "headerFontSize": 7.5,
         "fontSize": 7,
         "align": "center"
       }
     ]
   },
   "summary": {
-    "height": 22,
+    "height": 26,
     "align": "center",
     "border": true,
     "borderColor": "#d9d9d9",
@@ -277,8 +277,8 @@
       "amount": "${salesAmount}"
     },
     "grid": {
-      "rowHeight": 22,
-      "fontSize": 8,
+      "rowHeight": 24,
+      "fontSize": 8.5,
       "color": "#1f1f1f",
       "borderColor": "#d9d9d9",
       "columnWidths": [
@@ -310,7 +310,8 @@
           ""
         ]
       ]
-    }
+    },
+    "fontSize": 8.5
   },
   "clauses": {
     "height": 104,

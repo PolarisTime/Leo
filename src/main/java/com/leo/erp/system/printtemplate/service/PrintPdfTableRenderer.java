@@ -61,9 +61,9 @@ public class PrintPdfTableRenderer {
                     font,
                     text(column, "label", ""),
                     left + 2,
-                    top + 6,
+                    top,
                     width - 4,
-                    16,
+                    headerHeight,
                     drawing.number(column, "headerFontSize", 9f),
                     TextAlignment.CENTER,
                     drawing.color(column, "headerTextColor", textColor),
@@ -140,9 +140,8 @@ public class PrintPdfTableRenderer {
                         pageMetrics
                 );
                 float availWidth = Math.max(4f, width - 4);
-                float textTop = top + mergedHeight / 2f - 6f;
                 if (font.getWidth(mergedValue, fontSize) > availWidth) {
-                    drawWrappedCell(canvas, font, column, left, top, width, rowHeight,
+                    drawWrappedCell(canvas, font, column, left, top, width, mergedHeight,
                             mergedValue, fontSize, availWidth, textColor, pageMetrics);
                 } else {
                     drawing.drawCanvasText(
@@ -150,9 +149,9 @@ public class PrintPdfTableRenderer {
                             font,
                             mergedValue,
                             left + 2,
-                            textTop,
+                            top,
                             width - 4,
-                            12,
+                            mergedHeight,
                             fontSize,
                             drawing.alignment(text(column, "align", "center")),
                             drawing.color(column, "textColor", textColor),
@@ -184,9 +183,9 @@ public class PrintPdfTableRenderer {
                         font,
                         value,
                         left + 2,
-                        top + 7,
+                        top,
                         width - 4,
-                        12,
+                        rowHeight,
                         fontSize,
                         drawing.alignment(text(column, "align", "center")),
                         drawing.color(column, "textColor", textColor),
@@ -219,7 +218,8 @@ public class PrintPdfTableRenderer {
         }
         TextAlignment alignment = drawing.alignment(text(column, "align", "center"));
         Color color = drawing.color(column, "textColor", defaultTextColor);
-        float y = top + 2;
+        float blockHeight = lines.size() * lineHeight;
+        float y = top + Math.max(0f, (rowHeight - blockHeight) / 2f);
         for (String line : lines) {
             drawing.drawCanvasText(canvas, font, line, left + 2, y, width - 4, lineHeight,
                     fontSize, alignment, color, pageMetrics);
@@ -440,9 +440,9 @@ public class PrintPdfTableRenderer {
                             summaryConfig.path("defaults")
                     ),
                     left + paddingLeft,
-                    lineTop + paddingTop,
+                    lineTop,
                     width - paddingLeft * 2,
-                    12,
+                    rowHeight,
                     fontSize,
                     alignment,
                     color,
@@ -497,9 +497,9 @@ public class PrintPdfTableRenderer {
                     font,
                     value,
                     cellLeft + 4,
-                    top + rowHeight / 2f - 6f,
+                    top,
                     cellWidth - 8,
-                    12,
+                    rowHeight,
                     fontSize,
                     TextAlignment.CENTER,
                     drawing.color(summaryConfig, "color", drawing.color(summaryConfig, "textColor", ColorConstants.BLACK)),
@@ -555,9 +555,9 @@ public class PrintPdfTableRenderer {
                         font,
                         cellValue,
                         cellLeft + 4,
-                        lineTop + rowHeight / 2f - 6f,
+                        lineTop,
                         cellWidth - 8,
-                        12,
+                        rowHeight,
                         gridFontSize,
                         TextAlignment.CENTER,
                         gridColor,
