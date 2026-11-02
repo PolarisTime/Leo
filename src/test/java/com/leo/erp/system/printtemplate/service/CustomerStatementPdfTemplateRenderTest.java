@@ -55,8 +55,14 @@ class CustomerStatementPdfTemplateRenderTest {
                     .isEqualTo(1);
             assertThat(count(text, "2026年08月25日")).isEqualTo(1);
             assertThat(text)
-                    .as("已收金额为空时汇总行显示 0.00 而不是空白")
-                    .contains("已收金额：0.00 元");
+                    .as("合计行按明细列对齐（合计 + 件数/重量/金额三列）")
+                    .contains("合计")
+                    .doesNotContain("合计件数：");
+            assertThat(text)
+                    .as("累计行网格：累计应收/已收/欠款，空值显示 0.00")
+                    .contains("累计数量合计", "按合同应付金额", "累计已开票金额")
+                    .contains("累计应收金额", "累计已收金额", "累计欠款金额")
+                    .contains("0.00");
         }
     }
 

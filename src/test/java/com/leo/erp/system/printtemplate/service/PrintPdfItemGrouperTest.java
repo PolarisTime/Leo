@@ -100,6 +100,15 @@ class PrintPdfItemGrouperTest {
                     .toList())
                     .contains("groupIndex", "billTime");
             assertThat(table.path("repeatHeaderPerPage").asBoolean()).isTrue();
+            assertThat(StreamSupport.stream(
+                            table.path("mergeColumns").spliterator(), false)
+                    .map(JsonNode::asText)
+                    .toList())
+                    .as("序号/进货日期用真正的跨行合并单元格")
+                    .contains("groupIndex", "billTime");
+            assertThat(root.path("summary").path("grid").path("rows").size())
+                    .as("底部累计信息块按参考样式两行")
+                    .isEqualTo(2);
             assertThat(table.path("fillPage").asBoolean())
                     .as("连续表应尽量画满页面，只在末页预留汇总/条款高度")
                     .isTrue();

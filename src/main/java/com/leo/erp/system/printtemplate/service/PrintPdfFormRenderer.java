@@ -15,8 +15,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class PrintPdfFormRenderer {
@@ -111,6 +113,8 @@ public class PrintPdfFormRenderer {
         // inline 分组跨页时，新页首行要补回上一行的分组值（序号/进货日期），否则续页的行看不出属于哪一天
         List<String> continuationFillFields = textList(tableConfig.path("grouping").path("continuationFillFields"));
         Map<String, String> lastGroupValues = new HashMap<>();
+        // mergeColumns：连续多行的同值只画一个跨行单元格（序号/进货日期这类分组列）
+        Set<String> mergeColumns = mergeColumnKeys(tableConfig.path("mergeColumns"));
 
         int itemIndex = 0;
         boolean firstPage = true;
@@ -241,7 +245,10 @@ public class PrintPdfFormRenderer {
                         }
                     }
                 }
-                tableRenderer.drawItemRow(canvas, font, tableConfig, columns, rowTop, renderItem, pageMetrics);
+                Map<String, Integer> mergeSpans = mergeSpans(
+                        renderItem, items, itemIndex, mergeColumns, rowHeight, pageBottomLimit - rowTop);
+                tableRenderer.drawItemRow(canvas, font, tableConfig, columns, rowTop, renderItem,
+                        mergeSpans, mergeColumns, pageMetrics);
                 rowTop += itemHeight;
                 if (detailHeaderAfterProject && groupPaginator.isProjectGroupHeader(item)) {
                     tableRenderer.drawHeader(canvas, font, tableConfig, columns, rowTop, pageMetrics);
@@ -280,16 +287,68 @@ public class PrintPdfFormRenderer {
      * 当前行之后若紧跟小计行，返回其高度；用于明细行绘制前预判，
      * 保证小计行与本组最后一条明细分页时不被拆开。
      */
+    private Set<String> mergeColumnKeys(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return Set.of();
+        }
+        Set<String> keys = new LinkedHashSet<>();
+        for (JsonNode entry : node) {
+            String key = entry.asText("").trim();
+            if (!key.isBlank()) {
+                keys.add(key);
+            }
+        }
+        return keys;
+    }
+
+    private Map<String, Integer> mergeSpans(
+            Map<String, String> current,
+            List<Map<String, String>> items,
+            int index,
+            Set<String> mergeColumns,
+            float rowHeight,
+            float availableHeight
+    ) {
+        if (mergeColumns.isEmpty() || rowHeight <= 0f) {
+            return Map.of();
+        }
+        int maxRows = Math.max(1, (int) (availableHeight / rowHeight));
+        Map<String, Integer> spans = new LinkedHashMap<>();
+        for (String key : mergeColumns) {
+            String value = current.get(key);
+            if (value == null || value.isBlank()) {
+                continue;
+            }
+            int span = 1;
+            for (int next = index + 1; next < items.size() && span < maxRows; next++) {
+                String nextValue = items.get(next).get(key);
+                if (nextValue == null || nextValue.isBlank()) {
+                    span++;
+                } else {
+                    break;
+                }
+            }
+            spans.put(key, span);
+        }
+        return spans;
+    }
+
     private float footerReserveHeight(JsonNode summary, JsonNode clauses, JsonNode tableConfig) {
         float reserve = 0f;
         if (summary != null && summary.isObject()) {
             int summaryLines = summary.path("lines").size();
-            if (summaryLines == 0 && summary.path("template").isTextual()) {
+            if (summaryLines == 0
+                    && (summary.path("template").isTextual()
+                    || summary.path("alignToColumns").asBoolean(false))) {
                 summaryLines = 1;
             }
             if (summaryLines > 0) {
                 reserve += summaryLines * drawing.number(
                         summary, "height", drawing.number(tableConfig, "rowHeight", 26f));
+            }
+            JsonNode grid = summary.path("grid");
+            if (grid.isObject()) {
+                reserve += grid.path("rows").size() * drawing.number(grid, "rowHeight", 24f);
             }
         }
         if (clauses != null && clauses.isObject()

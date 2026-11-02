@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class PrintPdfTableRenderer {
@@ -81,6 +82,24 @@ public class PrintPdfTableRenderer {
             Map<String, String> item,
             PrintPdfDrawingSupport.PageMetrics pageMetrics
     ) {
+        drawItemRow(canvas, font, tableConfig, columns, top, item, Map.of(), Set.of(), pageMetrics);
+    }
+
+    /**
+     * 带纵向合并的明细行绘制：mergeSpans 表示当前行在某个列上要向下合并几行（1 表示不合并），
+     * mergeColumns 中的列在值为空时直接跳过（由首行画出的高单元格覆盖），从而得到真正的合并单元格。
+     */
+    void drawItemRow(
+            PdfCanvas canvas,
+            PdfFont font,
+            JsonNode tableConfig,
+            List<JsonNode> columns,
+            float top,
+            Map<String, String> item,
+            Map<String, Integer> mergeSpans,
+            Set<String> mergeColumns,
+            PrintPdfDrawingSupport.PageMetrics pageMetrics
+    ) {
         if (GROUP_HEADER_SOURCE.equals(item.get(GROUP_HEADER_KEY))
                 || GROUP_HEADER_PROJECT.equals(item.get(GROUP_HEADER_KEY))
                 || GROUP_HEADER_SUBTOTAL.equals(item.get(GROUP_HEADER_KEY))) {
@@ -98,6 +117,51 @@ public class PrintPdfTableRenderer {
         float lineWidth = drawing.number(tableConfig, "lineWidth", 1f);
         for (JsonNode column : columns) {
             float width = drawing.number(column, "width", 60f);
+            String columnKey = text(column, "key", "");
+            float fontSize = drawing.number(column, "fontSize", 8f);
+            if (mergeColumns.contains(columnKey)) {
+                String mergedValue = valueResolver.itemValue(item, column);
+                if (mergedValue.isBlank()) {
+                    // 合并列的续行：单元格由首行的高单元格覆盖，这里既不画边框也不画文字
+                    left += width;
+                    continue;
+                }
+                int span = Math.max(1, mergeSpans.getOrDefault(columnKey, 1));
+                float mergedHeight = rowHeight * span;
+                drawing.drawRect(
+                        canvas,
+                        left,
+                        top,
+                        width,
+                        mergedHeight,
+                        null,
+                        drawing.color(column, "borderColor", borderColor),
+                        drawing.number(column, "lineWidth", lineWidth),
+                        pageMetrics
+                );
+                float availWidth = Math.max(4f, width - 4);
+                float textTop = top + mergedHeight / 2f - 6f;
+                if (font.getWidth(mergedValue, fontSize) > availWidth) {
+                    drawWrappedCell(canvas, font, column, left, top, width, rowHeight,
+                            mergedValue, fontSize, availWidth, textColor, pageMetrics);
+                } else {
+                    drawing.drawCanvasText(
+                            canvas,
+                            font,
+                            mergedValue,
+                            left + 2,
+                            textTop,
+                            width - 4,
+                            12,
+                            fontSize,
+                            drawing.alignment(text(column, "align", "center")),
+                            drawing.color(column, "textColor", textColor),
+                            pageMetrics
+                    );
+                }
+                left += width;
+                continue;
+            }
             String value = valueResolver.itemValue(item, column);
             drawing.drawRect(
                     canvas,
@@ -110,7 +174,6 @@ public class PrintPdfTableRenderer {
                     drawing.number(column, "lineWidth", lineWidth),
                     pageMetrics
             );
-            float fontSize = drawing.number(column, "fontSize", 8f);
             float availWidth = Math.max(4f, width - 4);
             if (font.getWidth(value, fontSize) > availWidth) {
                 drawWrappedCell(canvas, font, column, left, top, width, rowHeight,
@@ -342,7 +405,8 @@ public class PrintPdfTableRenderer {
             return top;
         }
         List<String> lines = summaryLines(summaryConfig);
-        if (lines.isEmpty()) {
+        boolean alignToColumns = drawing.bool(summaryConfig, "alignToColumns", false);
+        if (lines.isEmpty() && !alignToColumns) {
             return top;
         }
         float left = drawing.number(tableConfig, "left", 28f);
@@ -384,6 +448,127 @@ public class PrintPdfTableRenderer {
                     color,
                     pageMetrics
             );
+            lineTop += rowHeight;
+        }
+        if (alignToColumns) {
+            lineTop = drawSummaryColumnRow(
+                    canvas, font, summaryConfig, tableConfig, variables, left, lineTop, rowHeight,
+                    fillColor, borderColor, lineWidth, fontSize, pageMetrics);
+        }
+        lineTop = drawSummaryGrid(canvas, font, summaryConfig, variables, left, width, lineTop, lineWidth,
+                borderColor, color, fontSize, pageMetrics);
+        return lineTop;
+    }
+
+    /**
+     * 合计行按明细列对齐：每个合计值落在对应的列宽里（件数/重量/金额），
+     * 文字居中、列宽直接取 table.columns 的宽度，从而随明细列自动拉伸。
+     */
+    private float drawSummaryColumnRow(
+            PdfCanvas canvas,
+            PdfFont font,
+            JsonNode summaryConfig,
+            JsonNode tableConfig,
+            Map<String, String> variables,
+            float left,
+            float top,
+            float rowHeight,
+            Color fillColor,
+            Color borderColor,
+            float lineWidth,
+            float fontSize,
+            PrintPdfDrawingSupport.PageMetrics pageMetrics
+    ) {
+        List<JsonNode> columns = drawing.childObjects(tableConfig.path("columns"));
+        JsonNode cells = summaryConfig.path("cells");
+        float cellLeft = left;
+        for (JsonNode column : columns) {
+            float cellWidth = drawing.number(column, "width", 60f);
+            String template = text(cells, text(column, "key", ""), "");
+            String value = valueResolver.applyTemplate(
+                    template,
+                    variables,
+                    summaryConfig.path("formats"),
+                    summaryConfig.path("defaults")
+            );
+            drawing.drawRect(canvas, cellLeft, top, cellWidth, rowHeight, fillColor, borderColor, lineWidth, pageMetrics);
+            drawing.drawCanvasText(
+                    canvas,
+                    font,
+                    value,
+                    cellLeft + 4,
+                    top + rowHeight / 2f - 6f,
+                    cellWidth - 8,
+                    12,
+                    fontSize,
+                    TextAlignment.CENTER,
+                    drawing.color(summaryConfig, "color", drawing.color(summaryConfig, "textColor", ColorConstants.BLACK)),
+                    pageMetrics
+            );
+            cellLeft += cellWidth;
+        }
+        return top + rowHeight;
+    }
+
+    /**
+     * 汇总区内的"累计"信息块：按 2 x N 网格画带边框的标签/数值单元格，
+     * 与参考对账单底部的 累计数量合计 / 累计应收金额 等行一致。
+     */
+    private float drawSummaryGrid(
+            PdfCanvas canvas,
+            PdfFont font,
+            JsonNode summaryConfig,
+            Map<String, String> variables,
+            float left,
+            float width,
+            float top,
+            float lineWidth,
+            Color borderColor,
+            Color color,
+            float fontSize,
+            PrintPdfDrawingSupport.PageMetrics pageMetrics
+    ) {
+        JsonNode grid = summaryConfig.path("grid");
+        if (!grid.isObject()) {
+            return top;
+        }
+        JsonNode rows = grid.path("rows");
+        JsonNode widths = grid.path("columnWidths");
+        float rowHeight = drawing.number(grid, "rowHeight", 24f);
+        float gridFontSize = drawing.number(grid, "fontSize", fontSize);
+        Color gridBorder = drawing.color(grid, "borderColor", borderColor);
+        Color gridColor = drawing.color(grid, "color", color);
+        float lineTop = top;
+        for (JsonNode row : rows) {
+            float cellLeft = left;
+            for (int index = 0; index < row.size(); index++) {
+                float cellWidth = index < widths.size() ? (float) widths.get(index).asDouble(80d) : 80f;
+                String cellValue = valueResolver.applyTemplate(
+                        row.get(index).asText(""),
+                        variables,
+                        summaryConfig.path("formats"),
+                        summaryConfig.path("defaults")
+                );
+                drawing.drawRect(canvas, cellLeft, lineTop, cellWidth, rowHeight, null, gridBorder, lineWidth, pageMetrics);
+                drawing.drawCanvasText(
+                        canvas,
+                        font,
+                        cellValue,
+                        cellLeft + 4,
+                        lineTop + rowHeight / 2f - 6f,
+                        cellWidth - 8,
+                        12,
+                        gridFontSize,
+                        TextAlignment.CENTER,
+                        gridColor,
+                        pageMetrics
+                );
+                cellLeft += cellWidth;
+            }
+            if (cellLeft < left + width) {
+                drawing.drawRect(canvas, cellLeft, lineTop, left + width - cellLeft, rowHeight, null,
+                        gridBorder, lineWidth, pageMetrics);
+            }
             lineTop += rowHeight;
         }
         return lineTop;

@@ -240,13 +240,16 @@
       }
     ],
     "maxRowsPerPage": 60,
-    "fillPage": true
+    "fillPage": true,
+    "mergeColumns": [
+      "groupIndex",
+      "billTime"
+    ]
   },
   "summary": {
-    "height": 34,
-    "template": "合计件数：${totalQuantity} 件    合计重量：${totalWeight} 吨    销售金额：${salesAmount} 元    已收金额：${receiptAmount} 元    期末余额：${closingAmount} 元",
+    "height": 30,
     "fontSize": 9,
-    "align": "right",
+    "align": "center",
     "border": true,
     "fillColor": "#e6f4ff",
     "borderColor": "#d9d9d9",
@@ -255,7 +258,50 @@
     "defaults": {
       "receiptAmount": "0.00",
       "salesAmount": "0.00",
-      "closingAmount": "0.00"
+      "closingAmount": "0.00",
+      "totalWeight": "0.000"
+    },
+    "grid": {
+      "rowHeight": 24,
+      "fontSize": 9,
+      "color": "#1f1f1f",
+      "borderColor": "#d9d9d9",
+      "columnWidths": [
+        120,
+        100,
+        140,
+        100,
+        130,
+        100,
+        96
+      ],
+      "rows": [
+        [
+          "累计数量合计",
+          "${totalWeight}",
+          "按合同应付金额",
+          "",
+          "累计已开票金额",
+          "",
+          ""
+        ],
+        [
+          "累计应收金额",
+          "${salesAmount}",
+          "累计已收金额",
+          "${receiptAmount}",
+          "累计欠款金额",
+          "${closingAmount}",
+          ""
+        ]
+      ]
+    },
+    "alignToColumns": true,
+    "cells": {
+      "groupIndex": "合计",
+      "quantity": "${totalQuantity}",
+      "weightTon": "${totalWeight}",
+      "amount": "${salesAmount}"
     }
   },
   "clauses": {
