@@ -50,10 +50,10 @@ class CustomerStatementPdfTemplateRenderTest {
             assertThat(count(text, "进货日期"))
                     .as("整页只出现一次表头（不再按分组重复）")
                     .isEqualTo(1);
-            assertThat(count(text, "2026年08月20日"))
-                    .as("同日期的多行只在第一行打印日期（合并单元格效果）")
+            assertThat(count(text, "08月20日"))
+                    .as("同一单据的多行只在第一行打印日期（合并单元格效果）")
                     .isEqualTo(1);
-            assertThat(count(text, "2026年08月25日")).isEqualTo(1);
+            assertThat(count(text, "08月25日")).isEqualTo(1);
             assertThat(text)
                     .as("合计行按明细列对齐（合计 + 件数/重量/金额三列）")
                     .contains("合计")
@@ -105,7 +105,7 @@ class CustomerStatementPdfTemplateRenderTest {
                 String text = PdfTextExtractor.getTextFromPage(document.getPage(page));
                 assertThat(text)
                         .as("第 %d 页续页首行应补回分组日期", page)
-                        .contains("2026年08月20日");
+                        .contains("08月20日");
             }
         }
     }

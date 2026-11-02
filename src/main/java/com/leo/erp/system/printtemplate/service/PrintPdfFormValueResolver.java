@@ -104,7 +104,35 @@ public class PrintPdfFormValueResolver {
         if ("chineseDate".equals(format)) {
             return formatChineseDate(value);
         }
+        // monthDay：只显示「月日」，用于列宽很窄、同一年内的明细日期列
+        if ("monthDay".equals(format)) {
+            return formatMonthDay(value);
+        }
         return value;
+    }
+
+    private String formatMonthDay(String rawDate) {
+        if (rawDate == null || rawDate.isBlank()) {
+            return "";
+        }
+        String datePart = rawDate.trim().split("[T\\s]", 2)[0];
+        String[] parts = datePart.split("[-/]");
+        if (parts.length >= 3) {
+            String month = parts[1].length() == 1 ? "0" + parts[1] : parts[1];
+            String day = parts[2].length() == 1 ? "0" + parts[2] : parts[2];
+            return month + "月" + day + "日";
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("(\\d{1,2})\\s*月\\s*(\\d{1,2})\\s*日")
+                .matcher(datePart);
+        if (matcher.find()) {
+            return pad2(matcher.group(1)) + "月" + pad2(matcher.group(2)) + "日";
+        }
+        return rawDate;
+    }
+
+    private String pad2(String value) {
+        return value.length() == 1 ? "0" + value : value;
     }
 
     private String formatChineseDate(String rawDate) {

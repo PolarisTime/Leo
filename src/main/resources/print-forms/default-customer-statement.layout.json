@@ -151,7 +151,7 @@
       {
         "key": "groupIndex",
         "label": "序号",
-        "width": 26,
+        "width": 24,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -159,16 +159,16 @@
       {
         "key": "billTime",
         "label": "进货日期",
-        "width": 72,
+        "width": 46,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center",
-        "format": "chineseDate"
+        "format": "monthDay"
       },
       {
         "key": "category",
         "label": "产品名称",
-        "width": 36,
+        "width": 40,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -193,7 +193,7 @@
       {
         "key": "spec",
         "label": "规格型号",
-        "width": 34,
+        "width": 36,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -209,7 +209,7 @@
       {
         "key": "pieceWeightTon",
         "label": "件重/吨",
-        "width": 40,
+        "width": 42,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -217,7 +217,7 @@
       {
         "key": "quantity",
         "label": "件数",
-        "width": 27,
+        "width": 28,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -225,7 +225,7 @@
       {
         "key": "weightTon",
         "label": "重量小计/吨",
-        "width": 48,
+        "width": 50,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -233,7 +233,7 @@
       {
         "key": "unitPrice",
         "label": "单价",
-        "width": 44,
+        "width": 46,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -241,7 +241,7 @@
       {
         "key": "amount",
         "label": "金额",
-        "width": 54,
+        "width": 58,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -249,7 +249,7 @@
       {
         "key": "remark",
         "label": "备注",
-        "width": 52,
+        "width": 63,
         "headerFontSize": 7.2,
         "fontSize": 7.5,
         "align": "center"
