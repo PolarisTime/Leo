@@ -1,3 +1,10 @@
+# [17.6.0](https://github.com/PolarisTime/Leo/compare/v17.5.0...v17.6.0) (2026-11-02)
+
+
+### Features
+
+* **print:** 物流对账单打印模板同步卡片分组布局并补来源单据日期 ([b1d7475](https://github.com/PolarisTime/Leo/commit/b1d7475b268a5567053e13b524ce43d31aa8e33c))
+
 # [17.5.0](https://github.com/PolarisTime/Leo/compare/v17.4.0...v17.5.0) (2026-11-02)
 
 
