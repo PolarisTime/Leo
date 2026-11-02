@@ -159,7 +159,7 @@
       {
         "key": "billTime",
         "label": "进货日期",
-        "width": 46,
+        "width": 44,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center",
@@ -168,7 +168,7 @@
       {
         "key": "category",
         "label": "产品名称",
-        "width": 40,
+        "width": 34,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -176,7 +176,7 @@
       {
         "key": "brand",
         "label": "产地",
-        "width": 38,
+        "width": 46,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -184,7 +184,7 @@
       {
         "key": "material",
         "label": "牌号商标",
-        "width": 44,
+        "width": 48,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center",
@@ -193,7 +193,7 @@
       {
         "key": "spec",
         "label": "规格型号",
-        "width": 36,
+        "width": 32,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -209,7 +209,7 @@
       {
         "key": "pieceWeightTon",
         "label": "件重/吨",
-        "width": 42,
+        "width": 34,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -217,7 +217,7 @@
       {
         "key": "quantity",
         "label": "件数",
-        "width": 28,
+        "width": 24,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -225,7 +225,7 @@
       {
         "key": "weightTon",
         "label": "重量小计/吨",
-        "width": 50,
+        "width": 54,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -233,7 +233,7 @@
       {
         "key": "unitPrice",
         "label": "单价",
-        "width": 46,
+        "width": 44,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -241,7 +241,7 @@
       {
         "key": "amount",
         "label": "金额",
-        "width": 58,
+        "width": 60,
         "headerFontSize": 7.2,
         "fontSize": 8.5,
         "align": "center"
@@ -249,7 +249,7 @@
       {
         "key": "remark",
         "label": "备注",
-        "width": 63,
+        "width": 71,
         "headerFontSize": 7.2,
         "fontSize": 7.5,
         "align": "center"
