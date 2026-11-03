@@ -1,3 +1,40 @@
+# [18.0.0](https://github.com/PolarisTime/Leo/compare/v17.7.0...v18.0.0) (2026-11-03)
+
+
+* refactor(api)!: 清理剩余兼容代码（物流候选死字段、版本开关收敛、旧调用方构造器标记） ([2ef5583](https://github.com/PolarisTime/Leo/commit/2ef558360725a27b30748c674e940fe7c20512a5))
+* refactor(api)!: 退役资源版本前置条件的 If-Match 兼容别名 ([cbde8bc](https://github.com/PolarisTime/Leo/commit/cbde8bc835a9960ef736870deddd79a636e5f6ef))
+
+
+### Bug Fixes
+
+* **cache:** 修复主数据缓存失效被二次延后而静默丢失 ([2456813](https://github.com/PolarisTime/Leo/commit/245681319e8c265a42a786b60bd441a5d3be4c8a))
+* **print:** 修复客户对账单打印明细 500（明细表无 deleted_flag） ([07e843f](https://github.com/PolarisTime/Leo/commit/07e843f5650aecad0292cd2019cf03de6e6857e1))
+* **print:** 修正打印配置引用已删除/改名的列（采购订单/收款/付款） ([b143f5f](https://github.com/PolarisTime/Leo/commit/b143f5fd30d320d58ca1a9f8f5764ab8b579ec25))
+* **print:** 客户对账单合计行与页脚对齐参考 PDF 样式 ([b38e44d](https://github.com/PolarisTime/Leo/commit/b38e44dbc08e85da64dbd974b4a81ac19e3b6c93))
+* **print:** 客户对账单序号/进货日期/备注按单据合并 ([f7ae04d](https://github.com/PolarisTime/Leo/commit/f7ae04de73e6934a7f9c0c79630208d5dc3d7403))
+* **print:** 客户对账单抬头区按表格列边界对齐 ([a837894](https://github.com/PolarisTime/Leo/commit/a83789458668a8197cb5f825144a5d0ef1b8eef6))
+* **print:** 客户对账单按实际内容收紧列宽 ([950f907](https://github.com/PolarisTime/Leo/commit/950f9075a27eb52ba54c9305b4a388793f91e275))
+
+
+### Features
+
+* **print:** print-runtime 显式声明 printable，并与模板清单做一致性门禁 ([3263a16](https://github.com/PolarisTime/Leo/commit/3263a160b97d271f63d1e20ba072eed2fd404a14))
+* **print:** 客户对账单按参考格式重做为一张连续表 ([c5baf9c](https://github.com/PolarisTime/Leo/commit/c5baf9cfca154c2f9b6aa344c75ade9731003345))
+* **print:** 客户对账单支持合并单元格与底部累计信息块 ([7f5db43](https://github.com/PolarisTime/Leo/commit/7f5db43a5dd5a9ee581be1826ef5861164328302))
+* **print:** 客户对账单改为 A4 竖版并合并备注列 ([5af1cf9](https://github.com/PolarisTime/Leo/commit/5af1cf97a85537ea13ff4f71769199a412cd9669))
+* **print:** 客户对账单放大正文字号到 8.5 ([cdb5ad8](https://github.com/PolarisTime/Leo/commit/cdb5ad8eb6da0551abe8a98f19971d71ab92ae52))
+* **print:** 客户对账单调整行高字号并让单元格文字垂直居中 ([d07e9db](https://github.com/PolarisTime/Leo/commit/d07e9dbd7035eec4f1ba869a49e27302a75d293d))
+* **print:** 客户对账单进货日期只显示月日 ([0aeacd8](https://github.com/PolarisTime/Leo/commit/0aeacd8ad8bcdd3e2978b1910d98218cf7824c4f))
+* **print:** 物流对账单分组头压成一行 ([fa8d44b](https://github.com/PolarisTime/Leo/commit/fa8d44b52fae8938665598bc4a0a2f61d91e4234))
+* **print:** 补齐销售退货/付款/收款默认 PDF 模板 ([4eddbe5](https://github.com/PolarisTime/Leo/commit/4eddbe532955dc73981e8d83722488b886ebeb45))
+
+
+### BREAKING CHANGES
+
+* 物流对账单候选接口不再返回 customerName / projectName 字段。
+* 写接口不再接受 If-Match 作为资源版本前置条件。只传该头的请求
+会按缺少版本前置条件处理（强制模块返回 428），调用方需改用 X-Resource-Version。
+
 # [17.7.0](https://github.com/PolarisTime/Leo/compare/v17.6.0...v17.7.0) (2026-11-02)
 
 
