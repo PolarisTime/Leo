@@ -1,3 +1,10 @@
+# [18.1.0](https://github.com/PolarisTime/Leo/compare/v18.0.0...v18.1.0) (2026-11-03)
+
+
+### Features
+
+* **supplier:** 新增供应商品牌规格配置存储与整集替换接口 ([3b92866](https://github.com/PolarisTime/Leo/commit/3b92866ebd22d93a1c40efe78ba25791f5f2ba85))
+
 # [18.0.0](https://github.com/PolarisTime/Leo/compare/v17.7.0...v18.0.0) (2026-11-03)
 
 
