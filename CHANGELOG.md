@@ -1,3 +1,10 @@
+## [18.1.2](https://github.com/PolarisTime/Leo/compare/v18.1.1...v18.1.2) (2026-11-04)
+
+
+### Bug Fixes
+
+* **freight-statement:** 列表响应补齐来源物流单运费，修复明细单价与金额显示 0 ([594a7d4](https://github.com/PolarisTime/Leo/commit/594a7d42e3a657f031dc4d81e9fd133ad64e94c7))
+
 ## [18.1.1](https://github.com/PolarisTime/Leo/compare/v18.1.0...v18.1.1) (2026-11-04)
 
 
