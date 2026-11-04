@@ -21,6 +21,7 @@ import com.leo.erp.common.architecture.SanctionedStatusWriter;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -162,6 +163,15 @@ public class FreightBillApplyService {
         item.setWarehouseName(source.warehouseName());
     }
 
+    /**
+     * 重量取值：显式过磅重量 &gt; 来源明细**实际重量按件数分摊** &gt; 件重 × 数量。
+     *
+     * <p>行级拆分提交（571a276e）把这里从「取来源实际重量」改成了「件重 × 数量」，而件重是名义值
+     * （盘螺常统一按 2.3 吨/件），与实际过磅重量常有差异：2026-10-31 的物流单 374859547451334656
+     * 因此按 9 × 2.3 = 20.7 计价，而来源销售订单/出库单实际是 20.19 / 20.192（整单 40.382），
+     * 多计 1.018 吨运费。整单导入时 quantity == 来源数量，分摊结果就是来源实际重量本身；
+     * 部分导入按件数比例分摊。来源重量缺失（历史数据为 0）时才回退件重换算。</p>
+     */
     private BigDecimal resolveWeightTon(FreightBillItemRequest request,
                                         SalesOrderSourceItemSnapshot source,
                                         int quantity,
@@ -170,9 +180,16 @@ public class FreightBillApplyService {
         if (requestedWeight != null && requestedWeight.signum() > 0) {
             return TradeItemCalculator.scaleWeightTon(requestedWeight);
         }
+        BigDecimal sourceWeightTon = TradeItemCalculator.scaleWeightTon(source.weightTon());
+        Integer sourceQuantity = source.quantity();
+        if (sourceWeightTon.signum() > 0 && sourceQuantity != null && sourceQuantity > 0) {
+            BigDecimal quantityRatio = BigDecimal.valueOf(quantity)
+                    .divide(BigDecimal.valueOf(sourceQuantity.longValue()), 10, RoundingMode.HALF_UP);
+            return TradeItemCalculator.scaleWeightTon(sourceWeightTon.multiply(quantityRatio));
+        }
         BigDecimal pieceWeightTon = TradeItemCalculator.scaleWeightTon(source.pieceWeightTon());
         if (pieceWeightTon.signum() <= 0) {
-            throw business("第" + lineNo + "行来源明细件重缺失，换算重量小于等于0");
+            throw business("第" + lineNo + "行来源明细重量与件重均缺失，换算重量小于等于0");
         }
         return TradeItemCalculator.calculateWeightTon(quantity, pieceWeightTon);
     }

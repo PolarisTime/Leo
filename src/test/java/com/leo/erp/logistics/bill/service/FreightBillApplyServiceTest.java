@@ -57,11 +57,17 @@ class FreightBillApplyServiceTest {
     }
 
     private SalesOrderSourceItemSnapshot srcItem(Long id, String pieceWeightTon, Integer remainingQuantity) {
+        return srcItem(id, pieceWeightTon, "12.500", remainingQuantity);
+    }
+
+    /** 可指定来源**实际重量**的夹具：件重是名义值，实际重量常与之不等（过磅调整）。 */
+    private SalesOrderSourceItemSnapshot srcItem(Long id, String pieceWeightTon, String weightTon,
+                                                 Integer remainingQuantity) {
         return new SalesOrderSourceItemSnapshot(
                 id, 1, 500L, "M001", "品牌A", "型钢", "螺纹钢", "HRB400", "12m", "吨",
                 700L, 800L, 30L, "结算公司A", 1L, "库房A", "B001", "b001", SOURCE_QUANTITY, "件",
                 pieceWeightTon == null ? null : new BigDecimal(pieceWeightTon), 100,
-                new BigDecimal("12.500"), new BigDecimal("4000"), new BigDecimal("50000"),
+                weightTon == null ? null : new BigDecimal(weightTon), new BigDecimal("4000"), new BigDecimal("50000"),
                 new BigDecimal("12.500"), remainingQuantity);
     }
 
@@ -150,6 +156,50 @@ class FreightBillApplyServiceTest {
         assertThat(entity.getTotalFreight()).isEqualByComparingTo("500.00");
     }
 
+    /**
+     * 回归（2026-11-04 生产数据 374859547451334656）：重量必须取来源明细的**实际重量**，
+     * 不能用件重（名义值）换算。现场数据：盘螺 8 共 9 件、件重 2.3、来源实际重量 20.190，
+     * 旧实现按 9 × 2.3 = 20.700 计价，整单多计 1.018 吨运费。
+     */
+    @Test
+    void applyItems_shouldUseSourceActualWeightInsteadOfNominalPieceWeight() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED,
+                List.of(srcItem(11L, "2.300", "20.190", null))));
+        FreightBill entity = new FreightBill();
+
+        // 数量缺省 = 来源数量 10（整单导入）：重量应等于来源实际重量，而不是 10 × 2.3 = 23.000
+        service.applyItems(entity, request(List.of(itemReq(null, 11L, null, null, new BigDecimal("2.300")))), () -> 100L);
+
+        assertThat(entity.getItems().get(0).getQuantity()).isEqualTo(10);
+        assertThat(entity.getItems().get(0).getWeightTon()).isEqualByComparingTo("20.190");
+        assertThat(entity.getTotalWeight()).isEqualByComparingTo("20.190");
+    }
+
+    /** 部分导入：实际重量按件数比例分摊（20.190 × 4 / 10 = 8.076），而不是件重 × 数量。 */
+    @Test
+    void applyItems_shouldProrateSourceActualWeightForPartialQuantity() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED,
+                List.of(srcItem(11L, "2.300", "20.190", null))));
+        FreightBill entity = new FreightBill();
+
+        service.applyItems(entity, request(List.of(itemReq(null, 11L, 4, null, new BigDecimal("2.300")))), () -> 100L);
+
+        assertThat(entity.getItems().get(0).getWeightTon()).isEqualByComparingTo("8.076");
+        assertThat(entity.getTotalWeight()).isEqualByComparingTo("8.076");
+    }
+
+    /** 来源重量缺失（历史数据为 0）时才回退件重换算，保证老数据仍可建单。 */
+    @Test
+    void applyItems_shouldFallbackToNominalPieceWeightWhenSourceWeightMissing() {
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED,
+                List.of(srcItem(11L, "1.250", "0", null))));
+        FreightBill entity = new FreightBill();
+
+        service.applyItems(entity, request(List.of(itemReq(null, 11L))), () -> 100L);
+
+        assertThat(entity.getItems().get(0).getWeightTon()).isEqualByComparingTo("12.500");
+    }
+
     @Test
     void applyItems_shouldPreferExplicitWeighedWeightTon() {
         stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "1.250"))));
@@ -221,7 +271,7 @@ class FreightBillApplyServiceTest {
     @Test
     void applyItems_shouldSupportPartialImportOfOrderSubset() {
         SalesOrderSourceSnapshot order = srcOrder(1L, "SO001", StatusConstants.AUDITED,
-                List.of(srcItem(11L, "1.000"), srcItem(12L, "2.000")));
+                List.of(srcItem(11L, "1.000", "10.000", null), srcItem(12L, "2.000", "20.000", null)));
         stubSources(order);
         FreightBill entity = new FreightBill();
 
@@ -382,7 +432,8 @@ class FreightBillApplyServiceTest {
 
     @Test
     void applyItems_shouldRejectNonPositiveWeightWhenPieceWeightMissing() {
-        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "0"))));
+        // 来源实际重量与件重都缺失：无法换算，必须拒绝（历史数据里两者为 0 的组合）
+        stubSources(srcOrder(1L, "SO001", StatusConstants.AUDITED, List.of(srcItem(11L, "0", "0", null))));
         FreightBillRequest request = request(List.of(
                 itemReq(null, 11L, null, null, BigDecimal.ZERO)));
 
