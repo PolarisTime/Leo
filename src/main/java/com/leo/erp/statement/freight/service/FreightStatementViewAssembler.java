@@ -9,6 +9,7 @@ import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -38,9 +39,16 @@ public class FreightStatementViewAssembler {
         return toView(entity, attachments, Map.of());
     }
 
-    private FreightStatementView toView(FreightStatement entity,
-                                        List<AttachmentView> attachments,
-                                        Map<Long, BillSnapshot> sourceBillsById) {
+    /**
+     * 组装视图（可带**批量预取**的来源物流单快照）。
+     *
+     * <p>列表页与详情页共用同一份 item 结构：列表行本身就带 items，前端打开详情/编辑时
+     * 若行里已有 items 就不再请求详情（见 useDetailSupport 的 shouldLoad 口径），
+     * 因此列表组装也必须带来源物流单快照，否则「运费单价 / 运费总价」在详情里恒为 0。</p>
+     */
+    FreightStatementView toView(FreightStatement entity,
+                                List<AttachmentView> attachments,
+                                Map<Long, BillSnapshot> sourceBillsById) {
         return new FreightStatementView(
                 entity.getId(),
                 entity.getStatementNo(),
@@ -133,10 +141,18 @@ public class FreightStatementViewAssembler {
     }
 
     private Map<Long, BillSnapshot> resolveSourceBills(FreightStatement entity) {
-        LinkedHashSet<Long> sourceBillIds = entity.getItems().stream()
+        return resolveSourceBills(entity.getItems().stream()
                 .map(FreightStatementItem::getSourceFreightBillId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+                .toList());
+    }
+
+    /** 批量解析来源物流单快照：列表页对整页明细只查一次，避免逐行查询。 */
+    Map<Long, BillSnapshot> resolveSourceBills(Collection<Long> billIds) {
+        LinkedHashSet<Long> sourceBillIds = billIds == null
+                ? new LinkedHashSet<>()
+                : billIds.stream()
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toCollection(LinkedHashSet::new));
         if (sourceBillIds.isEmpty()) {
             return Map.of();
         }
