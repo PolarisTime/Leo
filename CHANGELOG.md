@@ -1,3 +1,11 @@
+## [18.1.1](https://github.com/PolarisTime/Leo/compare/v18.1.0...v18.1.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **logistics:** 修复历史物流单重量口径并为对账单重算合计（V213） ([42cc868](https://github.com/PolarisTime/Leo/commit/42cc8688d3f36eea9b9744007ff946619ef66e05))
+* **logistics:** 物流单重量改取来源实际重量并按件数分摊 ([3d6088b](https://github.com/PolarisTime/Leo/commit/3d6088b00f2c8002e6041c878916790231fe3ccc))
+
 # [18.1.0](https://github.com/PolarisTime/Leo/compare/v18.0.0...v18.1.0) (2026-11-03)
 
 
