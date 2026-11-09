@@ -85,12 +85,12 @@ jobs:
       LEO_MACHINE_ID: 1
     steps:
       - name: Checkout Leo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.leo_ref || github.ref_name }}
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
@@ -177,7 +177,7 @@ jobs:
 
       - name: Upload flyway migration evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: flyway-migration-evidence
           path: |
@@ -190,7 +190,7 @@ jobs:
         run: bash scripts/maven.sh -B -ntp package
 
       - name: Upload backend artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: leo-backend-jar
           path: |
@@ -212,18 +212,18 @@ jobs:
         shell: bash
     steps:
       - name: Checkout Leo deploy scripts
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.leo_ref || github.ref_name }}
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Download backend artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: leo-backend-jar
           path: release-input/backend
@@ -298,7 +298,7 @@ jobs:
           echo "dependency_archive_name=$dependency_archive_name" >> "$GITHUB_OUTPUT"
 
       - name: Upload release archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: leo-production-release
           path: |
@@ -307,7 +307,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload dependency bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: leo-dependencies-${{ steps.release.outputs.dependency_bundle_id }}
           path: |
@@ -357,7 +357,7 @@ jobs:
       NO_PROXY: "127.0.0.1,localhost"
     steps:
       - name: Download release archive
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: leo-production-release
           path: production-release
@@ -382,7 +382,7 @@ jobs:
 
       - name: Download dependency bundle
         if: ${{ steps.dependency-cache.outputs.present != 'true' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: leo-dependencies-${{ needs.package.outputs.dependency_bundle_id }}
           path: production-dependency
@@ -472,7 +472,7 @@ jobs:
       NO_PROXY: "127.0.0.1,localhost"
     steps:
       - name: Download release archive
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: leo-production-release
           path: production-release
@@ -563,7 +563,7 @@ jobs:
 
       - name: Download dependency bundle
         if: ${{ steps.dependency-cache.outputs.present != 'true' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: leo-dependencies-${{ needs.package.outputs.dependency_bundle_id }}
           path: production-dependency
