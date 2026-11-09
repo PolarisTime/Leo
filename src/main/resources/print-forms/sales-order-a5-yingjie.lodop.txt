@@ -64,6 +64,14 @@ LODOP.SET_PRINT_STYLEA(0,"FontSize",12);
 LODOP.ADD_PRINT_TEXT(85,665,60,20,"{{dateDay}}");
 LODOP.SET_PRINT_STYLEA(0,"FontSize",12);
 {{/if}}
+{{#if isChargeRow}}
+LODOP.ADD_PRINT_TEXT({{rowTop}},345,51,24,"{{chargeName}}");
+LODOP.SET_PRINT_STYLEA(0,"Alignment",2);
+LODOP.SET_PRINT_STYLEA(0,"FontSize",12);
+LODOP.ADD_PRINT_TEXT({{rowTop}},415,71,24,"{{chargeAmount}}元");
+LODOP.SET_PRINT_STYLEA(0,"Alignment",2);
+LODOP.SET_PRINT_STYLEA(0,"FontSize",12);
+{{else}}
 LODOP.ADD_PRINT_TEXT({{rowTop}},45,46,24,"{{brand}}");
 LODOP.SET_PRINT_STYLEA(0,"Alignment",2);
 LODOP.SET_PRINT_STYLEA(0,"FontSize",12);
@@ -91,6 +99,7 @@ LODOP.SET_PRINT_STYLEA(0,"FontSize",12);
 LODOP.ADD_PRINT_TEXT({{rowTop}},528,76,24,"");
 LODOP.SET_PRINT_STYLEA(0,"Alignment",2);
 LODOP.SET_PRINT_STYLEA(0,"FontSize",12);
+{{/if}}
 {{/each}}
 
 LODOP.ADD_PRINT_TEXT({{sumTop}},225,70,24,"合计件数");

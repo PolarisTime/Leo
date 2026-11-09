@@ -42,6 +42,7 @@ public class PrintScriptService {
     private final PrintRuntimeProperties runtimeProperties;
     private final PrintRecordAuthorization recordAuthorization;
     private final PrintSpecLengthResolver specLengthResolver;
+    private final PrintChargeRowPreparer chargeRowPreparer;
 
     public PrintScriptService(
             PrintTemplateRepository templateRepository,
@@ -52,7 +53,8 @@ public class PrintScriptService {
             AttachmentRecordAccess recordAccessService,
             PrintRuntimeProperties runtimeProperties,
             PrintRecordAuthorization recordAuthorization,
-            PrintSpecLengthResolver specLengthResolver
+            PrintSpecLengthResolver specLengthResolver,
+            PrintChargeRowPreparer chargeRowPreparer
     ) {
         this.templateRepository = templateRepository;
         this.dataProvider = dataProvider;
@@ -63,6 +65,7 @@ public class PrintScriptService {
         this.runtimeProperties = runtimeProperties;
         this.recordAuthorization = recordAuthorization;
         this.specLengthResolver = specLengthResolver;
+        this.chargeRowPreparer = chargeRowPreparer;
     }
 
     /** Load record + items from DB, return raw template + data for frontend rendering. */
@@ -102,6 +105,8 @@ public class PrintScriptService {
         // 拆分必须发生在合并之后：拆分行共享同一明细键，提前拆分会被合并回一行。
         items = PrintItemSplitter.splitItems(
                 items, options == null ? null : options.splitPieceCount(), splitItemIds);
+        // 附加费用行必须排在合并/拆分之后追加：费用行没有货物明细字段，不能参与合并、拆分与合计。
+        items = chargeRowPreparer.appendChargeRows(moduleKey, recordId, template.getTemplateHtml(), items);
         items = layoutPreparer.prepare(moduleKey, template.getTemplateName(), template.getTemplateHtml(), data, items);
         if (FREIGHT_STATEMENT_MODULE.equals(moduleKey)
                 && PDF_FORM_TEMPLATE_TYPE.equals(template.getTemplateType())) {

@@ -276,6 +276,7 @@ class PrintRecordLayoutPreparer {
             CoordLayout layout,
             boolean needsGrouping
     ) {
+        // 附加费用行同样占用一行表格，计入已用行数，空行起点才会落在费用行之后。
         long itemCount = result.stream().filter(item -> !"true".equals(item.get("isSeparator"))).count();
         int actualItemCount = needsGrouping ? result.size() : (int) Math.min(itemCount, layout.maxRows());
         int sumTop = layout.sumTop() != null ? layout.sumTop() : layout.tableTop() + actualItemCount * layout.rowHeight();

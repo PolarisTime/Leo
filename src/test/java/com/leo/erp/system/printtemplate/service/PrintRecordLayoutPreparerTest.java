@@ -102,4 +102,77 @@ class PrintRecordLayoutPreparerTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0)).containsEntry("quantity", "1");
     }
+
+    /** A5 套打：附加费用紧跟在货物明细后面的第一条空行（表头 161 + 1 × 行高 41 = 202）。 */
+    @Test
+    void prepare_shouldPlaceChargeRowRightAfterLastItem() {
+        Map<String, String> data = new HashMap<>();
+        List<Map<String, String>> items = new ArrayList<>();
+        items.add(item("1", "11.988"));
+        items.add(chargeRow("运费", "1000.00"));
+
+        List<Map<String, String>> result = preparer.prepare("sales-order", "A5销售单", "{{rowTop}}", data, items);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(1))
+                .containsEntry(PrintChargeRowPreparer.CHARGE_ROW_FIELD, "true")
+                .containsEntry("rowTop", "202");
+        // 货物行 + 费用行共占 2 行，之后的第一个空行在 243
+        assertThat(data.get("hasEmptyRows")).isEqualTo("true");
+        assertThat(data.get("emptyRowTop")).isEqualTo("243");
+    }
+
+    /** 多条费用按顺序占用后续空行，行号连续。 */
+    @Test
+    void prepare_shouldPlaceChargeRowsInFollowingBlankRows() {
+        List<Map<String, String>> items = new ArrayList<>();
+        items.add(item("1", "11.988"));
+        items.add(item("2", "17.936"));
+        items.add(chargeRow("运费", "200.00"));
+        items.add(chargeRow("吊装费", "50.00"));
+
+        List<Map<String, String>> result = preparer.prepare(
+                "sales-order", "A5销售单", "{{rowTop}}", new HashMap<>(), items);
+
+        assertThat(result).hasSize(4);
+        assertThat(result.get(2))
+                .containsEntry("chargeName", "运费")
+                .containsEntry("rowTop", "243");
+        assertThat(result.get(3))
+                .containsEntry("chargeName", "吊装费")
+                .containsEntry("rowTop", "284");
+    }
+
+    /** 明细占满整页时费用行自然落到下一页首行（既有分页逻辑）。 */
+    @Test
+    void prepare_shouldPageBreakChargeRowWhenPageIsFull() {
+        List<Map<String, String>> items = new ArrayList<>();
+        for (int index = 1; index <= 7; index += 1) {
+            items.add(item(String.valueOf(index), "11.988"));
+        }
+        items.add(chargeRow("运费", "1000.00"));
+
+        List<Map<String, String>> result = preparer.prepare(
+                "sales-order", "A5销售单", "{{rowTop}}", new HashMap<>(), items);
+
+        assertThat(result).hasSize(8);
+        assertThat(result.get(7))
+                .containsEntry("needsNewPage", "true")
+                .containsEntry("rowTop", "161");
+    }
+
+    private Map<String, String> item(String quantity, String weightTon) {
+        Map<String, String> item = new HashMap<>();
+        item.put("quantity", quantity);
+        item.put("weightTon", weightTon);
+        return item;
+    }
+
+    private Map<String, String> chargeRow(String name, String amount) {
+        Map<String, String> item = new HashMap<>();
+        item.put(PrintChargeRowPreparer.CHARGE_ROW_FIELD, "true");
+        item.put("chargeName", name);
+        item.put("chargeAmount", amount);
+        return item;
+    }
 }
