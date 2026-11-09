@@ -68,9 +68,9 @@ LODOP.SET_PRINT_STYLEA(0,"FontSize",12);
 LODOP.ADD_PRINT_TEXT({{rowTop}},345,51,24,"{{chargeName}}");
 LODOP.SET_PRINT_STYLEA(0,"Alignment",2);
 LODOP.SET_PRINT_STYLEA(0,"FontSize",12);
-LODOP.ADD_PRINT_TEXT({{rowTop}},415,71,24,"{{chargeAmount}}元");
-LODOP.SET_PRINT_STYLEA(0,"Alignment",2);
-LODOP.SET_PRINT_STYLEA(0,"FontSize",12);
+LODOP.ADD_PRINT_TEXT({{rowTop}},376,110,24,"{{chargeAmount}}元");
+LODOP.SET_PRINT_STYLEA(0,"Alignment",3);
+LODOP.SET_PRINT_STYLEA(0,"FontSize",11);
 {{else}}
 LODOP.ADD_PRINT_TEXT({{rowTop}},45,46,24,"{{brand}}");
 LODOP.SET_PRINT_STYLEA(0,"Alignment",2);
