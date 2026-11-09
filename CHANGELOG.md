@@ -1,3 +1,10 @@
+# [18.2.0](https://github.com/PolarisTime/Leo/compare/v18.1.2...v18.2.0) (2026-11-09)
+
+
+### Features
+
+* **print:** A5 销售单套打把附加费用打印到明细后的空行 ([718370d](https://github.com/PolarisTime/Leo/commit/718370d03ca2a0fddb67d28568d5667a3781df69))
+
 ## [18.1.2](https://github.com/PolarisTime/Leo/compare/v18.1.1...v18.1.2) (2026-11-04)
 
 
