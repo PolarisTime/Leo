@@ -1,3 +1,10 @@
+## [18.2.1](https://github.com/PolarisTime/Leo/compare/v18.2.0...v18.2.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **print:** A5 附加费用金额加宽右对齐，避免「元」被换行 ([03a567d](https://github.com/PolarisTime/Leo/commit/03a567d18b3544821d6b69cf31a9ee071dc59eb1))
+
 # [18.2.0](https://github.com/PolarisTime/Leo/compare/v18.1.2...v18.2.0) (2026-11-09)
 
 
