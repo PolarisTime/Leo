@@ -114,36 +114,26 @@ class QuoteSchemaMigrationExtremePostgresTest {
     }
 
     @Test
-    void v163_dropsPurchasedColumn_andEntityDerivesItFromPurchaseOrder() {
-        // 已采购改由采购订单关联推导: V158 引入的独立列在 V163 删除。
+    void v163_dropsPurchasedColumn_andEntityHasNoPurchaseOrderFields() {
+        // 已采购标记与采购订单关联均已解耦: V158 引入的独立列在 V163 删除,
+        // 采购订单三列与关联表在 V214/V215 删除, 实体也不再声明任何采购订单字段。
         assertThat(columnNames("mk_quote_item")).doesNotContain("purchased");
-        assertThat(new QuoteSheetItem().isPurchased()).isFalse();
+        List<String> purchaseFields = Arrays.stream(QuoteSheetItem.class.getDeclaredFields())
+                .map(Field::getName)
+                .filter(name -> name.toLowerCase(Locale.ROOT).contains("purchaseorder"))
+                .toList();
+        assertThat(purchaseFields).isEmpty();
     }
 
     @Test
-    void v162_quoteItem_purchaseOrderLinkNullable_andEntityDefaultsNull() {
-        ColumnMeta orderId = column("mk_quote_item", "purchase_order_id");
-        assertThat(orderId.type()).isEqualTo("bigint");
-        assertThat(orderId.nullable()).isTrue();
-        ColumnMeta orderNo = column("mk_quote_item", "purchase_order_no");
-        assertThat(orderNo.type()).isEqualTo("character varying");
-        assertThat(orderNo.maxLength()).isEqualTo(64);
-        assertThat(orderNo.nullable()).isTrue();
-
-        assertThat(new QuoteSheetItem().getPurchaseOrderId()).isNull();
-        assertThat(new QuoteSheetItem().getPurchaseOrderNo()).isNull();
-        assertThat(indexNames("mk_quote_item")).contains("idx_quote_item_purchase_order");
-    }
-
-    @Test
-    void v164_quoteItem_purchaseOrderItemLinkNullable_andEntityDefaultsNull() {
-        ColumnMeta itemId = column("mk_quote_item", "purchase_order_item_id");
-        assertThat(itemId.type()).isEqualTo("bigint");
-        assertThat(itemId.nullable()).isTrue();
-
-        assertThat(new QuoteSheetItem().getPurchaseOrderItemId()).isNull();
+    void v214_v215_dropPurchaseOrderLinkTableAndColumns() {
+        // 报单比价与采购订单彻底解耦(V214 删关联表 / V215 删三列): 表不存在, 列与其索引全部移除。
+        assertThat(jdbc.queryForObject(
+                "select to_regclass('public.mk_quote_item_purchase_order')::text", String.class)).isNull();
+        assertThat(columnNames("mk_quote_item"))
+                .doesNotContain("purchase_order_id", "purchase_order_no", "purchase_order_item_id");
         assertThat(indexNames("mk_quote_item"))
-                .contains("idx_quote_item_purchase_order_item");
+                .doesNotContain("idx_quote_item_purchase_order", "idx_quote_item_purchase_order_item");
     }
 
     @Test

@@ -13,7 +13,6 @@ import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.api.SupplierQuery;
-import com.leo.erp.purchase.api.PurchaseOrderOptionQuery;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -214,11 +213,6 @@ class QuoteSheetUnlockSpecQuantityReplacePostgresTest {
         @Bean
         ProjectQuery projectQuery() {
             return Mockito.mock(ProjectQuery.class);
-        }
-
-        @Bean
-        PurchaseOrderOptionQuery purchaseOrderOptionQuery() {
-            return Mockito.mock(PurchaseOrderOptionQuery.class);
         }
 
         @Bean

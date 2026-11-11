@@ -12,7 +12,6 @@ import com.leo.erp.market.quotation.service.QuoteSheetStore;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.api.SupplierQuery;
-import com.leo.erp.purchase.api.PurchaseOrderOptionQuery;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
@@ -230,11 +229,6 @@ class QuoteSheetFetchGraphExtremePostgresTest {
         @Bean
         ProjectQuery projectQuery() {
             return Mockito.mock(ProjectQuery.class);
-        }
-
-        @Bean
-        PurchaseOrderOptionQuery purchaseOrderOptionQuery() {
-            return Mockito.mock(PurchaseOrderOptionQuery.class);
         }
 
         @Bean

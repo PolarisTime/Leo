@@ -26,14 +26,11 @@ public class QuoteSheetService {
 
     private final QuoteSheetStore store;
     private final QuoteSheetEditLockService editLockService;
-    private final PurchaseOrderTonnageService purchaseOrderTonnageService;
     private final KeyedLockRegistry locks = new KeyedLockRegistry();
 
-    public QuoteSheetService(QuoteSheetStore store, QuoteSheetEditLockService editLockService,
-                             PurchaseOrderTonnageService purchaseOrderTonnageService) {
+    public QuoteSheetService(QuoteSheetStore store, QuoteSheetEditLockService editLockService) {
         this.store = store;
         this.editLockService = editLockService;
-        this.purchaseOrderTonnageService = purchaseOrderTonnageService;
     }
 
     public QuoteSheetResponse create(QuoteSheetRequest request) {
@@ -42,16 +39,6 @@ public class QuoteSheetService {
 
     public QuoteSheetResponse detail(Long id) {
         return store.detail(id);
-    }
-
-    /** 采购订单已开吨位汇总(只读): 传 ids 按 id 汇总, 否则按关键字/状态列出选项。 */
-    public java.util.List<com.leo.erp.market.quotation.web.dto.PurchaseOrderTonnageResponse> summarizeTonnages(
-            java.util.List<Long> purchaseOrderItemIds, String keyword, String status,
-            Long purchaseOrderId, Long excludeSheetId) {
-        if (purchaseOrderItemIds != null && !purchaseOrderItemIds.isEmpty()) {
-            return purchaseOrderTonnageService.summarize(purchaseOrderItemIds, excludeSheetId);
-        }
-        return purchaseOrderTonnageService.listOptions(keyword, status, purchaseOrderId, excludeSheetId);
     }
 
     public Page<QuoteSheetResponse> page(PageQuery query, LocalDate orderDate, Long projectId, String keyword) {

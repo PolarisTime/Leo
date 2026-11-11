@@ -7,7 +7,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/** 报价单响应。 */
+/**
+ * 报价单响应。
+ * <p>报单比价模块与采购/销售单据完全解耦: 响应中不含任何采购订单号、明细行、已开吨位或已采购标记。</p>
+ */
 public record QuoteSheetResponse(
         Long id,
         String sheetNo,
@@ -56,53 +59,31 @@ public record QuoteSheetResponse(
         }
     }
 
-    /** 行级关联的采购订单明细行(可多条): allocatedTon 是本次在该明细行开出的吨位。 */
-    public record ItemPurchaseOrderResponse(Long purchaseOrderId, String purchaseOrderNo,
-                                            Long purchaseOrderItemId, BigDecimal allocatedTon,
-                                            Integer sortNo) {
-    }
-
+    /**
+     * 商品行/隔断行。{@code locked} 仅表示行级编辑保护标记, 不再表达任何采购订单关联状态。
+     */
     public record ItemResponse(Long id, Integer lineNo, QuoteRowType rowType, String category, String material,
-                               Integer spec, String length, String remark, BigDecimal ton, boolean purchased,
+                               Integer spec, String length, String remark, BigDecimal ton,
                                boolean locked,
-                               Long purchaseOrderId, String purchaseOrderNo, Long purchaseOrderItemId,
-                               List<ItemPurchaseOrderResponse> purchaseOrderLinks,
                                List<ItemPriceResponse> prices) {
 
         /** 兼容旧调用方: 未显式传行类型与行备注。 */
         public ItemResponse(Long id, Integer lineNo, String category, String material, Integer spec,
                             String length, BigDecimal ton, List<ItemPriceResponse> prices) {
-            this(id, lineNo, QuoteRowType.PRODUCT, category, material, spec, length, null, ton, false,
-                    false, null, null, null, List.of(), prices);
+            this(id, lineNo, QuoteRowType.PRODUCT, category, material, spec, length, null, ton, false, prices);
         }
 
         /** 兼容旧调用方: 未携带行备注。 */
         public ItemResponse(Long id, Integer lineNo, QuoteRowType rowType, String category, String material,
                             Integer spec, String length, BigDecimal ton, List<ItemPriceResponse> prices) {
-            this(id, lineNo, rowType, category, material, spec, length, null, ton, false, false, null, null, null, List.of(), prices);
+            this(id, lineNo, rowType, category, material, spec, length, null, ton, false, prices);
         }
 
-        /** 兼容旧调用方: 未携带已采购标记。 */
+        /** 兼容旧调用方: 未携带锁定标记。 */
         public ItemResponse(Long id, Integer lineNo, QuoteRowType rowType, String category, String material,
                             Integer spec, String length, String remark, BigDecimal ton,
                             List<ItemPriceResponse> prices) {
-            this(id, lineNo, rowType, category, material, spec, length, remark, ton, false, false, null, null, null, List.of(), prices);
-        }
-
-        /** 兼容旧调用方: 未携带关联采购订单(含明细行)。 */
-        public ItemResponse(Long id, Integer lineNo, QuoteRowType rowType, String category, String material,
-                            Integer spec, String length, String remark, BigDecimal ton, boolean purchased,
-                            List<ItemPriceResponse> prices) {
-            this(id, lineNo, rowType, category, material, spec, length, remark, ton, purchased, false, null, null, null, List.of(), prices);
-        }
-
-        /** 兼容旧调用方: 未携带订单明细行关联。 */
-        public ItemResponse(Long id, Integer lineNo, QuoteRowType rowType, String category, String material,
-                            Integer spec, String length, String remark, BigDecimal ton, boolean purchased,
-                            Long purchaseOrderId, String purchaseOrderNo,
-                            List<ItemPriceResponse> prices) {
-            this(id, lineNo, rowType, category, material, spec, length, remark, ton, purchased, false,
-                    purchaseOrderId, purchaseOrderNo, null, List.of(), prices);
+            this(id, lineNo, rowType, category, material, spec, length, remark, ton, false, prices);
         }
     }
 }

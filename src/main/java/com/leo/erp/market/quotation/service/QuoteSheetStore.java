@@ -12,7 +12,6 @@ import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheet;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItem;
-import com.leo.erp.market.quotation.domain.entity.QuoteSheetItemPurchaseOrder;
 import com.leo.erp.market.quotation.domain.entity.QuoteSheetItemPrice;
 import com.leo.erp.market.quotation.domain.enums.QuoteRowType;
 import com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository;
@@ -21,7 +20,6 @@ import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.api.SupplierQuery;
-import com.leo.erp.purchase.api.PurchaseOrderOptionQuery;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
@@ -35,7 +33,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -55,24 +52,11 @@ public class QuoteSheetStore {
 
     private static final String DEFAULT_STATUS = "报价";
 
-    /**
-     * 锁定行 Σ分配吨位<b>超发</b>的判定容差, 默认 0(精确): 只有 {@code Σ > ton} 才拒绝,
-     * {@code Σ <= ton} 一律放行。
-     * <p>欠额是合法业务态而非错误 —— 本行报 200 吨、可关联的明细行只有 60+70=130 吨时,
-     * 前端按 {@code min(剩余, 订货量)} 分摊, Σ 必然小于本行吨位; 它表示"这条报单还有一部分
-     * 没落到订单上", 由前端据此保持比价区可见(不遮蔽)。若要求 Σ 精确等于 ton, 这种常见
-     * 情形会必然 422, 用户关联成功却存不下去。</p>
-     * <p>只用于正向超发判定, 不得按"绝对值差"或"等值容差"使用(欠额永不报错)。
-     * 数值比较一律走 {@link BigDecimal#compareTo}(忽略标度), 不得用 {@code equals}。</p>
-     */
-    private static final BigDecimal ALLOCATED_TON_OVERRUN_TOLERANCE = BigDecimal.ZERO;
-
     private final QuoteSheetRepository repository;
     private final QuoteProjectConfigRepository quoteProjectConfigRepository;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final SupplierQuery supplierQuery;
     private final ProjectQuery projectQuery;
-    private final PurchaseOrderOptionQuery purchaseOrderOptionQuery;
     private final EntityManager entityManager;
     /** 定尺主数据：表头「定尺加价」未显式提供时取 12米 当前维护的加价。 */
     private final LengthPremiumService lengthPremiumService;
@@ -82,7 +66,6 @@ public class QuoteSheetStore {
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            SupplierQuery supplierQuery,
                            ProjectQuery projectQuery,
-                           PurchaseOrderOptionQuery purchaseOrderOptionQuery,
                            EntityManager entityManager,
                            LengthPremiumService lengthPremiumService) {
         this.repository = repository;
@@ -90,7 +73,6 @@ public class QuoteSheetStore {
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.supplierQuery = supplierQuery;
         this.projectQuery = projectQuery;
-        this.purchaseOrderOptionQuery = purchaseOrderOptionQuery;
         this.entityManager = entityManager;
         this.lengthPremiumService = lengthPremiumService;
     }
@@ -172,8 +154,7 @@ public class QuoteSheetStore {
                 replaceBrands(entity, request.brands());
             }
             syncBrandSnapshot(entity, config);
-            replaceItems(entity, request.items(), resolveSupplierNames(request.items()),
-                    resolvePurchaseOrderLinks(request.items()));
+            replaceItems(entity, request.items(), resolveSupplierNames(request.items()));
             if (!headerChanged) {
                 entityManager.lock(entity, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
             }
@@ -247,8 +228,7 @@ public class QuoteSheetStore {
                 .max(Integer::compareTo)
                 .orElse(0) + 1;
         Map<Long, String> supplierNames = resolveSupplierNames(List.of(request));
-        Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks = resolvePurchaseOrderLinks(List.of(request));
-        QuoteSheetItem item = buildItem(sheet, request, nextLineNo, supplierNames, purchaseOrderLinks);
+        QuoteSheetItem item = buildItem(sheet, request, nextLineNo, supplierNames);
         sheet.getItems().add(item);
         repository.saveAndFlush(sheet);
         return new QuoteSheetItemWrite(toItemResponse(item), sheet.getVersion());
@@ -266,8 +246,7 @@ public class QuoteSheetStore {
         QuoteSheetItem item = requireItem(sheet, itemId);
         checkSpecQuantityLockedForItemUpdate(sheet, item, request);
         Map<Long, String> supplierNames = resolveSupplierNames(List.of(request));
-        Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks = resolvePurchaseOrderLinks(List.of(request));
-        applyItem(item, request, supplierNames, purchaseOrderLinks);
+        applyItem(item, request, supplierNames);
         repository.saveAndFlush(sheet);
         return new QuoteSheetItemWrite(toItemResponse(item), sheet.getVersion());
     }
@@ -746,8 +725,7 @@ public class QuoteSheetStore {
     private void apply(QuoteSheet entity, QuoteSheetRequest request) {
         applyHeader(entity, request, false);
         replaceBrands(entity, request.brands());
-        replaceItems(entity, request.items(), resolveSupplierNames(request.items()),
-                resolvePurchaseOrderLinks(request.items()));
+        replaceItems(entity, request.items(), resolveSupplierNames(request.items()));
     }
 
     /**
@@ -853,8 +831,7 @@ public class QuoteSheetStore {
      * 因此按升序重编号不会在同一 flush 内产生 {@code uk_quote_item_line} 瞬时重复。</p>
      */
     private void replaceItems(QuoteSheet entity, List<QuoteSheetRequest.ItemRequest> requests,
-                              Map<Long, String> supplierNames,
-                              Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
+                              Map<Long, String> supplierNames) {
         List<QuoteSheetItem> existing = sortedByLineNo(entity.getItems());
         List<QuoteSheetItem> reconciled = new ArrayList<>();
         int lineNo = 0;
@@ -867,7 +844,7 @@ public class QuoteSheetStore {
                 item.setSheet(entity);
             }
             item.setLineNo(lineNo);
-            applyItem(item, request, supplierNames, purchaseOrderLinks);
+            applyItem(item, request, supplierNames);
             reconciled.add(item);
         }
         entity.getItems().clear();
@@ -883,13 +860,12 @@ public class QuoteSheetStore {
     }
 
     private QuoteSheetItem buildItem(QuoteSheet sheet, QuoteSheetRequest.ItemRequest request, int lineNo,
-                                     Map<Long, String> supplierNames,
-                                     Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
+                                     Map<Long, String> supplierNames) {
         QuoteSheetItem item = new QuoteSheetItem();
         item.setId(snowflakeIdGenerator.nextId());
         item.setSheet(sheet);
         item.setLineNo(lineNo);
-        applyItem(item, request, supplierNames, purchaseOrderLinks);
+        applyItem(item, request, supplierNames);
         return item;
     }
 
@@ -899,8 +875,7 @@ public class QuoteSheetStore {
      * {@code uk_quote_item_price(item_id, brand_name)} 冲突。
      */
     private void applyItem(QuoteSheetItem item, QuoteSheetRequest.ItemRequest request,
-                           Map<Long, String> supplierNames,
-                           Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
+                           Map<Long, String> supplierNames) {
         QuoteRowType rowType = resolveRowType(request);
         item.setRowType(rowType);
         if (rowType == QuoteRowType.SEPARATOR) {
@@ -912,10 +887,6 @@ public class QuoteSheetStore {
             item.setTon(null);
             item.setRemark(null);
             item.setLocked(false);
-            item.setPurchaseOrderId(null);
-            item.setPurchaseOrderNo(null);
-            item.setPurchaseOrderItemId(null);
-            item.getPurchaseOrderLinks().clear();
             item.getPrices().clear();
             return;
         }
@@ -928,15 +899,6 @@ public class QuoteSheetStore {
         // locked 未携带(null)时保留原值, 兼容仅改价的分片请求。
         if (request.locked() != null) {
             item.setLocked(request.locked());
-        }
-        // 门禁: 仅锁定行可关联采购订单; 未锁定(含刚解锁)时强制清除关联与快照。
-        if (!item.isLocked()) {
-            item.setPurchaseOrderId(null);
-            item.setPurchaseOrderNo(null);
-            item.setPurchaseOrderItemId(null);
-            item.getPurchaseOrderLinks().clear();
-        } else {
-            applyPurchaseOrderLinks(item, request, purchaseOrderLinks);
         }
         Map<String, QuoteSheetItemPrice> existingByBrandName = new HashMap<>();
         for (QuoteSheetItemPrice price : item.getPrices()) {
@@ -966,275 +928,6 @@ public class QuoteSheetStore {
         item.getPrices().addAll(reconciled);
     }
 
-    /**
-     * 应用行级采购订单关联(可多条), 整组替换。
-     *
-     * <p><b>「请求里没有该字段」与「空数组」语义不同, 必须区分</b>:</p>
-     * <ul>
-     *   <li>{@code purchaseOrderLinks} 显式给出(含空数组): 该列表即权威整组, 按 (订单, 明细行)
-     *       协调落库; {@code []} 表示<b>清空关联</b>(旧三列一并清空), 非空则校验 Σ 分配吨位不变量。
-     *       此形态下旧单值三列只是冗余镜像, 不作为关联来源。</li>
-     *   <li>{@code purchaseOrderLinks} 为 null 且旧单值字段也全为空: <b>不改关联</b> —— 保留该行现有
-     *       关联行与旧三列快照。要清空必须显式传 {@code []}: 否则"请求里没有这个字段"会被误读成
-     *       "要清空", 静默删掉多行关联。</li>
-     *   <li>{@code purchaseOrderLinks} 为 null 且旧单值字段非空: 旧形态兼容。该行当前至多一条关联时
-     *       沿用旧规则(带明细行则合成一条、分配吨位取本行吨位; 只带订单则仅写旧三列);
-     *       该行已是<b>多条</b>关联时旧形态无法表达, 直接 422, 不得静默压成一条
-     *       (旧实现会删掉其余关联行, 且 Σ 分配吨位校验恰好通过而无人察觉)。</li>
-     * </ul>
-     *
-     * <p>旧的三列始终镜像<b>第一条</b>关联, 无关联时清空, 保证历史读取与其它模块的单值口径不变。</p>
-     *
-     * <p>明细行必须真实存在且属于对应订单, 同一明细行只能出现一次; 违反即 422(VALIDATION_ERROR)
-     * 并在消息中带上明细行 id, 与「采购订单不存在」同一处理口径 —— 个别明细失效不再被静默丢弃,
-     * 否则调用方以为关联成功、实际额度没记上。订单本身不存在则在
-     * {@link #resolvePurchaseOrderLinks} 阶段直接报错。</p>
-     *
-     * <p>分配口径: 带明细行关联时 Σ{@code allocatedTon} <b>不得超过</b>本行报单吨位({@code ton} 为 null
-     * 按 0), 超发 422; <b>允许少于</b>本行吨位 —— 欠额表示这条报单还有一部分没落到订单上
-     * (本行报 200 吨、可关联明细行只有 60+70 吨时前端按 {@code min(剩余, 订货量)} 分摊,
-     * Σ 必然小于本行吨位), 不是错误。单条分配量不得为负, 也不得超过该明细行的订货量
-     * ({@code orderedWeight} 未知时不校验单条上限)。
-     * 只给 {@code purchaseOrderId} 的<b>订单级关联</b>(不含明细行, 旧兼容路径)不适用上述校验 ——
-     * 它只写旧三列, 不产生关联行, 因而没有可对账的分配量。</p>
-     */
-    private void applyPurchaseOrderLinks(QuoteSheetItem item, QuoteSheetRequest.ItemRequest request,
-                                         Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks) {
-        List<QuoteSheetRequest.ItemPurchaseOrderRequest> explicit = request.purchaseOrderLinks();
-        if (explicit != null) {
-            // 显式列表(含空数组): 以它为权威整组, 旧单值字段不再参与
-            reconcileLinks(item, requireCompleteLinks(explicit), purchaseOrderLinks, request.ton());
-            return;
-        }
-        if (request.purchaseOrderId() == null && request.purchaseOrderItemId() == null) {
-            // 未携带任何关联字段: 保持现状; 清空关联必须显式传空数组
-            return;
-        }
-        if (request.purchaseOrderId() == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "关联的采购订单不能为空");
-        }
-        int existingLinkCount = item.getPurchaseOrderLinks().size();
-        if (existingLinkCount > 1) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                    "该行已关联 " + existingLinkCount + " 张采购订单明细行, 单值形态无法完整表达; "
-                            + "请改用 purchaseOrderLinks 整组下发(清空请传空数组)");
-        }
-        if (request.purchaseOrderItemId() == null) {
-            /*
-             * 订单级关联(只选订单、未选具体明细行): 关联表要求明细行非空, 因此沿用旧行为 ——
-             * 只写三列(订单 + 订单号快照, 明细留空), 不产生关联行。历史与既有测试都依赖这一点。
-             * 该行至多一条关联行已在上面拦下, 这里清掉它以保证三列与关联行一致。
-             */
-            PurchaseOrderLinkSnapshot orderOnly = purchaseOrderLinks.get(request.purchaseOrderId());
-            item.getPurchaseOrderLinks().clear();
-            item.setPurchaseOrderId(request.purchaseOrderId());
-            item.setPurchaseOrderNo(orderOnly == null ? null : orderOnly.orderNo());
-            item.setPurchaseOrderItemId(null);
-            return;
-        }
-        // 旧形态: 只有单值关联时合成一条, 分配吨位取本行吨位(等价于"这一行全部开在这张明细行上")
-        reconcileLinks(item, List.of(new QuoteSheetRequest.ItemPurchaseOrderRequest(
-                request.purchaseOrderId(), request.purchaseOrderItemId(), request.ton())),
-                purchaseOrderLinks, request.ton());
-    }
-
-    /**
-     * 校验显式关联列表的每条都完整(订单与明细行都非空), 返回可直接落库的请求列表。
-     * <p>{@code @Valid} 的 {@code @NotNull} 只覆盖 HTTP 入口, 服务层被直接调用时同样要挡住,
-     * 否则半截关联会被静默丢弃(与明细行不存在的处理口径一致)。</p>
-     */
-    private static List<QuoteSheetRequest.ItemPurchaseOrderRequest> requireCompleteLinks(
-            List<QuoteSheetRequest.ItemPurchaseOrderRequest> links) {
-        List<QuoteSheetRequest.ItemPurchaseOrderRequest> requested = new ArrayList<>(links.size());
-        for (QuoteSheetRequest.ItemPurchaseOrderRequest link : links) {
-            if (link == null) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "关联的采购订单明细行不能为空");
-            }
-            if (link.purchaseOrderId() == null || link.purchaseOrderItemId() == null) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                        "关联的采购订单与采购订单明细行都不能为空");
-            }
-            requested.add(link);
-        }
-        return requested;
-    }
-
-    /**
-     * 把请求关联列表整组协调进该行: 同 (订单明细行) 复用原实体(仅更新分配吨位/顺序/订单号快照),
-     * 新增才创建, 请求未携带的关联行从集合移除; 随后校验单条上限与 Σ 超发并镜像旧三列。
-     */
-    private void reconcileLinks(QuoteSheetItem item,
-                                List<QuoteSheetRequest.ItemPurchaseOrderRequest> requested,
-                                Map<Long, PurchaseOrderLinkSnapshot> purchaseOrderLinks,
-                                BigDecimal ton) {
-        Map<Long, QuoteSheetItemPurchaseOrder> existingByItemId = new HashMap<>();
-        for (QuoteSheetItemPurchaseOrder existing : item.getPurchaseOrderLinks()) {
-            existingByItemId.put(existing.getPurchaseOrderItemId(), existing);
-        }
-        List<QuoteSheetItemPurchaseOrder> reconciled = new ArrayList<>();
-        Set<Long> usedItemIds = new HashSet<>();
-        BigDecimal allocatedTotal = BigDecimal.ZERO;
-        for (QuoteSheetRequest.ItemPurchaseOrderRequest linkRequest : requested) {
-            Long purchaseOrderItemId = linkRequest.purchaseOrderItemId();
-            // DTO 上有 @DecimalMin("0"), 但服务层被直接调用(绕过 @Valid)时必须同样挡住负分配量。
-            if (linkRequest.allocatedTon() != null && linkRequest.allocatedTon().signum() < 0) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                        "采购订单明细行分配吨位不能为负: " + purchaseOrderItemId
-                                + " = " + linkRequest.allocatedTon().toPlainString());
-            }
-            BigDecimal allocatedTon = linkRequest.allocatedTon() == null
-                    ? BigDecimal.ZERO : linkRequest.allocatedTon();
-            PurchaseOrderLinkSnapshot snapshot = purchaseOrderLinks.get(linkRequest.purchaseOrderId());
-            if (snapshot == null) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                        "采购订单不存在或已删除: " + linkRequest.purchaseOrderId());
-            }
-            if (!snapshot.orderedWeights().containsKey(purchaseOrderItemId)) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                        "采购订单明细行不存在或不属于该采购订单: " + purchaseOrderItemId);
-            }
-            // 单条不得超过该明细行的订货量: 否则这条报单会把别人已占的额度吃掉(订货量为空表示未知, 不校验)
-            BigDecimal orderedWeight = snapshot.orderedWeights().get(purchaseOrderItemId);
-            if (orderedWeight != null && allocatedTon.compareTo(orderedWeight) > 0) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                        "在明细行 " + purchaseOrderItemId + " 上分配 " + plain(allocatedTon)
-                                + " 吨，超过其订货量 " + plain(orderedWeight) + " 吨");
-            }
-            if (!usedItemIds.add(purchaseOrderItemId)) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                        "采购订单明细行重复关联: " + purchaseOrderItemId);
-            }
-            QuoteSheetItemPurchaseOrder link = existingByItemId.remove(purchaseOrderItemId);
-            if (link == null) {
-                link = new QuoteSheetItemPurchaseOrder();
-                link.setId(snowflakeIdGenerator.nextId());
-                link.setItem(item);
-                link.setPurchaseOrderItemId(purchaseOrderItemId);
-            }
-            link.setPurchaseOrderId(linkRequest.purchaseOrderId());
-            link.setPurchaseOrderNo(snapshot.orderNo());
-            link.setAllocatedTon(allocatedTon);
-            link.setSortNo(reconciled.size());
-            reconciled.add(link);
-            allocatedTotal = allocatedTotal.add(allocatedTon);
-        }
-        if (!reconciled.isEmpty()) {
-            // 订单级关联(不产生关联行)不经过这里, 因此不适用本校验。
-            checkAllocatedTonNotOverTon(allocatedTotal, ton);
-        }
-        item.getPurchaseOrderLinks().clear();
-        item.getPurchaseOrderLinks().addAll(reconciled);
-
-        // 旧三列镜像第一条, 无关联时清空
-        if (reconciled.isEmpty()) {
-            item.setPurchaseOrderId(null);
-            item.setPurchaseOrderNo(null);
-            item.setPurchaseOrderItemId(null);
-        } else {
-            QuoteSheetItemPurchaseOrder first = reconciled.get(0);
-            item.setPurchaseOrderId(first.getPurchaseOrderId());
-            item.setPurchaseOrderNo(first.getPurchaseOrderNo());
-            item.setPurchaseOrderItemId(first.getPurchaseOrderItemId());
-        }
-    }
-
-    /**
-     * 分配吨位校验: <b>只拦超发</b> —— {@code Σ分配吨位 > 本行报单吨位}(ton 为 null 按 0)时 422,
-     * 欠额({@code Σ <= ton})一律放行, 它表示本行还有一部分没落到订单上。
-     * <p>差值超过 {@link #ALLOCATED_TON_OVERRUN_TOLERANCE} 才拒绝, 消息把合计/本行吨位/超出多少
-     * 都写出来, 让调用方能直接改对。</p>
-     * <p>比较用 {@link BigDecimal#compareTo}(忽略标度), 与吨位列 numeric(18,8) 的回读精度差异无关。</p>
-     */
-    private static void checkAllocatedTonNotOverTon(BigDecimal allocatedTotal, BigDecimal ton) {
-        BigDecimal reported = ton == null ? BigDecimal.ZERO : ton;
-        BigDecimal over = allocatedTotal.subtract(reported);
-        if (over.compareTo(ALLOCATED_TON_OVERRUN_TOLERANCE) <= 0) {
-            // 欠额或刚好打平: 合法, 不报错
-            return;
-        }
-        throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                "分配吨位合计 " + plain(allocatedTotal) + " 吨已超过本行报单吨位 " + plain(reported)
-                        + " 吨（超出 " + plain(over) + " 吨）");
-    }
-
-    /** 消息里的数值统一去掉无意义尾零(130.00000000 → 130), 避免把 numeric 回读标度暴露给用户。 */
-    private static String plain(BigDecimal value) {
-        return value.stripTrailingZeros().toPlainString();
-    }
-
-    /**
-     * 订单关联快照: 订单号 + 该订单下有效明细行 id → 该明细行订货量({@code orderedWeight} 可能为 null,
-     * 表示未知; 构建期可变)。
-     */
-    private record PurchaseOrderLinkSnapshot(String orderNo, Map<Long, BigDecimal> orderedWeights) {
-    }
-
-    /**
-     * 批量解析行级采购订单关联(一次查询覆盖整单全部行, 避免逐行查询的 N+1)。
-     * <p>订单存在性通过批量订单查询校验; 显式给出的明细行必须真实存在且属于对应订单,
-     * 否则在 {@link #applyPurchaseOrderLinks} 落库前报 422(不再静默丢弃该条关联)。</p>
-     */
-    private Map<Long, PurchaseOrderLinkSnapshot> resolvePurchaseOrderLinks(
-            List<QuoteSheetRequest.ItemRequest> items) {
-        Set<Long> orderIds = new LinkedHashSet<>();
-        Set<Long> itemIds = new LinkedHashSet<>();
-        if (items != null) {
-            for (QuoteSheetRequest.ItemRequest item : items) {
-                if (item == null || resolveRowType(item) == QuoteRowType.SEPARATOR) {
-                    continue;
-                }
-                // 显式解锁的行会被门禁清除关联, 无需解析其采购订单(避免对已删订单误报)。
-                if (Boolean.FALSE.equals(item.locked())) {
-                    continue;
-                }
-                if (item.purchaseOrderId() != null) {
-                    orderIds.add(item.purchaseOrderId());
-                }
-                if (item.purchaseOrderItemId() != null) {
-                    itemIds.add(item.purchaseOrderItemId());
-                }
-                // 多行关联: 每条关联的订单与明细行都要在同一批校验里解析出订单号快照
-                if (item.purchaseOrderLinks() != null) {
-                    for (QuoteSheetRequest.ItemPurchaseOrderRequest link : item.purchaseOrderLinks()) {
-                        if (link == null) {
-                            continue;
-                        }
-                        if (link.purchaseOrderId() != null) {
-                            orderIds.add(link.purchaseOrderId());
-                        }
-                        if (link.purchaseOrderItemId() != null) {
-                            itemIds.add(link.purchaseOrderItemId());
-                        }
-                    }
-                }
-            }
-        }
-        if (orderIds.isEmpty()) {
-            return Map.of();
-        }
-        Map<Long, PurchaseOrderLinkSnapshot> resolved = new HashMap<>();
-        for (PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot snapshot
-                : purchaseOrderOptionQuery.listActiveByIds(orderIds)) {
-            resolved.put(snapshot.id(), new PurchaseOrderLinkSnapshot(snapshot.orderNo(), new HashMap<>()));
-        }
-        for (Long orderId : orderIds) {
-            if (!resolved.containsKey(orderId)) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                        "采购订单不存在或已删除: " + orderId);
-            }
-        }
-        if (!itemIds.isEmpty()) {
-            for (PurchaseOrderOptionQuery.PurchaseOrderItemOptionSnapshot item
-                    : purchaseOrderOptionQuery.listActiveItemsByIds(itemIds)) {
-                PurchaseOrderLinkSnapshot link = resolved.get(item.purchaseOrderId());
-                if (link != null) {
-                    link.orderedWeights().put(item.purchaseOrderItemId(), item.orderedWeight());
-                }
-            }
-        }
-        return resolved;
-    }
-
     private QuoteSheetResponse toResponse(QuoteSheet entity) {
         List<QuoteSheetResponse.BrandResponse> brands = entity.getBrands().stream()
                 .map(brand -> new QuoteSheetResponse.BrandResponse(
@@ -1253,14 +946,7 @@ public class QuoteSheetStore {
     private QuoteSheetResponse.ItemResponse toItemResponse(QuoteSheetItem item) {
         return new QuoteSheetResponse.ItemResponse(
                 item.getId(), item.getLineNo(), item.getRowType(), item.getCategory(), item.getMaterial(),
-                item.getSpec(), item.getLength(), item.getRemark(), item.getTon(), item.isPurchased(),
-                item.isLocked(),
-                item.getPurchaseOrderId(), item.getPurchaseOrderNo(), item.getPurchaseOrderItemId(),
-                item.getPurchaseOrderLinks().stream()
-                        .map(link -> new QuoteSheetResponse.ItemPurchaseOrderResponse(
-                                link.getPurchaseOrderId(), link.getPurchaseOrderNo(),
-                                link.getPurchaseOrderItemId(), link.getAllocatedTon(), link.getSortNo()))
-                        .toList(),
+                item.getSpec(), item.getLength(), item.getRemark(), item.getTon(), item.isLocked(),
                 item.getPrices().stream()
                         .map(price -> new QuoteSheetResponse.ItemPriceResponse(
                                 price.getId(), price.getBrandName(), price.getSpotPrice(),

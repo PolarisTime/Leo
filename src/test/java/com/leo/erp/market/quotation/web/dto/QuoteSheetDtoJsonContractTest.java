@@ -109,64 +109,47 @@ class QuoteSheetDtoJsonContractTest {
         assertThat(request.items().get(0).prices().get(0).spotPrice()).isEqualByComparingTo("3280");
     }
 
+    /**
+     * 解耦契约: 报单行的请求/响应 DTO 不得存在任何采购订单字段。
+     * <p>三层锁定: 记录组件(编译期契约) / 响应 JSON 键 / 历史请求体按未知字段忽略。</p>
+     */
     @Test
-    void request_ignoresLegacyPurchasedFlag() throws Exception {
-        // 已采购改由 purchaseOrderId 推导: 请求体携带历史 purchased 字段应被忽略(不报错)。
-        String json = "{\"name\":\"9月9日报单\",\"orderDate\":\"2026-09-09\",\"refDate\":\"2026-09-10\","
-                + "\"refPeriod\":\"9:30 上午\",\"brands\":[{\"brandName\":\"中天\",\"freight\":30}],"
-                + "\"items\":[{\"category\":\"螺纹钢\",\"material\":\"HRB400E\",\"spec\":12,\"length\":\"9米\","
-                + "\"ton\":10,\"purchased\":true,\"prices\":[{\"brandName\":\"中天\",\"spotPrice\":3280}]}]}";
+    void itemDtos_haveNoPurchaseOrderFields() throws Exception {
+        List<String> purchaseFields = List.of(
+                "purchaseOrderId", "purchaseOrderNo", "purchaseOrderItemId", "purchaseOrderLinks", "purchased");
 
-        QuoteSheetRequest request = objectMapper.readValue(json, QuoteSheetRequest.class);
+        assertThat(QuoteSheetRequest.ItemRequest.class.getRecordComponents())
+                .extracting(java.lang.reflect.RecordComponent::getName)
+                .doesNotContainAnyElementsOf(purchaseFields);
+        assertThat(QuoteSheetResponse.ItemResponse.class.getRecordComponents())
+                .extracting(java.lang.reflect.RecordComponent::getName)
+                .doesNotContainAnyElementsOf(purchaseFields);
 
-        assertThat(request.items().get(0).purchaseOrderId()).isNull();
-    }
-
-    @Test
-    void response_serializesPurchasedDerivedFromPurchaseOrder() throws Exception {
         QuoteSheetResponse response = new QuoteSheetResponse(
                 1L, "1", "报单", null, null,
                 LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30.00"),
                 false, false, "报价", null, List.of(),
                 List.of(new QuoteSheetResponse.ItemResponse(2L, 1, QuoteRowType.PRODUCT, "螺纹钢",
-                        "HRB400E", 12, "9米", null, new BigDecimal("10.00000000"), true, 88L, "PO-88",
+                        "HRB400E", 12, "9米", null, new BigDecimal("10.00000000"), true,
                         List.of())),
                 null, null, 1L);
 
         String json = objectMapper.writeValueAsString(response);
+        assertThat(json).doesNotContain("purchaseOrder");
+        assertThat(json).doesNotContain("\"purchased\"");
+        assertThat(json).contains("\"locked\":true");
 
-        assertThat(json).contains("\"purchased\":true");
-        assertThat(json).contains("\"purchaseOrderId\":\"88\"");
-    }
-
-    @Test
-    void request_deserializesPurchaseOrderLink() throws Exception {
-        String json = "{\"name\":\"9月9日报单\",\"orderDate\":\"2026-09-09\",\"refDate\":\"2026-09-10\","
+        // 历史请求体携带采购订单字段: 行 DTO 已无对应组件, 按未知字段忽略, 其余字段照常反序列化。
+        String legacyRequest = "{\"name\":\"9月9日报单\",\"orderDate\":\"2026-09-09\",\"refDate\":\"2026-09-10\","
                 + "\"refPeriod\":\"9:30 上午\",\"brands\":[{\"brandName\":\"中天\",\"freight\":30}],"
                 + "\"items\":[{\"category\":\"螺纹钢\",\"material\":\"HRB400E\",\"spec\":12,\"length\":\"9米\","
-                + "\"ton\":10,\"purchaseOrderId\":\"88\",\"prices\":[{\"brandName\":\"中天\",\"spotPrice\":3280}]}]}";
-
-        QuoteSheetRequest request = objectMapper.readValue(json, QuoteSheetRequest.class);
-
-        assertThat(request.items().get(0).purchaseOrderId()).isEqualTo(88L);
+                + "\"ton\":10,\"purchased\":true,\"purchaseOrderId\":\"88\",\"purchaseOrderNo\":\"PO-88\","
+                + "\"purchaseOrderLinks\":[],\"prices\":[{\"brandName\":\"中天\",\"spotPrice\":3280}]}]}";
+        QuoteSheetRequest request = objectMapper.readValue(legacyRequest, QuoteSheetRequest.class);
+        assertThat(request.items().get(0).ton()).isEqualByComparingTo("10");
+        assertThat(request.items().get(0).locked()).isNull();
     }
 
-    @Test
-    void response_serializesPurchaseOrderSnapshot() throws Exception {
-        QuoteSheetResponse response = new QuoteSheetResponse(
-                1L, "1", "报单", null, null,
-                LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30.00"),
-                false, false, "报价", null, List.of(),
-                List.of(new QuoteSheetResponse.ItemResponse(2L, 1, QuoteRowType.PRODUCT, "螺纹钢",
-                        "HRB400E", 12, "9米", null, new BigDecimal("10.00000000"), false, 88L, "PO-88",
-                        List.of())),
-                null, null, 1L);
-
-        String json = objectMapper.writeValueAsString(response);
-
-        assertThat(json).contains("\"purchaseOrderId\":\"88\"");
-        assertThat(json).contains("\"purchaseOrderNo\":\"PO-88\"");
-    }
     /** 请求体可携带「代取来源材质」（前端 substituteMaterialOf 算出后下发）。 */
     @Test
     void request_deserializesPriceSourceMaterial() throws Exception {

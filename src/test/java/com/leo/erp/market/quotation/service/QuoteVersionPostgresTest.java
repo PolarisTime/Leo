@@ -18,7 +18,6 @@ import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
 import com.leo.erp.master.api.ProjectProcurementScopeQuery;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.api.SupplierQuery;
-import com.leo.erp.purchase.api.PurchaseOrderOptionQuery;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -259,16 +258,6 @@ class QuoteVersionPostgresTest {
         @Bean
         ProjectProcurementScopeQuery projectProcurementScopeQuery() {
             return Mockito.mock(ProjectProcurementScopeQuery.class);
-        }
-
-        @Bean
-        PurchaseOrderOptionQuery purchaseOrderOptionQuery() {
-            return Mockito.mock(PurchaseOrderOptionQuery.class);
-        }
-
-        @Bean
-        PurchaseOrderTonnageService purchaseOrderTonnageService() {
-            return Mockito.mock(PurchaseOrderTonnageService.class);
         }
 
         @Bean

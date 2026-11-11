@@ -12,7 +12,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
-/** 报价单创建/更新请求。 */
+/**
+ * 报价单创建/更新请求。
+ * <p>报单比价模块与采购/销售单据完全解耦: 请求中不含任何采购订单字段。</p>
+ */
 public record QuoteSheetRequest(
         @NotBlank(message = "单据名称不能为空") @Size(max = 64, message = "单据名称过长") String name,
         @SnowflakeId Long projectId,
@@ -56,23 +59,12 @@ public record QuoteSheetRequest(
     }
 
     /**
-     * 行级关联的采购订单明细行: 一行可关联多张, {@code allocatedTon} 是本次在该明细行开出的吨位。
-     * <p>不携带订单号快照 —— 快照由服务端按 {@code purchaseOrderId} 批量解析后写入。</p>
-     */
-    public record ItemPurchaseOrderRequest(
-            @NotNull(message = "关联的采购订单不能为空") @SnowflakeId Long purchaseOrderId,
-            @NotNull(message = "关联的采购订单明细行不能为空") @SnowflakeId Long purchaseOrderItemId,
-            @DecimalMin(value = "0", message = "分配吨位不能为负") BigDecimal allocatedTon
-    ) {
-    }
-
-    /**
      * 商品行/隔断行。
      * <p>
      * {@code rowType} 为空按 {@code PRODUCT}(商品行)处理, 兼容历史请求; 商品字段的"必填"校验
      * 因隔断行可空而无法用注解表达, 统一由服务层按行类型校验(见 {@code QuoteSheetStore.validate})。
      * <p>
-     * 不再接受独立"已采购"标记: 是否已采购由 {@code purchaseOrderId} 是否为空推导。
+     * 本记录不含任何采购订单关联字段: 报单行与采购/销售单据没有任何链路。
      */
         public record ItemRequest(
                 QuoteRowType rowType,
@@ -83,89 +75,43 @@ public record QuoteSheetRequest(
                 @Size(max = 255, message = "备注过长") String remark,
                 @DecimalMin(value = "0", message = "吨数不能为负") BigDecimal ton,
                 Boolean locked,
-                @SnowflakeId Long purchaseOrderId,
-                @SnowflakeId Long purchaseOrderItemId,
-                @Valid List<ItemPurchaseOrderRequest> purchaseOrderLinks,
                 @Valid List<ItemPriceRequest> prices
         ) {
 
             /**
              * 兼容旧调用方: 未显式传行类型时按商品行处理。
              *
-             * @deprecated 生产代码零调用（LSP 核实：仅 8 个测试类的夹具使用 6 参/9 参简写）；
+             * @deprecated 生产代码零调用（LSP 核实：仅测试夹具使用 6 参/7 参/8 参简写）；
              *             测试夹具改用规范构造器后删除。
              */
             @Deprecated(forRemoval = true)
             public ItemRequest(String category, String material, Integer spec, String length,
                                BigDecimal ton, List<ItemPriceRequest> prices) {
-                this(null, category, material, spec, length, null, ton, null, null, null, null, prices);
+                this(null, category, material, spec, length, null, ton, null, prices);
             }
 
             /**
              * 兼容旧调用方: 未携带行备注。
              *
-             * @deprecated 生产代码零调用（LSP 核实：仅 8 个测试类的夹具使用 6 参/9 参简写）；
+             * @deprecated 生产代码零调用（LSP 核实：仅测试夹具使用 6 参/7 参/8 参简写）；
              *             测试夹具改用规范构造器后删除。
              */
             @Deprecated(forRemoval = true)
             public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
                                String length, BigDecimal ton, List<ItemPriceRequest> prices) {
-                this(rowType, category, material, spec, length, null, ton, null, null, null, null, prices);
+                this(rowType, category, material, spec, length, null, ton, null, prices);
             }
 
             /**
              * 兼容旧调用方: 未携带行备注。
              *
-             * @deprecated 生产代码零调用（LSP 核实：仅 8 个测试类的夹具使用 6 参/9 参简写）；
+             * @deprecated 生产代码零调用（LSP 核实：仅测试夹具使用 6 参/7 参/8 参简写）；
              *             测试夹具改用规范构造器后删除。
              */
             @Deprecated(forRemoval = true)
             public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
                                String length, String remark, BigDecimal ton, List<ItemPriceRequest> prices) {
-                this(rowType, category, material, spec, length, remark, ton, null, null, null, null, prices);
-            }
-
-            /**
-             * 兼容旧调用方: 未携带订单明细行关联。
-             *
-             * @deprecated 生产代码零调用（LSP 核实：仅 8 个测试类的夹具使用 6 参/9 参简写）；
-             *             测试夹具改用规范构造器后删除。
-             */
-            @Deprecated(forRemoval = true)
-            public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
-                               String length, String remark, BigDecimal ton, Long purchaseOrderId,
-                               List<ItemPriceRequest> prices) {
-                this(rowType, category, material, spec, length, remark, ton, null, purchaseOrderId, null, null, prices);
-            }
-
-            /**
-             * 兼容旧调用方: 单值关联形态(物料...|locked|purchaseOrderId|purchaseOrderItemId|prices)。
-             *
-             * @deprecated 生产代码零调用（LSP 核实：仅 8 个测试类的夹具使用 6 参/9 参简写）；
-             *             测试夹具改用规范构造器后删除。
-             */
-            @Deprecated(forRemoval = true)
-            public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
-                               String length, String remark, BigDecimal ton, Boolean locked,
-                               Long purchaseOrderId, Long purchaseOrderItemId,
-                               List<ItemPriceRequest> prices) {
-                this(rowType, category, material, spec, length, remark, ton, locked,
-                        purchaseOrderId, purchaseOrderItemId, null, prices);
-            }
-
-            /**
-             * 兼容旧调用方: 单值关联形态, 未携带行备注。
-             *
-             * @deprecated 生产代码零调用（LSP 核实：仅 8 个测试类的夹具使用 6 参/9 参简写）；
-             *             测试夹具改用规范构造器后删除。
-             */
-            @Deprecated(forRemoval = true)
-            public ItemRequest(QuoteRowType rowType, String category, String material, Integer spec,
-                               String length, BigDecimal ton, Boolean locked,
-                               Long purchaseOrderId, Long purchaseOrderItemId,
-                               List<ItemPriceRequest> prices) {
-                this(rowType, category, material, spec, length, null, ton, locked,
-                        purchaseOrderId, purchaseOrderItemId, null, prices);
+                this(rowType, category, material, spec, length, remark, ton, null, prices);
             }
         }
 }

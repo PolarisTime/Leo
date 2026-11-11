@@ -34,9 +34,6 @@ class QuoteSheetServiceTest {
     @Mock
     private QuoteSheetEditLockService editLockService;
 
-    @Mock
-    private PurchaseOrderTonnageService purchaseOrderTonnageService;
-
     @InjectMocks
     private QuoteSheetService service;
 

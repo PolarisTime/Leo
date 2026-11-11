@@ -9,7 +9,6 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -45,52 +44,4 @@ public interface QuoteSheetRepository extends JpaRepository<QuoteSheet, Long>,
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select sheet from QuoteSheet sheet where sheet.id = :id and sheet.deletedFlag = false")
     Optional<QuoteSheet> findActiveForUpdate(@Param("id") Long id);
-
-    /**
-     * 按采购订单明细行汇总报单已开吨位: 按规格扣减的唯一真源。
-     *
-     * <p><b>必须是一条语句(单快照)</b>: 口径由两段组成 —— 有明细行关联时按 {@code allocated_ton} 计
-     * (一行 130 吨拆到两张明细行 60+70 时, 两张各计自己那一份, 不能各计 130, 否则同一张单据会把
-     * 两张明细行的额度都吃掉); 没有关联行的历史数据仍按旧单值列 {@code mk_quote_item.purchase_order_item_id}
-     * + 整行吨位计(迁移回填前的兼容口径)。两段若拆成两条查询再在内存相加, READ COMMITTED 下另一事务
-     * 在两条语句之间提交(正是"旧单值行 + 回填/改写关联表"这类转换), 该行会两段都不计而瞬时少计;
-     * 合并成单条 SQL 后由数据库保证整条语句只用一个快照。</p>
-     *
-     * <p>用 {@code UNION ALL} 而不是带 {@code or} 的联表: 两个分支各自按
-     * {@code purchase_order_item_id} 走索引(见 Crunchy Data 的 LEFT JOIN vs UNION ALL 实测),
-     * {@code or} 联表会让 PostgreSQL 无法分别用索引。{@code excludeSheetId} 显式 {@code cast}
-     * 成 bigint, 避免 null 时 PostgreSQL 无法推断参数类型。</p>
-     *
-     * @return 每行 {@code [purchaseOrderItemId(Long), totalTon(BigDecimal or null)]}
-     */
-    @Query(value = """
-            SELECT issued.purchase_order_item_id, SUM(issued.ton)
-              FROM (
-                    SELECT link.purchase_order_item_id AS purchase_order_item_id,
-                           link.allocated_ton AS ton
-                      FROM mk_quote_item_purchase_order link
-                      JOIN mk_quote_item item ON item.id = link.item_id
-                      JOIN mk_quote_sheet sheet ON sheet.id = item.sheet_id
-                     WHERE link.purchase_order_item_id IN (:purchaseOrderItemIds)
-                       AND sheet.deleted_flag = false
-                       AND (CAST(:excludeSheetId AS bigint) IS NULL
-                            OR sheet.id <> CAST(:excludeSheetId AS bigint))
-                    UNION ALL
-                    SELECT item.purchase_order_item_id AS purchase_order_item_id,
-                           item.ton AS ton
-                      FROM mk_quote_item item
-                      JOIN mk_quote_sheet sheet ON sheet.id = item.sheet_id
-                     WHERE item.purchase_order_item_id IN (:purchaseOrderItemIds)
-                       AND NOT EXISTS (
-                            SELECT 1 FROM mk_quote_item_purchase_order link
-                             WHERE link.item_id = item.id)
-                       AND sheet.deleted_flag = false
-                       AND (CAST(:excludeSheetId AS bigint) IS NULL
-                            OR sheet.id <> CAST(:excludeSheetId AS bigint))
-                   ) issued
-             GROUP BY issued.purchase_order_item_id
-            """, nativeQuery = true)
-    List<Object[]> sumIssuedTonByPurchaseOrderItemIds(
-            @Param("purchaseOrderItemIds") Collection<Long> purchaseOrderItemIds,
-            @Param("excludeSheetId") Long excludeSheetId);
 }

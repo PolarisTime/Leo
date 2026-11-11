@@ -1,0 +1,29 @@
+-- V214: 删除报单行 ↔ 采购订单明细行的关联表 mk_quote_item_purchase_order。
+--
+-- 背景（2026-11-12「报单比价模块与采购订单彻底解耦」）：
+--   该表由 V181 创建，只服务于「比价报单商品行 → 采购订单明细行」的多行分配吨位投影：
+--   支撑 GET /api/v2/quote-sheets/purchase-order-tonnages 的「已开/剩余吨位」提示，以及
+--   QuoteSheetStore 的「未锁定清关联」「Σ 分配吨位不超本行报单吨位」两处校验。
+--   解耦后端点、服务（PurchaseOrderTonnageService）、实体（QuoteSheetItemPurchaseOrder）、
+--   仓储 SQL（QuoteSheetRepository.sumIssuedTonByPurchaseOrderItemIds）与实体集合字段全部删除，
+--   本表已无任何读写方（LSP find_referencing_symbols 核实：quotation 包内零引用）。
+--
+-- 依赖核对（2026-11-12，pg_indexes / pg_constraint）：
+--   * 主键 mk_quote_item_purchase_order_pkey；
+--   * 唯一键 uk_quote_item_purchase_order；
+--   * 外键 fk_quote_item_purchase_order_item → mk_quote_item(id)；
+--   * 普通索引 idx_quote_item_po_link_item(item_id) / idx_quote_item_po_link_poi(purchase_order_item_id)。
+--   上述约束与索引全部随 DROP TABLE 自动删除，无需显式 DROP。
+--   表注释（V182）与列注释（V182/V183）随表一并消失。
+--
+-- 数据处置：删除前 28 行关联数据已备份到
+--   db-backups/price-compare-decouple-20261112/mk_quote_item_purchase_order.csv
+--   （校验和见同目录 SHA256SUMS，sha256sum -c 已验证 OK）。
+--
+-- 幂等：DROP TABLE IF EXISTS，可重复执行；Flyway 事务包裹，失败整体回滚。
+--
+-- 回滚（只能恢复结构，取值需从上述 CSV 回灌）：
+--   重建语句见 V181__quote_item_purchase_order_links.sql（表 + 索引 + 从 mk_quote_item 三列的回填），
+--   注释见 V182/V183。
+
+DROP TABLE IF EXISTS public.mk_quote_item_purchase_order;
