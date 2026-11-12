@@ -73,14 +73,6 @@
       "settlementCompanyName": "嘉兴颖捷建材有限公司"
     },
     {
-      "sourceRef": "print-forms/customer-statement-a4.lodop.txt",
-      "billType": "customer-statement",
-      "templateName": "客户对账单-A4",
-      "templateCode": "TPL_700540000000000028",
-      "isDefault": false,
-      "settlementCompanyName": "嘉兴颖捷建材有限公司"
-    },
-    {
       "sourceRef": "print-forms/yingjie-a4-remark.layout.json",
       "billType": "sales-order",
       "templateName": "颖捷A4打印_带备注 PDF",
