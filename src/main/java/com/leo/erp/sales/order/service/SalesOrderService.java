@@ -601,10 +601,6 @@ public class SalesOrderService {
         return workflowService.saveStatus(entity);
     }
 
-    private SalesOrderResponse toResponse(SalesOrder entity) {
-        return queryService.toSummaryResponse(entity);
-    }
-
     private SalesOrderResponse toDetailResponse(SalesOrder entity) {
         return queryService.toDetailResponse(entity);
     }
