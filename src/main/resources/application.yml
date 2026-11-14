@@ -323,6 +323,15 @@ leo:
     # PUT /receipts/{id} 是否强制要求资源版本前置条件头 X-Resource-Version(缺失返回 428，
     # 与单据 @Version 不一致返回 412); 灰度兼容旧客户端时可临时关闭(关闭后带了版本仍校验 412)
     require-resource-version: ${LEO_RECEIPT_REQUIRE_RESOURCE_VERSION:true}
+  # 供应商价格表实时协作(Node 边车 leo/collab-server)的票据配置
+  collab:
+    # 下发给前端的 WebSocket 接入地址(浏览器直连或经 nginx 反代到 /collab)
+    url: ${LEO_COLLAB_URL:ws://127.0.0.1:11212/collab}
+    # HS256 共享密钥, 必须与边车 COLLAB_JWT_SECRET 一致;
+    # 缺省值刻意等于边车开发态兜底密钥, 本地不配环境变量也能联调(启动会打 warn)
+    jwt-secret: ${COLLAB_JWT_SECRET:leo-collab-dev-insecure-secret}
+    # 短票据有效期(秒); 过期后前端重新 POST 取票, 不提供续期接口
+    token-ttl-seconds: ${LEO_COLLAB_TOKEN_TTL_SECONDS:600}
   market:
     quotation:
       # 写接口是否强制要求资源版本前置条件头 X-Resource-Version(缺失返回 428); 灰度兼容期可临时关闭
