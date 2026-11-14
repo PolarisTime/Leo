@@ -209,7 +209,8 @@ public class SupplierPriceService {
                         lowest.price(),
                         lowest.priceListId(),
                         lowest.supplierId(),
-                        lowest.supplierName()));
+                        lowest.supplierName(),
+                        lowest.updatedAt()));
             });
         }
         return quotes;
@@ -227,7 +228,12 @@ public class SupplierPriceService {
                         item.getList().getSupplierId(),
                         item.getList().getSupplierName(),
                         item.getPrice(),
-                        item.getList().getQuotedOn()))
+                        item.getList().getQuotedOn(),
+                        // 条目时间优先；历史条目（V217 回填前写入且没被更新过）可能为空，
+                        // 回落到表头时间，避免前端显示"未知时间"。
+                        item.getUpdatedAt() != null
+                                ? item.getUpdatedAt()
+                                : item.getList().getUpdatedAt()))
                 .min(Comparator.comparing(LowestQuote::price)
                         .thenComparing(LowestQuote::supplierName,
                                 Comparator.nullsLast(Comparator.naturalOrder())));
@@ -248,7 +254,9 @@ public class SupplierPriceService {
             BigDecimal price,
             Long priceListId,
             Long supplierId,
-            String supplierName) {
+            String supplierName,
+            /** 该现货价最后一次修改时间：报单比价的「现货价修改时间」直接展示它。 */
+            LocalDateTime updatedAt) {
     }
 
     /** 某品牌某商品的最低报价。 */
@@ -257,7 +265,8 @@ public class SupplierPriceService {
             Long supplierId,
             String supplierName,
             BigDecimal price,
-            LocalDate quotedOn) {
+            LocalDate quotedOn,
+            LocalDateTime updatedAt) {
     }
 
     private SupplierPriceList requireList(Long listId) {

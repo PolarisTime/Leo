@@ -9,8 +9,10 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Objects;
 
 /**
@@ -64,6 +66,19 @@ public class SupplierPriceItem {
 
     @Column(name = "sort_order", nullable = false)
     private Integer sortOrder = 0;
+
+    /**
+     * 该条目最后一次改价/改状态的时间（V217）。
+     *
+     * <p>报单比价的「现货价修改时间」取这一列：现货价改为实时派生后，用户需要知道
+     * 屏幕上这个价是供应商多久之前报的。表头的 {@code updated_at} 粒度太粗
+     * （改个备注也会变），所以按条目单独记。</p>
+     *
+     * <p>{@code @UpdateTimestamp} 在插入与更新时都会写入，读路径不参与。</p>
+     */
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 
     /** 该条目是否就是给定商品（条目键与商品四属性的比对在此收敛）。 */
     public boolean matches(String category, String material, Integer spec, String length) {

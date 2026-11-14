@@ -900,29 +900,37 @@ public class QuoteSheetStore {
         if (request.locked() != null) {
             item.setLocked(request.locked());
         }
+        /*
+         * 现货价改为**实时派生**（2026-11-14）：报单比价不再手工导入/保存现货价，
+         * 前端保存时不再携带 prices。因此「请求没带 prices」必须**保留原有价格行**，
+         * 不能按空列表清空 —— 否则任何一次保存（改吨位、调行序）都会把历史价格抹掉。
+         *
+         * 只有显式携带 prices（兼容旧客户端/导出工具）时才做整组替换。
+         */
+        if (request.prices() == null) {
+            return;
+        }
         Map<String, QuoteSheetItemPrice> existingByBrandName = new HashMap<>();
         for (QuoteSheetItemPrice price : item.getPrices()) {
             existingByBrandName.put(price.getBrandName(), price);
         }
         List<QuoteSheetItemPrice> reconciled = new ArrayList<>();
-        if (request.prices() != null) {
-            for (QuoteSheetRequest.ItemPriceRequest priceRequest : request.prices()) {
-                String brandName = normalizeBrandName(priceRequest.brandName());
-                QuoteSheetItemPrice price = existingByBrandName.remove(brandName);
-                if (price == null) {
-                    price = new QuoteSheetItemPrice();
-                    price.setId(snowflakeIdGenerator.nextId());
-                    price.setItem(item);
-                    price.setBrandName(brandName);
-                }
-                price.setSpotPrice(priceRequest.spotPrice());
-                price.setSupplierId(priceRequest.supplierId());
-                price.setSupplierName(priceRequest.supplierId() == null
-                        ? null : supplierNames.get(priceRequest.supplierId()));
-                price.setSourceMaterial(normalizeSourceMaterial(
-                        priceRequest.sourceMaterial(), item.getMaterial(), priceRequest.spotPrice()));
-                reconciled.add(price);
+        for (QuoteSheetRequest.ItemPriceRequest priceRequest : request.prices()) {
+            String brandName = normalizeBrandName(priceRequest.brandName());
+            QuoteSheetItemPrice price = existingByBrandName.remove(brandName);
+            if (price == null) {
+                price = new QuoteSheetItemPrice();
+                price.setId(snowflakeIdGenerator.nextId());
+                price.setItem(item);
+                price.setBrandName(brandName);
             }
+            price.setSpotPrice(priceRequest.spotPrice());
+            price.setSupplierId(priceRequest.supplierId());
+            price.setSupplierName(priceRequest.supplierId() == null
+                    ? null : supplierNames.get(priceRequest.supplierId()));
+            price.setSourceMaterial(normalizeSourceMaterial(
+                    priceRequest.sourceMaterial(), item.getMaterial(), priceRequest.spotPrice()));
+            reconciled.add(price);
         }
         item.getPrices().clear();
         item.getPrices().addAll(reconciled);
