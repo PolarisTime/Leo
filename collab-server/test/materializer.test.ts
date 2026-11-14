@@ -49,7 +49,8 @@ function setCell(
     const cells = doc.getMap<Y.Map<unknown>>('cells')
     const cell = new Y.Map<unknown>()
     cell.set('price', value.price)
-    cell.set('status', value.status)
+    // 与前端 collab-doc.ts 同一字段名（权威名是 priceStatus）
+    cell.set('priceStatus', value.status)
     cell.set('remark', value.remark)
     cells.set(makeCellKey(parts), cell)
   })
@@ -88,6 +89,9 @@ describe('物化器：差异写与幂等', () => {
     assert.equal(store.audits.length, 1)
     assert.equal(store.audits[0]?.actorId, '9001')
     assert.equal(store.audits[0]?.listRevision, '1')
+    // 审计存的是 DB 形态（NUL → US），否则真实库会因 0x00 直接整流回滚。
+    assert.ok(store.audits[0]?.cellKey.includes('\u001f'))
+    assert.ok(!store.audits[0]?.cellKey.includes('\u0000'))
     materializer.dispose()
   })
 
@@ -206,6 +210,42 @@ describe('物化器：差异写与幂等', () => {
 
     const actors = store.audits.map((row) => row.actorId).sort()
     assert.deepEqual(actors, ['9001', '9002'])
+    materializer.dispose()
+  })
+
+  it('清空一个从未落库的格子：不写库、不加版本、不留审计（净变化为零）', async () => {
+    const store = seedStore()
+    const materializer = createMaterializer(store)
+    const doc = makeDoc()
+    await materializer.syncOnLoad(ROOM, doc)
+
+    // 先填后清（debounce 窗口内净变化为零）
+    setCell(doc, CELL, { price: 3280, status: 'NORMAL', remark: '' })
+    await materializer.observe(ROOM, doc, '9001')
+    setCell(doc, CELL, { price: null, status: 'NORMAL', remark: '' })
+    await materializer.observe(ROOM, doc, '9001')
+    const result = await materializer.flushRoom(ROOM)
+
+    assert.equal(result, null)
+    assert.equal(store.lists.get(LIST_ID)?.version, 0)
+    assert.equal(store.audits.length, 0)
+    assert.equal(store.items.size, 0)
+    materializer.dispose()
+  })
+
+  it('加载时就存在的「空格子」不会被当成变更（每次加载都不该顶版本号）', async () => {
+    const store = seedStore()
+    const materializer = createMaterializer(store)
+    const doc = makeDoc()
+    // 文档里有一个空态格子（例如前端清空后写回的占位），SQL 里并没有对应行
+    setCell(doc, CELL, { price: null, status: 'NORMAL', remark: '' })
+
+    await materializer.syncOnLoad(ROOM, doc)
+    const result = await materializer.flushRoom(ROOM)
+
+    assert.equal(result, null)
+    assert.equal(store.lists.get(LIST_ID)?.version, 0)
+    assert.equal(materializer.metrics().pendingCells, 0)
     materializer.dispose()
   })
 

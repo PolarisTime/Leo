@@ -2,9 +2,12 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import * as Y from 'yjs'
 import {
+  assertNoNulByte,
   CELL_KEY_SEPARATOR,
   cellValuesEqual,
   clampColumnText,
+  DB_CELL_KEY_SEPARATOR,
+  fromDbCellKey,
   isMeaningfulCell,
   makeCellKey,
   normalizeCellValue,
@@ -12,6 +15,8 @@ import {
   normalizePriceStatus,
   parseCellKey,
   readDocSnapshot,
+  sanitizeDbText,
+  toDbCellKey,
   writeDocSnapshot,
 } from '../src/doc-model.js'
 
@@ -95,6 +100,124 @@ describe('格子值归一化', () => {
     const base = { price: 1, status: 'NORMAL' as const, remark: '' }
     assert.equal(cellValuesEqual(base, { ...base }), true)
     assert.equal(cellValuesEqual(base, { ...base, remark: 'x' }), false)
+  })
+})
+
+describe('格字段名与前端契约（priceStatus）', () => {
+  it('写入用权威字段 priceStatus（设计文档 §4.1 / 前端 collab-doc.ts）', () => {
+    const doc = new Y.Doc()
+    const key = makeCellKey({
+      category: '盘螺',
+      material: 'HRB400',
+      spec: 8,
+      length: '-',
+    })
+    writeDocSnapshot(doc, {
+      meta: {
+        listId: '1',
+        supplierId: null,
+        brandName: null,
+        quotedOn: null,
+        warehouse: null,
+        version: null,
+      },
+      cells: new Map([
+        [key, { price: 3050, status: 'OUT_OF_STOCK', remark: '' }],
+      ]),
+    })
+
+    const rawCell = doc.getMap<Y.Map<unknown>>('cells').get(key)
+    assert.equal(rawCell?.get('priceStatus'), 'OUT_OF_STOCK')
+    assert.equal(rawCell?.get('status'), undefined)
+  })
+
+  it('读取兼容旧边车写过的 status 键（已有房间不丢状态）', () => {
+    const doc = new Y.Doc()
+    const key = makeCellKey({
+      category: '盘螺',
+      material: 'HRB400',
+      spec: 8,
+      length: '-',
+    })
+    const legacyCell = new Y.Map<unknown>()
+    legacyCell.set('price', 3000)
+    legacyCell.set('status', 'NEGOTIABLE')
+    legacyCell.set('remark', '')
+    doc.getMap<Y.Map<unknown>>('cells').set(key, legacyCell)
+
+    assert.deepEqual(readDocSnapshot(doc).cells.get(key), {
+      price: 3000,
+      status: 'NEGOTIABLE',
+      remark: '',
+    })
+  })
+
+  it('备注保留原样（不 trim），只按列宽截断', () => {
+    const doc = new Y.Doc()
+    const key = makeCellKey({
+      category: '盘螺',
+      material: 'HRB400',
+      spec: 8,
+      length: '-',
+    })
+    const cell = new Y.Map<unknown>()
+    cell.set('price', 3000)
+    cell.set('priceStatus', 'NORMAL')
+    cell.set('remark', '  待议  ')
+    doc.getMap<Y.Map<unknown>>('cells').set(key, cell)
+
+    assert.equal(readDocSnapshot(doc).cells.get(key)?.remark, '  待议  ')
+  })
+})
+
+describe('DB 边界编码（cellKey ↔ PostgreSQL 文本）', () => {
+  it('把 NUL 分隔符换成 US：写进 text 列不再带 0x00', () => {
+    const cellKey = makeCellKey({
+      category: '盘螺',
+      material: 'HRB400',
+      spec: 8,
+      length: '-',
+    })
+
+    const dbCellKey = toDbCellKey(cellKey)
+
+    assert.equal(
+      dbCellKey,
+      `盘螺${DB_CELL_KEY_SEPARATOR}HRB400${DB_CELL_KEY_SEPARATOR}8${DB_CELL_KEY_SEPARATOR}-`,
+    )
+    assert.ok(!dbCellKey.includes(CELL_KEY_SEPARATOR))
+    assert.equal(fromDbCellKey(dbCellKey), cellKey)
+  })
+
+  it('数据里本来就有的 US 会被加倍，编解码仍然可逆（不产生歧义）', () => {
+    const weird = `A${DB_CELL_KEY_SEPARATOR}B${CELL_KEY_SEPARATOR}C`
+    const dbForm = toDbCellKey(weird)
+
+    assert.equal(
+      dbForm,
+      `A${DB_CELL_KEY_SEPARATOR}${DB_CELL_KEY_SEPARATOR}B${DB_CELL_KEY_SEPARATOR}C`,
+    )
+    assert.equal(fromDbCellKey(dbForm), weird)
+  })
+
+  it('不含特殊字符时原样返回（常见路径零开销）', () => {
+    assert.equal(toDbCellKey('plain-key'), 'plain-key')
+    assert.equal(fromDbCellKey('plain-key'), 'plain-key')
+  })
+
+  it('assertNoNulByte：编码后的键通过，原始键报可定位的错误', () => {
+    const raw = `a${CELL_KEY_SEPARATOR}b`
+    assert.throws(
+      () => assertNoNulByte(raw, 'mk_supplier_price_cell_op.cell_key'),
+      /NUL\(0x00\)/,
+    )
+    assert.doesNotThrow(() => assertNoNulByte(toDbCellKey(raw), 'cell_key'))
+  })
+
+  it('sanitizeDbText：去掉 NUL 并按列宽截断（remark/category 的兜底）', () => {
+    assert.equal(sanitizeDbText(`现${CELL_KEY_SEPARATOR}货`), '现货')
+    assert.equal(sanitizeDbText('x'.repeat(300), 255).length, 255)
+    assert.equal(sanitizeDbText('盘螺', 16), '盘螺')
   })
 })
 

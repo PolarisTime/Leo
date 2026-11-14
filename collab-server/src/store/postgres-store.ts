@@ -19,9 +19,12 @@
 
 import { createHash } from 'node:crypto'
 import {
+  assertNoNulByte,
   type CellValue,
   makeCellKey,
   normalizeCellValue,
+  sanitizeDbText,
+  toDbCellKey,
 } from '../doc-model.js'
 import type { Logger } from '../logger.js'
 import { type PoolLike, type Queryable, withTransaction } from '../postgres.js'
@@ -467,13 +470,14 @@ export class PostgresStore implements CollabDocStore, MaterializeStore {
       [
         this.snowflake.nextId(),
         listId,
-        change.parts.category,
-        change.parts.material,
+        // 文本列做 DB 边界清洗（去 NUL + 按列宽截断）：一个异常字符不该让整个房间物化失败。
+        sanitizeDbText(change.parts.category, 16),
+        sanitizeDbText(change.parts.material, 16),
         change.parts.spec,
-        change.parts.length,
+        sanitizeDbText(change.parts.length, 16),
         next.price,
-        next.status,
-        next.remark.length > 0 ? next.remark : null,
+        sanitizeDbText(next.status, 16),
+        next.remark.length > 0 ? sanitizeDbText(next.remark, 255) : null,
         sortOrder ?? 0,
       ],
     )
@@ -508,6 +512,9 @@ export class PostgresStore implements CollabDocStore, MaterializeStore {
     version: string,
   ): Promise<void> {
     const next = change.next
+    // cellKey 的字段分隔符是 NUL，而 PostgreSQL 文本列拒收 0x00：写库前统一转成 US。
+    const dbCellKey = toDbCellKey(change.cellKey)
+    assertNoNulByte(dbCellKey, 'mk_supplier_price_cell_op.cell_key')
     await client.query(
       `INSERT INTO mk_supplier_price_cell_op
          (id, list_id, cell_key, price, price_status, remark, actor_id, list_revision)
@@ -515,10 +522,14 @@ export class PostgresStore implements CollabDocStore, MaterializeStore {
       [
         this.snowflake.nextId(),
         request.listId,
-        change.cellKey,
+        dbCellKey,
         next?.price ?? null,
-        next?.status ?? null,
-        next?.remark ?? null,
+        next?.status === undefined || next?.status === null
+          ? null
+          : sanitizeDbText(next.status, 16),
+        next === null || next.remark.length === 0
+          ? null
+          : sanitizeDbText(next.remark, 255),
         request.actorId,
         version,
       ],

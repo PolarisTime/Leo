@@ -324,11 +324,21 @@ export class CollabMaterializer {
   ): void {
     // 「清空」= 价格为空、状态 NORMAL、无备注：SQL 里不该有这一行。
     const next = value !== null && isMeaningfulCell(value) ? value : null
+    const existedBefore = state.baseline.has(cellKey)
+    /*
+     * 净变化为零：这一格在 SQL 里本来就不存在，现在又被清空 —— 既没有行可删，
+     * 也没有「把某格改成了什么」可审计。**必须在进队列前丢弃**：否则每次加载文档
+     * 都会拿它当变更，把 mk_supplier_price_list.version 顶上去（版本号是所有失效/乐观锁的信号）。
+     */
+    if (next === null && !existedBefore) {
+      state.pending.delete(cellKey)
+      return
+    }
     state.pending.set(cellKey, {
       parts,
       next,
       actorId,
-      existedBefore: state.baseline.has(cellKey),
+      existedBefore,
     })
     if (state.pendingSince === null) state.pendingSince = this.now()
   }

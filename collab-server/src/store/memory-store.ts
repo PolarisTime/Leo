@@ -12,6 +12,7 @@ import {
   makeCellKey,
   normalizeCellValue,
   type PriceStatus,
+  toDbCellKey,
 } from '../doc-model.js'
 import type {
   CollabDocStore,
@@ -210,7 +211,9 @@ export class MemoryStore implements CollabDocStore, MaterializeStore {
       this.audits.push({
         id: `audit-${this.audits.length + 1}`,
         listId: request.listId,
-        cellKey: change.cellKey,
+        // 与 PostgresStore 的 DB 边界同口径：存转义后的形态（NUL → US），
+        // 否则内存实现与真实库行为分叉，测试就锁不住「不能写 NUL」这条约束。
+        cellKey: toDbCellKey(change.cellKey),
         price: change.next?.price ?? null,
         priceStatus: change.next?.status ?? null,
         remark: change.next?.remark ?? null,

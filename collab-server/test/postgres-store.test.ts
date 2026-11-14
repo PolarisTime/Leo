@@ -300,12 +300,96 @@ describe('PostgresStore 物化事务', () => {
     assert.ok(auditInsert)
     // 参数顺序：id, list_id, cell_key, price, price_status, remark, actor_id, list_revision
     assert.equal(auditInsert?.values?.[1], '1001')
-    assert.equal(auditInsert?.values?.[2], CELL_KEY)
+    // 审计表存的是转义形态（NUL → US）：PostgreSQL text 列拒收 0x00。
+    assert.equal(auditInsert?.values?.[2], `盘螺\u001fHRB400\u001f8\u001f9`)
     assert.equal(auditInsert?.values?.[3], 3280)
     assert.equal(auditInsert?.values?.[4], 'NORMAL')
     assert.equal(auditInsert?.values?.[5], '现货')
     assert.equal(auditInsert?.values?.[6], '9001')
     assert.equal(auditInsert?.values?.[7], '7')
+  })
+
+  it('cellKey 含 NUL 时审计写入不抛错，且落库的是转义形态（回归：invalid byte sequence 0x00）', async () => {
+    const pool = new FakePool(
+      withSchema((text) => {
+        if (text.includes('UPDATE mk_supplier_price_list'))
+          return [{ version: '3' }]
+        return []
+      }),
+    )
+    const store = createStore(pool)
+    await store.init()
+    pool.queries.length = 0
+
+    const result = await store.applyChanges({
+      room: 'supplier-price-list:1001',
+      listId: '1001',
+      changes: [
+        {
+          // 真实形态：['盘螺','HRB400','8','-'].join('\u0000')
+          cellKey: `盘螺\u0000HRB400\u00008\u0000-`,
+          parts: { category: '盘螺', material: 'HRB400', spec: 8, length: '-' },
+          next: { price: 3050, status: 'NORMAL', remark: '' },
+          actorId: '9001',
+          existedBefore: true,
+        },
+      ],
+      quotedOn: null,
+      actorId: '9001',
+    })
+
+    assert.equal(result.audited, 1)
+    const auditInsert = pool.queries.find((query) =>
+      query.text.includes('INSERT INTO mk_supplier_price_cell_op'),
+    )
+    const dbCellKey = String(auditInsert?.values?.[2])
+    assert.ok(
+      !dbCellKey.includes('\u0000'),
+      '写进 SQL 的 cell_key 不得含 NUL 字节',
+    )
+    assert.equal(dbCellKey, `盘螺\u001fHRB400\u001f8\u001f-`)
+  })
+
+  it('文本字段带 NUL 时被清洗（不让异常字符毁掉整个物化事务）', async () => {
+    const pool = new FakePool(
+      withSchema((text) => {
+        if (text.includes('UPDATE mk_supplier_price_list'))
+          return [{ version: '4' }]
+        return []
+      }),
+    )
+    const store = createStore(pool)
+    await store.init()
+    pool.queries.length = 0
+
+    await store.applyChanges({
+      room: 'supplier-price-list:1001',
+      listId: '1001',
+      changes: [
+        {
+          cellKey: `盘螺\u0000HRB400\u00008\u0000-`,
+          parts: { category: '盘螺', material: 'HRB400', spec: 8, length: '-' },
+          next: { price: 3050, status: 'NORMAL', remark: `现\u0000货` },
+          actorId: '9001',
+          existedBefore: false,
+        },
+      ],
+      quotedOn: null,
+      actorId: '9001',
+    })
+
+    const itemInsert = pool.queries.find((query) =>
+      query.text.includes('INSERT INTO mk_supplier_price_item'),
+    )
+    const allParams = (itemInsert?.values ?? []).map((value) =>
+      String(value ?? ''),
+    )
+    assert.ok(
+      allParams.every((value) => !value.includes('\u0000')),
+      '发往 SQL 的参数都不得含 NUL 字节',
+    )
+    // 备注里的 NUL 被去掉（而不是让 INSERT 失败）
+    assert.ok(allParams.includes('现货'))
   })
 
   it('清空格（existedBefore=true）走 DELETE 而不是 upsert', async () => {
