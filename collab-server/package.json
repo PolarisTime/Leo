@@ -1,0 +1,37 @@
+{
+  "name": "leo-price-collab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "供应商价格表实时协作边车（Hocuspocus Yjs 同步 + Postgres 持久化 + SQL 物化）",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "lint": "biome check ."
+  },
+  "dependencies": {
+    "@hocuspocus/extension-database": "^4.8.0",
+    "@hocuspocus/extension-throttle": "^4.8.0",
+    "@hocuspocus/server": "^4.8.0",
+    "jose": "^6.2.0",
+    "pg": "^8.16.0",
+    "yjs": "^13.6.0"
+  },
+  "optionalDependencies": {
+    "@hocuspocus/extension-redis": "^4.8.0",
+    "ioredis": "^5.4.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.0",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

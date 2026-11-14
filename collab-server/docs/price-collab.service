@@ -1,0 +1,49 @@
+[Unit]
+Description=Leo ERP supplier-price collaboration sidecar (Hocuspocus / Yjs)
+Documentation=file:///opt/leo/collab-server/README.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+# 边车不阻塞 leo 后端启动；反向由 nginx 的 location 决定是否对外暴露
+PartOf=leo-backend.service
+
+[Service]
+Type=simple
+User=leo
+Group=leo
+WorkingDirectory=/opt/leo/collab-server
+
+# 生产配置放独立 EnvironmentFile（chmod 600，属主 leo），不要把密钥写进仓库
+EnvironmentFile=/etc/leo/collab-server.env
+Environment=NODE_ENV=production
+Environment=PORT=11212
+Environment=COLLAB_HOST=127.0.0.1
+
+ExecStart=/usr/bin/node /opt/leo/collab-server/dist/index.js
+# 收到 SIGTERM 后先关连接、flush 快照/增量/物化再退出（代码内上限 COLLAB_SHUTDOWN_TIMEOUT_MS）
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+Restart=on-failure
+RestartSec=3
+# 连续快速失败就停下来等人工介入，避免刷爆 Postgres 连接
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+# 只读根文件系统 + 最小权限
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/leo/collab-server
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=price-collab
+
+[Install]
+WantedBy=multi-user.target
