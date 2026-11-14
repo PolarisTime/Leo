@@ -113,12 +113,66 @@ class SupplierPriceServiceTest {
     void saveItems_dropsEmptyCellsSoClearingPersists() {
         SupplierPriceList existing = list("物产中大", "3390");
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
-        when(repository.save(existing)).thenReturn(existing);
+        when(repository.saveAndFlush(existing)).thenReturn(existing);
 
         SupplierPriceGridResponse.Column column = service.saveItems(1L,
                 new SupplierPriceListRequests.SaveItems(3L, List.of()));
 
         assertThat(existing.getItems()).isEmpty();
         assertThat(column.listId()).isEqualTo(1L);
+    }
+
+    @Test
+    /**
+     * 同规格再次保存走「就地更新」，不新增条目。
+     *
+     * <p>回归：之前整组 clear + 重新插入，Hibernate 会先 INSERT 再 DELETE，撞上
+     * {@code uk_supplier_price_item_key} 唯一索引，被映射成 409（真机复现：同一列第二次保存
+     * 起稳定 409）。就地更新后旧条目 id 不变，只有新增规格才会插入。</p>
+     */
+    void saveItems_updatesExistingItemsInPlace() {
+        SupplierPriceList existing = list("物产中大", "3390");
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(existing)).thenReturn(existing);
+
+        service.saveItems(1L, new SupplierPriceListRequests.SaveItems(3L, List.of(
+                new SupplierPriceListRequests.Item("直条", "HRB400E", 12, "9米",
+                        new BigDecimal("3398"), null, null),
+                new SupplierPriceListRequests.Item("直条", "HRB400E", 12, "12米",
+                        new BigDecimal("3410"), null, null))));
+
+        assertThat(existing.getItems()).hasSize(2);
+        assertThat(existing.getItems())
+                .filteredOn(item -> "9米".equals(item.getLength()))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.getId()).isEqualTo(101L);
+                    assertThat(item.getPrice()).isEqualByComparingTo("3398");
+                });
+        assertThat(existing.getItems())
+                .filteredOn(item -> "12米".equals(item.getLength()))
+                .hasSize(1);
+    }
+
+    @Test
+    /**
+     * 保存成功后必须返回 flush 后的新版本号。
+     *
+     * <p>回归：之前只调 {@code repository.save(list)} 就返回，JPA 的 {@code @Version} 要到 flush
+     * 才自增，响应里的 version 仍是旧值；前端自动保存拿旧版本再提交一次就会 409
+     * （真机复现：第一次 PUT 返回 version=0，第二次 PUT expectedVersion=0 被 409 拒绝）。</p>
+     */
+    void saveItems_returnsVersionAfterFlush() {
+        SupplierPriceList existing = list("物产中大", "3390");
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(existing)).thenAnswer(invocation -> {
+            existing.setVersion(existing.getVersion() + 1);
+            return existing;
+        });
+
+        SupplierPriceGridResponse.Column column = service.saveItems(1L,
+                new SupplierPriceListRequests.SaveItems(3L, List.of()));
+
+        assertThat(column.version()).isEqualTo(4L);
     }
 }

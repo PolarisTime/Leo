@@ -134,31 +134,63 @@ public class SupplierPriceService {
             throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION,
                     "该价格表已被他人修改，请刷新后重试");
         }
-        List<SupplierPriceItem> next = new ArrayList<>();
+        /*
+         * 按自然键就地更新，而不是「清空后重新插入」。
+         *
+         * <p>清空集合再插入新实体时，Hibernate 的 flush 顺序是 insert 先于 orphanRemoval 的 delete，
+         * 而 uk_supplier_price_item_key(list_id, category, material, spec, length) 是唯一索引：
+         * 第二次保存同一规格就会在 INSERT 上撞唯一键，被全局异常处理映射成 409
+         * （真机复现：第一次保存 200，第二次起稳定 409「数据已存在或与现有记录冲突」）。</p>
+         *
+         * <p>就地更新后：key 相同的条目改价不产生 INSERT；只有真正新增/删除的条目才有写动作，
+         * 旧条目的 id 也保持不变（审计与外部引用更稳）。</p>
+         */
+        Map<String, SupplierPriceItem> byKey = new LinkedHashMap<>();
+        for (SupplierPriceItem item : list.getItems()) {
+            byKey.put(itemKey(item.getCategory(), item.getMaterial(), item.getSpec(), item.getLength()), item);
+        }
         int sortOrder = 0;
         for (SupplierPriceListRequests.Item input : request.items()) {
             if (input.price() == null) {
                 continue;
             }
-            SupplierPriceItem item = new SupplierPriceItem();
-            item.setId(snowflakeIdGenerator.nextId());
-            item.setList(list);
-            item.setCategory(input.category());
-            item.setMaterial(input.material());
-            item.setSpec(input.spec());
+            String key = itemKey(input.category(), input.material(), input.spec(), input.length());
+            SupplierPriceItem item = byKey.remove(key);
+            if (item == null) {
+                item = new SupplierPriceItem();
+                item.setId(snowflakeIdGenerator.nextId());
+                item.setList(list);
+                item.setCategory(input.category());
+                item.setMaterial(input.material());
+                item.setSpec(input.spec());
+                list.getItems().add(item);
+            }
             item.setLength(input.length() == null ? "" : input.length());
             item.setPrice(input.price());
             item.setPriceStatus(normalizeStatus(input.priceStatus()));
             item.setRemark(input.remark());
             item.setSortOrder(sortOrder++);
-            next.add(item);
         }
-        list.getItems().clear();
-        list.getItems().addAll(next);
-        // 版本号由 JPA @Version 递增，此处不手动改：手改会与 JPA 的自增叠加导致跳号
-        // 报价日期可由前端随保存一起更新（默认沿用原值）
-        repository.save(list);
+        // 本次未出现的旧条目 = 用户清空的格子，交给 orphanRemoval 删除
+        list.getItems().removeAll(byKey.values());
+        /*
+         * 只改子条目不会把父实体标脏，@Version 也就不会自增（真机复现：改价保存成功但
+         * version 一直是 0，前端的乐观锁形同虚设）。这里显式刷新「价格表更新时间」，
+         * 既符合业务语义（这一列的价格确实刚变过），也让父实体变脏、版本号随 flush 自增。
+         */
+        list.setUpdatedAt(LocalDateTime.now());
+        /*
+         * 必须 flush 后再读版本号：JPA 的 @Version 在 flush 时才自增，若这里只 save()
+         * 就 return，响应里的 version 还是保存前的旧值；前端拿旧版本再存一次必 409。
+         * 手改 version 会与 JPA 自增叠加导致跳号，所以用 saveAndFlush 让 toColumn 读到新版本。
+         */
+        repository.saveAndFlush(list);
         return toColumn(list);
+    }
+
+    /** 条目的自然键：与唯一索引 `uk_supplier_price_item_key(list_id, category, material, spec, length)` 列一致。 */
+    private static String itemKey(String category, String material, Integer spec, String length) {
+        return category + "\u0000" + material + "\u0000" + spec + "\u0000" + (length == null ? "" : length);
     }
 
     /**
