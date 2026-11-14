@@ -16,7 +16,7 @@ import com.leo.erp.common.exception.GlobalExceptionHandler;
 import com.leo.erp.common.idempotent.IdempotencyRequired;
 import com.leo.erp.common.validation.SnowflakeId;
 import com.leo.erp.market.supplierprice.service.SupplierPriceCollabSessionService;
-import com.leo.erp.market.supplierprice.web.dto.CollabSessionResponse;
+import com.leo.erp.common.collab.CollabSessionResponse;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import com.leo.erp.security.support.SecurityPrincipal;

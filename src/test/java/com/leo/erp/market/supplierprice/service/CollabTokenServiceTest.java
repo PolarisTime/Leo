@@ -5,7 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.leo.erp.market.supplierprice.CollabSessionProperties;
+import com.leo.erp.common.collab.CollabSessionProperties;
+import com.leo.erp.common.collab.CollabTokenClaims;
+import com.leo.erp.common.collab.CollabTokenException;
+import com.leo.erp.common.collab.CollabTokenService;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;

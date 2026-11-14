@@ -1,4 +1,4 @@
-package com.leo.erp.market.supplierprice.web.dto;
+package com.leo.erp.common.collab;
 
 /**
  * 协作会话票据的响应体。
@@ -9,9 +9,9 @@ package com.leo.erp.market.supplierprice.web.dto;
  *
  * <p><b>没有 {@code id} 字段</b>：会话本身不是可 GET 的资源（过期即失效、无持久化），
  * 因此 POST 只回 201 + 表示，不发 {@code Location}；真正的持久化标识是 {@code room}
- * （一个供应商一个房间）。</p>
+ * （房间粒度由各业务决定：供应商价格表是「一张表 = 一个房间」，报单比价是「一张报价单 = 一个房间」）。</p>
  *
- * @param room      房间名，形如 {@code supplier-price-list:<listId>}（一张价格表一个房间）
+ * @param room      房间名，形如 {@code supplier-price-list:<listId>} / {@code quote-sheet:<sheetId>}
  * @param url       WebSocket 接入地址（配置 {@code leo.collab.url}）
  * @param token     JWT 短票据（HS256，默认 10 分钟有效）
  * @param writable  是否允许写；false 时边车只读转发（无 update 权限的看板/大屏场景）

@@ -1,4 +1,4 @@
-package com.leo.erp.market.supplierprice.service;
+package com.leo.erp.common.collab;
 
 import java.time.Instant;
 

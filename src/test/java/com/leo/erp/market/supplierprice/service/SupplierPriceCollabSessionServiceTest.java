@@ -8,12 +8,16 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.auth.api.AccountQuery;
+import com.leo.erp.common.collab.CollabCursorColors;
+import com.leo.erp.common.collab.CollabSessionIssuer;
+import com.leo.erp.common.collab.CollabSessionProperties;
+import com.leo.erp.common.collab.CollabSessionResponse;
+import com.leo.erp.common.collab.CollabTokenClaims;
+import com.leo.erp.common.collab.CollabTokenService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.market.supplierprice.CollabSessionProperties;
 import com.leo.erp.market.supplierprice.domain.entity.SupplierPriceList;
 import com.leo.erp.market.supplierprice.repository.SupplierPriceListRepository;
-import com.leo.erp.market.supplierprice.web.dto.CollabSessionResponse;
 import com.leo.erp.security.permission.PermissionChecker;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.support.SecurityPrincipal;
@@ -170,7 +174,11 @@ class SupplierPriceCollabSessionServiceTest {
 
     private SupplierPriceCollabSessionService service() {
         return new SupplierPriceCollabSessionService(repository, permissionChecker, accountQuery,
-                tokenService(), properties);
+                sessionIssuer());
+    }
+
+    private CollabSessionIssuer sessionIssuer() {
+        return new CollabSessionIssuer(tokenService(), properties);
     }
 
     private CollabTokenService tokenService() {

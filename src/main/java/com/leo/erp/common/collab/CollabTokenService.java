@@ -1,4 +1,4 @@
-package com.leo.erp.market.supplierprice.service;
+package com.leo.erp.common.collab;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -10,7 +10,6 @@ import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.Base64;
-import com.leo.erp.market.supplierprice.CollabSessionProperties;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import lombok.extern.slf4j.Slf4j;

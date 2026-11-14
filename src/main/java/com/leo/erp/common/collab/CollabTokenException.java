@@ -1,4 +1,4 @@
-package com.leo.erp.market.supplierprice.service;
+package com.leo.erp.common.collab;
 
 /**
  * 协作票据签发/校验失败。

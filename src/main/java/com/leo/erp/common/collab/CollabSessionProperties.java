@@ -1,4 +1,4 @@
-package com.leo.erp.market.supplierprice;
+package com.leo.erp.common.collab;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.validation.constraints.NotBlank;
@@ -8,7 +8,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * 供应商价格表实时协作（Node 边车 {@code leo/collab-server}）的票据配置。
+ * 实时协作（Node 边车 {@code leo/collab-server}）的票据配置，被所有协作房间共用
+ * （供应商价格表 {@code supplier-price-list:<listId>}、报单比价 {@code quote-sheet:<sheetId>} …）。
  *
  * <p>三个值都必须与边车对齐，否则浏览器拿到的票据连不上：</p>
  * <ul>

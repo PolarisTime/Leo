@@ -1,4 +1,4 @@
-package com.leo.erp.market.supplierprice.service;
+package com.leo.erp.common.collab;
 
 import java.util.List;
 
@@ -11,7 +11,7 @@ import java.util.List;
  * <p>调色板取 antd 主题色系，保证浅底/深底都可读；顺序即语义，改动会让老用户的光标换色，
  * 因此只在必要时加色（加在末尾不改变已有取模结果的风险仍然存在，改前先确认）。</p>
  */
-final class CollabCursorColors {
+public final class CollabCursorColors {
 
     /** 8 色，够区分一张表里的常见协作人数，也不需要引入 @ant-design/colors。 */
     private static final List<String> PALETTE = List.of(
@@ -27,7 +27,13 @@ final class CollabCursorColors {
     private CollabCursorColors() {
     }
 
-    static String colorOf(Long userId) {
+    /**
+     * 取该用户在协作房间里的光标颜色。
+     *
+     * @param userId 用户 id（雪花）；null 按 0 处理，保证不抛异常
+     * @return {@code #rrggbb} 形式的颜色
+     */
+    public static String colorOf(Long userId) {
         long id = userId == null ? 0L : userId;
         return PALETTE.get((int) Math.floorMod(id, PALETTE.size()));
     }
