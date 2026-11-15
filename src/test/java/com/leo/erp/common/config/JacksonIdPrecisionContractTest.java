@@ -82,17 +82,17 @@ class JacksonIdPrecisionContractTest {
     }
 
     @Test
-    void longField_shouldAcceptSafeNumberId() throws Exception {
-        SamplePayload payload = mapper().readValue("{\"id\":12345}", SamplePayload.class);
-
-        assertThat(payload.id).isEqualTo(12345L);
+    void longField_shouldRejectNumericIdEvenIfSafe() {
+        assertThatThrownBy(() -> mapper().readValue("{\"id\":12345}", SamplePayload.class))
+                .isInstanceOf(JsonMappingException.class)
+                .hasMessageContaining("雪花 ID 必须以十进制字符串传递");
     }
 
     @Test
     void longField_shouldRejectUnsafeNumberId() {
         assertThatThrownBy(() -> mapper().readValue("{\"id\":9007199254740993000}", SamplePayload.class))
                 .isInstanceOf(JsonMappingException.class)
-                .hasMessageContaining("安全整数范围");
+                .hasMessageContaining("雪花 ID 必须以十进制字符串传递");
     }
 
     @Test

@@ -11,7 +11,8 @@ import com.leo.erp.common.validation.SnowflakeId;
 import java.util.Iterator;
 
 /**
- * 把请求体中带 {@link SnowflakeId} 的 {@code Long} 字段统一收紧为「只接受十进制字符串」。
+ * 把请求体中雪花 ID 语义的 {@code Long} 字段统一收紧为「只接受十进制字符串」。
+ * 判定规则：显式标注 {@link SnowflakeId}，或字段名为 {@code id} / 以 {@code Id} 结尾。
  *
  * <p>背景：全局 {@code SnowflakeSafeLongDeserializer} 为了让历史客户端平滑迁移，仍接受
  * ≤ 2^53−1 的 JSON number；但 AGENTS 明确要求「新增 API 不得接受 JSON number 形式的雪花 ID」。
@@ -54,11 +55,17 @@ public class SnowflakeIdStrictModule extends SimpleModule {
         }
 
         private boolean requiresStringOnlyId(SettableBeanProperty property) {
-            if (property.getAnnotation(SnowflakeId.class) == null) {
+            Class<?> rawType = property.getType().getRawClass();
+            if (rawType != Long.class && rawType != long.class) {
                 return false;
             }
-            Class<?> rawType = property.getType().getRawClass();
-            return rawType == Long.class || rawType == long.class;
+            if (property.getAnnotation(SnowflakeId.class) != null) {
+                return true;
+            }
+            // 约定优于注解：请求 DTO 中名为 id 或以 Id 结尾的 Long 字段一律视为雪花 ID，
+            // 统一只接受十进制字符串，避免 31 个 DTO 逐字段漏标 @SnowflakeId。
+            String name = property.getName();
+            return "id".equals(name) || name.endsWith("Id");
         }
     }
 }
