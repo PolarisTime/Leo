@@ -15,6 +15,7 @@ import com.leo.erp.master.valuealias.web.dto.ValueAliasResponse;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -44,6 +45,7 @@ public class ValueAliasController {
         this.valueAliasService = valueAliasService;
     }
 
+    @Operation(summary = "分页查询值映射别名", description = "按维度与关键字过滤，分页返回（PageResponse），默认按 value-alias 稳定排序。需 VALUE_ALIASES_READ 权限。")
     @GetMapping
     @RequirePermission(PermissionCodes.VALUE_ALIASES_READ)
     public PageResponse<ValueAliasResponse> page(
@@ -53,12 +55,14 @@ public class ValueAliasController {
         return PageResponse.from(valueAliasService.page(query, dimension, keyword));
     }
 
+    @Operation(summary = "查询值映射别名详情", description = "按雪花 ID 查询单条别名（路径 id 以字符串传递）；不存在返回 404。需 VALUE_ALIASES_READ 权限。")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.VALUE_ALIASES_READ)
     public ValueAliasResponse detail(@PathVariable @SnowflakeId Long id) {
         return valueAliasService.detail(id);
     }
 
+    @Operation(summary = "创建值映射别名", description = "成功返回 201 与 Location /value-aliases/{id}，响应体为新建别名（id 为雪花 ID 字符串）。重复提交需 Idempotency-Key（类级强制）。需 VALUE_ALIASES_CREATE 权限。")
     @PostMapping
     @Created
     @RequirePermission(PermissionCodes.VALUE_ALIASES_CREATE)
@@ -66,12 +70,14 @@ public class ValueAliasController {
         return ResponseSupport.created("/value-aliases", valueAliasService.create(request));
     }
 
+    @Operation(summary = "更新值映射别名", description = "PUT 整体替换资源，成功返回 200；路径 id 为雪花 ID 字符串。重复提交需 Idempotency-Key（类级强制）。需 VALUE_ALIASES_UPDATE 权限。")
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.VALUE_ALIASES_UPDATE)
     public ValueAliasResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody ValueAliasRequest request) {
         return valueAliasService.update(id, request);
     }
 
+    @Operation(summary = "删除值映射别名", description = "幂等删除，成功返回 204 No Content；重复删除结果一致。需 VALUE_ALIASES_DELETE 权限。")
     @DeleteMapping("/{id}")
     @NoContent
     @RequirePermission(PermissionCodes.VALUE_ALIASES_DELETE)

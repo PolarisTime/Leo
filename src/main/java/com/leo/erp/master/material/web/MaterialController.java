@@ -13,6 +13,9 @@ import com.leo.erp.master.material.web.dto.MaterialStatusUpdateRequest;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ContentDisposition;
@@ -95,7 +98,11 @@ public class MaterialController {
     }
 
     @GetMapping("/template")
-    @Operation(summary = "下载商品资料导入模板（XLSX）")
+    @Operation(summary = "下载商品资料导入模板（XLSX）",
+            description = "文件内容是资源表示：200 + XLSX 媒体类型与 Content-Disposition 附件头，供导入前填报。",
+            responses = @ApiResponse(responseCode = "200", description = "导入模板文件",
+                    content = @Content(mediaType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            schema = @Schema(type = "string", format = "binary"))))
     @RequirePermission(PermissionCodes.MATERIALS_READ)
     public ResponseEntity<byte[]> downloadTemplate() {
         return toDownloadResponse(
@@ -103,7 +110,11 @@ public class MaterialController {
     }
 
     @GetMapping("/template/csv")
-    @Operation(summary = "下载商品资料导入模板（CSV）")
+    @Operation(summary = "下载商品资料导入模板（CSV）",
+            description = "文件内容是资源表示：200 + text/csv（UTF-8）媒体类型与 Content-Disposition 附件头，供导入前填报。",
+            responses = @ApiResponse(responseCode = "200", description = "导入模板文件",
+                    content = @Content(mediaType = "text/csv",
+                            schema = @Schema(type = "string", format = "binary"))))
     @RequirePermission(PermissionCodes.MATERIALS_READ)
     public ResponseEntity<byte[]> downloadCsvTemplate() {
         return toDownloadResponse(

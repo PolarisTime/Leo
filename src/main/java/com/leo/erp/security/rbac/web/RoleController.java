@@ -18,6 +18,7 @@ import com.leo.erp.security.rbac.web.dto.RoleRequest;
 import com.leo.erp.security.rbac.web.dto.RoleResponse;
 import com.leo.erp.security.rbac.web.dto.RoleStatusRequest;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -43,6 +44,7 @@ public class RoleController {
         this.roleService = roleService;
     }
 
+    @Operation(summary = "分页查询角色", description = "按关键字与状态过滤，分页返回（PageResponse），默认按 role 稳定排序。需 ROLES_READ 权限。")
     @GetMapping
     @RequirePermission(PermissionCodes.ROLES_READ)
     public PageResponse<RoleResponse> page(@BindPageQuery(sortFieldKey = "role") PageQuery query,
@@ -51,12 +53,14 @@ public class RoleController {
         return PageResponse.from(roleService.page(query, keyword, status));
     }
 
+    @Operation(summary = "查询角色详情", description = "按雪花 ID 查询角色及其权限清单（路径 id 以字符串传递）；不存在返回 404。需 ROLES_READ 权限。")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.ROLES_READ)
     public RoleDetailResponse detail(@PathVariable @SnowflakeId Long id) {
         return roleService.detail(id);
     }
 
+    @Operation(summary = "创建角色", description = "成功返回 201 与 Location /roles/{id}，响应体为新建角色（id 为雪花 ID 字符串）。重复提交需 Idempotency-Key（类级强制）。需 ROLES_WRITE 权限。")
     @PostMapping
     @Created
     @RequirePermission(PermissionCodes.ROLES_WRITE)
@@ -64,18 +68,21 @@ public class RoleController {
         return ResponseSupport.created("/roles", roleService.create(request));
     }
 
+    @Operation(summary = "更新角色", description = "PUT 整体替换角色基本信息，成功返回 200；路径 id 为雪花 ID 字符串。重复提交需 Idempotency-Key（类级强制）。需 ROLES_WRITE 权限。")
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.ROLES_WRITE)
     public RoleResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody RoleRequest request) {
         return roleService.update(id, request);
     }
 
+    @Operation(summary = "变更角色状态", description = "PATCH 仅更新启用/停用状态字段，成功返回 200 与更新后的角色；重复提交结果一致（幂等）。需 ROLES_WRITE 权限。")
     @PatchMapping("/{id}/status")
     @RequirePermission(PermissionCodes.ROLES_WRITE)
     public RoleResponse updateStatus(@PathVariable @SnowflakeId Long id, @Valid @RequestBody RoleStatusRequest request) {
         return roleService.updateStatus(id, request.status());
     }
 
+    @Operation(summary = "删除角色", description = "幂等删除，成功返回 204 No Content；仍被用户引用的角色由服务层校验并返回业务错误。需 ROLES_WRITE 权限。")
     @DeleteMapping("/{id}")
     @NoContent
     @RequirePermission(PermissionCodes.ROLES_WRITE)
@@ -84,6 +91,7 @@ public class RoleController {
         return ResponseSupport.noContent();
     }
 
+    @Operation(summary = "整体替换角色权限", description = "PUT 全量替换角色的权限集合（未列出的权限被移除），成功返回 200 与更新后的角色详情；重复提交结果一致（幂等）。需 ROLES_WRITE 权限。")
     @PutMapping("/{id}/permissions")
     @RequirePermission(PermissionCodes.ROLES_WRITE)
     public RoleDetailResponse replacePermissions(@PathVariable @SnowflakeId Long id,

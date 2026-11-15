@@ -13,6 +13,9 @@ import com.leo.erp.system.printtemplate.service.PrintOutputService;
 import com.leo.erp.system.printtemplate.web.dto.PrintRecordOutputResponse;
 import com.leo.erp.system.printtemplate.web.dto.PrintRecordRequest;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -84,7 +87,10 @@ public class PrintExportController {
      * PDF 文件表示（PDF_FORM 模板）：200 + application/pdf，不发 Location。
      * <p>脚本模板必须走 {@link #createScript(PrintRecordRequest)}；走错端点返回 406。</p>
      */
-    @Operation(summary = "生成打印 PDF 文件（200 + application/pdf；脚本模板请使用 /print-exports）")
+    @Operation(summary = "生成打印 PDF 文件（200 + application/pdf；脚本模板请使用 /print-exports）",
+            responses = @ApiResponse(responseCode = "200", description = "打印 PDF 文件",
+                    content = @Content(mediaType = MediaType.APPLICATION_PDF_VALUE,
+                            schema = @Schema(type = "string", format = "binary"))))
     @PostMapping("/print-export-files")
     @OperationLoggable(
             moduleName = "打印",

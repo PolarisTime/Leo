@@ -47,17 +47,20 @@ public class UserAccountController {
         this.apiProblemFactory = apiProblemFactory;
     }
 
+    @Operation(summary = "查询当前账号资料", description = "返回当前登录账号的档案信息（id 为雪花 ID 字符串）；未认证返回 401。需登录态，无额外权限码。")
     @GetMapping
     public CurrentAccountResponse current(@AuthenticationPrincipal SecurityPrincipal principal) {
         return userAccountService.current(currentUserId(principal));
     }
 
+    @Operation(summary = "更新当前账号资料", description = "PUT 整体更新当前账号可编辑字段，成功返回 200 与更新后的账号信息；重复提交需 Idempotency-Key（类级强制）。需登录态，无额外权限码。")
     @PutMapping
     @OperationLoggable(moduleName = "个人账号", actionType = "编辑")
     public CurrentAccountResponse update(@AuthenticationPrincipal SecurityPrincipal principal, @Valid @RequestBody CurrentAccountUpdateRequest request) {
         return userAccountService.updateCurrent(currentUserId(principal), request);
     }
 
+    @Operation(summary = "修改当前账号密码", description = "校验原密码后设置新密码，成功返回 204 No Content；原密码不匹配或新密码不满足规则时返回校验错误。重复提交需 Idempotency-Key（类级强制）。需登录态。")
     @PutMapping("/password")
     @OperationLoggable(moduleName = "身份认证", actionType = "修改密码")
     @NoContent

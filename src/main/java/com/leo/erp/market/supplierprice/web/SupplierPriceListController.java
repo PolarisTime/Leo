@@ -12,6 +12,7 @@ import com.leo.erp.market.supplierprice.web.dto.SupplierPriceListRequests;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -50,6 +51,7 @@ public class SupplierPriceListController {
     }
 
     /** 某品牌的整张价格表（列 + 行）。品牌必填：没有"全部品牌"的网格形态。 */
+    @Operation(summary = "查询供应商价格表网格（品牌表：列 + 行）", description = "按品牌一次性返回该品牌下的供应商列与商品行投影，避免前端 N+1；brandName 必填，不分页。需 SUPPLIER_PRICE_LISTS_READ 权限。")
     @GetMapping("/grid")
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_READ)
     public SupplierPriceGridResponse grid(@RequestParam String brandName) {
@@ -62,6 +64,7 @@ public class SupplierPriceListController {
      * <p>报单比价一次要填满整张表（品牌列 × 商品行），逐格请求会变成几百次 —— 这是为那次填充
      * 提供的批量读。{@code brandName} 省略表示全部品牌。</p>
      */
+    @Operation(summary = "批量查询各品牌最低报价", description = "按（品牌, 商品）各取最低一家供应商报价，供报单比价整表填充；省略 brandName 表示全部品牌，不分页。需 SUPPLIER_PRICE_LISTS_READ 权限。")
     @GetMapping("/lowest-quotes")
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_READ)
     public List<SupplierPriceService.BrandQuote> lowestQuotes(
@@ -70,6 +73,7 @@ public class SupplierPriceListController {
     }
 
     /** 增加一列：某品牌下接入一家供应商。 */
+    @Operation(summary = "新增价格表列（接入供应商）", description = "在指定品牌下接入一家供应商，成功返回 201 与 Location /supplier-price-lists/{id}，响应体为该列（表头 + 规格条目，id 为雪花 ID 字符串）。重复提交需 Idempotency-Key（类级强制）。需 SUPPLIER_PRICE_LISTS_CREATE 权限。")
     @PostMapping
     @Created
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_CREATE)
@@ -83,6 +87,7 @@ public class SupplierPriceListController {
      *
      * <p>删除的是「该供应商在这个品牌下的报价」，不影响其它品牌；条目随聚合根不再可见。</p>
      */
+    @Operation(summary = "删除价格表列（软删）", description = "软删除某品牌下某供应商的整列报价，不影响其它品牌；成功返回 204 No Content，重复删除幂等。需 SUPPLIER_PRICE_LISTS_DELETE 权限。")
     @DeleteMapping("/{id}")
     @NoContent
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_DELETE)
@@ -97,6 +102,7 @@ public class SupplierPriceListController {
      * <p>用 {@code PUT} 语义最贴合：提交的是这一列的<b>完整</b>内容，重复提交结果相同（幂等）。
      * 并发用请求体里的 {@code expectedVersion} 做前置校验，不符返回 409。</p>
      */
+    @Operation(summary = "整组保存价格表列明细", description = "PUT 全量替换该列全部规格条目（重复提交结果一致）；请求体 expectedVersion 与库中版本不符返回 409。需 SUPPLIER_PRICE_LISTS_UPDATE 权限。")
     @PutMapping("/{id}/items")
     @RequirePermission(PermissionCodes.SUPPLIER_PRICE_LISTS_UPDATE)
     public SupplierPriceGridResponse.Column saveItems(

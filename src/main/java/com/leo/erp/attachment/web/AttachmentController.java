@@ -34,6 +34,9 @@ import com.leo.erp.common.api.Created;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 
 @RestController
 @Validated
@@ -75,6 +78,7 @@ public class AttachmentController {
         );
     }
 
+    @Operation(summary = "获取附件临时访问地址", description = "为附件内容生成带签名的临时访问 URL，支持 disposition=inline 内联预览；会校验 moduleKey、accessKey 与记录可见性。需 ATTACHMENTS_READ 权限。")
     @GetMapping("/{id}/access-url")
     @RequirePermission(PermissionCodes.ATTACHMENTS_READ)
     public AttachmentAccessUrlResponse accessUrl(@AuthenticationPrincipal SecurityPrincipal principal, @PathVariable @SnowflakeId Long id, @RequestParam String moduleKey, @RequestParam String accessKey, @RequestParam(defaultValue = "false") boolean inline) {
@@ -94,7 +98,10 @@ public class AttachmentController {
      */
     @GetMapping("/{id}/content")
     @Operation(summary = "获取附件内容",
-            description = "读取附件二进制内容。disposition=attachment 触发浏览器下载（默认），disposition=inline 用于内联预览；非法的 disposition 返回 400。")
+            description = "读取附件二进制内容。disposition=attachment 触发浏览器下载（默认），disposition=inline 用于内联预览；非法的 disposition 返回 400。",
+            responses = @ApiResponse(responseCode = "200", description = "附件二进制内容（媒体类型随文件动态下发）",
+                    content = @Content(mediaType = MediaType.ALL_VALUE,
+                            schema = @Schema(type = "string", format = "binary"))))
     @RequirePermission(PermissionCodes.ATTACHMENTS_READ)
     public ResponseEntity<Resource> content(@AuthenticationPrincipal SecurityPrincipal principal,
                                             @PathVariable @SnowflakeId Long id,

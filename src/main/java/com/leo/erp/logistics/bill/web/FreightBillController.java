@@ -90,12 +90,14 @@ public class FreightBillController {
         ));
     }
 
+    @Operation(summary = "查询物流单详情", description = "按雪花 ID 查询单个物流单（路径 id 以字符串传递），包含明细与来源单据；不存在返回 404。需 FREIGHT_BILLS_READ 权限。")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.FREIGHT_BILLS_READ)
     public FreightBillResponse detail(@PathVariable @SnowflakeId Long id) {
         return service.detail(id);
     }
 
+    @Operation(summary = "创建物流单", description = "成功返回 201 与 Location /freight-bills/{id}，响应体为新建物流单（id 为雪花 ID 字符串）。重复提交需 Idempotency-Key（类级强制）。需 FREIGHT_BILLS_CREATE 权限。")
     @PostMapping
     @DomainEventAudited
     @Created
@@ -104,6 +106,7 @@ public class FreightBillController {
         return ResponseSupport.created("/freight-bills", service.create(request));
     }
 
+    @Operation(summary = "更新物流单", description = "PUT 整体替换物流单（含明细），成功返回 200 与最新单据；路径 id 为雪花 ID 字符串。重复提交需 Idempotency-Key（类级强制）。需 FREIGHT_BILLS_UPDATE 权限。")
     @PutMapping("/{id}")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.FREIGHT_BILLS_UPDATE)
@@ -111,6 +114,7 @@ public class FreightBillController {
         return service.update(id, request);
     }
 
+    @Operation(summary = "变更物流单状态", description = "PATCH 仅更新状态字段，按状态迁移表做入口权限校验（无迁移权限返回 403）；反审核同样走本端点。成功返回 200 与最新单据。需 FREIGHT_BILLS_UPDATE 权限。")
     @PatchMapping("/{id}/status")
     @DomainEventAudited
     @RequirePermission(PermissionCodes.FREIGHT_BILLS_UPDATE)
@@ -134,6 +138,7 @@ public class FreightBillController {
         return ResponseEntity.ok(service.updateStatus(id, StatusConstants.AUDITED));
     }
 
+    @Operation(summary = "删除物流单", description = "幂等删除，成功返回 204 No Content；已审核单据由服务层校验并拒绝删除。需 FREIGHT_BILLS_DELETE 权限。")
     @DeleteMapping("/{id}")
     @DomainEventAudited
     @NoContent

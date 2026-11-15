@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.info.BuildProperties;
 import org.springframework.boot.info.GitProperties;
 import org.springframework.validation.annotation.Validated;
+import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -35,6 +36,7 @@ public class VersionController {
         this.appName = appName;
     }
 
+    @Operation(summary = "查询应用版本信息", description = "返回应用名、版本号、短提交哈希与构建时间；缺失值返回 null（前端渲染为 --）。端点需登录态，未匿名开放以免提交哈希被用于定向攻击。")
     @GetMapping(ApiVersion.PREFIX + "/version")
     public VersionResponse version() {
         return currentVersion();

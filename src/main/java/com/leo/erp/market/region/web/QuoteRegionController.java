@@ -15,6 +15,7 @@ import com.leo.erp.market.region.web.dto.QuoteRegionResponse;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -42,6 +43,7 @@ public class QuoteRegionController {
         this.quoteRegionService = quoteRegionService;
     }
 
+    @Operation(summary = "分页查询取价地区", description = "按关键字与状态过滤，分页返回（PageResponse）；未显式指定方向时默认升序（与运行时配置下发的地区顺序一致），默认按 quote-region 排序。需 QUOTE_REGIONS_READ 权限。")
     @GetMapping
     @RequirePermission(PermissionCodes.QUOTE_REGIONS_READ)
     public PageResponse<QuoteRegionResponse> page(
@@ -56,12 +58,14 @@ public class QuoteRegionController {
         return PageResponse.from(quoteRegionService.page(effective, keyword, status));
     }
 
+    @Operation(summary = "查询取价地区详情", description = "按雪花 ID 查询单个取价地区（路径 id 以字符串传递）；不存在返回 404。需 QUOTE_REGIONS_READ 权限。")
     @GetMapping("/{id}")
     @RequirePermission(PermissionCodes.QUOTE_REGIONS_READ)
     public QuoteRegionResponse detail(@PathVariable @SnowflakeId Long id) {
         return quoteRegionService.detail(id);
     }
 
+    @Operation(summary = "创建取价地区", description = "成功返回 201 与 Location /quote-regions/{id}，响应体为新建地区（id 为雪花 ID 字符串）。重复提交需 Idempotency-Key（类级强制）。需 QUOTE_REGIONS_CREATE 权限。")
     @PostMapping
     @Created
     @RequirePermission(PermissionCodes.QUOTE_REGIONS_CREATE)
@@ -69,12 +73,14 @@ public class QuoteRegionController {
         return ResponseSupport.created("/quote-regions", quoteRegionService.create(request));
     }
 
+    @Operation(summary = "更新取价地区", description = "PUT 整体替换资源，成功返回 200；路径 id 为雪花 ID 字符串。重复提交需 Idempotency-Key（类级强制）。需 QUOTE_REGIONS_UPDATE 权限。")
     @PutMapping("/{id}")
     @RequirePermission(PermissionCodes.QUOTE_REGIONS_UPDATE)
     public QuoteRegionResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody QuoteRegionRequest request) {
         return quoteRegionService.update(id, request);
     }
 
+    @Operation(summary = "删除取价地区", description = "幂等删除，成功返回 204 No Content；重复删除结果一致。需 QUOTE_REGIONS_DELETE 权限。")
     @DeleteMapping("/{id}")
     @NoContent
     @RequirePermission(PermissionCodes.QUOTE_REGIONS_DELETE)

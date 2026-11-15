@@ -12,6 +12,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import org.springframework.validation.annotation.Validated;
+import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -42,6 +43,7 @@ public class AttachmentBindingController {
         this.attachmentRecordAccessService = attachmentRecordAccessService;
     }
 
+    @Operation(summary = "查询记录已绑定附件", description = "按 moduleKey 与 recordId（雪花 ID 字符串）返回该记录的附件绑定关系；记录不存在返回 404。需 ATTACHMENTS_READ 权限。")
     @GetMapping
     @RequirePermission(PermissionCodes.ATTACHMENTS_READ)
     public AttachmentBindingResponse detail(@RequestParam @NotBlank @Size(max = 64) String moduleKey, @RequestParam @Positive Long recordId) {
@@ -50,6 +52,7 @@ public class AttachmentBindingController {
         return attachmentWebService.detail(normalizedModuleKey, recordId);
     }
 
+    @Operation(summary = "批量统计记录附件数量", description = "recordIds 为逗号分隔的雪花 ID 列表，返回每条记录的附件数量；当前用户不可见或不存在的记录静默跳过。需 ATTACHMENTS_READ 权限。")
     @GetMapping("/counts")
     @RequirePermission(PermissionCodes.ATTACHMENTS_READ)
     public AttachmentBindingCountResponse counts(@RequestParam @NotBlank @Size(max = 64) String moduleKey, @RequestParam @NotBlank String recordIds) {
@@ -64,6 +67,7 @@ public class AttachmentBindingController {
         return attachmentWebService.counts(normalizedModuleKey, accessibleRecordIds);
     }
 
+    @Operation(summary = "整体替换记录附件绑定", description = "PUT 用 attachmentIds 全量替换指定记录的附件绑定；记录不存在返回 404。重复提交需 Idempotency-Key（类级强制）。需 ATTACHMENTS_UPDATE 权限。")
     @PutMapping
     @RequirePermission(PermissionCodes.ATTACHMENTS_UPDATE)
     public AttachmentBindingResponse update(@Valid @RequestBody AttachmentBindingRequest request) {
