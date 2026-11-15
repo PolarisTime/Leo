@@ -9,6 +9,7 @@ import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Positive;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,11 +42,11 @@ public class CashLedgerController {
     @GetMapping
     @RequirePermission(PermissionCodes.CASH_LEDGER_READ)
     public CashLedgerPageResponse page(@BindPageQuery(sortFieldKey = "cash-ledger", directionParam = "sortDirection") PageQuery query,
-                                       @RequestParam Long settlementCompanyId,
+                                       @RequestParam @Positive Long settlementCompanyId,
                                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
                                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
                                        @RequestParam(required = false) String counterpartyType,
-                                       @RequestParam(required = false) Long counterpartyId,
+                                       @RequestParam(required = false) @Positive Long counterpartyId,
                                        @RequestParam(required = false) String flowType,
                                        @RequestParam(required = false) String keyword) {
         return cashLedgerService.page(

@@ -42,7 +42,7 @@ public class PrintPreviewController {
     @GetMapping("/items")
     @RequirePermission(PermissionCodes.PRINT_PREVIEWS_READ)
     public PageResponse<PrintItemRowResponse> items(
-            @BindPageQuery PageQuery query,
+            @BindPageQuery(sortFieldKey = "print-preview-items") PageQuery query,
             @RequestParam @NotBlank @Size(max = 64) String moduleKey,
             @RequestParam @Size(min = 1, max = 200) List<@Positive Long> recordIds) {
         return PageResponse.from(
