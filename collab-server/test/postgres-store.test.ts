@@ -100,6 +100,9 @@ const REQUIRED_TABLES = {
     'released_at',
     'warehouse',
   ],
+  // 报单比价房间（quote-sheet）：边车只读 sheet 版本 + 明细行的 ton/remark
+  mk_quote_sheet: ['id', 'version', 'deleted_flag', 'updated_at'],
+  mk_quote_item: ['id', 'sheet_id', 'line_no', 'row_type', 'ton', 'remark'],
 }
 
 function schemaRows(

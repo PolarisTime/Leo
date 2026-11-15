@@ -7,6 +7,7 @@
 
 import type { MaterializerMetrics } from './materializer.js'
 import type { PersistenceMetrics } from './persistence.js'
+import type { QuoteMaterializerMetrics } from './quote-materializer.js'
 
 export interface HealthPayload {
   status: 'ok' | 'degraded'
@@ -15,7 +16,10 @@ export interface HealthPayload {
   connections: number
   documents: number
   persistence: PersistenceMetrics
+  /** 供应商价格表物化队列（金额/吨位/状态）。 */
   materializer: MaterializerMetrics
+  /** 报单比价物化队列（只要 ton/remark）。 */
+  quoteMaterializer: QuoteMaterializerMetrics
   redis: string
   timestamp: string
 }
@@ -27,6 +31,7 @@ export interface HealthDependencies {
   documents: () => number
   persistence: () => PersistenceMetrics
   materializer: () => MaterializerMetrics
+  quoteMaterializer: () => QuoteMaterializerMetrics
   redisStatus: () => string
   now?: () => number
 }
@@ -34,15 +39,21 @@ export interface HealthDependencies {
 export function buildHealthPayload(deps: HealthDependencies): HealthPayload {
   const now = deps.now ?? (() => Date.now())
   const materializer = deps.materializer()
+  const quoteMaterializer = deps.quoteMaterializer()
   return {
     // 物化在退避重试时仍能同步（文档没丢），但 SQL 已落后，标 degraded 让监控能报警。
-    status: materializer.retryingRooms > 0 ? 'degraded' : 'ok',
+    // 两个物化器任一在重试都算降级：报单比价与供应商价格表互不影响，但都导致 SQL 落后。
+    status:
+      materializer.retryingRooms > 0 || quoteMaterializer.retryingRooms > 0
+        ? 'degraded'
+        : 'ok',
     version: deps.version,
     uptimeSeconds: Math.floor((now() - deps.startedAt) / 1000),
     connections: deps.connections(),
     documents: deps.documents(),
     persistence: deps.persistence(),
     materializer,
+    quoteMaterializer,
     redis: deps.redisStatus(),
     timestamp: new Date(now()).toISOString(),
   }

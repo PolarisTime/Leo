@@ -22,16 +22,25 @@ import type { CollabConfig } from './config.js'
 import { CollabAuthError, isCollabAuthError } from './errors.js'
 import { buildHealthPayload, type HealthPayload } from './health.js'
 import type { Logger } from './logger.js'
-import { CollabMaterializer, SYSTEM_ACTOR_ID } from './materializer.js'
+import { CollabMaterializer } from './materializer.js'
+import { SYSTEM_ACTOR_ID } from './materializer-support.js'
 import { CollabPersistence } from './persistence.js'
+import { QuoteMaterializer } from './quote-materializer.js'
 import type { CollabRedis } from './redis.js'
-import type { CollabDocStore, MaterializeStore } from './store/types.js'
+import { isSupportedRoom, parseRoom } from './room.js'
+import type {
+  CollabDocStore,
+  MaterializeStore,
+  QuoteMaterializeStore,
+} from './store/types.js'
 
 export interface CollabServerDependencies {
   config: CollabConfig
   logger: Logger
   docStore: CollabDocStore
   materializeStore: MaterializeStore
+  /** 报单比价物化的写入口（与供应商侧共用一个 Store 实例即可）。 */
+  quoteMaterializeStore: QuoteMaterializeStore
   redis?: CollabRedis | null
   redisExtension?: Extension | null
   /** 版本号（健康检查展示）。 */
@@ -42,6 +51,7 @@ export interface CollabServerHandle {
   server: Server<CollabClaims>
   persistence: CollabPersistence
   materializer: CollabMaterializer
+  quoteMaterializer: QuoteMaterializer
   start(): Promise<void>
   stop(): Promise<void>
   health(): HealthPayload
@@ -92,7 +102,8 @@ function actorIdOf(context: CollabClaims | undefined): string {
 export function createCollabServer(
   deps: CollabServerDependencies,
 ): CollabServerHandle {
-  const { config, logger, docStore, materializeStore } = deps
+  const { config, logger, docStore, materializeStore, quoteMaterializeStore } =
+    deps
   const startedAt = Date.now()
   const version = deps.version ?? '0.1.0'
   const connections = new ConnectionRegistry(config.maxConnectionsPerUser)
@@ -124,6 +135,19 @@ export function createCollabServer(
       )
     },
   })
+
+  const quoteMaterializer = new QuoteMaterializer({
+    store: quoteMaterializeStore,
+    logger,
+    debounceMs: config.debounceMs,
+    maxDebounceMs: config.maxDebounceMs,
+    retryBaseMs: config.materializeRetryBaseMs,
+    retryMaxMs: config.materializeRetryMaxMs,
+  })
+
+  /** 按房间前缀路由到对应物化器。 */
+  const isQuoteRoom = (room: string): boolean =>
+    parseRoom(room).kind === 'quote-sheet'
 
   /** 读文档状态：没有协作文档时从 SQL 生成（见 persistence.fetchState）。 */
   const database = new Database({
@@ -173,6 +197,11 @@ export function createCollabServer(
           token,
           room,
         })
+        // 票据合法但房间前缀不认识：拒绝，避免边车为拼错的房间名建空文档/
+        // 误用供应商价格表的物化路径。新业务房间必须先在 room.ts 注册前缀。
+        if (!isSupportedRoom(room)) {
+          throw new CollabAuthError('forbidden', `不支持的房间类型：${room}`)
+        }
         connections.add(claims.userId, socketId)
         // 只读用户：hocuspocus 会拒绝其 syncStep2 的写入（内部按 readOnly 校验）。
         connectionConfig.readOnly = !claims.writable
@@ -226,7 +255,11 @@ export function createCollabServer(
     /** 文档加载完成后对齐基线：崩溃恢复时把 SQL 与文档的差异补齐。 */
     afterLoadDocument: async ({ documentName, document, context }) => {
       try {
-        await materializer.syncOnLoad(documentName, document as Y.Doc)
+        if (isQuoteRoom(documentName)) {
+          await quoteMaterializer.syncOnLoad(documentName, document as Y.Doc)
+        } else {
+          await materializer.syncOnLoad(documentName, document as Y.Doc)
+        }
       } catch (error) {
         // 基线加载失败不能阻断连接：实时同步优先，物化会在下一次变更时重试。
         logger.error('加载物化基线失败，稍后重试', {
@@ -241,11 +274,16 @@ export function createCollabServer(
     onChange: async ({ documentName, document, update, context }) => {
       persistence.recordUpdate(documentName, update)
       try {
-        await materializer.observe(
-          documentName,
-          document as Y.Doc,
-          actorIdOf(context),
-        )
+        const actorId = actorIdOf(context)
+        if (isQuoteRoom(documentName)) {
+          await quoteMaterializer.observe(
+            documentName,
+            document as Y.Doc,
+            actorId,
+          )
+        } else {
+          await materializer.observe(documentName, document as Y.Doc, actorId)
+        }
       } catch (error) {
         logger.error('登记物化变更失败', {
           room: documentName,
@@ -272,12 +310,15 @@ export function createCollabServer(
       if (context?.userId) connections.remove(context.userId, socketId)
       await Promise.allSettled([
         persistence.flushRoom(documentName),
-        materializer.flushRoom(documentName),
+        isQuoteRoom(documentName)
+          ? quoteMaterializer.flushRoom(documentName)
+          : materializer.flushRoom(documentName),
       ])
     },
 
     onDestroy: async () => {
       materializer.dispose()
+      quoteMaterializer.dispose()
     },
   })
 
@@ -286,6 +327,7 @@ export function createCollabServer(
     server,
     persistence,
     materializer,
+    quoteMaterializer,
     async start(): Promise<void> {
       await server.listen()
       const address = server.address
@@ -311,6 +353,7 @@ export function createCollabServer(
       const flushes = await Promise.allSettled([
         persistence.flushAll(),
         materializer.flushAll(),
+        quoteMaterializer.flushAll(),
       ])
       for (const result of flushes) {
         if (result.status === 'rejected') {
@@ -341,6 +384,7 @@ export function createCollabServer(
         documents: () => server.hocuspocus.getDocumentsCount(),
         persistence: () => persistence.metrics(),
         materializer: () => materializer.metrics(),
+        quoteMaterializer: () => quoteMaterializer.metrics(),
         redisStatus: () => deps.redis?.status() ?? 'disabled',
       })
     },

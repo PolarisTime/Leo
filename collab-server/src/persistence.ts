@@ -17,7 +17,16 @@
 import * as Y from 'yjs'
 import { type CellValue, makeCellKey, writeDocSnapshot } from './doc-model.js'
 import type { Logger } from './logger.js'
-import type { CollabDocStore, InitialListSnapshot } from './store/types.js'
+import {
+  type QuoteSheetSnapshot,
+  writeQuoteSheetSnapshot,
+} from './quote-sheet-model.js'
+import { parseRoom } from './room.js'
+import type {
+  CollabDocStore,
+  InitialListSnapshot,
+  InitialQuoteSheetSnapshot,
+} from './store/types.js'
 
 export interface CollabPersistenceOptions {
   store: CollabDocStore
@@ -73,6 +82,36 @@ export function buildInitialDocState(initial: InitialListSnapshot): Uint8Array {
   return state
 }
 
+/**
+ * 从 SQL 报价单快照构造 Y.Doc 的初始状态（报单比价房间）。
+ *
+ * <p>只写 `meta.sheetId/version` 与每行的 `ton/remark`：规格/价格/行结构全部归 REST 与
+ * 实时派生，不进 CRDT（见 `quote-sheet-model.ts` 的说明）。</p>
+ */
+export function buildInitialQuoteDocState(
+  initial: InitialQuoteSheetSnapshot,
+): Uint8Array {
+  const doc = new Y.Doc()
+  const snapshot: QuoteSheetSnapshot = {
+    meta: { sheetId: initial.sheetId, version: initial.version },
+    items: new Map(
+      initial.items.map((item) => [
+        item.itemId,
+        {
+          ...(item.ton === null ? {} : { ton: item.ton }),
+          ...(item.remark === null || item.remark === ''
+            ? {}
+            : { remark: item.remark }),
+        },
+      ]),
+    ),
+  }
+  writeQuoteSheetSnapshot(doc, snapshot)
+  const state = Y.encodeStateAsUpdate(doc)
+  doc.destroy()
+  return state
+}
+
 export class CollabPersistence {
   private readonly store: CollabDocStore
   private readonly logger: Logger
@@ -107,6 +146,27 @@ export class CollabPersistence {
     const stored = await this.store.loadDocState(room)
     if (stored !== null) return stored
     if (!this.bootstrapFromSql) return null
+
+    const kind = parseRoom(room).kind
+    if (kind === 'quote-sheet') {
+      const initial = await this.store.loadInitialQuoteSheet(room)
+      if (initial === null) {
+        this.logger.warn('报价单房间无协作文档且无对应报价单，按空文档处理', {
+          room,
+        })
+        return null
+      }
+      const state = buildInitialQuoteDocState(initial)
+      await this.store.saveDocState(room, state)
+      this.counters.bootstrapCount += 1
+      this.logger.info('已从 SQL 生成初始报单比价文档', {
+        room,
+        sheetId: initial.sheetId,
+        items: initial.items.length,
+        bytes: state.byteLength,
+      })
+      return state
+    }
 
     const initial = await this.store.loadInitialList(room)
     if (initial === null) {

@@ -14,12 +14,17 @@ import {
   type PriceStatus,
   toDbCellKey,
 } from '../doc-model.js'
+import type { QuoteSheetItemRecord } from '../quote-sheet-model.js'
 import type {
   CollabDocStore,
   InitialListSnapshot,
+  InitialQuoteSheetSnapshot,
   MaterializeRequest,
   MaterializeResult,
   MaterializeStore,
+  QuoteMaterializeRequest,
+  QuoteMaterializeResult,
+  QuoteMaterializeStore,
   StoredListItem,
 } from './types.js'
 
@@ -47,21 +52,43 @@ export interface MemoryAuditRow {
   listRevision: string
 }
 
+export interface MemoryQuoteSheetRow {
+  sheetId: string
+  version: number
+}
+
+/** 报价单行（只含可协作的 ton/remark，与 `mk_quote_item` 对齐）。 */
+export interface MemoryQuoteItemRow {
+  itemId: string
+  sheetId: string
+  lineNo: number
+  ton: number | null
+  remark: string | null
+}
+
 export interface MemoryStoreSeed {
   lists?: MemoryListRow[]
   items?: MemoryListItemRow[]
+  quoteSheets?: MemoryQuoteSheetRow[]
+  quoteItems?: MemoryQuoteItemRow[]
 }
 
 function itemKey(listId: string, cellKey: string): string {
   return `${listId}\u0001${cellKey}`
 }
 
-export class MemoryStore implements CollabDocStore, MaterializeStore {
+export class MemoryStore
+  implements CollabDocStore, MaterializeStore, QuoteMaterializeStore
+{
   readonly docs = new Map<string, Uint8Array>()
   readonly updates = new Map<string, Uint8Array[]>()
   readonly lists = new Map<string, MemoryListRow>()
   readonly items = new Map<string, MemoryListItemRow>()
   readonly audits: MemoryAuditRow[] = []
+  readonly quoteSheets = new Map<string, MemoryQuoteSheetRow>()
+  readonly quoteItems = new Map<string, MemoryQuoteItemRow>()
+  /** quote 房间的 applyQuoteChanges 调用次数（断言空变更不写库）。 */
+  quoteApplyCalls = 0
   /** 注入一次失败（测重试）：下一次 applyChanges 直接抛错。 */
   failNextApply: Error | null = null
   /** 注入持续失败：需要手动清空才能恢复（测退避重试）。 */
@@ -76,6 +103,12 @@ export class MemoryStore implements CollabDocStore, MaterializeStore {
     for (const item of seed.items ?? []) {
       const cellKey = makeCellKey(item)
       this.items.set(itemKey(item.listId, cellKey), { ...item })
+    }
+    for (const sheet of seed.quoteSheets ?? []) {
+      this.quoteSheets.set(sheet.sheetId, { ...sheet })
+    }
+    for (const item of seed.quoteItems ?? []) {
+      this.quoteItems.set(item.itemId, { ...item })
     }
   }
 
@@ -234,6 +267,70 @@ export class MemoryStore implements CollabDocStore, MaterializeStore {
   /** 供测试直接断言某格的当前物化值。 */
   getItem(listId: string, cellKey: string): MemoryListItemRow | undefined {
     return this.items.get(itemKey(listId, cellKey))
+  }
+
+  async loadInitialQuoteSheet(
+    room: string,
+  ): Promise<InitialQuoteSheetSnapshot | null> {
+    const sheetId = /^quote-sheet:(\d+)$/.exec(room.trim())?.[1]
+    if (sheetId === undefined) return null
+    const sheet = this.quoteSheets.get(sheetId)
+    if (!sheet) return null
+    const items = [...this.quoteItems.values()]
+      .filter((row) => row.sheetId === sheetId)
+      .sort((left, right) => left.lineNo - right.lineNo)
+    return {
+      sheetId: sheet.sheetId,
+      version: sheet.version,
+      items: items.map((row) => ({
+        itemId: row.itemId,
+        ton: row.ton,
+        remark: row.remark,
+      })),
+    }
+  }
+
+  async loadQuoteMaterialized(
+    _room: string,
+    sheetId: string,
+  ): Promise<Map<string, QuoteSheetItemRecord>> {
+    const records = new Map<string, QuoteSheetItemRecord>()
+    for (const row of this.quoteItems.values()) {
+      if (row.sheetId !== sheetId) continue
+      records.set(row.itemId, { ton: row.ton, remark: row.remark })
+    }
+    return records
+  }
+
+  async applyQuoteChanges(
+    request: QuoteMaterializeRequest,
+  ): Promise<QuoteMaterializeResult> {
+    this.quoteApplyCalls += 1
+    if (this.failNextApply) {
+      const error = this.failNextApply
+      this.failNextApply = null
+      throw error
+    }
+    const sheet = this.quoteSheets.get(request.sheetId)
+    if (!sheet) {
+      throw new Error(`报价单 ${request.sheetId} 不存在（内存存储）`)
+    }
+    sheet.version += 1
+    let updated = 0
+    for (const change of request.changes) {
+      const row = this.quoteItems.get(change.itemId)
+      // 只更新已存在的行：行结构归 REST 管，物化不插入、不删除。
+      if (!row || row.sheetId !== request.sheetId) continue
+      row.ton = change.ton
+      row.remark = change.remark
+      updated += 1
+    }
+    return { version: String(sheet.version), updated }
+  }
+
+  /** 供测试直接断言某行的当前 SQL 值。 */
+  getQuoteItem(itemId: string): MemoryQuoteItemRow | undefined {
+    return this.quoteItems.get(itemId)
   }
 
   async close(): Promise<void> {

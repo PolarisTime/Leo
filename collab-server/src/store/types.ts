@@ -9,6 +9,7 @@
  */
 
 import type { CellParts, CellValue, PriceStatus } from '../doc-model.js'
+import type { QuoteSheetItemRecord } from '../quote-sheet-model.js'
 
 /** 从 SQL 读出的条目（用于生成初始 Y.Doc 与物化基线）。 */
 export interface StoredListItem {
@@ -48,6 +49,11 @@ export interface CollabDocStore {
   appendUpdates(room: string, updates: readonly Uint8Array[]): Promise<number>
   /** 无协作文档时，按 room 线索从 SQL 价格表生成初始快照；找不到返回 null。 */
   loadInitialList(room: string): Promise<InitialListSnapshot | null>
+  /**
+   * 无协作文档时，按 `quote-sheet:<sheetId>` 从 SQL 报价单生成初始快照
+   * （**只播种 ton/remark**，规格/行结构归 REST）；找不到返回 null。
+   */
+  loadInitialQuoteSheet(room: string): Promise<InitialQuoteSheetSnapshot | null>
   close(): Promise<void>
 }
 
@@ -93,5 +99,67 @@ export interface MaterializeStore {
   ): Promise<Map<string, CellValue>>
   /** **单事务**应用变更：版本 +1、upsert/delete 条目、写通知审计。 */
   applyChanges(request: MaterializeRequest): Promise<MaterializeResult>
+  close(): Promise<void>
+}
+
+/* ------------------------------------------------------------------ *
+ * 报单比价（quote-sheet）房间
+ * ------------------------------------------------------------------ */
+
+/** 从 SQL 读出的报价单行（只含可协作的 ton/remark）。 */
+export interface QuoteSheetItemSeed {
+  itemId: string
+  ton: number | null
+  remark: string | null
+}
+
+export interface InitialQuoteSheetSnapshot {
+  sheetId: string
+  version: number
+  items: QuoteSheetItemSeed[]
+}
+
+/**
+ * 一行报价单的可写值变化。
+ *
+ * <p>报价单物化是**只更新**语义：只 UPDATE 已存在的明细行（按 id），不插入、不删除 ——
+ * 行结构归 Java REST 管，CRDT 里没有「增行/删行」这个操作。</p>
+ */
+export interface QuoteSheetItemChange {
+  itemId: string
+  /** 目标吨位；null = 清空（写 SQL NULL）。 */
+  ton: number | null
+  /** 目标备注；null = 清空（写 SQL NULL）。 */
+  remark: string | null
+  /** 触发改动的用户（仅用于日志；报价单本期没有审计表）。 */
+  actorId: string
+}
+
+export interface QuoteMaterializeRequest {
+  room: string
+  sheetId: string
+  changes: QuoteSheetItemChange[]
+  /** 本次物化的兜底操作人（按行归因缺失时使用）。 */
+  actorId: string
+}
+
+export interface QuoteMaterializeResult {
+  /** 物化后的报价单版本号（字符串，BIGINT 语义）。 */
+  version: string
+  /** 实际更新到的明细行数。 */
+  updated: number
+}
+
+/** 报价单物化写 SQL 的唯一入口。 */
+export interface QuoteMaterializeStore {
+  /** 读 SQL 里当前的可协作值（重启后的 diff 基线）。 */
+  loadQuoteMaterialized(
+    room: string,
+    sheetId: string,
+  ): Promise<Map<string, QuoteSheetItemRecord>>
+  /** **单事务**：`mk_quote_sheet.version + 1` + 按 id 更新 `mk_quote_item.ton/remark`。 */
+  applyQuoteChanges(
+    request: QuoteMaterializeRequest,
+  ): Promise<QuoteMaterializeResult>
   close(): Promise<void>
 }

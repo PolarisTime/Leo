@@ -14,7 +14,11 @@ import { type CollabServerHandle, createCollabServer } from './server.js'
 import { createSnowflakeGenerator } from './snowflake.js'
 import { MemoryStore } from './store/memory-store.js'
 import { PostgresStore } from './store/postgres-store.js'
-import type { CollabDocStore, MaterializeStore } from './store/types.js'
+import type {
+  CollabDocStore,
+  MaterializeStore,
+  QuoteMaterializeStore,
+} from './store/types.js'
 
 const require = createRequire(import.meta.url)
 const packageJson = require('../package.json') as { version?: string }
@@ -39,11 +43,8 @@ async function main(): Promise<void> {
     machineId: config.snowflakeWorkerId,
   })
 
-  const { docStore, materializeStore, closeStores } = await createStores(
-    config,
-    snowflake,
-    logger,
-  )
+  const { docStore, materializeStore, quoteMaterializeStore, closeStores } =
+    await createStores(config, snowflake, logger)
 
   const { redis, extension } = await createCollabRedis(config.redisUrl, logger)
 
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
     logger,
     docStore,
     materializeStore,
+    quoteMaterializeStore,
     redis,
     redisExtension: extension,
     version: packageJson.version ?? '0.1.0',
@@ -75,6 +77,7 @@ async function main(): Promise<void> {
 interface StoreBundle {
   docStore: CollabDocStore
   materializeStore: MaterializeStore
+  quoteMaterializeStore: QuoteMaterializeStore
   closeStores: () => Promise<void>
 }
 
@@ -88,6 +91,7 @@ async function createStores(
     return {
       docStore: store,
       materializeStore: store,
+      quoteMaterializeStore: store,
       closeStores: async () => store.close(),
     }
   }
@@ -112,7 +116,9 @@ async function createStores(
   return {
     docStore: store,
     materializeStore: store,
-    // PostgresStore 同时实现两个接口，close 只执行一次（同一连接池）。
+    // PostgresStore 同时实现三个接口（供应商/报价单共用同一连接池与事务工具）。
+    quoteMaterializeStore: store,
+    // close 只执行一次（同一连接池）。
     closeStores: async () => store.close(),
   }
 }

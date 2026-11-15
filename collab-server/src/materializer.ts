@@ -25,6 +25,7 @@ import {
   readDocSnapshot,
 } from './doc-model.js'
 import type { Logger } from './logger.js'
+import { nextRetryDelayMs, SYSTEM_ACTOR_ID } from './materializer-support.js'
 import { parseRoom } from './room.js'
 import type {
   CellChange,
@@ -32,8 +33,8 @@ import type {
   MaterializeStore,
 } from './store/types.js'
 
-/** 系统操作人（拿不到 JWT 用户时，例如服务端重建/测试）。 */
-export const SYSTEM_ACTOR_ID = '0'
+// 系统操作人与退避口径在 materializer-support.ts（与报单比价物化器共用一份）。
+export { SYSTEM_ACTOR_ID } from './materializer-support.js'
 
 export interface MaterializedEvent {
   room: string
@@ -475,10 +476,11 @@ export class CollabMaterializer {
       this.timers.clearTimeout(state.timer)
       state.timer = null
     }
-    state.retryDelayMs =
-      state.retryDelayMs === 0
-        ? this.retryBaseMs
-        : Math.min(state.retryDelayMs * 2, this.retryMaxMs)
+    state.retryDelayMs = nextRetryDelayMs(
+      state.retryDelayMs,
+      this.retryBaseMs,
+      this.retryMaxMs,
+    )
     const timer = this.timers.setTimeout(() => {
       state.timer = null
       void this.flushRoom(state.room).catch(() => {

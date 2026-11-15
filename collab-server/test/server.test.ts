@@ -78,6 +78,7 @@ describe('协作边车 HTTP 面', () => {
       logger: silentLogger(),
       docStore: store,
       materializeStore: store,
+      quoteMaterializeStore: store,
       version: 'test-version',
     })
     await handle.start()

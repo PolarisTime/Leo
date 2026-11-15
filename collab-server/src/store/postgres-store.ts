@@ -28,14 +28,19 @@ import {
 } from '../doc-model.js'
 import type { Logger } from '../logger.js'
 import { type PoolLike, type Queryable, withTransaction } from '../postgres.js'
+import type { QuoteSheetItemRecord } from '../quote-sheet-model.js'
 import { parseRoom } from '../room.js'
 import type { SnowflakeGenerator } from '../snowflake.js'
 import type {
   CollabDocStore,
   InitialListSnapshot,
+  InitialQuoteSheetSnapshot,
   MaterializeRequest,
   MaterializeResult,
   MaterializeStore,
+  QuoteMaterializeRequest,
+  QuoteMaterializeResult,
+  QuoteMaterializeStore,
   StoredListItem,
 } from './types.js'
 
@@ -54,6 +59,9 @@ const REQUIRED_TABLES = [
   'mk_supplier_price_cell_op',
   'mk_supplier_price_item',
   'mk_supplier_price_list',
+  // 报单比价房间：复用同一个 store 实例读写（quote-sheet 房间只更新 ton/remark）。
+  'mk_quote_sheet',
+  'mk_quote_item',
 ] as const
 
 /** 必需列：缺任何一个都无法工作，strict 模式启动即失败并列出缺什么。 */
@@ -95,6 +103,11 @@ const REQUIRED_COLUMNS: ReadonlyArray<{ table: string; columns: string[] }> = [
     table: 'mk_supplier_price_list',
     columns: ['id', 'supplier_id', 'brand_name', 'effective_from', 'version'],
   },
+  { table: 'mk_quote_sheet', columns: ['id', 'version', 'deleted_flag'] },
+  {
+    table: 'mk_quote_item',
+    columns: ['id', 'sheet_id', 'row_type', 'ton', 'remark'],
+  },
 ]
 
 export interface PostgresStoreOptions {
@@ -117,7 +130,9 @@ interface ItemRowRecord {
   sort_order: number | null
 }
 
-export class PostgresStore implements CollabDocStore, MaterializeStore {
+export class PostgresStore
+  implements CollabDocStore, MaterializeStore, QuoteMaterializeStore
+{
   private readonly pool: PoolLike
   private readonly snowflake: SnowflakeGenerator
   private readonly logger: Logger
@@ -311,6 +326,136 @@ export class PostgresStore implements CollabDocStore, MaterializeStore {
       version: Number(list.version),
       items: itemsResult.rows.map((row) => toStoredItem(row)),
     }
+  }
+
+  /**
+   * 报价单播种：只取 `ton` / `remark`。
+   *
+   * <p>**不播种规格与价格**：行结构（品类/材质/规格/定尺/排序）与价格都由 Java REST 与
+   * 实时派生决定，进 CRDT 会造出第二份真相源；这里只把「可协作的两列」灌进初始文档。</p>
+   *
+   * <p>只取 `row_type = 'PRODUCT'` 的行：隔断行（SEPARATOR）是结构/标题，不是可编辑明细。</p>
+   */
+  async loadInitialQuoteSheet(
+    room: string,
+  ): Promise<InitialQuoteSheetSnapshot | null> {
+    const sheetId = parseRoom(room).sheetId
+    if (sheetId === null) return null
+    const sheetResult = await this.pool.query<{
+      id: string
+      version: string | number
+    }>(
+      `SELECT id, version
+         FROM mk_quote_sheet
+        WHERE id = $1
+          AND deleted_flag = false`,
+      [sheetId],
+    )
+    const sheet = sheetResult.rows[0]
+    if (!sheet) {
+      this.logger.warn('报价单不存在或已删除，跳过初始文档生成', {
+        room,
+        sheetId,
+      })
+      return null
+    }
+    const itemsResult = await this.pool.query<{
+      id: string
+      ton: string | null
+      remark: string | null
+    }>(
+      `SELECT id, ton, remark
+         FROM mk_quote_item
+        WHERE sheet_id = $1
+          AND row_type = 'PRODUCT'
+        ORDER BY line_no ASC, id ASC`,
+      [sheet.id],
+    )
+    return {
+      sheetId: String(sheet.id),
+      version: Number(sheet.version),
+      items: itemsResult.rows.map((row) => ({
+        itemId: String(row.id),
+        // numeric 由 pg 驱动返回字符串：必须转 number，否则文档里会变成字符串吨位。
+        ton: row.ton === null ? null : Number(row.ton),
+        remark: row.remark,
+      })),
+    }
+  }
+
+  async loadQuoteMaterialized(
+    _room: string,
+    sheetId: string,
+  ): Promise<Map<string, QuoteSheetItemRecord>> {
+    const result = await this.pool.query<{
+      id: string
+      ton: string | null
+      remark: string | null
+    }>(
+      `SELECT id, ton, remark
+         FROM mk_quote_item
+        WHERE sheet_id = $1
+          AND row_type = 'PRODUCT'`,
+      [sheetId],
+    )
+    const records = new Map<string, QuoteSheetItemRecord>()
+    for (const row of result.rows) {
+      records.set(String(row.id), {
+        ton: row.ton === null ? null : Number(row.ton),
+        remark: row.remark,
+      })
+    }
+    return records
+  }
+
+  /**
+   * 报价单物化：**只更新**已存在的明细行（ton/remark），不插入、不删除。
+   *
+   * <p>删除语义：Y.Doc 里删掉整个 `itemId` 不会到达这里（物化器已忽略）；格内删掉字段
+   * （ton/remark）到这里就是 `null` → 写 SQL NULL。行本身的增删仍走 Java REST。</p>
+   */
+  async applyQuoteChanges(
+    request: QuoteMaterializeRequest,
+  ): Promise<QuoteMaterializeResult> {
+    return withTransaction(this.pool, async (client) => {
+      const versionResult = await client.query<{ version: string | number }>(
+        `UPDATE mk_quote_sheet
+            SET version = version + 1,
+                updated_at = now()
+          WHERE id = $1
+            AND deleted_flag = false
+          RETURNING version`,
+        [request.sheetId],
+      )
+      const versionRow = versionResult.rows[0]
+      if (!versionRow) {
+        throw new Error(
+          `报价单 ${request.sheetId} 不存在，物化中止（不写任何明细行）`,
+        )
+      }
+      const version = String(versionRow.version)
+
+      let updated = 0
+      for (const change of request.changes) {
+        const result = await client.query(
+          `UPDATE mk_quote_item
+              SET ton = $2,
+                  remark = $3
+            WHERE id = $1
+              AND sheet_id = $4`,
+          [
+            change.itemId,
+            change.ton,
+            change.remark === null || change.remark.length === 0
+              ? null
+              : sanitizeDbText(change.remark, 255),
+            request.sheetId,
+          ],
+        )
+        updated += result.rowCount ?? 0
+      }
+      return { version, updated }
+    })
   }
 
   async loadMaterialized(
