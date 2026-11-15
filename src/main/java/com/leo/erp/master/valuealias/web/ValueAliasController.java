@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 值映射/别名维护接口。
  *
- * <p>资源路径 {@code /api/v2/value-aliases} 与权限码资源名 {@code value-aliases} 对齐。</p>
+ * <p>资源路径 {@code /api/v2.0/value-aliases} 与权限码资源名 {@code value-aliases} 对齐。</p>
  */
 @RestController
 @Validated

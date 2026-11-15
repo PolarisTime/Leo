@@ -26,7 +26,7 @@ import java.time.LocalDate;
  * 项目取价基准解析：只读地把「项目配置 + 单据日期」换算成实际取价日与实际时段。
  *
  * <p>解析与匹配分离：本接口负责「取哪天哪时段」（含休市回退与中文说明），
- * 真正取价仍走 {@code GET /api/v2/material-price-matches?quoteDate&period&source&region}，
+ * 真正取价仍走 {@code GET /api/v2.0/material-price-matches?quoteDate&period&source&region}，
  * 这样前端可以先展示解析结果、允许人工覆盖，再发起取价。</p>
  */
 @Tag(name = "项目取价基准解析")

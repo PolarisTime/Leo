@@ -29,7 +29,7 @@ public final class ResponseSupport {
     }
 
     /**
-     * 创建资源：201 + {@code Location: /api/v2/{resourcePath}/{id}}。
+     * 创建资源：201 + {@code Location: /api/v2.0/{resourcePath}/{id}}。
      *
      * @param resourcePath 资源集合路径（如 {@code /sales-orders}）
      * @param body         新建资源的表示；需提供 {@code id()} / {@code getId()} 才能发出 Location

@@ -128,7 +128,7 @@ public class PurchaseOrderController {
     }
 
     @Operation(summary = "预览采购订单提货清单")
-    @GetMapping("/pickup-list-preview")
+    @GetMapping("/pickup-list-previews")
     @RequirePermission(PermissionCodes.PURCHASE_ORDERS_READ)
     public PurchaseOrderPickupListResponse pickupListPreview(@RequestParam @Size(min = 1, max = 50) List<@Positive Long> orderIds) {
         return pickupListService.preview(orderIds);
