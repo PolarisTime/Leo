@@ -17,6 +17,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -56,7 +57,7 @@ public class ReceiptController {
     @Operation(summary = "分页查询收款单")
     @GetMapping
     @RequirePermission(PermissionCodes.RECEIPTS_READ)
-    public PageResponse<ReceiptResponse> page(@BindPageQuery(sortFieldKey = "receipt") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String customerName, @RequestParam(required = false) String counterpartyType, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+    public PageResponse<ReceiptResponse> page(@BindPageQuery(sortFieldKey = "receipt") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String customerName, @RequestParam(required = false) String counterpartyType, @RequestParam(required = false) @Positive Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return PageResponse.from(receiptService.page(
                 query,
                 PageFilter.of(keyword, customerName, settlementCompanyId, status, startDate, endDate)

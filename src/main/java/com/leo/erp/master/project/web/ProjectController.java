@@ -14,6 +14,7 @@ import com.leo.erp.master.project.web.dto.ProjectResponse;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -52,14 +53,14 @@ public class ProjectController {
     @Operation(summary = "查询项目下拉选项", description = "按客户查询启用状态的项目精简列表，供单据选择使用；数量受 OptionLimits 上限保护，不分页。需 PROJECTS_READ 权限。")
     @GetMapping("/options")
     @RequirePermission(PermissionCodes.PROJECTS_READ)
-    public List<ProjectOptionResponse> options(@RequestParam Long customerId) {
+    public List<ProjectOptionResponse> options(@RequestParam @Positive Long customerId) {
         return OptionLimits.cap(projectService.listActiveOptions(customerId));
     }
 
     @Operation(summary = "分页查询项目", description = "按关键字、状态与客户过滤，分页返回（PageResponse），默认按 project 稳定排序。需 PROJECTS_READ 权限。")
     @GetMapping
     @RequirePermission(PermissionCodes.PROJECTS_READ)
-    public PageResponse<ProjectResponse> page(@BindPageQuery(sortFieldKey = "project") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String status, @RequestParam(required = false) Long customerId) {
+    public PageResponse<ProjectResponse> page(@BindPageQuery(sortFieldKey = "project") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String status, @RequestParam(required = false) @Positive Long customerId) {
         return PageResponse.from(projectService.page(query, keyword, status, customerId));
     }
 

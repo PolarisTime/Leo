@@ -43,6 +43,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -96,7 +97,7 @@ public class SalesOrderController {
     @Operation(summary = "分页查询销售订单采购来源候选")
     @GetMapping("/source-candidates")
     @RequirePermission(PermissionCodes.SALES_ORDERS_READ)
-    public PageResponse<SalesOrderSourceCandidateResponse> sourceCandidates(@BindPageQuery(sortFieldKey = "purchase-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long supplierId, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Long currentSalesOrderId) {
+    public PageResponse<SalesOrderSourceCandidateResponse> sourceCandidates(@BindPageQuery(sortFieldKey = "purchase-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) @Positive Long supplierId, @RequestParam(required = false) @Positive Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) @Positive Long currentSalesOrderId) {
         return sourceCandidateService.page(
                 keyword, supplierId, settlementCompanyId,
                 startDate, endDate, currentSalesOrderId, query);

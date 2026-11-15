@@ -19,6 +19,7 @@ import com.leo.erp.statement.freight.web.dto.FreightStatementSummaryResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -56,7 +57,7 @@ public class FreightStatementController {
     @Operation(summary = "分页查询物流对账单")
     @GetMapping
     @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_READ)
-    public PageResponse<FreightStatementResponse> page(@BindPageQuery(sortFieldKey = "freight-statement") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long carrierId, @RequestParam(required = false) String carrierCode, @RequestParam(required = false) String carrierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
+    public PageResponse<FreightStatementResponse> page(@BindPageQuery(sortFieldKey = "freight-statement") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) @Positive Long carrierId, @RequestParam(required = false) String carrierCode, @RequestParam(required = false) String carrierName, @RequestParam(required = false) @Positive Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
         return PageResponse.from(freightStatementService.responsePage(
                 query,
                 pageFilter(keyword, carrierId, carrierName, settlementCompanyId, status, periodStart, periodEnd),
@@ -67,7 +68,7 @@ public class FreightStatementController {
     @Operation(summary = "汇总物流对账单")
     @GetMapping("/summary")
     @RequirePermission(PermissionCodes.FREIGHT_STATEMENTS_READ)
-    public FreightStatementSummaryResponse summary(@RequestParam(required = false) String keyword, @RequestParam(required = false) Long carrierId, @RequestParam(required = false) String carrierCode, @RequestParam(required = false) String carrierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
+    public FreightStatementSummaryResponse summary(@RequestParam(required = false) String keyword, @RequestParam(required = false) @Positive Long carrierId, @RequestParam(required = false) String carrierCode, @RequestParam(required = false) String carrierName, @RequestParam(required = false) @Positive Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
         return freightStatementService.summary(
                 pageFilter(keyword, carrierId, carrierName, settlementCompanyId, status, periodStart, periodEnd),
                 carrierCode

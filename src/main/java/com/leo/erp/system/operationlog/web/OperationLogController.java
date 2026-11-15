@@ -13,6 +13,7 @@ import com.leo.erp.system.operationlog.web.dto.OperationLogResponse;
 import com.leo.erp.system.operationlog.web.dto.OperationLogSummaryResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.format.annotation.DateTimeFormat;
+import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -47,7 +48,7 @@ public class OperationLogController {
             @RequestParam(required = false) String resultStatus,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startTime,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endTime,
-            @RequestParam(required = false) Long recordId,
+            @RequestParam(required = false) @Positive Long recordId,
             @RequestParam(required = false) String authType,
             @RequestParam(required = false) String operatorName,
             @RequestParam(required = false) String businessNo,

@@ -21,6 +21,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -58,8 +59,8 @@ public class SalesContractController {
     public PageResponse<SalesContractResponse> page(
             @BindPageQuery(sortFieldKey = "sales-contract") PageQuery query,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Long customerId,
-            @RequestParam(required = false) Long projectId,
+            @RequestParam(required = false) @Positive Long customerId,
+            @RequestParam(required = false) @Positive Long projectId,
             @RequestParam(required = false) String status) {
         return PageResponse.from(service.page(query, keyword, customerId, projectId, status));
     }

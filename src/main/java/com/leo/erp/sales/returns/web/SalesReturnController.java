@@ -22,6 +22,7 @@ import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -67,9 +68,9 @@ public class SalesReturnController {
     public PageResponse<SalesReturnResponse> page(
             @BindPageQuery(sortFieldKey = "sales-return") PageQuery query,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) @Positive Long customerId,
             @RequestParam(required = false) String customerName,
-            @RequestParam(required = false) Long projectId,
+            @RequestParam(required = false) @Positive Long projectId,
             @RequestParam(required = false) String projectName,
             @RequestParam(required = false) String productKeyword,
             @RequestParam(required = false) String status,
@@ -86,7 +87,7 @@ public class SalesReturnController {
     @GetMapping("/candidates")
     @Operation(summary = "查询销售退货来源候选（已审核销售出库可退明细）")
     @RequirePermission(PermissionCodes.SALES_RETURNS_READ)
-    public SalesReturnCandidateResponse candidates(@RequestParam Long salesOutboundId) {
+    public SalesReturnCandidateResponse candidates(@RequestParam @Positive Long salesOutboundId) {
         return candidateService.candidates(salesOutboundId);
     }
 

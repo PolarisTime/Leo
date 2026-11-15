@@ -97,7 +97,7 @@ public class PurchaseOrderController {
     @Operation(summary = "分页查询采购入库来源候选")
     @GetMapping("/inbound-import-candidates")
     @RequirePermission(PermissionCodes.PURCHASE_ORDERS_READ)
-    public PageResponse<PurchaseOrderImportCandidateResponse> inboundImportCandidates(@BindPageQuery(sortFieldKey = "purchase-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long supplierId, @RequestParam(required = false) String supplierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Long currentRecordId) {
+    public PageResponse<PurchaseOrderImportCandidateResponse> inboundImportCandidates(@BindPageQuery(sortFieldKey = "purchase-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) @Positive Long supplierId, @RequestParam(required = false) String supplierName, @RequestParam(required = false) @Positive Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) @Positive Long currentRecordId) {
         return PageResponse.from(purchaseOrderService.inboundImportCandidates(
                 query,
                 PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)

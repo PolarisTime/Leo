@@ -18,6 +18,7 @@ import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementSummaryResponse;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -55,7 +56,7 @@ public class CustomerStatementController {
     @Operation(summary = "分页查询客户对账单")
     @GetMapping
     @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_READ)
-    public PageResponse<CustomerStatementResponse> page(@BindPageQuery(sortFieldKey = "customer-statement") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) String billDirection, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
+    public PageResponse<CustomerStatementResponse> page(@BindPageQuery(sortFieldKey = "customer-statement") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) @Positive Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) @Positive Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) @Positive Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) String billDirection, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
         return PageResponse.from(customerStatementService.page(
                 query,
                 PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, periodStart, periodEnd)
@@ -67,7 +68,7 @@ public class CustomerStatementController {
     @Operation(summary = "汇总客户对账单")
     @GetMapping("/summary")
     @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_READ)
-    public CustomerStatementSummaryResponse summary(@RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) String billDirection, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
+    public CustomerStatementSummaryResponse summary(@RequestParam(required = false) String keyword, @RequestParam(required = false) @Positive Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) @Positive Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) @Positive Long settlementCompanyId, @RequestParam(required = false) String status, @RequestParam(required = false) String billDirection, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
         return customerStatementService.summary(
                 PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, periodStart, periodEnd)
                         .withIdentity(customerId, projectId, null, null, null),
@@ -78,7 +79,7 @@ public class CustomerStatementController {
     @Operation(summary = "分页查询客户对账单候选销售订单")
     @GetMapping("/candidates")
     @RequirePermission(PermissionCodes.CUSTOMER_STATEMENTS_READ)
-    public PageResponse<CustomerStatementCandidateResponse> candidates(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) Long currentStatementId) {
+    public PageResponse<CustomerStatementCandidateResponse> candidates(@BindPageQuery(sortFieldKey = "sales-order") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) @Positive Long customerId, @RequestParam(required = false) String customerName, @RequestParam(required = false) @Positive Long projectId, @RequestParam(required = false) String projectName, @RequestParam(required = false) @Positive Long settlementCompanyId, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate, @RequestParam(required = false) @Positive Long currentStatementId) {
         return PageResponse.from(customerStatementService.candidatePage(
                 query,
                 PageFilter.of(keyword, customerName, projectName, settlementCompanyId, null, startDate, endDate)

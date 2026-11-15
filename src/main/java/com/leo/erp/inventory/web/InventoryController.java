@@ -20,6 +20,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -57,8 +58,8 @@ public class InventoryController {
     public PageResponse<InventoryBalanceResponse> balances(
             @BindPageQuery(sortFieldKey = "inventory-balance") PageQuery query,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Long materialId,
-            @RequestParam(required = false) Long warehouseId) {
+            @RequestParam(required = false) @Positive Long materialId,
+            @RequestParam(required = false) @Positive Long warehouseId) {
         return balanceQueryService.page(query, keyword, warehouseId, materialId);
     }
 
@@ -68,8 +69,8 @@ public class InventoryController {
     public PageResponse<InventoryTransactionResponse> transactions(
             @BindPageQuery(sortFieldKey = "inventory-transaction") PageQuery query,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Long materialId,
-            @RequestParam(required = false) Long warehouseId,
+            @RequestParam(required = false) @Positive Long materialId,
+            @RequestParam(required = false) @Positive Long warehouseId,
             @RequestParam(required = false) String transactionType,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,

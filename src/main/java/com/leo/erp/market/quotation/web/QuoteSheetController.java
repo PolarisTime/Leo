@@ -23,6 +23,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -63,7 +64,7 @@ public class QuoteSheetController {
     public PageResponse<QuoteSheetResponse> page(
             @BindPageQuery(sortFieldKey = "quote-sheet") PageQuery query,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate orderDate,
-            @RequestParam(required = false) Long projectId,
+            @RequestParam(required = false) @Positive Long projectId,
             @RequestParam(required = false) String keyword) {
         return PageResponse.from(quoteSheetService.page(query, orderDate, projectId, keyword));
     }

@@ -15,6 +15,7 @@ import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -58,7 +59,7 @@ public class PurchaseInboundController {
     @GetMapping
     @Operation(summary = "分页查询采购入库")
     @RequirePermission(PermissionCodes.PURCHASE_INBOUNDS_READ)
-    public PageResponse<PurchaseInboundResponse> page(@BindPageQuery(sortFieldKey = "purchase-inbound") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) Long supplierId, @RequestParam(required = false) String supplierName, @RequestParam(required = false) Long settlementCompanyId, @RequestParam(required = false) String productKeyword, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+    public PageResponse<PurchaseInboundResponse> page(@BindPageQuery(sortFieldKey = "purchase-inbound") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) @Positive Long supplierId, @RequestParam(required = false) String supplierName, @RequestParam(required = false) @Positive Long settlementCompanyId, @RequestParam(required = false) String productKeyword, @RequestParam(required = false) String status, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate, @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return PageResponse.from(service.page(
                 query,
                 PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)
