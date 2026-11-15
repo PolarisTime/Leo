@@ -1,0 +1,280 @@
+package com.leo.erp.logistics.bill.web;
+
+import com.leo.erp.common.api.ApiProblemFactory;
+import com.leo.erp.common.api.PageFilter;
+import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.exception.GlobalExceptionHandler;
+import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.web.dto.StatusUpdateRequest;
+import com.leo.erp.logistics.bill.domain.enums.FreightSettlementMode;
+import com.leo.erp.logistics.bill.service.FreightBillSalesOrderCandidateService;
+import com.leo.erp.logistics.bill.service.FreightBillService;
+import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
+import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
+import com.leo.erp.logistics.bill.web.dto.FreightBillSalesOrderCandidateResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.support.SecurityPrincipal;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * FreightBillController 极端情况测试。
+ */
+@ExtendWith(MockitoExtension.class)
+class FreightBillControllerTest {
+
+    @Mock
+    private FreightBillService service;
+
+    @Mock
+    private FreightBillSalesOrderCandidateService candidateService;
+
+    @Mock
+    private FreightBillSalesOrderCandidateResponseAssembler candidateResponseAssembler;
+
+    @InjectMocks
+    private FreightBillController controller;
+
+    @BeforeEach
+    void setUpServletContext() {
+        RequestContextHolder.setRequestAttributes(
+                new ServletRequestAttributes(new MockHttpServletRequest()));
+    }
+
+    @AfterEach
+    void clearServletContext() {
+        RequestContextHolder.resetRequestAttributes();
+        SecurityContextHolder.clearContext();
+    }
+
+    private void authenticate(String... authorities) {
+        var granted = java.util.Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toList();
+        var authentication = new UsernamePasswordAuthenticationToken(
+                SecurityPrincipal.authenticated(1L, "tester", 0L), "n/a", granted);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
+    private FreightBillRequest request() {
+        return new FreightBillRequest(
+                "FB001", 1L, "C001", "承运商A", 30L, "结算公司A", null, null,
+                LocalDate.of(2026, 8, 1), new BigDecimal("100"), FreightSettlementMode.BY_TONNAGE, null,
+                "DRAFT", null, List.of(), List.of(), false);
+    }
+
+    @Test
+    void salesOrderCandidates_shouldDelegate() {
+        @SuppressWarnings("unchecked")
+        PageResponse<FreightBillSalesOrderCandidateResponse> expected =
+                (PageResponse<FreightBillSalesOrderCandidateResponse>) mock(PageResponse.class);
+        @SuppressWarnings("unchecked")
+        PageResponse<com.leo.erp.sales.api.SalesOrderSourceSnapshot> page =
+                (PageResponse<com.leo.erp.sales.api.SalesOrderSourceSnapshot>) mock(PageResponse.class);
+        when(candidateService.page(any(PageQuery.class), any(PageFilter.class))).thenReturn(page);
+        when(candidateResponseAssembler.toPageResponse(any(PageResponse.class))).thenReturn(expected);
+
+        PageResponse<FreightBillSalesOrderCandidateResponse> result = controller.salesOrderCandidates(
+                mock(PageQuery.class), "kw", 10L, "客户A", 20L, "项目A", 30L, null,
+                LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), 5L);
+
+        assertThat(result).isSameAs(expected);
+    }
+
+    @Test
+    void salesOrderCandidates_shouldForwardStatusIntoFilter() {
+        @SuppressWarnings("unchecked")
+        PageResponse<com.leo.erp.sales.api.SalesOrderSourceSnapshot> page =
+                (PageResponse<com.leo.erp.sales.api.SalesOrderSourceSnapshot>) mock(PageResponse.class);
+        when(candidateService.page(any(PageQuery.class), any(PageFilter.class))).thenReturn(page);
+        when(candidateResponseAssembler.toPageResponse(any(PageResponse.class)))
+                .thenReturn(mock(PageResponse.class));
+
+        controller.salesOrderCandidates(
+                mock(PageQuery.class), null, null, null, null, null, null,
+                " " + StatusConstants.AUDITED + " ", null, null, null);
+
+        // 必须断言到 PageFilter.status()：只断言「参数被接收」会漏掉「收了但没往下传」的静默失效
+        ArgumentCaptor<PageFilter> captor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(candidateService).page(any(PageQuery.class), captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(StatusConstants.AUDITED);
+    }
+
+    @Test
+    void salesOrderCandidates_shouldForwardNullWhenStatusBlank() {
+        @SuppressWarnings("unchecked")
+        PageResponse<com.leo.erp.sales.api.SalesOrderSourceSnapshot> page =
+                (PageResponse<com.leo.erp.sales.api.SalesOrderSourceSnapshot>) mock(PageResponse.class);
+        when(candidateService.page(any(PageQuery.class), any(PageFilter.class))).thenReturn(page);
+        when(candidateResponseAssembler.toPageResponse(any(PageResponse.class)))
+                .thenReturn(mock(PageResponse.class));
+
+        controller.salesOrderCandidates(
+                mock(PageQuery.class), null, null, null, null, null, null, "   ", null, null, null);
+
+        ArgumentCaptor<PageFilter> captor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(candidateService).page(any(PageQuery.class), captor.capture());
+        // 前端 opt-out 时传空串：必须归一化成 null(不加状态条件)，而不是查 status = ''
+        assertThat(captor.getValue().status()).isNull();
+    }
+
+    @Test
+    void salesOrderCandidates_shouldReturn422WhenStatusOutsideCandidatePool() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler(new ApiProblemFactory("Asia/Shanghai")))
+                .build();
+
+        mockMvc.perform(get("/v2.0/freight-bills/sales-order-candidates")
+                        .param("status", StatusConstants.DRAFT))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value(4000));
+
+        // 非法状态必须在进入查询前就被拒绝，不能把空结果伪装成「该状态没有候选」
+        verify(candidateService, never()).page(any(PageQuery.class), any(PageFilter.class));
+    }
+
+    @Test
+    void page_shouldDelegateWithCarrierCode() {
+        when(service.page(any(PageQuery.class), any(PageFilter.class), eq("C001"), eq("HRB400")))
+                .thenReturn(mock(org.springframework.data.domain.Page.class));
+
+        var result = controller.page(mock(PageQuery.class), "kw", 100L, "C001", "承运商A", 30L,
+                "HRB400", "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+
+        assertThat(result).isNotNull();
+        // productKeyword 是「商品信息」筛选（品牌/材质/规格/长度），必须与 carrierCode 一起原样透传：
+        // 只有断言到具体值，才能防止"加了参数但控制器没传下去"这类静默失效
+        verify(service).page(any(PageQuery.class), any(PageFilter.class), eq("C001"), eq("HRB400"));
+    }
+
+    @Test
+    void page_shouldForwardNullProductKeywordWhenAbsent() {
+        when(service.page(any(PageQuery.class), any(PageFilter.class), eq("C001"), isNull()))
+                .thenReturn(mock(org.springframework.data.domain.Page.class));
+
+        var result = controller.page(mock(PageQuery.class), "kw", 100L, "C001", "承运商A", 30L,
+                null, "DRAFT", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+
+        assertThat(result).isNotNull();
+        // 未传 productKeyword 必须原样透传 null：Service 侧 Specs.collectionKeywordLike(null, ...)
+        // 返回 conjunction（不过滤），既有"只按单据头关键字搜"的行为完全不受影响
+        verify(service).page(any(PageQuery.class), any(PageFilter.class), eq("C001"), isNull());
+    }
+
+    @Test
+    void detail_shouldDelegate() {
+        FreightBillResponse response = mock(FreightBillResponse.class);
+        when(service.detail(5L)).thenReturn(response);
+
+        assertThat(controller.detail(5L)).isSameAs(response);
+    }
+
+    @Test
+    void create_shouldReturnCreated() {
+        FreightBillResponse response = mock(FreightBillResponse.class);
+        when(service.create(any())).thenReturn(response);
+
+        ResponseEntity<FreightBillResponse> result = controller.create(request());
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(result.getBody()).isSameAs(response);
+    }
+
+    @Test
+    void update_shouldDelegate() {
+        FreightBillResponse response = mock(FreightBillResponse.class);
+        when(service.update(anyLong(), any())).thenReturn(response);
+
+        assertThat(controller.update(5L, request())).isSameAs(response);
+    }
+
+    @Test
+    void updateStatus_shouldPassStatus() {
+        authenticate(PermissionCodes.FREIGHT_BILLS_AUDIT);
+        FreightBillResponse response = mock(FreightBillResponse.class);
+        when(service.updateStatus(anyLong(), anyString())).thenReturn(response);
+
+        assertThat(controller.updateStatus(5L, new StatusUpdateRequest("AUDITED"))).isSameAs(response);
+        verify(service).updateStatus(5L, "AUDITED");
+    }
+
+    /**
+     * 入口 fail-closed + 迁移表校验：仅持 {@code freight-bills:update} 的主体经
+     * {@code PATCH /{id}/status} 到「已审核」必须 403（等价动作端点 {@code POST /audits} 要求
+     * {@code freight-bills:audit}），且不得触达 service。
+     */
+    @Test
+    void updateStatus_withOnlyUpdatePermission_shouldReturn403() throws Exception {
+        authenticate(PermissionCodes.FREIGHT_BILLS_UPDATE);
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler(new ApiProblemFactory("Asia/Shanghai")))
+                .build();
+
+        mockMvc.perform(patch("/v2.0/freight-bills/5/status")
+                        .contentType("application/json")
+                        .content("{\"status\":\"" + StatusConstants.AUDITED + "\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(4030));
+
+        verify(service, never()).updateStatus(anyLong(), anyString());
+    }
+
+    @Test
+    void createAudit_shouldReturnOkPointingToParentBill() {
+        FreightBillResponse response = mock(FreightBillResponse.class);
+        when(service.updateStatus(5L, StatusConstants.AUDITED)).thenReturn(response);
+
+        ResponseEntity<FreightBillResponse> result = controller.createAudit(5L);
+
+        // 审核是状态迁移而非创建资源: 200 + 最新单据, 不发 Location(无独立可回读的审核记录资源)
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getBody()).isSameAs(response);
+        assertThat(result.getHeaders().getLocation()).isNull();
+        verify(service).updateStatus(5L, StatusConstants.AUDITED);
+    }
+
+    @Test
+    void delete_shouldReturnNoContent() {
+        org.mockito.Mockito.doNothing().when(service).delete(anyLong());
+
+        ResponseEntity<Void> result = controller.delete(5L);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    }
+}

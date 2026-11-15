@@ -12,7 +12,16 @@
 | Loki | 3100 | 保存 ECS JSON 日志 |
 | Tempo | 3200、14317、14318 | 查询 Trace、接收 Alloy 转发 |
 | Prometheus | 9090 | 拉取指标和执行告警规则 |
-| Leo management | 57218 | 暴露 health 与 prometheus |
+| Leo management | 57218 | 暴露 health 与 prometheus，路径 `/api/v2.0/actuator/*` |
+
+管理端点路径说明（`application-prod.yml`）：独立管理端口不继承 `server.servlet.context-path`，
+因此显式配置 `management.server.base-path=/api` 与 `management.endpoints.web.base-path=/v2.0/actuator`，
+对外统一为 `http://127.0.0.1:57218/api/v2.0/actuator/{health,prometheus,loggers,configprops}`。
+Prometheus 的 `metrics_path` 必须与之一致（`/api/v2.0/actuator/prometheus`）。
+
+> 安全提示：管理端点仍受 Spring Security 主过滤器链约束（未认证 401，见 `SecurityConfig`），
+> 本目录的 `prometheus.yml` 未配置任何凭据；启用 Prometheus 抓取前需由运维补齐认证方案或
+> 在受控边界内单独放行，**不要**为抓取方便把 actuator 整体设为匿名可访问。
 
 Grafana 的访问入口、TLS 和认证由独立运维配置负责，不应直接暴露上述内部端口。
 

@@ -9,7 +9,6 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 
 @Component
 public class ApiErrorResponseWriter {
@@ -28,7 +27,8 @@ public class ApiErrorResponseWriter {
                       ErrorCode errorCode,
                       String message) throws IOException {
         response.setStatus(status.value());
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        // 统一使用 application/problem+json（不带 charset），与 GlobalExceptionHandler.failure() 保持一致；
+        // JSON 按 RFC 8259 固定 UTF-8，无需在 Content-Type 中重复声明。
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
         objectMapper.writeValue(
                 response.getOutputStream(),

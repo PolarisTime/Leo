@@ -47,10 +47,10 @@ import java.util.Set;
  * <ul>
  *   <li>{@code /v2.0/health} —— 探活接口，被限流会让负载均衡误判实例不健康；</li>
  *   <li>{@code /v2.0/system/health} —— 健康页；</li>
- *   <li>{@code /actuator}、{@code /actuator/**} —— 监控与探活端点；</li>
+ *   <li>{@code /v2.0/actuator}、{@code /v2.0/actuator/**} —— 监控与探活端点；</li>
  *   <li>{@code /v2.0/auth/login} —— 登录接口：登录已有专门的失败次数保护
  *       （{@code leo.auth.login-protection}），若被读限流拦下，过载时所有人都无法登录；</li>
- *   <li>{@code /error} —— 错误分发入口，防御性豁免。</li>
+ *   <li>{@code /v2.0/error} —— 错误分发入口（server.error.path），防御性豁免。</li>
  * </ul>
  * <p>额外豁免路径通过 {@code leo.rate-limit.exclude-paths}（Ant 通配，逗号分隔）追加。</p>
  *
@@ -87,10 +87,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final List<String> BUILT_IN_EXCLUSIONS = List.of(
             "/v2.0/health",
             "/v2.0/system/health",
-            "/actuator",
-            "/actuator/**",
+            "/v2.0/actuator",
+            "/v2.0/actuator/**",
             "/v2.0/auth/login",
-            "/error"
+            "/v2.0/error"
     );
 
     private final RateLimitProperties properties;

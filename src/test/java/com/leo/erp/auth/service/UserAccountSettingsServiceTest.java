@@ -14,7 +14,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.repository.UserAccountRepository;
-import com.leo.erp.auth.web.dto.UserAccountPreferencesPayload;
 import com.leo.erp.auth.web.dto.UserListColumnSettingsPayload;
 import com.leo.erp.auth.web.dto.UserSettingsPayload;
 import com.leo.erp.auth.web.dto.UserSettingsSectionUpdatePayload;
@@ -33,7 +32,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
  * 设置同步服务的行为锁定：v1 兼容读取、分片 LWW（较新覆盖 / 较旧 409 / 相同幂等）、
- * supplierQuote 材质深度合并、未知分片保留、空请求体不写库、32KB/256KB 限额、pages 别名不污染分片。
+ * supplierQuote 材质深度合并、未知分片保留、空请求体不写库、32KB/256KB 限额、pages 列设置整段替换
+ * 与读写同构、以及 pages/sections 同请求时的原子性。
  *
  * <p>断言口径是「响应 + 实际写进仓库的 JSON」两边都查：只看返回值会漏掉「内存里对、落库写错了」
  * 这类缺陷（{@code preferencesJson} 是字符串，编译器管不到结构）。</p>
@@ -279,7 +279,7 @@ class UserAccountSettingsServiceTest {
                 "pages":{}}
                 """);
 
-        UserSettingsPayload emptyMap = service().saveSettings(USER_ID, new UserSettingsUpdateRequest(Map.of()));
+        UserSettingsPayload emptyMap = service().saveSettings(USER_ID, new UserSettingsUpdateRequest(Map.of(), null));
         UserSettingsPayload nullBody = service().saveSettings(USER_ID, null);
 
         assertThat(emptyMap.sections()).containsOnlyKeys("ui");
@@ -294,7 +294,7 @@ class UserAccountSettingsServiceTest {
                 """);
 
         UserSettingsUpdateRequest request = new UserSettingsUpdateRequest(Map.of("ui",
-                new UserSettingsSectionUpdatePayload(null, "2026-11-14T07:05:00Z")));
+                new UserSettingsSectionUpdatePayload(null, "2026-11-14T07:05:00Z")), null);
 
         assertThatThrownBy(() -> service().saveSettings(USER_ID, request))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -309,7 +309,7 @@ class UserAccountSettingsServiceTest {
                 """);
 
         UserSettingsUpdateRequest request = new UserSettingsUpdateRequest(Map.of("   ",
-                section("{\"fontSize\":14}", "2026-11-14T07:05:00Z")));
+                section("{\"fontSize\":14}", "2026-11-14T07:05:00Z")), null);
 
         assertThatThrownBy(() -> service().saveSettings(USER_ID, request))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -348,7 +348,7 @@ class UserAccountSettingsServiceTest {
         for (int i = 0; i < 9; i++) {
             sections.put("s" + i, section("{\"blob\":\"" + blob + "\"}", "2026-11-14T07:05:00Z"));
         }
-        UserSettingsUpdateRequest request = new UserSettingsUpdateRequest(sections);
+        UserSettingsUpdateRequest request = new UserSettingsUpdateRequest(sections, null);
 
         assertThatThrownBy(() -> service().saveSettings(USER_ID, request))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -357,66 +357,127 @@ class UserAccountSettingsServiceTest {
     }
 
     // ------------------------------------------------------------------
-    // v1 别名：pages 读写不得污染/清掉分片
+    // pages（列设置）：整段替换、读写同构、与 sections 同请求的原子性
     // ------------------------------------------------------------------
 
     @Test
-    void getPreferences_whenStoredIsV2_shouldExposePagesOnly() {
-        UserAccount account = accountWith("""
+    void saveSettings_pages_shouldReplacePagesKeepSectionsAndApplyV1Normalization() {
+        givenStoredForUpdate("""
                 {"version":2,"sections":{"ui":{"value":{"fontSize":14},
                 "clientUpdatedAt":"2026-11-14T07:00:00Z","serverUpdatedAt":"2026-11-14T07:00:01Z"}},
                 "pages":{"orders":{"orderedKeys":["no"],"hiddenKeys":[],"columnSizes":{}}}}
                 """);
-        when(repository.findByIdAndDeletedFlagFalse(USER_ID)).thenReturn(Optional.of(account));
-
-        UserAccountPreferencesPayload payload = service().getPreferences(USER_ID);
-
-        assertThat(payload.pages()).containsOnlyKeys("orders");
-        assertThat(payload.pages().get("orders").orderedKeys()).containsExactly("no");
-    }
-
-    @Test
-    void savePreferences_shouldUpgradeToV2AndKeepExistingSections() {
-        givenStoredForUpdate("""
-                {"version":2,"sections":{"ui":{"value":{"fontSize":14},
-                "clientUpdatedAt":"2026-11-14T07:00:00Z","serverUpdatedAt":"2026-11-14T07:00:01Z"}},
-                "pages":{}}
-                """);
         givenUpdateSucceeds();
 
-        UserAccountPreferencesPayload payload = service().savePreferences(USER_ID,
-                new UserAccountPreferencesPayload(Map.of("sales-order",
-                        new UserListColumnSettingsPayload(List.of("no"), List.of(), Map.of("no", 60)))));
+        UserSettingsPayload payload = service().saveSettings(USER_ID,
+                new UserSettingsUpdateRequest(null, Map.of("sales-order",
+                        new UserListColumnSettingsPayload(List.of("no"), List.of(),
+                                Map.of("no", 60, "customer", 900)))));
 
-        // 列宽仍按 v1 规则夹到 80~800，响应结构保持 v1（只有 pages）。
-        assertThat(payload.pages().get("sales-order").columnSizes()).containsEntry("no", 80);
+        // v1 savePreferences 的规整规则原样保留：列宽夹到 80~800；pages 整段替换（旧 orders 不保留）。
+        assertThat(payload.pages()).containsOnlyKeys("sales-order");
+        assertThat(payload.pages().get("sales-order").columnSizes())
+                .containsEntry("no", 80)
+                .containsEntry("customer", 800);
 
         JsonNode persisted = persistedJson();
-        assertThat(persisted.get("version").asInt()).isEqualTo(2);
-        assertThat(persisted.get("pages").get("sales-order").get("orderedKeys").get(0).asText())
-                .isEqualTo("no");
+        assertThat(persisted.get("version").asInt()).isEqualTo(UserSettingsPayload.CURRENT_VERSION);
         assertThat(persisted.get("sections").get("ui").get("value").get("fontSize").asInt())
                 .isEqualTo(14);
+        assertThat(persisted.get("pages").has("orders")).isFalse();
+        assertThat(persisted.get("pages").get("sales-order").get("columnSizes").get("no").asInt())
+                .isEqualTo(80);
     }
 
     @Test
-    void savePreferences_whenStoredIsV1_shouldUpgradeAndKeepPages() {
+    void saveSettings_whenPagesAndSectionsInSameRequest_shouldPersistBoth() {
         givenStoredForUpdate("""
                 {"pages":{"orders":{"orderedKeys":["no"],"hiddenKeys":[],"columnSizes":{}}}}
                 """);
         givenUpdateSucceeds();
 
-        service().savePreferences(USER_ID,
-                new UserAccountPreferencesPayload(Map.of("projects",
-                        new UserListColumnSettingsPayload(List.of("name"), List.of(), Map.of()))));
+        UserSettingsPayload payload = service().saveSettings(USER_ID,
+                new UserSettingsUpdateRequest(
+                        Map.of("ui", section("{\"fontSize\":14}", "2026-11-14T07:05:00Z")),
+                        Map.of("projects", new UserListColumnSettingsPayload(
+                                List.of("name"), List.of(), Map.of()))));
 
+        assertThat(payload.sections()).containsOnlyKeys("ui");
+        assertThat(payload.pages()).containsOnlyKeys("projects");
+
+        // 落库为 v2：v1 旧数据在本次写入时升级，pages 写进去什么样、读出来就什么样。
         JsonNode persisted = persistedJson();
-        assertThat(persisted.get("version").asInt()).isEqualTo(2);
-        assertThat(persisted.get("sections")).isNotNull();
-        assertThat(persisted.get("pages").size()).isEqualTo(1);
+        assertThat(persisted.get("version").asInt()).isEqualTo(UserSettingsPayload.CURRENT_VERSION);
+        assertThat(persisted.get("sections").get("ui").get("value").get("fontSize").asInt())
+                .isEqualTo(14);
         assertThat(persisted.get("pages").has("projects")).isTrue();
-        // v1 的旧 pageKey 被整体替换（pages 是整段覆盖语义，不做合并）。
-        assertThat(persisted.get("pages").has("orders")).isFalse();
+        assertThat(persisted.get("pages").get("projects").get("orderedKeys").get(0).asText())
+                .isEqualTo("name");
+    }
+
+    @Test
+    void saveSettings_whenPagesUnchanged_shouldBeIdempotentWithoutWriting() {
+        givenStoredForUpdate("""
+                {"version":2,"sections":{},"pages":{"orders":{"orderedKeys":["no"],
+                "hiddenKeys":[],"columnSizes":{"no":120}}}}
+                """);
+
+        // 服务端读回时同样走 normalizePages，提交内容与读回口径一致即视为无变化。
+        UserSettingsPayload payload = service().saveSettings(USER_ID,
+                new UserSettingsUpdateRequest(null, Map.of("orders",
+                        new UserListColumnSettingsPayload(List.of("no"), List.of(), Map.of("no", 120)))));
+
+        assertThat(payload.pages()).containsOnlyKeys("orders");
+        verify(repository, never()).updatePreferencesJson(eq(USER_ID), anyString());
+    }
+
+    @Test
+    void saveSettings_whenSectionConflict_shouldNotPersistPagesEither() {
+        givenStoredForUpdate("""
+                {"version":2,"sections":{"ui":{"value":{"fontSize":16},
+                "clientUpdatedAt":"2026-11-14T07:10:00Z","serverUpdatedAt":"2026-11-14T07:10:01Z"}},
+                "pages":{}}
+                """);
+
+        UserSettingsUpdateRequest request = new UserSettingsUpdateRequest(
+                Map.of("ui", section("{\"fontSize\":14}", "2026-11-14T07:05:00Z")),
+                Map.of("projects", new UserListColumnSettingsPayload(
+                        List.of("name"), List.of(), Map.of())));
+
+        assertThatThrownBy(() -> service().saveSettings(USER_ID, request))
+                .isInstanceOf(UserSettingsConflictException.class);
+        // 同一次请求里 sections 冲突时，pages 也不落库（不做半成功写入）。
+        verify(repository, never()).updatePreferencesJson(eq(USER_ID), anyString());
+    }
+
+    @Test
+    void saveSettings_whenPagesNull_shouldKeepExistingPages() {
+        givenStoredForUpdate("""
+                {"version":2,"sections":{},"pages":{"orders":{"orderedKeys":["no"],
+                "hiddenKeys":[],"columnSizes":{}}}}
+                """);
+        givenUpdateSucceeds();
+
+        UserSettingsPayload payload = service().saveSettings(USER_ID,
+                updateRequest("ui", "{\"fontSize\":14}", "2026-11-14T07:05:00Z"));
+
+        assertThat(payload.pages()).containsOnlyKeys("orders");
+        assertThat(persistedJson().get("pages").has("orders")).isTrue();
+    }
+
+    @Test
+    void saveSettings_whenPagesExplicitlyEmpty_shouldClearPages() {
+        givenStoredForUpdate("""
+                {"version":2,"sections":{},"pages":{"orders":{"orderedKeys":["no"],
+                "hiddenKeys":[],"columnSizes":{}}}}
+                """);
+        givenUpdateSucceeds();
+
+        UserSettingsPayload payload = service().saveSettings(USER_ID,
+                new UserSettingsUpdateRequest(null, Map.of()));
+
+        assertThat(payload.pages()).isEmpty();
+        assertThat(persistedJson().get("pages").size()).isZero();
     }
 
     // ------------------------------------------------------------------
@@ -471,7 +532,7 @@ class UserAccountSettingsServiceTest {
     }
 
     private UserSettingsUpdateRequest updateRequest(String sectionKey, String valueJson, String clientUpdatedAt) {
-        return new UserSettingsUpdateRequest(Map.of(sectionKey, section(valueJson, clientUpdatedAt)));
+        return new UserSettingsUpdateRequest(Map.of(sectionKey, section(valueJson, clientUpdatedAt)), null);
     }
 
     private UserSettingsSectionUpdatePayload section(String valueJson, String clientUpdatedAt) {

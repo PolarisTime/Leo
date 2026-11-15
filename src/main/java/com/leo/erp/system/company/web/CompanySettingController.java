@@ -1,0 +1,97 @@
+package com.leo.erp.system.company.web;
+
+import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.support.OptionLimits;
+import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.system.company.service.CompanySettingService;
+import com.leo.erp.system.company.web.dto.CompanySettingOptionResponse;
+import com.leo.erp.system.company.web.dto.CompanySettingRequest;
+import com.leo.erp.system.company.web.dto.CompanySettingResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
+import com.leo.erp.system.operationlog.support.OperationLoggable;
+import jakarta.validation.Valid;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import java.util.List;
+import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
+import com.leo.erp.common.api.ResponseSupport;
+import com.leo.erp.common.api.Created;
+import com.leo.erp.common.api.NoContent;
+import org.springframework.http.ResponseEntity;
+
+@RestController
+@Validated
+@IdempotencyRequired
+@RequestMapping(ApiVersion.PREFIX + "/company-settings")
+public class CompanySettingController {
+
+    private final CompanySettingService companySettingService;
+
+    public CompanySettingController(CompanySettingService companySettingService) {
+        this.companySettingService = companySettingService;
+    }
+
+    @GetMapping
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_READ)
+    public PageResponse<CompanySettingResponse> page(@BindPageQuery(sortFieldKey = "company-setting") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String status) {
+        return PageResponse.from(companySettingService.page(query, keyword, status));
+    }
+
+    @GetMapping("/options")
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_READ)
+    public List<CompanySettingOptionResponse> options() {
+        return OptionLimits.cap(companySettingService.listActiveOptions());
+    }
+
+    @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_READ)
+    public CompanySettingResponse detail(@PathVariable @SnowflakeId Long id) {
+        return companySettingService.detail(id);
+    }
+
+    @GetMapping("/current")
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_READ)
+    public CompanySettingResponse current() {
+        return companySettingService.current();
+    }
+
+    @PutMapping("/current")
+    @OperationLoggable(moduleName = "结算主体", actionType = "保存")
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_UPDATE)
+    public CompanySettingResponse saveCurrent(@Valid @RequestBody CompanySettingRequest request) {
+        return companySettingService.saveCurrent(request);
+    }
+
+    @PostMapping
+    @Created
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_CREATE)
+    public ResponseEntity<CompanySettingResponse> create(@Valid @RequestBody CompanySettingRequest request) {
+        return ResponseSupport.created("/company-settings", companySettingService.create(request));
+    }
+
+    @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_UPDATE)
+    public CompanySettingResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody CompanySettingRequest request) {
+        return companySettingService.update(id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    @NoContent
+    @RequirePermission(PermissionCodes.COMPANY_SETTINGS_DELETE)
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
+        companySettingService.delete(id);
+        return ResponseSupport.noContent();
+    }
+}

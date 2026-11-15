@@ -234,12 +234,22 @@ class RateLimitFilterTest {
                 "/api/v2.0/health",
                 "/api/v2.0/health/",          // 结尾斜杠同样豁免
                 "/api/v2.0/system/health",
-                "/api/actuator",
-                "/api/actuator/health",
-                "/api/error")) {
+                "/api/v2.0/actuator",
+                "/api/v2.0/actuator/health",
+                "/api/v2.0/error")) {
             filter.doFilter(get(uri), new MockHttpServletResponse(), (req, res) -> { });
         }
         verify(store, never()).tryAcquire(any(RateLimitCheck.class));
+    }
+
+    @Test
+    void legacyFrameworkPaths_areNoLongerExempt() throws Exception {
+        // 框架端点统一迁到 /v2.0 前缀后，旧 /actuator、/error 不得继续豁免：
+        // 一旦有人把旧路径写回调用方，限流会正常参与判定（而不是悄悄绕过）。
+        filter.doFilter(get("/api/actuator/health"), new MockHttpServletResponse(), (req, res) -> { });
+        filter.doFilter(get("/api/error"), new MockHttpServletResponse(), (req, res) -> { });
+
+        verify(store, org.mockito.Mockito.times(2)).tryAcquire(any(RateLimitCheck.class));
     }
 
     @Test

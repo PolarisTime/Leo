@@ -19,7 +19,7 @@ public class HealthPageController {
         this.healthPageService = healthPageService;
     }
 
-    @GetMapping(value = ApiVersion.V2_PREFIX + "/system/health", produces = MediaType.TEXT_HTML_VALUE)
+    @GetMapping(value = ApiVersion.PREFIX + "/system/health", produces = MediaType.TEXT_HTML_VALUE)
     public String health() {
         return healthPageService.render();
     }

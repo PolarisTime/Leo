@@ -1,8 +1,10 @@
 package com.leo.erp.common.web.service;
 
-import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.leo.erp.common.web.dto.HealthCheckResponse;
 import com.leo.erp.common.web.dto.HealthResponse;
+
+import java.time.Instant;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -31,7 +33,7 @@ public class HealthService {
         boolean allUp = db.isUp() && redis.isUp();
         return new HealthResponse(
                 allUp ? "UP" : "DEGRADED",
-                DateTimeFormatSupport.now()
+                Instant.now()
         );
     }
 

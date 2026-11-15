@@ -9,7 +9,8 @@ rule_files:
 
 scrape_configs:
   - job_name: leo-backend
-    metrics_path: /actuator/prometheus
+    # 生产使用独立管理端口 57218：management.server.base-path=/api + endpoints.web.base-path=/v2.0/actuator
+    metrics_path: /api/v2.0/actuator/prometheus
     static_configs:
       - targets:
           - 127.0.0.1:57218

@@ -11,9 +11,12 @@ import java.util.Locale;
  * 与 {@code security.permission.PermissionDecimalSerializer}（字段级权限脱敏）都必须调用本类，
  * 否则同一个字段在「有权限」与「无权限」两条序列化路径上会得到不同精度。</p>
  *
- * <p>规则（命中顺序不可调换，先金额后重量）：属性名含 {@code amount|price|freight} → 2 位；
- * 含 {@code weight} → {@link PrecisionConstants#WEIGHT_SCALE}；其余不指定（按 {@code BigDecimal}
- * 原始 scale 输出，避免把 {@code 1E+3} 之类规范化成定点数）。</p>
+ * <p>规则（命中顺序不可调换）：属性名含 {@code rate} → {@link PrecisionConstants#USAGE_RATE_SCALE}
+ * （4 位，先于金额，避免 {@code amountUsageRate} 被 {@code amount} 截成 2 位）；含
+ * {@code amount|price|freight|premium|cost|fee|income|expense|balance} →
+ * {@link PrecisionConstants#AMOUNT_SCALE}（2 位）；含 {@code weight|tonnage} →
+ * {@link PrecisionConstants#WEIGHT_SCALE}（8 位）；其余不指定（按 {@code BigDecimal} 原始 scale
+ * 输出，避免把 {@code 1E+3} 之类规范化成定点数）。</p>
  */
 public final class FieldPrecisionResolver {
 
@@ -26,10 +29,17 @@ public final class FieldPrecisionResolver {
      */
     public static Integer resolveScale(String propertyName) {
         String normalizedName = propertyName == null ? "" : propertyName.toLowerCase(Locale.ROOT);
-        if (normalizedName.contains("amount") || normalizedName.contains("price") || normalizedName.contains("freight")) {
-            return 2;
+        if (normalizedName.contains("rate")) {
+            return PrecisionConstants.USAGE_RATE_SCALE;
         }
-        if (normalizedName.contains("weight")) {
+        if (normalizedName.contains("amount") || normalizedName.contains("price")
+                || normalizedName.contains("freight") || normalizedName.contains("premium")
+                || normalizedName.contains("cost") || normalizedName.contains("fee")
+                || normalizedName.contains("income") || normalizedName.contains("expense")
+                || normalizedName.contains("balance")) {
+            return PrecisionConstants.AMOUNT_SCALE;
+        }
+        if (normalizedName.contains("weight") || normalizedName.contains("tonnage")) {
             return PrecisionConstants.WEIGHT_SCALE;
         }
         return null;

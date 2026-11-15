@@ -29,7 +29,7 @@ public class InitialSetupTokenFilter extends OncePerRequestFilter {
     static final int FILTER_ORDER = Ordered.HIGHEST_PRECEDENCE + 4;
 
     private static final Set<PathPattern> SETUP_PATHS = Set.of(
-            PathPatternParser.defaultInstance.parse(ApiVersion.V2_PREFIX + "/setup/{*path}")
+            PathPatternParser.defaultInstance.parse(ApiVersion.PREFIX + "/setup/{*path}")
     );
     private static final Set<String> SAFE_METHODS = Set.of("GET", "HEAD", "OPTIONS");
 

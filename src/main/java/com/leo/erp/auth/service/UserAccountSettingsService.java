@@ -8,7 +8,6 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.repository.UserAccountRepository;
-import com.leo.erp.auth.web.dto.UserAccountPreferencesPayload;
 import com.leo.erp.auth.web.dto.UserListColumnSettingsPayload;
 import com.leo.erp.auth.web.dto.UserSettingsPayload;
 import com.leo.erp.auth.web.dto.UserSettingsSectionPayload;
@@ -103,9 +102,13 @@ public class UserAccountSettingsService {
     }
 
     /**
-     * 按分片增量保存设置，返回合并后的完整结构。
+     * 按分片/列设置增量保存，返回合并后的完整结构。
      *
-     * @param request 只含本次变化的分片；{@code null} 或空 {@code sections} 表示无变化
+     * <p>sections 走 LWW（服务端已存分片更新更晚则 409，整体不落库）；pages 是整段替换、
+     * 没有时间戳，不参与 LWW。两者可以出现在同一次请求里，但任一项失败（含 sections 409）
+     * 都不会写入任何一部分，避免「sections 冲突但 pages 被写进去」的半成功状态。</p>
+     *
+     * @param request 只含本次变化的部分；{@code null} 或全空表示无变化
      * @throws UserSettingsConflictException 服务端已存分片比本次提交更新（409）
      * @throws BusinessException             分片/总量超限（413）、用户不存在（404）、时间戳非法（422）
      */
@@ -159,44 +162,29 @@ public class UserAccountSettingsService {
             changed = true;
         }
 
+        // sections 冲突优先：此时 pages 也不写，避免同一次请求里出现半成功状态。
         if (!conflictSections.isEmpty()) {
             throw new UserSettingsConflictException(conflictSections, conflictServerSections);
         }
+
+        Map<String, UserListColumnSettingsPayload> mergedPages = current.pages();
+        if (request != null && request.pages() != null) {
+            // pages 没有时间戳：提交即整段替换（v1 savePreferences 语义），不做 LWW / 逐页合并。
+            Map<String, UserListColumnSettingsPayload> incomingPages = normalizePages(request.pages());
+            if (!jsonEquals(pagesNode(incomingPages), pagesNode(current.pages()))) {
+                mergedPages = incomingPages;
+                changed = true;
+            }
+        }
+
         if (!changed) {
             // 空请求体或全部为幂等重试：不回写，避免无意义的行更新与审计噪声。
             return toPayload(current);
         }
 
-        StoredSettings next = new StoredSettings(current.root(), mergedSections, current.pages());
+        StoredSettings next = new StoredSettings(current.root(), mergedSections, mergedPages);
         persist(userId, serialize(next));
         return toPayload(next);
-    }
-
-    /**
-     * 读取「列表页列设置」（v1 兼容别名 {@code /account/preferences} 的读路径）。
-     *
-     * <p>响应结构与升级前完全一致（只有 {@code pages}），老客户端不受影响。</p>
-     */
-    @Transactional(readOnly = true)
-    public UserAccountPreferencesPayload getPreferences(Long userId) {
-        return new UserAccountPreferencesPayload(readStored(getEntity(userId)).pages());
-    }
-
-    /**
-     * 写入「列表页列设置」（v1 兼容别名 {@code /account/preferences} 的写路径）。
-     *
-     * <p>只替换 {@code pages}，<b>不动</b> {@code sections} —— 新客户端已写入的同步分片不会被
-     * 老客户端的一次列设置保存清掉；落库恒为 v2，因此老数据在这里被顺带升级。</p>
-     */
-    @Transactional
-    public UserAccountPreferencesPayload savePreferences(Long userId, UserAccountPreferencesPayload request) {
-        UserAccount account = getEntityForUpdate(userId);
-        StoredSettings current = readStored(account);
-        Map<String, UserListColumnSettingsPayload> pages =
-                normalizePages(request == null ? null : request.pages());
-        StoredSettings next = new StoredSettings(current.root(), current.sections(), pages);
-        persist(userId, serialize(next));
-        return new UserAccountPreferencesPayload(pages);
     }
 
     private UserAccount getEntity(Long userId) {
@@ -394,6 +382,11 @@ public class UserAccountSettingsService {
             return left == right;
         }
         return left.equals(right);
+    }
+
+    /** pages 的 JSON 视图：仅用于幂等比较（Map 顺序不敏感，列数组顺序敏感）。 */
+    private JsonNode pagesNode(Map<String, UserListColumnSettingsPayload> pages) {
+        return objectMapper.valueToTree(pages);
     }
 
     // ---------------------------------------------------------------------

@@ -1,0 +1,83 @@
+package com.leo.erp.master.material.web;
+
+import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.support.OptionLimits;
+import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.master.material.service.MaterialCategoryService;
+import com.leo.erp.master.material.web.dto.MaterialCategoryOptionResponse;
+import com.leo.erp.master.material.web.dto.MaterialCategoryRequest;
+import com.leo.erp.master.material.web.dto.MaterialCategoryResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
+import jakarta.validation.Valid;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import java.util.List;
+import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
+import com.leo.erp.common.api.ResponseSupport;
+import com.leo.erp.common.api.Created;
+import com.leo.erp.common.api.NoContent;
+import org.springframework.http.ResponseEntity;
+
+@RestController
+@Validated
+@IdempotencyRequired
+@RequestMapping(ApiVersion.PREFIX + "/material-categories")
+public class MaterialCategoryController {
+
+    private final MaterialCategoryService service;
+
+    public MaterialCategoryController(MaterialCategoryService service) {
+        this.service = service;
+    }
+
+    @GetMapping
+    @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_READ)
+    public PageResponse<MaterialCategoryResponse> page(@BindPageQuery(sortFieldKey = "material-category") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String status) {
+        return PageResponse.from(service.page(query, keyword, status));
+    }
+
+    @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_READ)
+    public MaterialCategoryResponse detail(@PathVariable @SnowflakeId Long id) {
+        return service.detail(id);
+    }
+
+    @PostMapping
+    @Created
+    @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_CREATE)
+    public ResponseEntity<MaterialCategoryResponse> create(@Valid @RequestBody MaterialCategoryRequest request) {
+        return ResponseSupport.created("/material-categories", service.create(request));
+    }
+
+    @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_UPDATE)
+    public MaterialCategoryResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody MaterialCategoryRequest request) {
+        return service.update(id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    @NoContent
+    @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_DELETE)
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
+        service.delete(id);
+        return ResponseSupport.noContent();
+    }
+
+    @GetMapping("/options")
+    @RequirePermission(PermissionCodes.MATERIAL_CATEGORIES_READ)
+    public List<MaterialCategoryOptionResponse> options() {
+        return OptionLimits.cap(service.options());
+    }
+}

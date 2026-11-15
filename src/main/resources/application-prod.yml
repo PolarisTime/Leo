@@ -56,6 +56,12 @@ management:
     # 指标端口仅绑定本机，由同机 Prometheus 拉取，不经过业务 Nginx。
     address: ${LEO_MANAGEMENT_SERVER_ADDRESS:127.0.0.1}
     port: ${LEO_MANAGEMENT_SERVER_PORT:57218}
+    # 独立管理端口不继承 server.servlet.context-path，必须显式补 /api；
+    # 与管理端点前缀 /v2.0/actuator 拼接后，对外统一为 http://127.0.0.1:57218/api/v2.0/actuator/*，
+    # 与同端口(本地/测试)的 /api/v2.0/actuator/* 语义一致。
+    # 同端口模式下该属性不生效（Spring Boot 仅在独立管理端口时将其作为管理上下文路径），
+    # 因此不会产生 /api/api/v2.0/actuator 双前缀。
+    base-path: /api
   endpoints:
     web:
       exposure:

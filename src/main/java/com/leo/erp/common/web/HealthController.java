@@ -20,7 +20,7 @@ public class HealthController {
     }
 
     @PublicAccess
-    @GetMapping(ApiVersion.V2_PREFIX + "/health")
+    @GetMapping(ApiVersion.PREFIX + "/health")
     public ResponseEntity<HealthResponse> health() {
         HealthResponse health = healthService.health();
         return ResponseEntity.status(statusOf(health)).body(health);

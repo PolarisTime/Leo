@@ -97,6 +97,21 @@ PROD_START_COMMAND=STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/ste
 PROD_STOP_COMMAND=STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh stop
 ```
 
+### 框架与运维端点路径
+
+部署探活使用业务健康端点 `GET /api/v2.0/health`（`PROD_HEALTHCHECK_URL` 默认值），它由 `HealthController` 提供；框架端点不参与业务 Nginx 探活：
+
+- Actuator（生产独立管理端口，默认 `LEO_MANAGEMENT_SERVER_PORT=57218`，仅绑定 `127.0.0.1`）：
+  `http://127.0.0.1:57218/api/v2.0/actuator/{health,prometheus,loggers,configprops}`。
+  该 URL 由 `management.server.base-path=/api` 与 `management.endpoints.web.base-path=/v2.0/actuator` 拼接，
+  同端口（本地/测试）时等价于 `http://localhost:11211/api/v2.0/actuator/*`。
+- Prometheus 抓取路径：`/api/v2.0/actuator/prometheus`（见 `deploy/observability/prometheus/prometheus.yml`）。
+- OpenAPI 文档（默认关闭）：`/api/v2.0/api-docs` 与 Swagger UI `/api/v2.0/doc`。
+- 错误分派入口：`/api/v2.0/error`（`server.error.path`）。
+
+上述框架端点除显式 `@PublicAccess`/文档公开访问开关外均需登录，未认证请求返回 401；
+探活与指标抓取必须使用受控方案，禁止为了抓取方便把 actuator 整体设为匿名可访问。
+
 生产机必须已存在 `/instance/steelx/shared/steelx.env`。`steelx-process.sh` 随 release 打包，并由后端安装脚本写入 shared 目录；首次迁移到 GitHub 部署前，先用本地 steelx 部署脚本完成目录、数据库、密钥和 Nginx 初始化。
 
 ## 生产机准备

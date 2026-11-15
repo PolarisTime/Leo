@@ -35,7 +35,7 @@ public class VersionController {
         this.appName = appName;
     }
 
-    @GetMapping(ApiVersion.V2_PREFIX + "/version")
+    @GetMapping(ApiVersion.PREFIX + "/version")
     public VersionResponse version() {
         return currentVersion();
     }

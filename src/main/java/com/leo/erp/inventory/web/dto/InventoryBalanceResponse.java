@@ -2,6 +2,7 @@ package com.leo.erp.inventory.web.dto;
 
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import com.leo.erp.common.json.NumericLongSerializer;
 import com.leo.erp.security.permission.PermissionDecimalSerializer;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.PermissionField;
@@ -22,7 +23,7 @@ public record InventoryBalanceResponse(
         @JsonSerialize(using = ToStringSerializer.class) Long warehouseId,
         String warehouseName,
         String batchNo,
-        long quantity,
+        @JsonSerialize(using = NumericLongSerializer.class) long quantity,
         @PermissionField(PermissionCodes.INVENTORY_READ_COST)
         @JsonSerialize(using = PermissionDecimalSerializer.class)
         BigDecimal amount,

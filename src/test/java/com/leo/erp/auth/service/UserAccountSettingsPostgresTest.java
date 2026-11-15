@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.auth.repository.UserAccountRepository;
-import com.leo.erp.auth.web.dto.UserAccountPreferencesPayload;
 import com.leo.erp.auth.web.dto.UserListColumnSettingsPayload;
 import com.leo.erp.auth.web.dto.UserSettingsPayload;
 import com.leo.erp.auth.web.dto.UserSettingsSectionUpdatePayload;
@@ -61,7 +60,7 @@ class UserAccountSettingsPostgresTest {
         UserSettingsPayload saved = service.saveSettings(USER_ID,
                 new UserSettingsUpdateRequest(Map.of("ui", new UserSettingsSectionUpdatePayload(
                         objectMapper.readTree("{\"fontSize\":14,\"themeMode\":\"system\"}"),
-                        "2026-11-14T07:05:00Z"))));
+                        "2026-11-14T07:05:00Z")), null));
 
         assertThat(saved.sections()).containsOnlyKeys("ui");
 
@@ -78,6 +77,20 @@ class UserAccountSettingsPostgresTest {
                 .isEqualTo("system");
         assertThat(reloaded.sections().get("ui").clientUpdatedAt())
                 .isEqualTo("2026-11-14T07:05:00Z");
+
+        // pages 经同一个 PUT 写入：JSONB 往返后读回同构，且不会清掉已写好的 sections。
+        UserSettingsPayload withPages = service.saveSettings(USER_ID,
+                new UserSettingsUpdateRequest(null, Map.of("sales-order",
+                        new UserListColumnSettingsPayload(List.of("no"), List.of(), Map.of("no", 120)))));
+        assertThat(withPages.pages()).containsOnlyKeys("sales-order");
+        assertThat(withPages.sections()).containsOnlyKeys("ui");
+
+        UserSettingsPayload reloadedWithPages = service.getSettings(USER_ID);
+        assertThat(reloadedWithPages.pages().get("sales-order").orderedKeys()).containsExactly("no");
+        assertThat(reloadedWithPages.pages().get("sales-order").columnSizes())
+                .containsEntry("no", 120);
+        assertThat(reloadedWithPages.sections().get("ui").value().get("fontSize").asInt())
+                .isEqualTo(14);
     }
 
     @Test
@@ -94,7 +107,8 @@ class UserAccountSettingsPostgresTest {
         assertThat(payload.sections()).isEmpty();
         assertThat(payload.pages()).containsOnlyKeys("sales-order");
 
-        service.savePreferences(USER_ID, new UserAccountPreferencesPayload(Map.of("projects",
+        // 旧 preferences 别名端点删除后，pages 的唯一写通路是 PUT /account/settings。
+        service.saveSettings(USER_ID, new UserSettingsUpdateRequest(null, Map.of("projects",
                 new UserListColumnSettingsPayload(List.of("name"), List.of(), Map.of()))));
 
         JsonNode persisted = objectMapper.readTree(storedPreferencesJson());

@@ -73,7 +73,7 @@ public class OpenApiConfig {
     public GroupedOpenApi v2OpenApi() {
         return GroupedOpenApi.builder()
                 .group("v2.0")
-                .pathsToMatch(ApiVersion.V2_PREFIX + "/**")
+                .pathsToMatch(ApiVersion.PREFIX + "/**")
                 .addOpenApiCustomizer(this::customizeV2OpenApi)
                 .build();
     }

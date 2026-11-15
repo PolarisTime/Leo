@@ -1,0 +1,81 @@
+package com.leo.erp.master.supplier.web;
+
+import org.springframework.validation.annotation.Validated;
+import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.master.supplier.service.SupplierService;
+import com.leo.erp.master.supplier.web.dto.SupplierRequest;
+import com.leo.erp.master.supplier.web.dto.SupplierOptionResponse;
+import com.leo.erp.master.supplier.web.dto.SupplierResponse;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
+import com.leo.erp.common.api.ResponseSupport;
+import com.leo.erp.common.api.Created;
+import com.leo.erp.common.api.NoContent;
+import org.springframework.http.ResponseEntity;
+
+@RestController
+@Validated
+@IdempotencyRequired
+@RequestMapping(ApiVersion.PREFIX + "/suppliers")
+public class SupplierController {
+
+    private final SupplierService supplierService;
+
+    public SupplierController(SupplierService supplierService) {
+        this.supplierService = supplierService;
+    }
+
+    @GetMapping("/options")
+    @RequirePermission(PermissionCodes.SUPPLIERS_READ)
+    public java.util.List<SupplierOptionResponse> options() {
+        return supplierService.listActiveOptions();
+    }
+
+    @GetMapping
+    @RequirePermission(PermissionCodes.SUPPLIERS_READ)
+    public PageResponse<SupplierResponse> page(@BindPageQuery(sortFieldKey = "supplier") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String status) {
+        return PageResponse.from(supplierService.page(query, keyword, status));
+    }
+
+    @GetMapping("/{id}")
+    @RequirePermission(PermissionCodes.SUPPLIERS_READ)
+    public SupplierResponse detail(@PathVariable @SnowflakeId Long id) {
+        return supplierService.detail(id);
+    }
+
+    @PostMapping
+    @Created
+    @RequirePermission(PermissionCodes.SUPPLIERS_CREATE)
+    public ResponseEntity<SupplierResponse> create(@Valid @RequestBody SupplierRequest request) {
+        return ResponseSupport.created("/suppliers", supplierService.create(request));
+    }
+
+    @PutMapping("/{id}")
+    @RequirePermission(PermissionCodes.SUPPLIERS_UPDATE)
+    public SupplierResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody SupplierRequest request) {
+        return supplierService.update(id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    @NoContent
+    @RequirePermission(PermissionCodes.SUPPLIERS_DELETE)
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
+        supplierService.delete(id);
+        return ResponseSupport.noContent();
+    }
+}

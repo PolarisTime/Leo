@@ -70,8 +70,8 @@ public class OperationLogRequestPolicy {
         if (contextPath != null && !contextPath.isEmpty() && path.startsWith(contextPath)) {
             path = path.substring(contextPath.length());
         }
-        if (path.startsWith(ApiVersion.V2_PREFIX)) {
-            path = path.substring(ApiVersion.V2_PREFIX.length());
+        if (path.startsWith(ApiVersion.PREFIX)) {
+            path = path.substring(ApiVersion.PREFIX.length());
         }
         return path;
     }

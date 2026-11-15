@@ -5,6 +5,11 @@ server:
   servlet:
     # 统一接口前缀
     context-path: /api
+  error:
+    # 错误分派入口统一挂在 /api/v2.0/error（相对 context-path 为 /v2.0/error）；
+    # BasicErrorController、Spring Security 的 ERROR 分派与 ProblemDetail 返回都以此路径为准，
+    # 旧 /error 不再注册（SecurityConfig 通过 @Value 读取本属性，禁止硬编码分叉）。
+    path: /v2.0/error
   tomcat:
     accesslog:
       # 访问日志(含 traceId, 与业务日志同链路); 生产建议开启, 本地默认关闭避免噪音
@@ -672,7 +677,8 @@ leo:
     # 全局窗口时长(秒); <=0 回退为 1 秒。默认 1 秒: 报告诉求是"过载时快速 429", 短窗口秒级感知过载
     global-window-seconds: ${LEO_RATE_LIMIT_GLOBAL_WINDOW_SECONDS:1}
     # 额外豁免路径(Ant 通配, 逗号分隔)。内置豁免不受本配置影响、不可移除:
-    # /v2.0/health、/v2.0/system/health、/actuator(/actuator/**)、/v2.0/auth/login(登录被限流=拒绝服务)、/error
+    # /v2.0/health、/v2.0/system/health、/v2.0/actuator(/v2.0/actuator/**)、
+    # /v2.0/auth/login(登录被限流=拒绝服务)、/v2.0/error
     exclude-paths: ${LEO_RATE_LIMIT_EXCLUDE_PATHS:}
   # 导出并发闸门：并发导出超过上限时快速失败 429（带 Retry-After），
   # 防止 POI 生成 XLSX 的 CPU 密集负载把线程与连接池一起吃满、外溢成全站故障
@@ -693,13 +699,14 @@ springdoc:
   api-docs:
     # 是否启用 OpenAPI JSON 文档
     enabled: ${SPRINGDOC_API_DOCS_ENABLED:false}
-    # OpenAPI JSON 访问路径
-    path: /api-docs
+    # OpenAPI JSON 访问路径（相对 context-path=/api → 对外 /api/v2.0/api-docs）
+    path: /v2.0/api-docs
   swagger-ui:
     # 是否启用 Swagger UI 页面
     enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:false}
-    # Swagger UI 访问路径
-    path: /doc
+    # Swagger UI 入口路径（相对 context-path=/api → 对外 /api/v2.0/doc；
+    # UI 的静态资源仍由 springdoc 固定挂在 /swagger-ui/**）
+    path: /v2.0/doc
 
 # 可观测性配置
 management:
@@ -710,6 +717,10 @@ management:
       show-values: ${LEO_CONFIGPROPS_SHOW_VALUES:never}
   endpoints:
     web:
+      # 管理端点前缀。同端口(本地/测试)时相对 server.servlet.context-path=/api,
+      # 对外为 /api/v2.0/actuator/*；独立管理端口(生产)时相对 management.server.base-path=/api,
+      # 对外同样是 /api/v2.0/actuator/*（见 application-prod.yml）。
+      base-path: /v2.0/actuator
       exposure:
         # 暴露 loggers 以便运行时按需调整日志级别(排障), health 供探活
         include: ${LEO_MANAGEMENT_ENDPOINTS:health,loggers,configprops}

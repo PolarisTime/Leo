@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 或落入显式 allowlist（必须写明为何此类写操作天然不需要幂等键）。
  *
  * <p>回归背景（质量报告 P1-4）：全仓绝大多数写控制器已类级强制幂等键，并有
- * 「本控制器已标注」的点状断言（如 {@code V2InventoryControllerTest}）；但断言是逐控制器的，
+ * 「本控制器已标注」的点状断言（如 {@code InventoryControllerTest}）；但断言是逐控制器的，
  * 新写一个控制器忘了标注不会有任何测试失败——报价单、销售合同、采购订单明细、
  * 报价项目配置、模块导出这 5 个控制器就是这样漏掉的。本测试把「漏配」变成全仓扫描级的单测失败。</p>
  *
@@ -52,7 +52,7 @@ class IdempotencyRequiredContractTest {
      * 单据/余额/库存等可累积副作用。</p>
      */
     private static final Map<String, String> ALLOWLIST = Map.of(
-            "V2QuoteSheetEditLockController",
+            "QuoteSheetEditLockController",
             "编辑锁是租约（lease）资源：签出/续约在同一持锁人上是幂等续期（本人已持有则续约，"
                     + "他人未过期 409、已过期可抢占），释放（DELETE）同样幂等。"
                     + "前端在持锁期间按周期轮询续约，若强制 Idempotency-Key 会改变续约语义"
@@ -66,7 +66,7 @@ class IdempotencyRequiredContractTest {
      * 类级 allowlist 管不到的零散端点放这里。</p>
      */
     private static final Map<String, String> METHOD_ALLOWLIST = Map.of(
-            "V2AuthController#refresh",
+            "AuthController#refresh",
             "刷新令牌是「用 refresh token 换一组新令牌」的流转，不是幂等创建："
                     + "同一幂等键重放会命中首次响应缓存，客户端拿到的仍是被消费过的旧令牌；"
                     + "且刷新在 401 自动重试链上由多个并发请求触发，强制幂等键会互相顶掉。"

@@ -2,6 +2,7 @@ package com.leo.erp.inventory.web.dto;
 
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import com.leo.erp.common.json.NumericLongSerializer;
 import com.leo.erp.security.permission.PermissionDecimalSerializer;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.PermissionField;
@@ -28,8 +29,8 @@ import java.math.BigDecimal;
 public record InventoryBalanceMismatchResponse(
         @JsonSerialize(using = ToStringSerializer.class) Long materialId,
         @JsonSerialize(using = ToStringSerializer.class) Long warehouseId,
-        long ledgerQuantity,
-        long snapshotQuantity,
+        @JsonSerialize(using = NumericLongSerializer.class) long ledgerQuantity,
+        @JsonSerialize(using = NumericLongSerializer.class) long snapshotQuantity,
         @PermissionField(PermissionCodes.INVENTORY_READ_COST)
         @JsonSerialize(using = PermissionDecimalSerializer.class)
         BigDecimal ledgerAmount,

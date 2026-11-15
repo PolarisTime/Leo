@@ -7,6 +7,7 @@ import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.idempotent.HttpIdempotencyFilter;
 import com.leo.erp.common.ratelimit.RateLimitFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
@@ -33,12 +34,19 @@ import java.util.List;
 @Configuration
 public class SecurityConfig {
 
+    /**
+     * OpenAPI / Swagger 匿名放行路径（仅在 {@code leo.surface.docs.public-access-enabled=true} 时生效）。
+     *
+     * <p>路径与 application.yml 的 springdoc 配置保持一致：文档 JSON 与 UI 入口都迁到
+     * {@code /v2.0} 前缀下；{@code /swagger-ui/**} 是 springdoc 固定的 UI 静态资源位置，
+     * 不随 {@code springdoc.swagger-ui.path} 变化，必须保留。</p>
+     */
     private static final String[] OPEN_API_PATHS = {
-            "/api-docs",
-            "/api-docs/**",
-            "/doc",
-            "/doc/**",
-            "/v3/api-docs/**",
+            "/v2.0/api-docs",
+            "/v2.0/api-docs/**",
+            "/v2.0/api-docs.yaml",
+            "/v2.0/doc",
+            "/v2.0/doc/**",
             "/swagger-ui.html",
             "/swagger-ui/**"
     };
@@ -52,7 +60,9 @@ public class SecurityConfig {
                                                    InitialSetupTokenFilter initialSetupTokenFilter,
                                                    HttpIdempotencyFilter httpIdempotencyFilter,
                                                    RateLimitFilter rateLimitFilter,
-                                                   ApiErrorResponseWriter errorResponseWriter) throws Exception {
+                                                   ApiErrorResponseWriter errorResponseWriter,
+                                                   @Value("${server.error.path:${error.path:/error}}")
+                                                   String errorPath) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
@@ -89,7 +99,9 @@ public class SecurityConfig {
                         )))
                 .authorizeHttpRequests(authorize -> {
                     authorize.requestMatchers(publicAccessRequestMatcher).permitAll();
-                    authorize.requestMatchers("/error").permitAll();
+                    // 错误分派入口必须放行，否则容器 ERROR 分派会被安全链改写成 401。
+                    // 路径与 BasicErrorController 使用同一表达式派生，避免配置与实际映射分叉。
+                    authorize.requestMatchers(errorPath).permitAll();
                     if (surfaceAccessProperties.getHealth().isPublicAccessEnabled()) {
                         authorize.requestMatchers("/v2.0/system/health").permitAll();
                     } else {
@@ -170,7 +182,7 @@ public class SecurityConfig {
         FilterRegistrationBean<CacheControlShallowEtagFilter> registration =
                 new FilterRegistrationBean<>(new CacheControlShallowEtagFilter());
         registration.setName("cacheControlShallowEtagFilter");
-        registration.setUrlPatterns(List.of(ApiVersion.V2_PREFIX + "/*"));
+        registration.setUrlPatterns(List.of(ApiVersion.PREFIX + "/*"));
         registration.setOrder(Ordered.LOWEST_PRECEDENCE);
         return registration;
     }

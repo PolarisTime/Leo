@@ -1,0 +1,169 @@
+package com.leo.erp.master.material.web;
+
+import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.master.material.service.MaterialDocumentService;
+import com.leo.erp.master.material.service.MaterialHistoryQueryService;
+import com.leo.erp.master.material.service.MaterialService;
+import com.leo.erp.master.material.web.dto.MaterialHistoryResponse;
+import com.leo.erp.master.material.web.dto.MaterialRequest;
+import com.leo.erp.master.material.web.dto.MaterialResponse;
+import com.leo.erp.master.material.web.dto.MaterialStatusUpdateRequest;
+import com.leo.erp.security.permission.PermissionCodes;
+import com.leo.erp.security.permission.RequirePermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import java.nio.charset.StandardCharsets;
+import com.leo.erp.common.api.ApiVersion;
+import com.leo.erp.common.validation.SnowflakeId;
+import com.leo.erp.common.idempotent.IdempotencyRequired;
+import com.leo.erp.common.api.ResponseSupport;
+import com.leo.erp.common.api.Created;
+import com.leo.erp.common.api.NoContent;
+
+@RestController
+@Validated
+@IdempotencyRequired
+@Tag(name = "商品资料")
+@RequestMapping(ApiVersion.PREFIX + "/materials")
+public class MaterialController {
+
+    private static final MediaType CSV_MEDIA_TYPE = new MediaType("text", "csv", StandardCharsets.UTF_8);
+    private static final MediaType XLSX_MEDIA_TYPE = new MediaType(
+            "application",
+            "vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    private final MaterialService materialService;
+    private final MaterialDocumentService materialDocumentService;
+    private final MaterialHistoryQueryService materialHistoryQueryService;
+
+    public MaterialController(MaterialService materialService,
+                                MaterialDocumentService materialDocumentService,
+                                MaterialHistoryQueryService materialHistoryQueryService) {
+        this.materialService = materialService;
+        this.materialDocumentService = materialDocumentService;
+        this.materialHistoryQueryService = materialHistoryQueryService;
+    }
+
+    @GetMapping
+    @Operation(summary = "分页查询商品资料")
+    @RequirePermission(PermissionCodes.MATERIALS_READ)
+    public PageResponse<MaterialResponse> page(@BindPageQuery(sortFieldKey = "material") PageQuery query, @RequestParam(required = false) String keyword, @RequestParam(required = false) String category, @RequestParam(required = false) String material, @RequestParam(required = false) String materialType, @RequestParam(required = false) String status) {
+        return PageResponse.from(materialService.page(query, keyword, category, material, materialType, status));
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "查询商品资料详情")
+    @RequirePermission(PermissionCodes.MATERIALS_READ)
+    public MaterialResponse detail(@PathVariable @SnowflakeId Long id) {
+        return materialService.detail(id);
+    }
+
+    @GetMapping("/{id}/histories")
+    @Operation(summary = "分页查询商品资料版本历史")
+    @RequirePermission(PermissionCodes.MATERIALS_READ)
+    public PageResponse<MaterialHistoryResponse> histories(
+            @PathVariable @SnowflakeId Long id,
+            @BindPageQuery(sortFieldKey = "material") PageQuery query) {
+        return PageResponse.from(materialHistoryQueryService.page(id, query));
+    }
+
+    @PostMapping
+    @Created
+    @Operation(summary = "创建商品资料")
+    @RequirePermission(PermissionCodes.MATERIALS_CREATE)
+    public ResponseEntity<MaterialResponse> create(@Valid @RequestBody MaterialRequest request) {
+        return ResponseSupport.created("/materials", materialService.create(request));
+    }
+
+    @GetMapping("/template")
+    @Operation(summary = "下载商品资料导入模板（XLSX）")
+    @RequirePermission(PermissionCodes.MATERIALS_READ)
+    public ResponseEntity<byte[]> downloadTemplate() {
+        return toDownloadResponse(
+                "商品资料导入模板.xlsx", XLSX_MEDIA_TYPE, materialDocumentService.spreadsheetTemplate());
+    }
+
+    @GetMapping("/template/csv")
+    @Operation(summary = "下载商品资料导入模板（CSV）")
+    @RequirePermission(PermissionCodes.MATERIALS_READ)
+    public ResponseEntity<byte[]> downloadCsvTemplate() {
+        return toDownloadResponse(
+                "商品资料导入模板.csv", CSV_MEDIA_TYPE, materialDocumentService.csvTemplate());
+    }
+
+    @GetMapping("/grades")
+    @Operation(summary = "查询商品材质（品名）选项")
+    @RequirePermission(PermissionCodes.MATERIALS_READ)
+    public java.util.List<String> materialGrades() {
+        return materialService.materialGrades();
+    }
+
+    @GetMapping("/brands")
+    @Operation(summary = "查询商品品牌选项")
+    @RequirePermission(PermissionCodes.MATERIALS_READ)
+    public java.util.List<String> materialBrands() {
+        return materialService.materialBrands();
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "更新商品资料")
+    @RequirePermission(PermissionCodes.MATERIALS_UPDATE)
+    public MaterialResponse update(@PathVariable @SnowflakeId Long id, @Valid @RequestBody MaterialRequest request) {
+        return materialService.update(id, request);
+    }
+
+    /**
+     * 商品启停：PATCH /materials/{id}/status，请求体 {"status": "正常" | "禁用"}。
+     *
+     * <p>与角色启停端点同形态（状态是资源的受控字段，不建动作后缀路径）；
+     * 双向可切换，返回更新后的商品资源。</p>
+     */
+    @PatchMapping("/{id}/status")
+    @Operation(summary = "启用或禁用商品资料")
+    @RequirePermission(PermissionCodes.MATERIALS_UPDATE)
+    public MaterialResponse updateStatus(@PathVariable @SnowflakeId Long id, @Valid @RequestBody MaterialStatusUpdateRequest request) {
+        return materialService.updateStatus(id, request.status());
+    }
+
+    @DeleteMapping("/{id}")
+    @NoContent
+    @Operation(summary = "删除商品资料")
+    @RequirePermission(PermissionCodes.MATERIALS_DELETE)
+    public ResponseEntity<Void> delete(@PathVariable @SnowflakeId Long id) {
+        materialService.delete(id);
+        return ResponseSupport.noContent();
+    }
+
+    private ResponseEntity<byte[]> toDownloadResponse(String filename, MediaType contentType, byte[] content) {
+        return ResponseEntity.ok()
+                .contentType(contentType)
+                .contentLength(content.length)
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment()
+                                .filename(filename, StandardCharsets.UTF_8)
+                                .build()
+                                .toString()
+                )
+                .body(content);
+    }
+}

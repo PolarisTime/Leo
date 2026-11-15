@@ -1,5 +1,8 @@
 package com.leo.erp.system.operationlog.web.dto;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.leo.erp.common.json.NumericLongSerializer;
+
 import java.time.LocalDate;
 import java.util.List;
 
@@ -17,19 +20,24 @@ import java.util.List;
  * @param topFailedModules 失败次数最多的模块前 5
  */
 public record OperationLogSummaryResponse(
-        long total,
-        long successCount,
-        long failedCount,
-        long avgDurationMs,
+        @JsonSerialize(using = NumericLongSerializer.class) long total,
+        @JsonSerialize(using = NumericLongSerializer.class) long successCount,
+        @JsonSerialize(using = NumericLongSerializer.class) long failedCount,
+        @JsonSerialize(using = NumericLongSerializer.class) long avgDurationMs,
         List<DailyCount> byDay,
         List<FailedModule> topFailedModules
 ) {
 
     /** 单日聚合: {@code date} 为 ISO 日期(yyyy-MM-dd)。 */
-    public record DailyCount(LocalDate date, long total, long failed) {
+    public record DailyCount(
+            LocalDate date,
+            @JsonSerialize(using = NumericLongSerializer.class) long total,
+            @JsonSerialize(using = NumericLongSerializer.class) long failed) {
     }
 
     /** 失败模块计数。 */
-    public record FailedModule(String moduleName, long count) {
+    public record FailedModule(
+            String moduleName,
+            @JsonSerialize(using = NumericLongSerializer.class) long count) {
     }
 }

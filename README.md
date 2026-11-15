@@ -63,9 +63,16 @@ bash scripts/maven.sh -B -ntp -DskipTests spotbugs:check
 bash scripts/maven.sh -DskipTests package
 ```
 
-Swagger UI：
+Swagger UI / OpenAPI（默认关闭；需 `SPRINGDOC_SWAGGER_UI_ENABLED=true` / `SPRINGDOC_API_DOCS_ENABLED=true`）：
 
-- `http://localhost:11211/api/swagger-ui.html`
+- Swagger UI：`http://localhost:11211/api/v2.0/doc`
+- OpenAPI JSON：`http://localhost:11211/api/v2.0/api-docs`
+- OpenAPI YAML：`http://localhost:11211/api/v2.0/api-docs.yaml`
+
+框架与运维端点（统一在 `/api/v2.0` 下；除显式 `@PublicAccess` 外默认需登录，未认证返回 401）：
+
+- Actuator：`http://localhost:11211/api/v2.0/actuator/health`（exposure：`health`、`loggers`、`configprops`）
+- 错误分派入口：`http://localhost:11211/api/v2.0/error`
 
 健康检查：
 
