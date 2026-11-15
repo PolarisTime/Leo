@@ -4,6 +4,7 @@ import com.leo.erp.common.support.ValidationMessages;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.StatusAwareEntity;
+import com.leo.erp.common.support.DocumentStatus;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
 
@@ -43,19 +44,19 @@ public final class CrudStatusGuard<E> {
         return statusReader.apply(entity);
     }
 
+    /** 实体状态归一化为稳定 code：兼容回滚环境下的旧中文 label。 */
     private static Optional<String> normalizeStatus(String value) {
-        if (value == null) {
-            return Optional.empty();
-        }
-        String status = value.trim();
-        return status.isBlank() ? Optional.empty() : Optional.of(status);
+        String status = StatusConstants.toCode(value);
+        return status == null ? Optional.empty() : Optional.of(status);
     }
 
+    /** 请求状态归一化为稳定 code：接受 code 与迁移期旧中文 label，空值按统一文案拒绝。 */
     public String normalizeRequiredStatus(String status) {
-        if (status == null || status.isBlank()) {
+        String code = StatusConstants.toCode(status);
+        if (code == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, ValidationMessages.STATUS_REQUIRED);
         }
-        return status.trim();
+        return code;
     }
 
     public void assertEditAllowed(E entity, boolean allowProtectedStatusUpdate) {
@@ -63,7 +64,7 @@ public final class CrudStatusGuard<E> {
             if (StatusConstants.PROTECTED_DOCUMENT_STATUS.contains(status) && !allowProtectedStatusUpdate) {
                 throw new BusinessException(
                         ErrorCode.BUSINESS_ERROR,
-                        "当前单据状态为「" + status + "」，不能编辑"
+                        "当前单据状态为「" + displayStatus(status) + "」，不能编辑"
                 );
             }
         });
@@ -74,7 +75,7 @@ public final class CrudStatusGuard<E> {
             if (StatusConstants.PROTECTED_DOCUMENT_STATUS.contains(status)) {
                 throw new BusinessException(
                         ErrorCode.BUSINESS_ERROR,
-                        "当前单据状态为「" + status + "」，不能删除"
+                        "当前单据状态为「" + displayStatus(status) + "」，不能删除"
                 );
             }
         });
@@ -110,14 +111,24 @@ public final class CrudStatusGuard<E> {
         if (allowedTransitions.isEmpty()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, ValidationMessages.STATUS_CHANGE_UNSUPPORTED);
         }
-        boolean invalidStatus = currentStatus == null || currentStatus.isBlank()
-                || nextStatus == null || nextStatus.isBlank();
-        if (invalidStatus || !allowedTransitions.contains(StatusTransition.of(currentStatus, nextStatus))) {
+        String currentCode = StatusConstants.toCode(currentStatus);
+        String nextCode = StatusConstants.toCode(nextStatus);
+        boolean invalidStatus = currentCode == null || currentCode.isBlank()
+                || nextCode == null || nextCode.isBlank();
+        if (invalidStatus || !allowedTransitions.contains(StatusTransition.of(currentCode, nextCode))) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
-                    "当前单据状态不能从「" + currentStatus + "」变更为「" + nextStatus + "」"
+                    "当前单据状态不能从「" + displayStatus(currentCode) + "」变更为「" + displayStatus(nextCode) + "」"
             );
         }
+    }
+
+    /** 错误文案展示用：code 转回中文 label（未知值原样），API/DB 仍只使用 code。 */
+    private static String displayStatus(String status) {
+        if (status == null) {
+            return null;
+        }
+        return DocumentStatus.fromCode(status).map(DocumentStatus::label).orElse(status);
     }
 
     public void writeStatus(E entity, String status) {

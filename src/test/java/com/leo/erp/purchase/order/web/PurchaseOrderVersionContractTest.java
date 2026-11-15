@@ -107,7 +107,7 @@ class PurchaseOrderVersionContractTest {
     @Test
     void put_withMatchingVersion_returns200WithNewVersionAsString() throws Exception {
         when(purchaseOrderService.update(eq(ORDER_ID), any(), eq(3L)))
-                .thenReturn(response("草稿", 4L));
+                .thenReturn(response("DRAFT", 4L));
 
         mockMvc(true).perform(put("/v2.0/purchase-orders/" + ORDER_ID)
                         .header("X-Resource-Version", "3")
@@ -132,7 +132,7 @@ class PurchaseOrderVersionContractTest {
 
     @Test
     void put_withoutVersionHeader_whenNotRequired_stillForwardsNullVersion() throws Exception {
-        when(purchaseOrderService.update(eq(ORDER_ID), any(), isNull())).thenReturn(response("草稿", 1L));
+        when(purchaseOrderService.update(eq(ORDER_ID), any(), isNull())).thenReturn(response("DRAFT", 1L));
 
         mockMvc(false).perform(put("/v2.0/purchase-orders/" + ORDER_ID)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -142,7 +142,7 @@ class PurchaseOrderVersionContractTest {
 
     @Test
     void detail_exposesVersionSoClientCanSendItBack() throws Exception {
-        when(purchaseOrderService.detail(ORDER_ID)).thenReturn(response("草稿", 7L));
+        when(purchaseOrderService.detail(ORDER_ID)).thenReturn(response("DRAFT", 7L));
 
         mockMvc(true).perform(get("/v2.0/purchase-orders/" + ORDER_ID))
                 .andExpect(status().isOk())

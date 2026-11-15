@@ -51,7 +51,7 @@ class FreightStatementPageAssemblerTest {
         when(sourceQuery.findByBillIds(any())).thenReturn(List.of(new BillSnapshot(
                 3L, "FB-001", 4L, "C-001", "物流商", 5L, "结算主体",
                 LocalDate.of(2026, 10, 31),
-                new BigDecimal("40.00"), new BigDecimal("1616.20"), "已审核", List.of()
+                new BigDecimal("40.00"), new BigDecimal("1616.20"), "AUDITED", List.of()
         )));
 
         Page<FreightStatementView> page = pageAssembler.toViewPage(

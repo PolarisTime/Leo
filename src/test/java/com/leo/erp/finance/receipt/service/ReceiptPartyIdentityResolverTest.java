@@ -91,7 +91,7 @@ class ReceiptPartyIdentityResolverTest {
                 LocalDate.of(2026, 8, 25),
                 "银行转账",
                 new BigDecimal("100.00"),
-                "草稿",
+                "DRAFT",
                 "操作员",
                 null,
                 List.of()

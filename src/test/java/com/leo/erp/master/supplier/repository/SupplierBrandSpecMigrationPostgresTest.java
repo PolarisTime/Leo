@@ -171,7 +171,7 @@ class SupplierBrandSpecMigrationPostgresTest {
         supplier.setId(SUPPLIER_ID);
         supplier.setSupplierCode("PG-BS-001");
         supplier.setSupplierName("PG品牌规格供应商");
-        supplier.setStatus("正常");
+        supplier.setStatus("NORMAL");
         supplierRepository.save(supplier);
 
         SupplierBrand brand = new SupplierBrand();

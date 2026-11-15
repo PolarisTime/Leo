@@ -73,26 +73,26 @@ class ProjectNameAbbrSerializationTest {
         return new SalesOrderResponse(
                 5L, "SO001", null, "客户A", "项目A",
                 LocalDate.of(2026, 9, 1), "销售员A", new BigDecimal("1.000"), new BigDecimal("100.00"),
-                "草稿", null, List.of());
+                "DRAFT", null, List.of());
     }
 
     private SalesOutboundResponse salesOutbound() {
         return new SalesOutboundResponse(
                 5L, "OB001", "SO001", 10L, "客户A", 20L, "项目A", 1L, "库房A", null, null,
                 LocalDate.of(2026, 9, 1), new BigDecimal("1.000"), new BigDecimal("100.00"),
-                "草稿", false, null, List.of(), null);
+                "DRAFT", false, null, List.of(), null);
     }
 
     private SalesReturnResponse salesReturn() {
         return new SalesReturnResponse(
                 5L, "SR001", "SO001", 10L, "客户A", 20L, "项目A", 1L, "库房A", null, null,
                 LocalDate.of(2026, 9, 1), new BigDecimal("1.000"), new BigDecimal("100.00"),
-                "草稿", false, null, List.of(), null);
+                "DRAFT", false, null, List.of(), null);
     }
 
     private CustomerStatementResponse customerStatement() {
         return new CustomerStatementResponse(
                 5L, "CS001", "客户A", "项目A", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31),
-                new BigDecimal("100.00"), BigDecimal.ZERO, new BigDecimal("100.00"), "待确认", null, List.of());
+                new BigDecimal("100.00"), BigDecimal.ZERO, new BigDecimal("100.00"), "PENDING_CONFIRM", null, List.of());
     }
 }

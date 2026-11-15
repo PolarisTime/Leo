@@ -157,7 +157,7 @@ class QuoteSheetServiceTest {
 
     private QuoteSheetRequest request() {
         return new QuoteSheetRequest("9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
-                LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30"), false, false, "报价", null,
+                LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30"), false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
@@ -166,7 +166,7 @@ class QuoteSheetServiceTest {
     private QuoteSheetResponse response() {
         return new QuoteSheetResponse(9L, "9", "9月9日报单", null, "云潮筝鸣府",
                 LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30"),
-                false, false, "报价", null, List.of(), List.of(), null, null, 3L);
+                false, false, "QUOTING", null, List.of(), List.of(), null, null, 3L);
     }
     /** 顺序调整: 先校验编辑签出锁, 再委托存储层, 并以提交后的回读版本覆盖响应版本。 */
     @Test

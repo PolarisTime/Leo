@@ -73,7 +73,7 @@ class ProjectServiceTest {
 
     private ProjectRequest request(Long customerId, String customerCode) {
         return new ProjectRequest("111", "项目A", "项A", "地址", "张三",
-                customerId, customerCode, 55L, "结算公司A", "正常", "备注");
+                customerId, customerCode, 55L, "结算公司A", "NORMAL", "备注");
     }
 
     private Customer customer(Long id, String code) {
@@ -107,7 +107,7 @@ class ProjectServiceTest {
         assertThat(entity.getCustomerCode()).isEqualTo("C007");
         assertThat(entity.getSettlementCompanyId()).isEqualTo(55L);
         assertThat(entity.getSettlementCompanyName()).isEqualTo("结算公司A");
-        assertThat(entity.getStatus()).isEqualTo("正常");
+        assertThat(entity.getStatus()).isEqualTo("NORMAL");
         verify(codeIssuanceService).validate("project", "111");
         verify(codeIssuanceService).consume("project", "111");
     }
@@ -125,7 +125,7 @@ class ProjectServiceTest {
         });
 
         service().create(new ProjectRequest("  111  ", "  项目A  ", " 项A ", " 地址 ", " 张三 ",
-                7L, " C007 ", 55L, "结算公司A", "正常", " 备注 "));
+                7L, " C007 ", 55L, "结算公司A", "NORMAL", " 备注 "));
 
         Project entity = savedHolder[0];
         assertThat(entity.getProjectName()).isEqualTo("项目A");
@@ -208,7 +208,7 @@ class ProjectServiceTest {
 
         // 请求省略结算主体 → 沿用实体上已配置的主体（不因缺省被清空）
         service().update(5L, new ProjectRequest("111", "项目A", "项A", "地址", "张三",
-                7L, "C007", null, null, "正常", "备注"));
+                7L, "C007", null, null, "NORMAL", "备注"));
 
         assertThat(entity.getSettlementCompanyId()).isEqualTo(66L);
         assertThat(entity.getSettlementCompanyName()).isEqualTo("结算公司B");
@@ -304,7 +304,7 @@ class ProjectServiceTest {
 
         // quoteSource/quoteRegion 都不传(等同于用户在页面上没动这两个字段)
         service().create(new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", 55L, "结算公司A", "正常", null, null,
+                7L, "C007", 55L, "结算公司A", "NORMAL", null, null,
                 null, null,
                 null, null, null, null,
                 null, null, null,
@@ -330,7 +330,7 @@ class ProjectServiceTest {
         });
 
         service().create(new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", 55L, "结算公司A", "正常", null, null,
+                7L, "C007", 55L, "结算公司A", "NORMAL", null, null,
                 "STEELX", "嘉兴",
                 null, null, null, null,
                 null, null, null,
@@ -355,7 +355,7 @@ class ProjectServiceTest {
         });
 
         service().create(new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", 55L, "结算公司A", "正常", "ADD",
+                7L, "C007", 55L, "结算公司A", "NORMAL", "ADD",
                 new java.math.BigDecimal("30.00"), null));
 
         Project entity = savedHolder[0];
@@ -378,7 +378,7 @@ class ProjectServiceTest {
 
         // 未配置方向时应清空幅度, 避免残留半配置
         service().create(new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", 55L, "结算公司A", "正常", null,
+                7L, "C007", 55L, "结算公司A", "NORMAL", null,
                 new java.math.BigDecimal("30.00"), null));
 
         Project entity = savedHolder[0];
@@ -392,7 +392,7 @@ class ProjectServiceTest {
                 .thenReturn(Optional.of(customer(7L, "C007")));
 
         assertThatThrownBy(() -> service().create(new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", 55L, "结算公司A", "正常", "UP",
+                7L, "C007", 55L, "结算公司A", "NORMAL", "UP",
                 new java.math.BigDecimal("30.00"), null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
@@ -406,7 +406,7 @@ class ProjectServiceTest {
                 .thenReturn(Optional.of(customer(7L, "C007")));
 
         assertThatThrownBy(() -> service().create(new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", 55L, "结算公司A", "正常", "SUBTRACT", null, null)))
+                7L, "C007", 55L, "结算公司A", "NORMAL", "SUBTRACT", null, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.VALIDATION_ERROR);
@@ -453,7 +453,7 @@ class ProjectServiceTest {
         project.setCustomerCode("C007");
         project.setAllowedBrands("沙钢,永钢");
         project.setAllowedMaterials("HRB400E");
-        when(projectRepository.findActiveOptionsByCustomerIdentity(7L, "C007", "正常"))
+        when(projectRepository.findActiveOptionsByCustomerIdentity(7L, "C007", "NORMAL"))
                 .thenReturn(List.of(project));
 
         List<ProjectOptionResponse> options = service().listActiveOptions(7L);
@@ -473,7 +473,7 @@ class ProjectServiceTest {
         project.setProjectCode("P001");
         project.setProjectName("项目A");
         project.setCustomerCode("C007");
-        when(projectRepository.findActiveOptionsByCustomerIdentity(7L, "C007", "正常"))
+        when(projectRepository.findActiveOptionsByCustomerIdentity(7L, "C007", "NORMAL"))
                 .thenReturn(List.of(project));
 
         List<ProjectOptionResponse> options = service().listActiveOptions(7L);
@@ -503,7 +503,7 @@ class ProjectServiceTest {
                                               String allowedBrandSeverity,
                                               String allowedMaterialSeverity) {
         return new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", 55L, "结算公司A", "正常", null, null, null, null,
+                7L, "C007", 55L, "结算公司A", "NORMAL", null, null, null, null,
                 allowedBrands, allowedMaterials, allowedBrandSeverity, allowedMaterialSeverity,
                 null, null, null, null, null, null, null);
     }
@@ -915,7 +915,7 @@ class ProjectServiceTest {
                                           String priceClosedSettleDirection, Integer priceClosedSettleDays,
                                           String pricePeriodPolicy, String pricePeriodFixed) {
         return new ProjectRequest("111", "项目A", null, null, null,
-                7L, "C007", 55L, "结算公司A", "正常", null, null, null, null,
+                7L, "C007", 55L, "结算公司A", "NORMAL", null, null, null, null,
                 null, null, null, null,
                 priceDateBasis, priceDateOffsetDays, priceClosedSettleDirection, priceClosedSettleDays,
                 pricePeriodPolicy, pricePeriodFixed, null);

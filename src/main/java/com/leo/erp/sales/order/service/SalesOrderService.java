@@ -648,8 +648,10 @@ public class SalesOrderService {
         return String.valueOf(entityId);
     }
 
+    /** 归一化为稳定 code：兼容旧中文 label。 */
     private String normalizeStatus(String value) {
-        return value == null ? "" : value.trim();
+        String code = StatusConstants.toCode(value);
+        return code == null ? "" : code;
     }
 
 }

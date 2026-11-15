@@ -35,7 +35,7 @@ class CustomerStatementResponseAssemblerTest {
         when(mapper.toResponse(statement)).thenReturn(new CustomerStatementResponse(
                 10L, "CS-001", null, "客户A", null, "项目A", null, null,
                 LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31),
-                BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.TEN, "待确认", false,
+                BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.TEN, "PENDING_CONFIRM", false,
                 null, List.of(), 20L
         ));
         SalesOrderSourceItemSnapshot sourceItem = new SalesOrderSourceItemSnapshot(
@@ -47,7 +47,7 @@ class CustomerStatementResponseAssemblerTest {
         SalesOrderSourceSnapshot sourceOrder = new SalesOrderSourceSnapshot(
                 100L, "SO-001", null, null, null, 20L, "客户A", null, "项目A",
                 null, null, LocalDate.of(2026, 8, 15), LocalDate.of(2026, 8, 14), "销售", BigDecimal.ONE,
-                BigDecimal.ONE, "完成销售", false, null, List.of(sourceItem)
+                BigDecimal.ONE, "SALES_COMPLETED", false, null, List.of(sourceItem)
         );
         when(sourceQuery.findBySourceItemIds(any())).thenReturn(List.of(sourceOrder));
 

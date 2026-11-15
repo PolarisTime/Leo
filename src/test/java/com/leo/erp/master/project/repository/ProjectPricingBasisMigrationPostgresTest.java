@@ -156,7 +156,7 @@ class ProjectPricingBasisMigrationPostgresTest {
                 INSERT INTO public.md_customer
                     (id, customer_code, customer_name, project_name, status, created_by, created_name, created_at,
                      deleted_flag, version)
-                VALUES (?, ?, 'V179取价基准测试客户', 'V179取价基准测试项目', '正常', 0, 'system', now(),
+                VALUES (?, ?, 'V179取价基准测试客户', 'V179取价基准测试项目', 'NORMAL', 0, 'system', now(),
                         false, 0)
                 ON CONFLICT (id) DO NOTHING
                 """, CUSTOMER_ID, "V179-C-" + CUSTOMER_ID);
@@ -165,7 +165,7 @@ class ProjectPricingBasisMigrationPostgresTest {
                     (id, project_code, project_name, customer_code, customer_id, status, created_by, created_name,
                      created_at, deleted_flag, price_date_basis, price_date_offset_days, price_period_policy,
                      price_period_fixed)
-                VALUES (?, ?, 'V179取价基准测试项目', ?, ?, '正常', 0, 'system', now(),
+                VALUES (?, ?, 'V179取价基准测试项目', ?, ?, 'NORMAL', 0, 'system', now(),
                         false, ?, ?, ?, ?)
                 """, PROJECT_ID, "V179-P-" + PROJECT_ID, "V179-C-" + CUSTOMER_ID, CUSTOMER_ID,
                 basis, offsetDays, periodPolicy, fixedPeriod);

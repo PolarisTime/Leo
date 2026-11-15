@@ -101,7 +101,7 @@ public class MaterialCategoryService {
     public Page<MaterialCategoryResponse> page(PageQuery query, String keyword, String status) {
         Specification<MaterialCategory> spec = Specs.<MaterialCategory>notDeleted()
                 .and(Specs.keywordLike(keyword, "categoryCode", "categoryName"))
-                .and(Specs.equalIfPresent("status", status));
+                .and(Specs.equalIfPresent("status", StatusConstants.toCode(status)));
         return repository.findAll(spec, query.toPageable("sortOrder"))
                 .map(this::toResponse);
     }
@@ -138,9 +138,8 @@ public class MaterialCategoryService {
         entity.setCategoryName(required(request.categoryName(), "类别名称"));
         entity.setSortOrder(request.sortOrder() == null ? 0 : request.sortOrder());
         entity.setPurchaseWeighRequired(Boolean.TRUE.equals(request.purchaseWeighRequired()));
-        entity.setStatus(request.status() == null || request.status().isBlank()
-                ? StatusConstants.NORMAL
-                : request.status().trim());
+        String status = StatusConstants.toCode(request.status());
+        entity.setStatus(status == null ? StatusConstants.NORMAL : status);
         entity.setRemark(optional(request.remark()));
     }
 

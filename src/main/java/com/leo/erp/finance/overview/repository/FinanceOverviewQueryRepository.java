@@ -36,7 +36,7 @@ public class FinanceOverviewQueryRepository {
                 JOIN so_sales_outbound_item item ON item.outbound_id = outbound.id
                 LEFT JOIN md_customer customer ON customer.id = outbound.customer_id
                 WHERE outbound.deleted_flag = FALSE
-                  AND outbound.status = '已审核'
+                  AND outbound.status = 'AUDITED'
                   AND outbound.settlement_company_id = :settlementCompanyId
                   AND outbound.outbound_date < :asOfDate + INTERVAL '1 day'
                 GROUP BY outbound.customer_id
@@ -56,7 +56,7 @@ public class FinanceOverviewQueryRepository {
                 JOIN so_sales_return_item item ON item.return_id = ret.id
                 LEFT JOIN md_customer customer ON customer.id = ret.customer_id
                 WHERE ret.deleted_flag = FALSE
-                  AND ret.status = '已审核'
+                  AND ret.status = 'AUDITED'
                   AND ret.settlement_company_id = :settlementCompanyId
                   AND ret.return_date < :asOfDate + INTERVAL '1 day'
                 GROUP BY ret.customer_id
@@ -74,7 +74,7 @@ public class FinanceOverviewQueryRepository {
                 FROM po_purchase_inbound inbound
                 JOIN po_purchase_inbound_item item ON item.inbound_id = inbound.id
                 WHERE inbound.deleted_flag = FALSE
-                  AND inbound.status IN ('已审核', '完成入库')
+                  AND inbound.status IN ('AUDITED', 'INBOUND_COMPLETED')
                   AND inbound.settlement_company_id = :settlementCompanyId
                   AND inbound.inbound_date < :asOfDate + INTERVAL '1 day'
                 GROUP BY inbound.supplier_id
@@ -91,7 +91,7 @@ public class FinanceOverviewQueryRepository {
                     CAST(0 AS NUMERIC)
                 FROM lg_freight_bill bill
                 WHERE bill.deleted_flag = FALSE
-                  AND bill.status = '已审核'
+                  AND bill.status = 'AUDITED'
                   AND bill.settlement_company_id = :settlementCompanyId
                   AND bill.bill_time < :asOfDate + INTERVAL '1 day'
                 GROUP BY bill.carrier_id
@@ -108,7 +108,7 @@ public class FinanceOverviewQueryRepository {
                     SUM(receipt.amount)
                 FROM fm_receipt receipt
                 WHERE receipt.deleted_flag = FALSE
-                  AND receipt.status = '已审核'
+                  AND receipt.status = 'AUDITED'
                   AND receipt.counterparty_type = '客户'
                   AND receipt.settlement_company_id = :settlementCompanyId
                   AND receipt.receipt_date < :asOfDate + INTERVAL '1 day'
@@ -126,7 +126,7 @@ public class FinanceOverviewQueryRepository {
                     SUM(payment.amount)
                 FROM fm_payment payment
                 WHERE payment.deleted_flag = FALSE
-                  AND payment.status = '已审核'
+                  AND payment.status = 'AUDITED'
                   AND payment.counterparty_type IN ('供应商', '物流商')
                   AND payment.settlement_company_id = :settlementCompanyId
                   AND payment.payment_date < :asOfDate + INTERVAL '1 day'
@@ -144,7 +144,7 @@ public class FinanceOverviewQueryRepository {
                     -SUM(receipt.amount)
                 FROM fm_receipt receipt
                 WHERE receipt.deleted_flag = FALSE
-                  AND receipt.status = '已审核'
+                  AND receipt.status = 'AUDITED'
                   AND receipt.counterparty_type = '供应商'
                   AND receipt.settlement_company_id = :settlementCompanyId
                   AND receipt.receipt_date < :asOfDate + INTERVAL '1 day'
@@ -162,7 +162,7 @@ public class FinanceOverviewQueryRepository {
                     -SUM(reversal.amount)
                 FROM fm_cash_reversal reversal
                 WHERE reversal.deleted_flag = FALSE
-                  AND reversal.status = '已审核'
+                  AND reversal.status = 'AUDITED'
                   AND reversal.original_payment_id IS NOT NULL
                   AND reversal.settlement_company_id = :settlementCompanyId
                   AND reversal.reversal_date <= :asOfDate
@@ -180,7 +180,7 @@ public class FinanceOverviewQueryRepository {
                     SUM(reversal.amount)
                 FROM fm_cash_reversal reversal
                 WHERE reversal.deleted_flag = FALSE
-                  AND reversal.status = '已审核'
+                  AND reversal.status = 'AUDITED'
                   AND reversal.original_receipt_id IS NOT NULL
                   AND reversal.settlement_company_id = :settlementCompanyId
                   AND reversal.reversal_date <= :asOfDate

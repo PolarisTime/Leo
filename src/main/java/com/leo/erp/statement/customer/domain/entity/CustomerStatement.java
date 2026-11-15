@@ -69,7 +69,7 @@ public class CustomerStatement extends AbstractAuditableEntity implements Status
     @Column(name = "settlement_company_name", length = 128)
     private String settlementCompanyName;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "direction", nullable = false, length = 8)

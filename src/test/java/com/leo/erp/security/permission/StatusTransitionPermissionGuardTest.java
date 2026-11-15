@@ -39,7 +39,7 @@ class StatusTransitionPermissionGuardTest {
         authenticate(PermissionCodes.SALES_ORDERS_UPDATE);
 
         assertThatThrownBy(() -> StatusTransitionPermissionGuard.requireForTransition(
-                ModuleKeys.SALES_ORDER, DocumentStatus.DRAFT.label(), DocumentStatus.AUDITED.label()))
+                ModuleKeys.SALES_ORDER, DocumentStatus.DRAFT.code(), DocumentStatus.AUDITED.code()))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining(PermissionCodes.SALES_ORDERS_AUDIT);
     }
@@ -49,7 +49,7 @@ class StatusTransitionPermissionGuardTest {
         authenticate(PermissionCodes.SALES_ORDERS_AUDIT);
 
         assertThatCode(() -> StatusTransitionPermissionGuard.requireForTransition(
-                ModuleKeys.SALES_ORDER, DocumentStatus.DRAFT.label(), DocumentStatus.AUDITED.label()))
+                ModuleKeys.SALES_ORDER, DocumentStatus.DRAFT.code(), DocumentStatus.AUDITED.code()))
                 .doesNotThrowAnyException();
     }
 
@@ -58,7 +58,7 @@ class StatusTransitionPermissionGuardTest {
         authenticate(PermissionCodes.ofResourceWildcard("sales-orders"));
 
         assertThatCode(() -> StatusTransitionPermissionGuard.requireForTransition(
-                ModuleKeys.SALES_ORDER, DocumentStatus.DRAFT.label(), DocumentStatus.AUDITED.label()))
+                ModuleKeys.SALES_ORDER, DocumentStatus.DRAFT.code(), DocumentStatus.AUDITED.code()))
                 .doesNotThrowAnyException();
     }
 
@@ -67,7 +67,7 @@ class StatusTransitionPermissionGuardTest {
         authenticate(PermissionCodes.SALES_ORDERS_UPDATE);
 
         assertThatThrownBy(() -> StatusTransitionPermissionGuard.requireForTransition(
-                ModuleKeys.SALES_ORDER, DocumentStatus.AUDITED.label(), DocumentStatus.DRAFT.label()))
+                ModuleKeys.SALES_ORDER, DocumentStatus.AUDITED.code(), DocumentStatus.DRAFT.code()))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining(PermissionCodes.SALES_ORDERS_UNAUDIT);
     }
@@ -78,8 +78,8 @@ class StatusTransitionPermissionGuardTest {
 
         assertThatThrownBy(() -> StatusTransitionPermissionGuard.requireForTransition(
                 ModuleKeys.CUSTOMER_STATEMENT,
-                DocumentStatus.PENDING_CONFIRM.label(),
-                DocumentStatus.CONFIRMED.label()))
+                DocumentStatus.PENDING_CONFIRM.code(),
+                DocumentStatus.CONFIRMED.code()))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining(PermissionCodes.CUSTOMER_STATEMENTS_CONFIRM);
     }
@@ -90,8 +90,8 @@ class StatusTransitionPermissionGuardTest {
 
         assertThatThrownBy(() -> StatusTransitionPermissionGuard.requireForTransition(
                 ModuleKeys.SALES_ORDER,
-                DocumentStatus.DELIVERY_VERIFICATION.label(),
-                DocumentStatus.SALES_COMPLETED.label()))
+                DocumentStatus.DELIVERY_VERIFICATION.code(),
+                DocumentStatus.SALES_COMPLETED.code()))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining(PermissionCodes.SALES_ORDERS_COMPLETE);
     }
@@ -103,8 +103,8 @@ class StatusTransitionPermissionGuardTest {
         // 交付核定 (已审核 -> 交付核定) 非受控动作, 保持 update 口径, 不额外要求。
         assertThatCode(() -> StatusTransitionPermissionGuard.requireForTransition(
                 ModuleKeys.SALES_ORDER,
-                DocumentStatus.AUDITED.label(),
-                DocumentStatus.DELIVERY_VERIFICATION.label()))
+                DocumentStatus.AUDITED.code(),
+                DocumentStatus.DELIVERY_VERIFICATION.code()))
                 .doesNotThrowAnyException();
     }
 
@@ -114,7 +114,7 @@ class StatusTransitionPermissionGuardTest {
         authenticate(PermissionCodes.SALES_CONTRACTS_UPDATE);
 
         assertThatCode(() -> StatusTransitionPermissionGuard.requireForTransition(
-                ModuleKeys.SALES_CONTRACT, DocumentStatus.DRAFT.label(), DocumentStatus.AUDITED.label()))
+                ModuleKeys.SALES_CONTRACT, DocumentStatus.DRAFT.code(), DocumentStatus.AUDITED.code()))
                 .doesNotThrowAnyException();
     }
 
@@ -122,24 +122,24 @@ class StatusTransitionPermissionGuardTest {
     void noAuthentication_shouldSkipGuard() {
         // 无认证主体(内部/系统调用)时跳过, 交由上层 @RequirePermission 负责。
         assertThatCode(() -> StatusTransitionPermissionGuard.requireForTransition(
-                ModuleKeys.SALES_ORDER, DocumentStatus.DRAFT.label(), DocumentStatus.AUDITED.label()))
+                ModuleKeys.SALES_ORDER, DocumentStatus.DRAFT.code(), DocumentStatus.AUDITED.code()))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void resolveRequiredPermission_mapsControlledActions() {
         assertThat(StatusTransitionPermissionGuard.resolveRequiredPermission(
-                ModuleKeys.SALES_ORDER, DocumentStatus.DRAFT.label(), DocumentStatus.AUDITED.label()))
+                ModuleKeys.SALES_ORDER, DocumentStatus.DRAFT.code(), DocumentStatus.AUDITED.code()))
                 .isEqualTo(PermissionCodes.SALES_ORDERS_AUDIT);
         assertThat(StatusTransitionPermissionGuard.resolveRequiredPermission(
-                ModuleKeys.SALES_ORDER, DocumentStatus.AUDITED.label(), DocumentStatus.DRAFT.label()))
+                ModuleKeys.SALES_ORDER, DocumentStatus.AUDITED.code(), DocumentStatus.DRAFT.code()))
                 .isEqualTo(PermissionCodes.SALES_ORDERS_UNAUDIT);
         assertThat(StatusTransitionPermissionGuard.resolveRequiredPermission(
-                ModuleKeys.PAYMENT, DocumentStatus.DRAFT.label(), DocumentStatus.AUDITED.label()))
+                ModuleKeys.PAYMENT, DocumentStatus.DRAFT.code(), DocumentStatus.AUDITED.code()))
                 .isEqualTo(PermissionCodes.PAYMENTS_AUDIT);
         // 物流单无独立反审核码: 反审核保持 update 口径(不额外要求)。
         assertThat(StatusTransitionPermissionGuard.resolveRequiredPermission(
-                ModuleKeys.FREIGHT_BILL, DocumentStatus.AUDITED.label(), DocumentStatus.DRAFT.label()))
+                ModuleKeys.FREIGHT_BILL, DocumentStatus.AUDITED.code(), DocumentStatus.DRAFT.code()))
                 .isNull();
     }
 
@@ -150,8 +150,8 @@ class StatusTransitionPermissionGuardTest {
 
         assertThatThrownBy(() -> StatusTransitionPermissionGuard.requireForTransition(
                 ModuleKeys.CUSTOMER_STATEMENT,
-                DocumentStatus.CONFIRMED.label(),
-                DocumentStatus.PENDING_CONFIRM.label()))
+                DocumentStatus.CONFIRMED.code(),
+                DocumentStatus.PENDING_CONFIRM.code()))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining(PermissionCodes.CUSTOMER_STATEMENTS_CONFIRM);
     }
@@ -163,8 +163,8 @@ class StatusTransitionPermissionGuardTest {
 
         assertThatThrownBy(() -> StatusTransitionPermissionGuard.requireForTransition(
                 ModuleKeys.SALES_ORDER,
-                DocumentStatus.SALES_COMPLETED.label(),
-                DocumentStatus.DELIVERY_VERIFICATION.label()))
+                DocumentStatus.SALES_COMPLETED.code(),
+                DocumentStatus.DELIVERY_VERIFICATION.code()))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining(PermissionCodes.SALES_ORDERS_COMPLETE);
     }
@@ -174,7 +174,7 @@ class StatusTransitionPermissionGuardTest {
         authenticate(PermissionCodes.SALES_ORDERS_UPDATE);
 
         assertThatThrownBy(() -> StatusTransitionPermissionGuard.requireForTransitionAtEntry(
-                ModuleKeys.SALES_ORDER, DocumentStatus.AUDITED.label()))
+                ModuleKeys.SALES_ORDER, DocumentStatus.AUDITED.code()))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining(PermissionCodes.SALES_ORDERS_AUDIT);
     }
@@ -184,7 +184,7 @@ class StatusTransitionPermissionGuardTest {
         authenticate(PermissionCodes.SALES_ORDERS_AUDIT);
 
         assertThatCode(() -> StatusTransitionPermissionGuard.requireForTransitionAtEntry(
-                ModuleKeys.SALES_ORDER, DocumentStatus.AUDITED.label()))
+                ModuleKeys.SALES_ORDER, DocumentStatus.AUDITED.code()))
                 .doesNotThrowAnyException();
     }
 
@@ -192,7 +192,7 @@ class StatusTransitionPermissionGuardTest {
     @Test
     void entry_withoutAuthentication_shouldFailClosed() {
         assertThatThrownBy(() -> StatusTransitionPermissionGuard.requireForTransitionAtEntry(
-                ModuleKeys.SALES_ORDER, DocumentStatus.AUDITED.label()))
+                ModuleKeys.SALES_ORDER, DocumentStatus.AUDITED.code()))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("已认证主体");
     }

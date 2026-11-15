@@ -53,7 +53,7 @@ public class PrintTemplate extends AbstractAuditableEntity implements StatusAwar
     @Column(name = "version_no", nullable = false)
     private Integer versionNo = 1;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status = "ACTIVE";
 
     @Column(name = "sync_mode", nullable = false, length = 16)

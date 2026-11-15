@@ -24,9 +24,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 请求 DTO 的字段长度上限必须等于数据库真实列宽。
  *
  * <p>回归背景：{@code sys_user.mobile} 是 varchar(20)、{@code sys_attachment.content_type} 是
- * varchar(128)、各表 {@code status} 是 varchar(16)，而对应 DTO 曾写成 32 / 255 / 32。
- * 上限放宽后超长值能通过 Bean Validation，最终撞库报 500 或被 {{@code DataIntegrityViolation}}
- * 兜成 422，错误定位不到字段。本测试锁定四个 DTO 的上限值。</p>
+ * varchar(128)、各表 {@code status} 是 varchar(32)（V219 为容纳 DELIVERY_VERIFICATION 等
+ * 英文 code 由 16 扩容），而对应 DTO 曾与列宽不一致。
+ * 上限放宽后超长值能通过 Bean Validation，最终撞库报 500 或被 {@code DataIntegrityViolation}
+ * 兜成 422，错误定位不到字段。本测试锁定这几个 DTO 的上限值。</p>
  */
 class FieldLengthContractValidationTest {
 
@@ -110,27 +111,27 @@ class FieldLengthContractValidationTest {
                 "a.pdf", contentType, 1L, "PRINT", repeat(64));
     }
 
-    // ---------- 通用状态: 各表 status varchar(16) ----------
+    // ---------- 通用状态: 各表 status varchar(32)（V219 扩容以容纳英文 code） ----------
 
     @Test
     void status_maxSizeMatchesDatabaseColumn() throws NoSuchFieldException {
-        assertThat(declaredMaxSize(StatusUpdateRequest.class, "status")).isEqualTo(16);
+        assertThat(declaredMaxSize(StatusUpdateRequest.class, "status")).isEqualTo(32);
     }
 
     @Test
-    void status_at16Accepted() {
-        assertThat(violatedFields(new StatusUpdateRequest(repeat(16)))).isEmpty();
+    void status_at32Accepted() {
+        assertThat(violatedFields(new StatusUpdateRequest(repeat(32)))).isEmpty();
     }
 
     @Test
-    void status_over16Rejected() {
-        assertThat(violatedFields(new StatusUpdateRequest(repeat(17)))).contains("status");
+    void status_over32Rejected() {
+        assertThat(violatedFields(new StatusUpdateRequest(repeat(33)))).contains("status");
     }
 
     // ---------- 定尺打印后缀: md_length_premium.spec_suffix varchar(16) ----------
 
     private LengthPremiumRequest lengthPremium(String specSuffix) {
-        return new LengthPremiumRequest("12米", 30, 1, "正常", null, specSuffix);
+        return new LengthPremiumRequest("12米", 30, 1, "NORMAL", null, specSuffix);
     }
 
     @Test

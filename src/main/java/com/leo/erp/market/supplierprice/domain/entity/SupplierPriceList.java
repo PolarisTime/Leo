@@ -69,7 +69,7 @@ public class SupplierPriceList extends AbstractAuditableEntity implements Status
     private LocalDate effectiveTo;
 
     /** 兼容列：新行恒为 {@code ACTIVE}。 */
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status = "ACTIVE";
 
     /** 仓库（展示用，如 东恒库 / 钢联新安库）。 */

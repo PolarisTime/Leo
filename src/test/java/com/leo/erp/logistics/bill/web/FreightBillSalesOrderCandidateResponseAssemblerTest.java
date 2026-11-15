@@ -56,7 +56,7 @@ class FreightBillSalesOrderCandidateResponseAssemblerTest {
         assertThat(response.salesName()).isEqualTo("销售员A");
         assertThat(response.totalWeight()).isEqualByComparingTo("100.00000000");
         assertThat(response.totalAmount()).isEqualByComparingTo("5000.00");
-        assertThat(response.status()).isEqualTo("交付核定");
+        assertThat(response.status()).isEqualTo("DELIVERY_VERIFICATION");
         assertThat(response.deletedFlag()).isFalse();
         assertThat(response.remark()).isEqualTo("备注A");
         assertThat(response.items()).hasSize(1);
@@ -99,7 +99,7 @@ class FreightBillSalesOrderCandidateResponseAssemblerTest {
                 "销售员A",
                 new BigDecimal("100.00000000"),
                 new BigDecimal("5000.00"),
-                "交付核定",
+                "DELIVERY_VERIFICATION",
                 false,
                 "备注A",
                 List.of(sampleItem()));

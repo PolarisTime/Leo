@@ -159,7 +159,8 @@ class PurchaseOrderForceCloseServiceTest {
         verify(sourceAllocationLockService).lockTradeItemSources(List.of(100L), List.of(), List.of());
         verify(directSalesCapacityGuard).assertCovered(List.of(100L));
         verify(auditPublisher).publish(order, "PURCHASE_ORDER_FORCE_CLOSED", "强制结单",
-                "采购订单状态 已审核 -> 完成采购(强制结单), 作废未入库 1 件; 原因: 剩余 1 件报废");
+                "采购订单状态 " + StatusConstants.AUDITED + " -> " + StatusConstants.PURCHASE_COMPLETED
+                        + "(强制结单), 作废未入库 1 件; 原因: 剩余 1 件报废");
     }
 
     @Test

@@ -45,7 +45,7 @@ class PurchaseOrderOptionServiceTest {
         order.setOrderNo("88");
         order.setSupplierName("沙钢");
         order.setTotalWeight(new BigDecimal("40.5"));
-        order.setStatus("正常");
+        order.setStatus("NORMAL");
         order.setOrderDate(LocalDateTime.of(2026, 9, 9, 10, 0));
         when(repository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(order)));
@@ -68,7 +68,7 @@ class PurchaseOrderOptionServiceTest {
         order.setOrderNo("PO-88");
         order.setSupplierName("沙钢");
         order.setTotalWeight(new BigDecimal("40.5"));
-        order.setStatus("正常");
+        order.setStatus("NORMAL");
         when(repository.findByIdInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
 
         List<PurchaseOrderOptionQuery.PurchaseOrderOptionSnapshot> snapshots =
@@ -92,7 +92,7 @@ class PurchaseOrderOptionServiceTest {
         order.setId(88L);
         order.setOrderNo("PO-88");
         order.setSupplierName("沙钢");
-        order.setStatus("正常");
+        order.setStatus("NORMAL");
         PurchaseOrderItem item = new PurchaseOrderItem();
         item.setId(301L);
         item.setPurchaseOrder(order);

@@ -43,7 +43,7 @@ class MaterialCategoryGuardTest {
     @Test
     void existingActiveCategory_shouldPassAndReturnName() {
         when(repository.findByCategoryNameInAndDeletedFlagFalse(anyCollection()))
-                .thenReturn(List.of(category("直条", "正常")));
+                .thenReturn(List.of(category("直条", "NORMAL")));
 
         assertThat(guard.requireActive("直条")).isEqualTo("直条");
     }
@@ -80,7 +80,7 @@ class MaterialCategoryGuardTest {
     @Test
     void categoryNameShouldBeTrimmedBeforeMatching() {
         when(repository.findByCategoryNameInAndDeletedFlagFalse(List.of("盘螺")))
-                .thenReturn(List.of(category("盘螺", "正常")));
+                .thenReturn(List.of(category("盘螺", "NORMAL")));
 
         assertThat(guard.requireActive("  盘螺  ")).isEqualTo("盘螺");
     }

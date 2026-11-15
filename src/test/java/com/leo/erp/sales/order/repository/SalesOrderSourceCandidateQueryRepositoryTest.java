@@ -48,8 +48,8 @@ class SalesOrderSourceCandidateQueryRepositoryTest {
         ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
         verify(jdbcTemplate).query(sqlCaptor.capture(), any(SqlParameterSource.class), any(RowMapper.class));
         String sql = sqlCaptor.getValue();
-        assertThat(sql).doesNotContain("purchase_order.status = '完成采购'");
-        assertThat(sql).contains("inbound.status IN ('已审核', '完成入库')");
+        assertThat(sql).doesNotContain("purchase_order.status = 'PURCHASE_COMPLETED'");
+        assertThat(sql).contains("inbound.status IN ('AUDITED', 'INBOUND_COMPLETED')");
         assertThat(sql).contains("inbound.deleted_flag = FALSE");
         assertThat(sql).contains("remaining_quantity > 0");
     }

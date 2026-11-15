@@ -419,7 +419,7 @@ class SalesOrderServiceTest {
                 new BigDecimal("200.00"), new BigDecimal("2000.00"));
         SalesOrderRequest request = new SalesOrderRequest(
                 "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A", null, null,
-                LocalDate.of(2026, 8, 1), "销售员A", "草稿", null,
+                LocalDate.of(2026, 8, 1), "销售员A", "DRAFT", null,
                 List.of(item), List.of(), false);
 
         assertThatThrownBy(() -> service.update(5L, request, null))

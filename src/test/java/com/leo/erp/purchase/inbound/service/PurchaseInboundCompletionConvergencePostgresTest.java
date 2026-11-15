@@ -134,11 +134,11 @@ class PurchaseInboundCompletionConvergencePostgresTest {
     private void seedMasterData() {
         jdbc.update("""
                 insert into md_supplier (id, supplier_code, supplier_name, status)
-                values (?, ?, 'PG完成度供应商', '正常')
+                values (?, ?, 'PG完成度供应商', 'NORMAL')
                 """, SUPPLIER_ID, "PG-CONV-S-" + SUPPLIER_ID);
         jdbc.update("""
                 insert into md_warehouse (id, warehouse_code, warehouse_name, warehouse_type, status)
-                values (?, ?, 'PG完成度仓库', '自营', '正常')
+                values (?, ?, 'PG完成度仓库', '自营', 'NORMAL')
                 """, WAREHOUSE_ID, "PG-CONV-W-" + WAREHOUSE_ID);
         jdbc.update("""
                 insert into md_material
@@ -153,7 +153,7 @@ class PurchaseInboundCompletionConvergencePostgresTest {
                 insert into po_purchase_order
                     (id, order_no, supplier_name, order_date, total_weight, total_amount, status,
                      supplier_code, supplier_id)
-                values (?, ?, 'PG完成度供应商', now(), 3.00000000, 200.00, '已审核', ?, ?)
+                values (?, ?, 'PG完成度供应商', now(), 3.00000000, 200.00, 'AUDITED', ?, ?)
                 """, ORDER_ID, String.valueOf(ORDER_ID), "PG-CONV-S-" + SUPPLIER_ID, SUPPLIER_ID);
         jdbc.update("""
                 insert into po_purchase_order_item

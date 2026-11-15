@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.api.OperationLogCommand;
 import com.leo.erp.system.operationlog.api.OperationLogRecorder;
@@ -287,8 +288,12 @@ public class OperationLogService implements OperationLogRecorder {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    /**
+     * 归一化操作日志结果筛选值：接受稳定 code（SUCCESS/FAILED）与旧中文 label（成功/失败），
+     * 统一按 code 查询。
+     */
     private String normalizeResultStatus(String value) {
-        String normalized = trimToNull(value);
+        String normalized = StatusConstants.toCode(trimToNull(value));
         if (normalized == null) {
             return null;
         }

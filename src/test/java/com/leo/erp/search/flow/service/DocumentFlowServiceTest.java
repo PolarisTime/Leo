@@ -215,7 +215,7 @@ class DocumentFlowServiceTest {
         ResultSet resultSet = mock(ResultSet.class);
         lenient().when(resultSet.getLong("id")).thenReturn(id);
         lenient().when(resultSet.getString("no")).thenReturn(no);
-        lenient().when(resultSet.getString("status")).thenReturn("已审核");
+        lenient().when(resultSet.getString("status")).thenReturn("AUDITED");
         lenient().when(resultSet.getBigDecimal("amount")).thenReturn(new BigDecimal("1000.00"));
         lenient().when(resultSet.getBigDecimal("weight")).thenReturn(new BigDecimal("10.00000000"));
         lenient().when(resultSet.getObject("business_date", LocalDate.class)).thenReturn(LocalDate.of(2026, 9, 1));

@@ -56,19 +56,19 @@ class MasterDataRequestSizeValidationTest {
     }
 
     private CustomerRequest customer(String name, String phone) {
-        return new CustomerRequest("C-1", name, null, phone, null, null, null, null, null, "正常", null);
+        return new CustomerRequest("C-1", name, null, phone, null, null, null, null, null, "NORMAL", null);
     }
 
     private SupplierRequest supplier(String name, String shortName) {
-        return new SupplierRequest("S-1", name, shortName, null, null, null, "正常", null);
+        return new SupplierRequest("S-1", name, shortName, null, null, null, "NORMAL", null);
     }
 
     private WarehouseRequest warehouse(String name, String type) {
-        return new WarehouseRequest("W-1", name, type, null, null, null, "正常", null);
+        return new WarehouseRequest("W-1", name, type, null, null, null, "NORMAL", null);
     }
 
     private CarrierRequest carrier(String name, List<VehicleItem> vehicles) {
-        return new CarrierRequest("L-1", name, null, null, null, vehicles, null, 1L, "正常", null);
+        return new CarrierRequest("L-1", name, null, null, null, vehicles, null, 1L, "NORMAL", null);
     }
 
     // ---------- 客户 ----------

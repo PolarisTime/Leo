@@ -16,7 +16,7 @@ import java.util.Set;
 /**
  * 基于数据库角色-权限的 {@link AuthorityProvider} 主实现（RBAC0）。
  *
- * <p>按登录用户 id 聚合其所有<b>启用</b>角色（{@code status='正常'} 且未删除）的权限码并集。
+ * <p>按登录用户 id 聚合其所有<b>启用</b>角色（{@code status='NORMAL'} 且未删除）的权限码并集。
  * 若集合中包含通配 {@link PermissionCodes#WILDCARD} 或 {@code 资源:*}，由
  * {@code PermissionAuthorizationManager} 的前缀匹配语义负责展开，本类原样返回。</p>
  *

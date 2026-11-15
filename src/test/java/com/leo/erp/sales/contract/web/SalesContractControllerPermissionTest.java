@@ -149,7 +149,7 @@ class SalesContractControllerPermissionTest {
 
         mockMvc.perform(patch("/v2.0/sales-contracts/5/status")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"审核\"}"))
+                        .content("{\"status\":\"CONTRACT_REVIEWED\"}"))
                 .andExpect(status().isForbidden());
 
         verify(service, never()).updateStatus(anyLong(), any());
@@ -161,7 +161,7 @@ class SalesContractControllerPermissionTest {
                 1L, "客户甲", 2L, "项目乙",
                 LocalDate.of(2026, 9, 17), null, null,
                 new BigDecimal("100.00"), new BigDecimal("1.50000000"),
-                "草稿", null, null, null, 0L);
+                "DRAFT", null, null, null, 0L);
     }
 
     static void authenticate(String... authorities) {

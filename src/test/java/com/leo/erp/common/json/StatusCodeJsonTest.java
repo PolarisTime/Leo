@@ -11,7 +11,8 @@ import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 状态 code/label 双向映射契约：API 输出稳定 code，请求可接受 code 并回落为 DB label。
+ * 状态 code/label 双向映射契约：API 输出稳定 code，请求接受 code，也兼容旧中文 label
+ * 并归一化为 code（V219 之后 DB 与领域层只存 code）。
  */
 class StatusCodeJsonTest {
 
@@ -53,16 +54,19 @@ class StatusCodeJsonTest {
     }
 
     @Test
-    void codeShouldDeserializeToDatabaseLabel() throws Exception {
+    void codeShouldDeserializeToSameCode() throws Exception {
         SampleStatus payload = mapper().readValue("{\"status\":\"SALES_COMPLETED\"}", SampleStatus.class);
 
-        assertThat(payload.status).isEqualTo("完成销售");
+        assertThat(payload.status).isEqualTo("SALES_COMPLETED");
     }
 
     @Test
-    void labelAndUnknownStatusShouldDeserializeUnchanged() throws Exception {
+    void legacyLabelShouldDeserializeToCodeAndUnknownStatusStaysUnchanged() throws Exception {
         SampleStatus payload = mapper().readValue("{\"status\":\"已审核\"}", SampleStatus.class);
-        assertThat(payload.status).isEqualTo("已审核");
+        assertThat(payload.status).isEqualTo("AUDITED");
+
+        SampleStatus quoted = mapper().readValue("{\"status\":\"报价\"}", SampleStatus.class);
+        assertThat(quoted.status).isEqualTo("QUOTING");
 
         SampleStatus unknown = mapper().readValue("{\"status\":\"SUCCESS\"}", SampleStatus.class);
         assertThat(unknown.status).isEqualTo("SUCCESS");

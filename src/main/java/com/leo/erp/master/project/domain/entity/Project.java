@@ -52,7 +52,7 @@ public class Project extends AbstractAuditableEntity implements StatusAwareEntit
     @Column(name = "settlement_company_name", length = 128)
     private String settlementCompanyName;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     /** 网价浮动方向: ADD加价/SUBTRACT减价; null 表示不启用网价浮动。 */

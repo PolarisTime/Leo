@@ -81,7 +81,7 @@ class WarehouseServiceTest {
         assertThat(entity.getId()).isEqualTo(88L);
         assertThat(entity.getWarehouseCode()).isEqualTo("111");
         assertThat(entity.getWarehouseName()).isEqualTo("仓库A");
-        assertThat(entity.getStatus()).isEqualTo("正常");
+        assertThat(entity.getStatus()).isEqualTo("NORMAL");
         verify(codeIssuanceService).validate("warehouse", "111");
         verify(codeIssuanceService).consume("warehouse", "111");
     }
@@ -99,7 +99,7 @@ class WarehouseServiceTest {
         when(warehouseMapper.toResponse(any(Warehouse.class))).thenReturn(null);
 
         service().create(new WarehouseRequest("  111  ", "  仓库A  ", "  实体仓  ", " 联系人 ", " 138 ",
-                " 地址 ", "正常", " 备注 "));
+                " 地址 ", "NORMAL", " 备注 "));
 
         Warehouse entity = savedHolder[0];
         assertThat(entity.getWarehouseName()).isEqualTo("仓库A");
@@ -112,7 +112,7 @@ class WarehouseServiceTest {
 
     @Test
     void create_invalidStatus_rejected() {
-        assertThatThrownBy(() -> service().create(request("仓库A", "已审核")))
+        assertThatThrownBy(() -> service().create(request("仓库A", "AUDITED")))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -140,7 +140,7 @@ class WarehouseServiceTest {
         when(codeIssuanceService.resolve("warehouse", "W001", "111")).thenReturn("W001");
         when(warehouseRepository.save(entity)).thenReturn(entity);
 
-        service().update(5L, request("新仓库名", "正常"));
+        service().update(5L, request("新仓库名", "NORMAL"));
 
         verify(referenceSnapshotSyncService).syncWarehouseName(5L, "新仓库名");
     }
@@ -155,7 +155,7 @@ class WarehouseServiceTest {
         when(codeIssuanceService.resolve("warehouse", "W001", "111")).thenReturn("W001");
         when(warehouseRepository.save(entity)).thenReturn(entity);
 
-        service().update(5L, request("仓库名", "正常"));
+        service().update(5L, request("仓库名", "NORMAL"));
 
         verify(referenceSnapshotSyncService, never()).syncWarehouseName(any(), anyString());
     }

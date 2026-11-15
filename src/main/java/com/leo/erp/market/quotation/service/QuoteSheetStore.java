@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.market.lengthpremium.service.LengthPremiumService;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
@@ -50,7 +51,8 @@ import java.util.Set;
 @Service
 public class QuoteSheetStore {
 
-    private static final String DEFAULT_STATUS = "报价";
+    /** 报价单默认状态 code；旧中文 label「报价」由 V219 迁成 {@code QUOTING}。 */
+    private static final String DEFAULT_STATUS = StatusConstants.QUOTING;
 
     private final QuoteSheetRepository repository;
     private final QuoteProjectConfigRepository quoteProjectConfigRepository;
@@ -756,7 +758,10 @@ public class QuoteSheetStore {
         changed |= differs(lengthPremium, entity.getLengthPremium());
         entity.setLengthPremium(lengthPremium);
         changed |= applyLockFlags(entity, request.locked(), request.specQuantityLocked(), preserveNullLockFlags);
-        String status = request.status() == null || request.status().isBlank() ? DEFAULT_STATUS : request.status();
+        String status = StatusConstants.toCode(request.status());
+        if (status == null) {
+            status = DEFAULT_STATUS;
+        }
         changed |= !Objects.equals(status, entity.getStatus());
         entity.setStatus(status);
         changed |= !Objects.equals(request.remark(), entity.getRemark());

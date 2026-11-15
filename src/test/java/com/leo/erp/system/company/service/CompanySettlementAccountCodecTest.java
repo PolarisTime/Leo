@@ -45,7 +45,7 @@ class CompanySettlementAccountCodecTest {
         List<CompanySettlementAccountResponse> result = codec.normalize(Arrays.asList(
                 null,
                 new CompanySettlementAccountRequest(null, null, null, null, null, null, null),
-                new CompanySettlementAccountRequest(null, "户名A", "银行A", "622200001", "通用", "正常", "备注"),
+                new CompanySettlementAccountRequest(null, "户名A", "银行A", "622200001", "通用", "NORMAL", "备注"),
                 new CompanySettlementAccountRequest(null, "户名B", "银行B", null, null, null, null)
         ));
 
@@ -54,7 +54,7 @@ class CompanySettlementAccountCodecTest {
         assertThat(result.get(0).bankAccount()).isEqualTo("622200001");
         assertThat(result.get(1).id()).isEqualTo(102L);
         assertThat(result.get(1).usageType()).isEqualTo("通用");
-        assertThat(result.get(1).status()).isEqualTo("正常");
+        assertThat(result.get(1).status()).isEqualTo("NORMAL");
     }
 
     @Test
@@ -62,7 +62,7 @@ class CompanySettlementAccountCodecTest {
         CompanySettlementAccountCodec codec = codec();
 
         List<CompanySettlementAccountResponse> result = codec.normalize(List.of(
-                new CompanySettlementAccountRequest(88L, "户名A", "银行A", "622200001", "通用", "正常", null)
+                new CompanySettlementAccountRequest(88L, "户名A", "银行A", "622200001", "通用", "NORMAL", null)
         ));
 
         assertThat(result.get(0).id()).isEqualTo(88L);
@@ -74,8 +74,8 @@ class CompanySettlementAccountCodecTest {
         CompanySettlementAccountCodec codec = codec();
 
         assertThatThrownBy(() -> codec.normalize(List.of(
-                new CompanySettlementAccountRequest(null, "户名A", "银行A", "622200001", "通用", "正常", null),
-                new CompanySettlementAccountRequest(null, "户名B", "银行B", "622200001", "通用", "正常", null)
+                new CompanySettlementAccountRequest(null, "户名A", "银行A", "622200001", "通用", "NORMAL", null),
+                new CompanySettlementAccountRequest(null, "户名B", "银行B", "622200001", "通用", "NORMAL", null)
         )))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("银行账号不能重复")
@@ -102,7 +102,7 @@ class CompanySettlementAccountCodecTest {
         CompanySetting entity = new CompanySetting();
         entity.setId(1L);
         entity.setSettlementAccountsJson(OBJECT_MAPPER.writeValueAsString(List.of(
-                new CompanySettlementAccountResponse(9L, "户名A", "银行A", "622200001", "通用", "正常", null)
+                new CompanySettlementAccountResponse(9L, "户名A", "银行A", "622200001", "通用", "NORMAL", null)
         )));
 
         List<CompanySettlementAccountResponse> result = codec.read(entity);
@@ -119,7 +119,7 @@ class CompanySettlementAccountCodecTest {
         entity.setCompanyName("公司A");
         entity.setBankName("银行A");
         entity.setBankAccount("622200001");
-        entity.setStatus("正常");
+        entity.setStatus("NORMAL");
         entity.setRemark("备注");
 
         List<CompanySettlementAccountResponse> result = codec.read(entity);
@@ -168,7 +168,7 @@ class CompanySettlementAccountCodecTest {
     void write_shouldSerializeAccountsToJson() {
         CompanySettlementAccountCodec codec = codec();
         CompanySettlementAccountResponse account = new CompanySettlementAccountResponse(
-                9L, "户名A", "银行A", "622200001", "通用", "正常", null);
+                9L, "户名A", "银行A", "622200001", "通用", "NORMAL", null);
 
         String json = codec.write(List.of(account));
 

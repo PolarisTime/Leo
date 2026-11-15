@@ -1,6 +1,7 @@
 package com.leo.erp.purchase.order.service;
 
 import com.leo.erp.common.persistence.Specs;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.purchase.api.PurchaseOrderOptionQuery;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
@@ -111,7 +112,7 @@ public class PurchaseOrderOptionService implements PurchaseOrderOptionQuery {
     }
 
     private static String normalizeStatus(String status) {
-        return (status == null || status.isBlank()) ? null : status;
+        return StatusConstants.toCode(status);
     }
 
     private static PurchaseOrderItemOptionSnapshot toItemSnapshot(PurchaseOrderItem item) {

@@ -97,19 +97,19 @@ class PurchaseInboundItemReferenceReleasePostgresTest {
     private void seedMasterData() {
         jdbc.update("""
                 insert into md_customer (id, customer_code, customer_name, project_name, status)
-                values (?, ?, 'PG客户', 'PG项目', '正常')
+                values (?, ?, 'PG客户', 'PG项目', 'NORMAL')
                 """, CUSTOMER_ID, "PG-C-" + CUSTOMER_ID);
         jdbc.update("""
                 insert into md_project (id, project_code, project_name, customer_code, customer_id, status)
-                values (?, ?, 'PG项目', ?, ?, '正常')
+                values (?, ?, 'PG项目', ?, ?, 'NORMAL')
                 """, PROJECT_ID, "PG-P-" + PROJECT_ID, "PG-C-" + CUSTOMER_ID, CUSTOMER_ID);
         jdbc.update("""
                 insert into md_supplier (id, supplier_code, supplier_name, status)
-                values (?, ?, 'PG供应商', '正常')
+                values (?, ?, 'PG供应商', 'NORMAL')
                 """, SUPPLIER_ID, "PG-S-" + SUPPLIER_ID);
         jdbc.update("""
                 insert into md_warehouse (id, warehouse_code, warehouse_name, warehouse_type, status)
-                values (?, ?, 'PG仓库', '自营', '正常')
+                values (?, ?, 'PG仓库', '自营', 'NORMAL')
                 """, WAREHOUSE_ID, "PG-W-" + WAREHOUSE_ID);
         jdbc.update("""
                 insert into md_material
@@ -124,7 +124,7 @@ class PurchaseInboundItemReferenceReleasePostgresTest {
                 insert into po_purchase_order
                     (id, order_no, supplier_name, order_date, total_weight, total_amount, status,
                      supplier_code, supplier_id)
-                values (?, ?, 'PG供应商', now(), 3.00000000, 200.00, '草稿', ?, ?)
+                values (?, ?, 'PG供应商', now(), 3.00000000, 200.00, 'DRAFT', ?, ?)
                 """, ORDER_ID, String.valueOf(ORDER_ID), "PG-S-" + SUPPLIER_ID, SUPPLIER_ID);
         insertOrderItem(ORDER_ITEM_RELEASABLE, 1);
         insertOrderItem(ORDER_ITEM_RETAINED, 2);
@@ -132,7 +132,7 @@ class PurchaseInboundItemReferenceReleasePostgresTest {
                 insert into po_purchase_inbound
                     (id, inbound_no, supplier_name, warehouse_name, inbound_date, settlement_mode,
                      total_weight, total_amount, status, supplier_code, supplier_id, deleted_flag)
-                values (?, ?, 'PG供应商', 'PG仓库', now(), '过磅', 3.00000000, 200.00, '草稿', ?, ?, true)
+                values (?, ?, 'PG供应商', 'PG仓库', now(), '过磅', 3.00000000, 200.00, 'DRAFT', ?, ?, true)
                 """, INBOUND_ID, String.valueOf(INBOUND_ID), "PG-S-" + SUPPLIER_ID, SUPPLIER_ID);
         insertInboundItem(INBOUND_ITEM_RELEASABLE, 1, ORDER_ITEM_RELEASABLE);
         insertInboundItem(INBOUND_ITEM_RETAINED, 2, ORDER_ITEM_RETAINED);
@@ -143,7 +143,7 @@ class PurchaseInboundItemReferenceReleasePostgresTest {
                 insert into so_sales_order
                     (id, order_no, customer_name, project_name, delivery_date, sales_name,
                      total_weight, total_amount, status, project_id, customer_id)
-                values (?, ?, 'PG客户', 'PG项目', now(), 'PG销售', 1.00000000, 100.00, '草稿', ?, ?)
+                values (?, ?, 'PG客户', 'PG项目', now(), 'PG销售', 1.00000000, 100.00, 'DRAFT', ?, ?)
                 """, SALES_ORDER_ID, String.valueOf(SALES_ORDER_ID), PROJECT_ID, CUSTOMER_ID);
         jdbc.update("""
                 insert into so_sales_order_item

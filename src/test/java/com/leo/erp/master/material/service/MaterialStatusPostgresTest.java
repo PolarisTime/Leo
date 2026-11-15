@@ -77,7 +77,8 @@ class MaterialStatusPostgresTest {
                 where table_schema = 'public' and table_name = 'md_material' and column_name = 'status'
                 """,
                 Integer.class);
-        assertThat(maxLength).isEqualTo(16);
+        // V219 把状态列由 varchar(16) 扩到 varchar(32)，以容纳 DELIVERY_VERIFICATION 等长 code
+        assertThat(maxLength).isEqualTo(32);
 
         Integer indexCount = jdbc.queryForObject(
                 """

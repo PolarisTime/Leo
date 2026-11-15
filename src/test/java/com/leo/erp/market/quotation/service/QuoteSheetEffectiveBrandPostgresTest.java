@@ -182,7 +182,7 @@ class QuoteSheetEffectiveBrandPostgresTest {
 
         QuoteSheetRequest request = new QuoteSheetRequest(
                 "pg-effective-brand", PROJECT_ID, "云潮筝鸣府", ORDER_DATE, ORDER_DATE, "09:00",
-                LENGTH_PREMIUM, false, false, "报价", null,
+                LENGTH_PREMIUM, false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest(BASE_BRAND, BigDecimal.ZERO, 0)),
                 List.of(itemRequest("盘螺", "HRB400E", 8, "3300", CONFIG_ONLY_BRAND)));
 
@@ -203,7 +203,7 @@ class QuoteSheetEffectiveBrandPostgresTest {
 
         QuoteSheetRequest headerOnly = new QuoteSheetRequest(
                 "pg-effective-brand", PROJECT_ID, "云潮筝鸣府", ORDER_DATE, ORDER_DATE, "09:00",
-                LENGTH_PREMIUM, false, false, "报价", null, null, null);
+                LENGTH_PREMIUM, false, false, "QUOTING", null, null, null);
 
         store.update(SHEET_ID, headerOnly, version);
 
@@ -306,7 +306,7 @@ class QuoteSheetEffectiveBrandPostgresTest {
         sheet.setRefDate(ORDER_DATE);
         sheet.setRefPeriod("09:00");
         sheet.setLengthPremium(LENGTH_PREMIUM);
-        sheet.setStatus("报价");
+        sheet.setStatus("QUOTING");
         sheet.setCreatedAt(LocalDateTime.now());
         sheet.setCreatedBy(0L);
         sheet.setCreatedName("system");

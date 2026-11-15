@@ -186,6 +186,6 @@ class SupplierBrandPostgresTest {
 
     private SupplierRequest request(List<String> brands) {
         return new SupplierRequest("PG-GYS-001", "PG供应商", null, "联系人", "13800000000",
-                "上海", "正常", "PG备注", brands);
+                "上海", "NORMAL", "PG备注", brands);
     }
 }

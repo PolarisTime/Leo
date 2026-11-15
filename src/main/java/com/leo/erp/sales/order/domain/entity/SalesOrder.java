@@ -58,7 +58,7 @@ public class SalesOrder extends AbstractAuditableEntity implements StatusAwareEn
     @Column(name = "total_amount", nullable = false, precision = 14, scale = 2)
     private BigDecimal totalAmount;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "customer_code", length = 64)

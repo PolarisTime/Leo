@@ -23,10 +23,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 契约测试：JPQL 里写死的单据状态字面量必须与 {@link StatusConstants} 的取值一致。
  *
- * <p>背景：全仓有 20+ 处 {@code @Query} 直接用 {@code status = '已审核'} 这类字面量。
+ * <p>背景：全仓有 20+ 处 {@code @Query} 直接用 {@code status = 'AUDITED'} 这类字面量。
  * 这些查询没法直接引用常量（JPQL 是注解里的文本，拼常量会把查询拆得不可读），
- * 于是「改状态文案时漏改 SQL」成了静默缺陷：改完 {@link StatusConstants#AUDITED}，
- * 财务口径的查询仍按旧文案过滤，页面数字对不上却不报错。</p>
+ * 于是「改状态取值时漏改 SQL」成了静默缺陷：改完 {@link StatusConstants#AUDITED}，
+ * 财务口径的查询仍按旧字面量过滤，页面数字对不上却不报错。</p>
  *
  * <p>这里不重写查询，而是把两者的取值锁在一起：只要 SQL 里出现一个字面量不在常量表里，
  * 测试立刻红，并指出具体是哪个方法、哪个字面量。新增状态值时请先加到
@@ -37,17 +37,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class SqlStatusLiteralContractTest {
 
-    /** 匹配 `status = '已审核'`、`status<>'草稿'`、`status IN ('已审核','完成入库')`。 */
+    /** 匹配 `status = 'AUDITED'`、`status<>'DRAFT'`、`status IN ('AUDITED','INBOUND_COMPLETED')`。 */
     private static final Pattern STATUS_LITERAL = Pattern.compile(
             "(?i)\\bstatus\\s*(?:=|<>|<>)??\\s*(?:in)?\\s*\\(?\\s*'([^']*)'",
             Pattern.DOTALL);
 
     /**
-     * 不属于「单据状态文案」的例外取值，必须逐个写明来源；新增条目要在注释里说明为什么不是单据状态。
+     * 不属于「单据状态取值」的例外字面量，必须逐个写明来源；新增条目要在注释里说明为什么不是单据状态。
      */
     private static final Set<String> NON_DOCUMENT_STATUS_LITERALS = Set.of(
-            // 用户账号状态用的是枚举名（auth 模块 u.status = 'NORMAL'），与单据状态文案（「正常」）不同源
-            "NORMAL",
             // 采购订单列表的虚拟筛选值：'已删除' 映射到 deletedFlag = true，不是真实 status 取值
             "已删除"
     );
@@ -81,7 +79,7 @@ class SqlStatusLiteralContractTest {
 
         assertThat(violations).isEmpty();
         assertThat(seen)
-                .as("应扫描到 @Query 里的状态字面量（至少含「已审核」与另一种状态），否则扫描范围失效")
+                .as("应扫描到 @Query 里的状态字面量（至少含 AUDITED 与另一种状态），否则扫描范围失效")
                 .contains(StatusConstants.AUDITED)
                 .hasSizeGreaterThanOrEqualTo(2);
     }

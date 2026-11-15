@@ -49,7 +49,7 @@ public class SupplierPrepaymentBalanceService {
                         SELECT SUM(payment.amount)
                         FROM fm_payment payment
                         WHERE payment.deleted_flag = FALSE
-                          AND payment.status = '已审核'
+                          AND payment.status = 'AUDITED'
                           AND payment.counterparty_type = '供应商'
                           AND payment.settlement_company_id = :settlementCompanyId
                           AND payment.counterparty_id = :supplierId
@@ -58,7 +58,7 @@ public class SupplierPrepaymentBalanceService {
                         SELECT SUM(reversal.amount)
                         FROM fm_cash_reversal reversal
                         WHERE reversal.deleted_flag = FALSE
-                          AND reversal.status = '已审核'
+                          AND reversal.status = 'AUDITED'
                           AND reversal.original_payment_id IS NOT NULL
                           AND reversal.settlement_company_id = :settlementCompanyId
                           AND reversal.counterparty_id = :supplierId
@@ -72,7 +72,7 @@ public class SupplierPrepaymentBalanceService {
                         JOIN po_purchase_order source_order
                           ON source_order.id = source_item.order_id
                         WHERE inbound.deleted_flag = FALSE
-                          AND inbound.status IN ('已审核', '完成入库')
+                          AND inbound.status IN ('AUDITED', 'INBOUND_COMPLETED')
                           AND source_order.deleted_flag = FALSE
                           AND inbound.settlement_company_id = :settlementCompanyId
                           AND inbound.supplier_id = :supplierId
@@ -81,7 +81,7 @@ public class SupplierPrepaymentBalanceService {
                         SELECT SUM(supplier_receipt.amount)
                         FROM fm_receipt supplier_receipt
                         WHERE supplier_receipt.deleted_flag = FALSE
-                          AND supplier_receipt.status = '已审核'
+                          AND supplier_receipt.status = 'AUDITED'
                           AND supplier_receipt.counterparty_type = '供应商'
                           AND supplier_receipt.settlement_company_id = :settlementCompanyId
                           AND supplier_receipt.counterparty_id = :supplierId
@@ -90,7 +90,7 @@ public class SupplierPrepaymentBalanceService {
                         SELECT SUM(reversal.amount)
                         FROM fm_cash_reversal reversal
                         WHERE reversal.deleted_flag = FALSE
-                          AND reversal.status = '已审核'
+                          AND reversal.status = 'AUDITED'
                           AND reversal.original_receipt_id IS NOT NULL
                           AND reversal.settlement_company_id = :settlementCompanyId
                           AND reversal.counterparty_id = :supplierId

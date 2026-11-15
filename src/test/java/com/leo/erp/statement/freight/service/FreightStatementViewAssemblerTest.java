@@ -36,7 +36,7 @@ class FreightStatementViewAssemblerTest {
         when(attachmentQuery.list("freight-statement", 1L)).thenReturn(List.of());
         when(sourceQuery.findByBillIds(any())).thenReturn(List.of(new BillSnapshot(
                 3L, "FB-001", 4L, "C-001", "物流商", 5L, "结算主体", billTime,
-                BigDecimal.ONE, BigDecimal.TEN, "已审核", List.of()
+                BigDecimal.ONE, BigDecimal.TEN, "AUDITED", List.of()
         )));
 
         FreightStatementView result = assembler.toDetailView(statement);

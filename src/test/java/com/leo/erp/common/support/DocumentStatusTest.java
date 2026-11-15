@@ -13,10 +13,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class DocumentStatusTest {
 
     @Test
-    void everyEnumLabel_shouldMatchCorrespondingStatusConstant() throws Exception {
+    void everyEnumCode_shouldMatchCorrespondingStatusConstant() throws Exception {
         for (DocumentStatus status : DocumentStatus.values()) {
             Field field = StatusConstants.class.getField(status.name());
-            assertThat(field.get(null)).isEqualTo(status.label());
+            assertThat(field.get(null)).isEqualTo(status.code());
         }
     }
 
@@ -34,38 +34,47 @@ class DocumentStatusTest {
         assertThat(DocumentStatus.fromCode("ISSUED")).isEmpty();
         assertThat(DocumentStatus.fromLabel("已付款")).isEmpty();
         assertThat(DocumentStatus.fromLabel("已收款")).isEmpty();
-        // 字面量仍保留供守卫使用（历史数据若存在必须只读），但不再属于枚举
-        assertThat(StatusConstants.LEGACY_PAID).isEqualTo("已付款");
-        assertThat(StatusConstants.LEGACY_RECEIVED).isEqualTo("已收款");
+        // 旧命名常量仍保留供守卫使用（历史数据若存在必须只读），值已改为稳定 code
+        assertThat(StatusConstants.LEGACY_PAID).isEqualTo("PAID");
+        assertThat(StatusConstants.LEGACY_RECEIVED).isEqualTo("RECEIVED");
+        // 迁移期双读：旧中文 label 仍能被归一化为 code
+        assertThat(StatusConstants.toCode("已付款")).isEqualTo("PAID");
+        assertThat(StatusConstants.toCode("已收款")).isEqualTo("RECEIVED");
+        assertThat(StatusConstants.toCode("报价")).isEqualTo("QUOTING");
+        assertThat(StatusConstants.toCode("成功")).isEqualTo("SUCCESS");
+        assertThat(StatusConstants.toCode("失败")).isEqualTo("FAILED");
     }
 
     @Test
     void shouldCoverAllRequiredBusinessStatuses() {
-        assertThat(DocumentStatus.fromLabel(StatusConstants.NORMAL)).contains(DocumentStatus.NORMAL);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.DISABLED)).contains(DocumentStatus.DISABLED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.DRAFT)).contains(DocumentStatus.DRAFT);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.AUDITED)).contains(DocumentStatus.AUDITED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.CONTRACT_REVIEWED))
+        assertThat(DocumentStatus.fromCode(StatusConstants.NORMAL)).contains(DocumentStatus.NORMAL);
+        assertThat(DocumentStatus.fromCode(StatusConstants.DISABLED)).contains(DocumentStatus.DISABLED);
+        assertThat(DocumentStatus.fromCode(StatusConstants.DRAFT)).contains(DocumentStatus.DRAFT);
+        assertThat(DocumentStatus.fromCode(StatusConstants.AUDITED)).contains(DocumentStatus.AUDITED);
+        assertThat(DocumentStatus.fromCode(StatusConstants.CONTRACT_REVIEWED))
                 .contains(DocumentStatus.CONTRACT_REVIEWED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.CONTRACT_ISSUED))
+        assertThat(DocumentStatus.fromCode(StatusConstants.CONTRACT_ISSUED))
                 .contains(DocumentStatus.CONTRACT_ISSUED);
+        // 中文 label 只保留为旧数据/旧客户端兼容映射
         assertThat(DocumentStatus.CONTRACT_REVIEWED.label()).isEqualTo("审核");
         assertThat(DocumentStatus.CONTRACT_ISSUED.label()).isEqualTo("签发");
         assertThat(DocumentStatus.fromLabel("审核")).contains(DocumentStatus.CONTRACT_REVIEWED);
         assertThat(DocumentStatus.fromLabel("签发")).contains(DocumentStatus.CONTRACT_ISSUED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.COMPLETED)).contains(DocumentStatus.COMPLETED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.PURCHASE_COMPLETED)).contains(DocumentStatus.PURCHASE_COMPLETED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.SALES_COMPLETED)).contains(DocumentStatus.SALES_COMPLETED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.INBOUND_COMPLETED)).contains(DocumentStatus.INBOUND_COMPLETED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.DELIVERY_VERIFICATION)).contains(DocumentStatus.DELIVERY_VERIFICATION);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.SIGNED)).contains(DocumentStatus.SIGNED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.UNSIGNED)).contains(DocumentStatus.UNSIGNED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.UNAUDITED)).contains(DocumentStatus.UNAUDITED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.EXECUTING)).contains(DocumentStatus.EXECUTING);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.ARCHIVED)).contains(DocumentStatus.ARCHIVED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.PENDING_CONFIRM)).contains(DocumentStatus.PENDING_CONFIRM);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.CONFIRMED)).contains(DocumentStatus.CONFIRMED);
-        assertThat(DocumentStatus.fromLabel(StatusConstants.PENDING_AUDIT)).contains(DocumentStatus.PENDING_AUDIT);
+        assertThat(StatusConstants.toCode("审核")).isEqualTo(StatusConstants.CONTRACT_REVIEWED);
+        assertThat(StatusConstants.toCode("签发")).isEqualTo(StatusConstants.CONTRACT_ISSUED);
+        assertThat(DocumentStatus.fromCode(StatusConstants.COMPLETED)).contains(DocumentStatus.COMPLETED);
+        assertThat(DocumentStatus.fromCode(StatusConstants.PURCHASE_COMPLETED)).contains(DocumentStatus.PURCHASE_COMPLETED);
+        assertThat(DocumentStatus.fromCode(StatusConstants.SALES_COMPLETED)).contains(DocumentStatus.SALES_COMPLETED);
+        assertThat(DocumentStatus.fromCode(StatusConstants.INBOUND_COMPLETED)).contains(DocumentStatus.INBOUND_COMPLETED);
+        assertThat(DocumentStatus.fromCode(StatusConstants.DELIVERY_VERIFICATION)).contains(DocumentStatus.DELIVERY_VERIFICATION);
+        assertThat(DocumentStatus.fromCode(StatusConstants.SIGNED)).contains(DocumentStatus.SIGNED);
+        assertThat(DocumentStatus.fromCode(StatusConstants.UNSIGNED)).contains(DocumentStatus.UNSIGNED);
+        assertThat(DocumentStatus.fromCode(StatusConstants.UNAUDITED)).contains(DocumentStatus.UNAUDITED);
+        assertThat(DocumentStatus.fromCode(StatusConstants.EXECUTING)).contains(DocumentStatus.EXECUTING);
+        assertThat(DocumentStatus.fromCode(StatusConstants.ARCHIVED)).contains(DocumentStatus.ARCHIVED);
+        assertThat(DocumentStatus.fromCode(StatusConstants.PENDING_CONFIRM)).contains(DocumentStatus.PENDING_CONFIRM);
+        assertThat(DocumentStatus.fromCode(StatusConstants.CONFIRMED)).contains(DocumentStatus.CONFIRMED);
+        assertThat(DocumentStatus.fromCode(StatusConstants.PENDING_AUDIT)).contains(DocumentStatus.PENDING_AUDIT);
     }
 
     @Test
@@ -115,13 +124,21 @@ class DocumentStatusTest {
     }
 
     @Test
-    void labels_shouldBeUniqueAndUnmodifiable() {
+    void codes_shouldBeUniqueAndUnmodifiable() {
+        assertThat(DocumentStatus.codes()).hasSize(DocumentStatus.values().length);
+        for (DocumentStatus status : DocumentStatus.values()) {
+            assertThat(DocumentStatus.codes()).contains(status.code());
+            assertThat(StatusConstants.codes()).contains(status.code());
+        }
+        assertThatThrownBy(() -> DocumentStatus.codes().add("非法状态"))
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void legacyLabels_shouldStayAvailableForCompatibilityOnly() {
         assertThat(DocumentStatus.labels()).hasSize(DocumentStatus.values().length);
         for (DocumentStatus status : DocumentStatus.values()) {
             assertThat(DocumentStatus.labels()).contains(status.label());
-            assertThat(StatusConstants.labels()).contains(status.label());
         }
-        assertThatThrownBy(() -> DocumentStatus.labels().add("非法状态"))
-                .isInstanceOf(UnsupportedOperationException.class);
     }
 }

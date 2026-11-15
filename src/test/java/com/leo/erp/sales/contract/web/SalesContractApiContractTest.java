@@ -104,7 +104,7 @@ class SalesContractApiContractTest {
 
     @Test
     void post_returns201WithLocationAndStringIdsAndScaledAmount() throws Exception {
-        when(service.create(any())).thenReturn(response("草稿", new BigDecimal("123.456"), 0L));
+        when(service.create(any())).thenReturn(response("DRAFT", new BigDecimal("123.456"), 0L));
 
         mockMvc(false).perform(post("/v2.0/sales-contracts")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -122,7 +122,7 @@ class SalesContractApiContractTest {
 
     @Test
     void getDetail_locksResponseFieldNamesAndTypes() throws Exception {
-        when(service.detail(CONTRACT_ID)).thenReturn(response("审核", new BigDecimal("100.00"), 3L));
+        when(service.detail(CONTRACT_ID)).thenReturn(response("CONTRACT_REVIEWED", new BigDecimal("100.00"), 3L));
 
         MvcResult result = mockMvc(false)
                 .perform(get("/v2.0/sales-contracts/" + CONTRACT_ID))
@@ -141,13 +141,13 @@ class SalesContractApiContractTest {
         assertThat(body.get("projectId").asText()).isEqualTo(String.valueOf(PROJECT_ID));
         assertThat(body.get("version").asText()).isEqualTo("3");
         assertThat(body.get("totalAmount").decimalValue()).isEqualByComparingTo("100.00");
-        assertThat(body.get("status").asText()).isEqualTo("审核");
+        assertThat(body.get("status").asText()).isEqualTo("CONTRACT_REVIEWED");
     }
 
     @Test
     void getList_locksPageEnvelopeAndItemIdString() throws Exception {
         when(service.page(any(), isNull(), isNull(), isNull(), isNull()))
-                .thenReturn(new PageImpl<>(List.of(response("草稿", new BigDecimal("1.00"), 0L)),
+                .thenReturn(new PageImpl<>(List.of(response("DRAFT", new BigDecimal("1.00"), 0L)),
                         PageRequest.of(0, 20), 1L));
 
         MvcResult result = mockMvc(false)
@@ -165,7 +165,7 @@ class SalesContractApiContractTest {
     @Test
     void put_withMatchingVersion_returns200AndVersionHeader() throws Exception {
         when(service.update(eq(CONTRACT_ID), any(), eq(3L)))
-                .thenReturn(response("草稿", new BigDecimal("100.00"), 4L));
+                .thenReturn(response("DRAFT", new BigDecimal("100.00"), 4L));
 
         mockMvc(true).perform(put("/v2.0/sales-contracts/" + CONTRACT_ID)
                         .header("X-Resource-Version", "3")
@@ -179,7 +179,7 @@ class SalesContractApiContractTest {
     @Test
     void put_withoutVersion_whenOptional_forwardsNullVersion() throws Exception {
         when(service.update(eq(CONTRACT_ID), any(), isNull()))
-                .thenReturn(response("草稿", new BigDecimal("100.00"), 1L));
+                .thenReturn(response("DRAFT", new BigDecimal("100.00"), 1L));
 
         mockMvc(false).perform(put("/v2.0/sales-contracts/" + CONTRACT_ID)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -216,7 +216,7 @@ class SalesContractApiContractTest {
 
         mockMvc(false).perform(patch("/v2.0/sales-contracts/" + CONTRACT_ID + "/status")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"作废\"}"))
+                        .content("{\"status\":\"VOIDED\"}"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value(4220));
     }

@@ -104,7 +104,7 @@ class QuoteSheetUnlockSpecQuantityReplacePostgresTest {
 
         QuoteSheetRequest omitted = new QuoteSheetRequest(
                 "pg-unlock-spec", null, null, ORDER_DATE, ORDER_DATE, "09:00",
-                LENGTH_PREMIUM, false, null, "报价", null,
+                LENGTH_PREMIUM, false, null, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 10, "9米", BigDecimal.ONE,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
@@ -159,7 +159,7 @@ class QuoteSheetUnlockSpecQuantityReplacePostgresTest {
         sheet.setRefPeriod("09:00");
         sheet.setLengthPremium(LENGTH_PREMIUM);
         sheet.setSpecQuantityLocked(true);
-        sheet.setStatus("报价");
+        sheet.setStatus("QUOTING");
         sheet.setCreatedAt(LocalDateTime.now());
         sheet.setCreatedBy(0L);
         sheet.setCreatedName("system");
@@ -196,7 +196,7 @@ class QuoteSheetUnlockSpecQuantityReplacePostgresTest {
                                           boolean specQuantityLocked) {
         return new QuoteSheetRequest(
                 "pg-unlock-spec", null, null, ORDER_DATE, ORDER_DATE, "09:00",
-                LENGTH_PREMIUM, false, specQuantityLocked, "报价", null,
+                LENGTH_PREMIUM, false, specQuantityLocked, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", spec, "9米", ton,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal(spotPrice), null)))));

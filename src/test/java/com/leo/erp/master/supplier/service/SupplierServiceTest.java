@@ -63,12 +63,12 @@ class SupplierServiceTest {
 
     private SupplierRequest request(String supplierName) {
         return new SupplierRequest("GYS001", supplierName, "联系人", "13800000000",
-                "上海", "正常", "备注");
+                "上海", "NORMAL", "备注");
     }
 
     private SupplierRequest requestWithBrands(String supplierName, List<String> brands) {
         return new SupplierRequest("GYS001", supplierName, null, "联系人", "13800000000",
-                "上海", "正常", "备注", brands);
+                "上海", "NORMAL", "备注", brands);
     }
 
     private SupplierBrand brand(long id, long supplierId, String name) {
@@ -99,7 +99,7 @@ class SupplierServiceTest {
             return entity;
         });
         SupplierResponse response = new SupplierResponse(77L, "GYS001", "供应商A",
-                "联系人", "13800000000", "上海", "正常", "备注");
+                "联系人", "13800000000", "上海", "NORMAL", "备注");
         when(supplierMapper.toResponse(any(Supplier.class))).thenReturn(response);
 
         SupplierResponse result = service().create(request("供应商A"));
@@ -108,7 +108,7 @@ class SupplierServiceTest {
         assertThat(entity.getId()).isEqualTo(77L);
         assertThat(entity.getSupplierCode()).isEqualTo("GYS001");
         assertThat(entity.getSupplierName()).isEqualTo("供应商A");
-        assertThat(entity.getStatus()).isEqualTo("正常");
+        assertThat(entity.getStatus()).isEqualTo("NORMAL");
         assertThat(result.id()).isEqualTo(77L);
         assertThat(result.supplierName()).isEqualTo("供应商A");
         assertThat(result.brands()).isEmpty();
@@ -128,7 +128,7 @@ class SupplierServiceTest {
         });
         when(supplierMapper.toResponse(any(Supplier.class))).thenReturn(null);
 
-        service().create(new SupplierRequest("  S001  ", "  供应商A  ", "  ", null, " 上海 ", "正常", "  "));
+        service().create(new SupplierRequest("  S001  ", "  供应商A  ", "  ", null, " 上海 ", "NORMAL", "  "));
 
         Supplier entity = savedHolder[0];
         assertThat(entity.getSupplierName()).isEqualTo("供应商A");
@@ -202,7 +202,7 @@ class SupplierServiceTest {
         when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(supplierRepository.save(entity)).thenReturn(entity);
         when(supplierMapper.toResponse(entity)).thenReturn(new SupplierResponse(
-                5L, "GYS001", "供应商A", null, null, null, "正常", null));
+                5L, "GYS001", "供应商A", null, null, null, "NORMAL", null));
         SupplierBrand keep = brand(11L, 5L, "沙钢");
         SupplierBrand remove = brand(12L, 5L, "旧品牌");
         when(supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(5L))
@@ -228,7 +228,7 @@ class SupplierServiceTest {
         when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(supplierRepository.save(entity)).thenReturn(entity);
         when(supplierMapper.toResponse(entity)).thenReturn(new SupplierResponse(
-                5L, "GYS001", "供应商A", null, null, null, "正常", null));
+                5L, "GYS001", "供应商A", null, null, null, "NORMAL", null));
         when(supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(5L))
                 .thenReturn(List.of(brand(11L, 5L, "沙钢"), brand(12L, 5L, "永钢")));
 
@@ -244,7 +244,7 @@ class SupplierServiceTest {
         when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(supplierRepository.save(entity)).thenReturn(entity);
         when(supplierMapper.toResponse(entity)).thenReturn(new SupplierResponse(
-                5L, "GYS001", "供应商A", null, null, null, "正常", null));
+                5L, "GYS001", "供应商A", null, null, null, "NORMAL", null));
         SupplierBrand first = brand(11L, 5L, "沙钢");
         SupplierBrand second = brand(12L, 5L, "永钢");
         when(supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(5L))
@@ -265,7 +265,7 @@ class SupplierServiceTest {
         when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(supplierRepository.save(entity)).thenReturn(entity);
         when(supplierMapper.toResponse(entity)).thenReturn(new SupplierResponse(
-                5L, "GYS001", "供应商A", null, null, null, "正常", null));
+                5L, "GYS001", "供应商A", null, null, null, "NORMAL", null));
         when(supplierBrandRepository.findBySupplierIdOrderByBrandNameAsc(5L))
                 .thenReturn(List.of(brand(11L, 5L, "永钢"), brand(12L, 5L, "沙钢")));
 
@@ -283,7 +283,7 @@ class SupplierServiceTest {
         when(supplierBrandRepository.findBySupplierIdAndDeletedFlagFalseOrderByBrandNameAsc(5L))
                 .thenReturn(List.of(brand(11L, 5L, "沙钢")));
         when(supplierMapper.toResponse(entity)).thenReturn(new SupplierResponse(
-                5L, "GYS001", "供应商A", null, null, null, "正常", null));
+                5L, "GYS001", "供应商A", null, null, null, "NORMAL", null));
 
         SupplierResponse response = service().detail(5L);
 
@@ -292,7 +292,7 @@ class SupplierServiceTest {
 
     @Test
     void options_returnsBrandsPerSupplierInRepositoryOrder() {
-        when(supplierRepository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc("正常"))
+        when(supplierRepository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc("NORMAL"))
                 .thenReturn(List.of(
                         supplier(101L, "S001", "供应商A", "甲"),
                         supplier(102L, "S002", "供应商B", null),
@@ -331,7 +331,7 @@ class SupplierServiceTest {
         when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(supplierRepository.save(entity)).thenReturn(entity);
         SupplierResponse response = new SupplierResponse(5L, "GYS001", "新名称",
-                null, null, null, "正常", null);
+                null, null, null, "NORMAL", null);
         when(supplierMapper.toResponse(entity)).thenReturn(response);
 
         service().update(5L, request("新名称"));
@@ -348,7 +348,7 @@ class SupplierServiceTest {
         when(supplierRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(supplierRepository.save(entity)).thenReturn(entity);
         SupplierResponse response = new SupplierResponse(5L, "GYS001", "供应商A",
-                null, null, null, "正常", null);
+                null, null, null, "NORMAL", null);
         when(supplierMapper.toResponse(entity)).thenReturn(response);
 
         service().update(5L, request("供应商A"));

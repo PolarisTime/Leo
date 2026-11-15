@@ -180,7 +180,7 @@ class QuoteSheetFetchGraphExtremePostgresTest {
         sheet.setRefDate(orderDate);
         sheet.setRefPeriod("09:00");
         sheet.setLengthPremium(new BigDecimal("30"));
-        sheet.setStatus("报价");
+        sheet.setStatus("QUOTING");
         sheet.setCreatedAt(LocalDateTime.now());
         sheet.setCreatedBy(0L);
         sheet.setCreatedName("system");

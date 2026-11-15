@@ -40,7 +40,7 @@ public class MdQuoteRegion extends AbstractAuditableEntity implements StatusAwar
     private Integer sortOrder;
 
     /** 状态：正常 / 停用；仅正常参与抓取与下拉。 */
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "remark", length = 255)

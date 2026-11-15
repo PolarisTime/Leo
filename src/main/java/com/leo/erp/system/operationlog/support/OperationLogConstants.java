@@ -1,20 +1,20 @@
 package com.leo.erp.system.operationlog.support;
 
 /**
- * 操作日志结果状态与认证类动作的中文取值常量。
+ * 操作日志结果状态与认证类动作的取值常量。
  *
- * <p>中文值即数据库 {@code sys_operation_log.action_type}/{@code result_status} 的存储值,
- * 也与前端操作日志筛选选项、认证日志链路保持逐字一致; 此处仅用于代码层消除魔法字符串,
- * 不改变任何持久化值与对外契约。</p>
+ * <p>{@code result_status} 自 V219 起存稳定英文 code（{@link #RESULT_SUCCESS}/{@link #RESULT_FAILURE}），
+ * 与前端操作日志筛选选项、认证日志链路保持逐字一致；{@code action_type} 仍是中文动作名
+ * （登录/退出登录…），不在本次状态 code 迁移范围内。</p>
  */
 public final class OperationLogConstants {
 
     private OperationLogConstants() {
     }
 
-    // 结果状态
-    public static final String RESULT_SUCCESS = "成功";
-    public static final String RESULT_FAILURE = "失败";
+    // 结果状态（稳定英文 code，V219 起为 result_status 的唯一存储值）
+    public static final String RESULT_SUCCESS = "SUCCESS";
+    public static final String RESULT_FAILURE = "FAILED";
 
     // 认证类动作
     public static final String ACTION_LOGIN = "登录";

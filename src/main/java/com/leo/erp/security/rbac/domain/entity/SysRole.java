@@ -38,6 +38,6 @@ public class SysRole extends AbstractAuditableEntity implements StatusAwareEntit
     @Column(name = "builtin", nullable = false)
     private boolean builtin = false;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status = StatusConstants.NORMAL;
 }

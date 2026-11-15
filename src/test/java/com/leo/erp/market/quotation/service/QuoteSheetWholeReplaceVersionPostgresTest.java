@@ -91,7 +91,7 @@ class QuoteSheetWholeReplaceVersionPostgresTest {
         // 表头-only 更新由 @Version 自然递增一次, 不得双增。
         QuoteSheetResponse headerOnly = store.update(SHEET_ID,
                 new QuoteSheetRequest("pg-whole-replace", null, null, orderDate, orderDate, refPeriod,
-                        lengthPremium, false, false, "报价", "仅改备注", null, null),
+                        lengthPremium, false, false, "QUOTING", "仅改备注", null, null),
                 versionBefore + 1);
         assertThat(headerOnly.remark()).isEqualTo("仅改备注");
         assertThat(repository.findByIdAndDeletedFlagFalse(SHEET_ID).orElseThrow().getVersion())
@@ -115,7 +115,7 @@ class QuoteSheetWholeReplaceVersionPostgresTest {
         sheet.setRefDate(orderDate);
         sheet.setRefPeriod(refPeriod);
         sheet.setLengthPremium(lengthPremium);
-        sheet.setStatus("报价");
+        sheet.setStatus("QUOTING");
         sheet.setCreatedAt(LocalDateTime.now());
         sheet.setCreatedBy(0L);
         sheet.setCreatedName("system");
@@ -151,7 +151,7 @@ class QuoteSheetWholeReplaceVersionPostgresTest {
     private QuoteSheetRequest request(LocalDate orderDate, String refPeriod, BigDecimal lengthPremium, String spotPrice) {
         return new QuoteSheetRequest(
                 "pg-whole-replace", null, null, orderDate, orderDate, refPeriod,
-                lengthPremium, false, false, "报价", null,
+                lengthPremium, false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", BigDecimal.ZERO, 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.ONE,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal(spotPrice), null)))));

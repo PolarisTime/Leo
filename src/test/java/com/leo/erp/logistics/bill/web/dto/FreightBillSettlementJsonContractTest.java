@@ -43,7 +43,7 @@ class FreightBillSettlementJsonContractTest {
                 5L, "沪A123", LocalDate.of(2026, 8, 1),
                 new BigDecimal("100.5"), new BigDecimal("12.5"), new BigDecimal("1800.55"),
                 FreightSettlementMode.FIXED, new BigDecimal("1800.55"), new BigDecimal("1250.625"),
-                "草稿", false, null, List.of(), new BigDecimal("0"), List.of());
+                "DRAFT", false, null, List.of(), new BigDecimal("0"), List.of());
 
         String json = objectMapper.writeValueAsString(response);
 
@@ -66,7 +66,7 @@ class FreightBillSettlementJsonContractTest {
                 1L, "1", null, "C001", "承运商A", null, null, null, null, LocalDate.of(2026, 8, 1),
                 new BigDecimal("100.00"), new BigDecimal("12.50000000"), new BigDecimal("1250.00"),
                 FreightSettlementMode.BY_TONNAGE, null, new BigDecimal("1250.00"),
-                "草稿", false, null, List.of(), null, List.of());
+                "DRAFT", false, null, List.of(), null, List.of());
 
         String json = objectMapper.writeValueAsString(response);
 

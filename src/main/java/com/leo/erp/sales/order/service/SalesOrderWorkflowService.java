@@ -85,7 +85,7 @@ public class SalesOrderWorkflowService {
         salesOrderApplyService.validateCustomerSnapshot(order);
         order.setStatus(StatusConstants.SALES_COMPLETED);
         SalesOrder saved = saveService.saveStatus(order);
-        publishEvent(saved, "SALES_ORDER_COMPLETED", StatusConstants.SALES_COMPLETED,
+        publishEvent(saved, "SALES_ORDER_COMPLETED", "完成销售",
                 "销售订单状态 " + currentStatus + " -> " + saved.getStatus());
         return queryService.toDetailResponse(saved);
     }
@@ -99,8 +99,10 @@ public class SalesOrderWorkflowService {
         publishEvent(entity, "SALES_ORDER_DELETED", "删除", "删除销售订单 " + entity.getOrderNo());
     }
 
+    /** 归一化为稳定 code：兼容旧中文 label。 */
     private String normalizeStatus(String value) {
-        return value == null ? "" : value.trim();
+        String code = StatusConstants.toCode(value);
+        return code == null ? "" : code;
     }
 
     private String resolveStatusAction(String currentStatus, String nextStatus) {

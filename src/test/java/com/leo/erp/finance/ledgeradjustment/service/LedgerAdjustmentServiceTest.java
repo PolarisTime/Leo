@@ -54,7 +54,7 @@ class LedgerAdjustmentServiceTest {
 
     @Test
     void updateStatus_shouldBeDisabled() {
-        assertThatThrownBy(() -> service().updateStatus(1L, "已审核"))
+        assertThatThrownBy(() -> service().updateStatus(1L, "AUDITED"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("台账调整单已停用");
     }
@@ -71,7 +71,7 @@ class LedgerAdjustmentServiceTest {
         LedgerAdjustmentService service = service();
         assertThatThrownBy(() -> service.create(request())).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> service.update(1L, request())).isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> service.updateStatus(1L, "已审核")).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.updateStatus(1L, "AUDITED")).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> service.delete(1L)).isInstanceOf(BusinessException.class);
         verify(repository, never()).save(any());
         verify(repository, never()).findByIdAndDeletedFlagFalse(anyLong());
@@ -136,7 +136,7 @@ class LedgerAdjustmentServiceTest {
 
     @Test
     void updateStatus_shouldRejectDisabledWriteWithInvalidTransitionStatus() {
-        assertThatThrownBy(() -> service().updateStatus(1L, "已完成"))
+        assertThatThrownBy(() -> service().updateStatus(1L, "COMPLETED"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("台账调整单已停用");
         verify(repository, never()).findByIdAndDeletedFlagFalse(anyLong());
@@ -145,7 +145,7 @@ class LedgerAdjustmentServiceTest {
 
     @Test
     void updateStatus_shouldRejectDisabledWriteWithoutEqualStatusShortCircuit() {
-        assertThatThrownBy(() -> service().updateStatus(1L, "草稿"))
+        assertThatThrownBy(() -> service().updateStatus(1L, "DRAFT"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("台账调整单已停用");
         verify(repository, never()).save(any());
@@ -154,7 +154,7 @@ class LedgerAdjustmentServiceTest {
 
     @Test
     void updateStatus_shouldRejectDisabledWriteWithTerminalStatus() {
-        assertThatThrownBy(() -> service().updateStatus(1L, "已审核"))
+        assertThatThrownBy(() -> service().updateStatus(1L, "AUDITED"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("台账调整单已停用");
         verify(repository, never()).save(any());
@@ -190,7 +190,7 @@ class LedgerAdjustmentServiceTest {
                 new BigDecimal("10.00"),
                 "其他调整",
                 "增加余额",
-                "草稿",
+                "DRAFT",
                 "操作员",
                 null
         );

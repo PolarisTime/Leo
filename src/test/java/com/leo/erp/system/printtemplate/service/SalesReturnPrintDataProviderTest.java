@@ -72,7 +72,7 @@ class SalesReturnPrintDataProviderTest {
                         Map.entry("return_date", "2026-09-15"),
                         Map.entry("total_weight", new BigDecimal("3.50000000")),
                         Map.entry("total_amount", new BigDecimal("12345.67")),
-                        Map.entry("status", "已审核"),
+                        Map.entry("status", "AUDITED"),
                         Map.entry("remark", "整批退货")
                 )))
                 .thenReturn(List.of(Map.ofEntries(
@@ -118,7 +118,7 @@ class SalesReturnPrintDataProviderTest {
                 .containsEntry("returnDate", "2026-09-15")
                 .containsEntry("totalWeight", "3.5")
                 .containsEntry("totalAmount", "12345.67")
-                .containsEntry("status", "已审核")
+                .containsEntry("status", "AUDITED")
                 .containsEntry("remark", "整批退货");
 
         assertThat(data.items()).singleElement().satisfies(item -> {

@@ -32,7 +32,7 @@ public class SecuritySecret extends AbstractAuditableEntity implements StatusAwa
     @Column(name = "secret_value", nullable = false, columnDefinition = "TEXT")
     private String secretValue;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "activated_at", nullable = false)

@@ -66,7 +66,7 @@ public class FreightStatement extends AbstractAuditableEntity implements StatusA
     @Column(name = "unpaid_amount", nullable = false, precision = 14, scale = 2)
     private BigDecimal unpaidAmount;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "attachment", length = 500)

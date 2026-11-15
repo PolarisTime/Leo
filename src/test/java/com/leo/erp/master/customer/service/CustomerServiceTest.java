@@ -61,12 +61,12 @@ class CustomerServiceTest {
 
     private CustomerRequest request(String customerName) {
         return new CustomerRequest("KH001", customerName, "联系人", "13800000000",
-                "上海", "月结", null, null, null, "正常", "备注");
+                "上海", "月结", null, null, null, "NORMAL", "备注");
     }
 
     private CustomerResponse baseResponse(String customerName) {
         return new CustomerResponse(5L, "KH001", customerName, "联系人", "13800000000",
-                "上海", "月结", null, null, null, "正常", "备注", "");
+                "上海", "月结", null, null, null, "NORMAL", "备注", "");
     }
 
     @Test
@@ -89,7 +89,7 @@ class CustomerServiceTest {
         assertThat(entity.getCustomerCode()).isEqualTo("KH001");
         assertThat(entity.getCustomerName()).isEqualTo("客户A");
         assertThat(entity.getProjectName()).isEqualTo("客户A");
-        assertThat(entity.getStatus()).isEqualTo("正常");
+        assertThat(entity.getStatus()).isEqualTo("NORMAL");
         verify(codeIssuanceService).validate("customer", "KH001");
         verify(codeIssuanceService).consume("customer", "KH001");
     }
@@ -108,7 +108,7 @@ class CustomerServiceTest {
         when(projectRepository.findAllByCustomerIdentity(77L, "KH001")).thenReturn(List.of());
 
         service().create(new CustomerRequest("  KH001  ", "  客户A  ", " 联系人 ", " 138 ", " 上海 ",
-                " 月结 ", "  项目A ", " 项A ", " 地址 ", "正常", " 备注 "));
+                " 月结 ", "  项目A ", " 项A ", " 地址 ", "NORMAL", " 备注 "));
 
         Customer entity = savedHolder[0];
         assertThat(entity.getCustomerName()).isEqualTo("客户A");
@@ -145,7 +145,7 @@ class CustomerServiceTest {
         project.setCustomerId(5L);
         when(projectRepository.findAllByCustomerIdentity(5L, "KH001")).thenReturn(List.of(project));
         CustomerResponse base = new CustomerResponse(5L, "KH001", "客户A", null, null,
-                null, null, null, null, null, "正常", null, null);
+                null, null, null, null, null, "NORMAL", null, null);
         when(customerMapper.toResponse(entity)).thenReturn(base);
 
         CustomerResponse response = service().detail(5L);

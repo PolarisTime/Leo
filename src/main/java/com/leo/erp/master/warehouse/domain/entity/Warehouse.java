@@ -41,7 +41,7 @@ public class Warehouse extends AbstractAuditableEntity implements StatusAwareEnt
     @Column(name = "address", length = 255)
     private String address;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "remark", length = 255)

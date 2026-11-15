@@ -73,7 +73,7 @@ class SalesOrderContractCheckPostgresTest {
                 insert into md_customer
                     (id, customer_code, customer_name, project_name, status, created_by, created_name, created_at,
                      deleted_flag, version)
-                values (?, ?, 'PG客户', 'PG项目', '正常', 0, 'system', now(), false, 0)
+                values (?, ?, 'PG客户', 'PG项目', 'NORMAL', 0, 'system', now(), false, 0)
                 """, CUSTOMER_ID, "PG-C-" + CUSTOMER_ID);
         insertProject(PROJECT_ID);
         insertProject(OTHER_PROJECT_ID);
@@ -203,7 +203,7 @@ class SalesOrderContractCheckPostgresTest {
                 insert into md_project
                     (id, project_code, project_name, customer_code, status, created_by, created_name, created_at,
                      deleted_flag, version, customer_id)
-                values (?, ?, 'PG项目', ?, '正常', 0, 'system', now(), false, 0, ?)
+                values (?, ?, 'PG项目', ?, 'NORMAL', 0, 'system', now(), false, 0, ?)
                 """, projectId, "PG-P-" + projectId, "PG-C-" + CUSTOMER_ID, CUSTOMER_ID);
     }
 

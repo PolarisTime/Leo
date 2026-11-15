@@ -204,6 +204,6 @@ class SalesReturnApplyServiceTest {
                                        String customerName, String projectName, String warehouseName) {
         return new SalesReturnRequest(
                 "SR001", "SO001", 10L, customerName, 20L, projectName, 30L, warehouseName,
-                java.time.LocalDate.of(2026, 9, 1), "草稿", null, items, false);
+                java.time.LocalDate.of(2026, 9, 1), "DRAFT", null, items, false);
     }
 }

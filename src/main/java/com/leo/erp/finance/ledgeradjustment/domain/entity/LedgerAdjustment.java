@@ -67,7 +67,7 @@ public class LedgerAdjustment extends AbstractAuditableEntity implements StatusA
     @Column(name = "effect", nullable = false, length = 32)
     private String effect;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "operator_name", nullable = false, length = 32)

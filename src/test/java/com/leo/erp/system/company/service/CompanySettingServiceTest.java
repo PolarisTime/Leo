@@ -58,7 +58,7 @@ class CompanySettingServiceTest {
     }
 
     private CompanySettingRequest request(String companyName) {
-        return new CompanySettingRequest(companyName, "91310000MA1K35X00X", null, "正常", "备注");
+        return new CompanySettingRequest(companyName, "91310000MA1K35X00X", null, "NORMAL", "备注");
     }
 
     @Test
@@ -112,7 +112,7 @@ class CompanySettingServiceTest {
             return entity;
         });
         CompanySettingResponse response = new CompanySettingResponse(77L, "结算主体A", "91310000MA1K35X00X",
-                "", "", List.of(), "正常", "备注");
+                "", "", List.of(), "NORMAL", "备注");
         when(mapper.toResponse(any(CompanySetting.class), eq(List.of()))).thenReturn(response);
 
         service().create(request("结算主体A"));
@@ -123,7 +123,7 @@ class CompanySettingServiceTest {
         assertThat(entity.getBankName()).isEmpty();
         assertThat(entity.getBankAccount()).isEmpty();
         assertThat(entity.getSettlementAccountsJson()).isEqualTo("[]");
-        assertThat(entity.getStatus()).isEqualTo("正常");
+        assertThat(entity.getStatus()).isEqualTo("NORMAL");
         verify(dashboardSummaryService).evictAllCache();
     }
 
@@ -198,7 +198,7 @@ class CompanySettingServiceTest {
     void updateStatus_anyStatus_rejectedAsUnsupported() {
         when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(new CompanySetting()));
 
-        assertThatThrownBy(() -> service().updateStatus(5L, "正常"))
+        assertThatThrownBy(() -> service().updateStatus(5L, "NORMAL"))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ErrorCode.BUSINESS_ERROR))

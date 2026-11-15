@@ -56,7 +56,7 @@ public class OperationLog {
     @Column(name = "client_ip", length = 64)
     private String clientIp;
 
-    @Column(name = "result_status", nullable = false, length = 16)
+    @Column(name = "result_status", nullable = false, length = 32)
     private String resultStatus;
 
     @Column(name = "operation_time", nullable = false)

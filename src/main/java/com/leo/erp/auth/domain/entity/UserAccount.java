@@ -49,7 +49,7 @@ public class UserAccount extends AbstractAuditableEntity implements StatusAwareE
     @Getter(AccessLevel.NONE)
     @Setter(AccessLevel.NONE)
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private UserStatus status;
 
     @Column(name = "remark", length = 255)

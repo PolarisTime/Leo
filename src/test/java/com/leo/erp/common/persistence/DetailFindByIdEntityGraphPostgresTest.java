@@ -143,13 +143,13 @@ class DetailFindByIdEntityGraphPostgresTest {
         jdbc.update("""
                 insert into md_carrier (id, carrier_code, carrier_name, status, deleted_flag,
                                         created_by, created_name, created_at, version)
-                values (?, 'PG-L2-GRAPH-C', 'L2抓取图承运商', '正常', false, 0, 'system', now(), 0)
+                values (?, 'PG-L2-GRAPH-C', 'L2抓取图承运商', 'NORMAL', false, 0, 'system', now(), 0)
                 """, CARRIER_ID);
         jdbc.update("""
                 insert into lg_freight_bill (id, bill_no, carrier_name, bill_time, unit_price, total_weight,
                                              total_freight, status, carrier_code, carrier_id, version, created_by,
                                              created_name, created_at, deleted_flag)
-                values (?, 'FB-L2-GRAPH', 'L2抓取图承运商', now(), 100.00, 12.50000000, 1250.00, '草稿',
+                values (?, 'FB-L2-GRAPH', 'L2抓取图承运商', now(), 100.00, 12.50000000, 1250.00, 'DRAFT',
                         'PG-L2-GRAPH-C', ?, 0, 0, 'system', now(), false)
                 """, FREIGHT_BILL_ID, CARRIER_ID);
 

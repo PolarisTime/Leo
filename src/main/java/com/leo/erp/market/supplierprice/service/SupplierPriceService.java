@@ -3,6 +3,7 @@ package com.leo.erp.market.supplierprice.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.market.supplierprice.domain.entity.SupplierPriceItem;
 import com.leo.erp.market.supplierprice.domain.entity.SupplierPriceList;
 import com.leo.erp.market.supplierprice.repository.SupplierPriceListRepository;
@@ -308,10 +309,11 @@ public class SupplierPriceService {
     }
 
     private String normalizeStatus(String status) {
-        if (status == null || status.isBlank()) {
+        String code = StatusConstants.toCode(status);
+        if (code == null) {
             return STATUS_NORMAL;
         }
-        String upper = status.trim().toUpperCase();
+        String upper = code.toUpperCase();
         if (!VALID_STATUSES.contains(upper)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "未知的报价状态: " + status);
         }

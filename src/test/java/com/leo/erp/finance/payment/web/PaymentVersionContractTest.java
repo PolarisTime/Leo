@@ -92,7 +92,7 @@ class PaymentVersionContractTest {
     @Test
     void put_withMatchingVersion_returns200WithNewVersionAsString() throws Exception {
         when(paymentService.update(eq(PAYMENT_ID), any(), eq(3L)))
-                .thenReturn(response("草稿", 4L));
+                .thenReturn(response("DRAFT", 4L));
 
         mockMvc(true).perform(put("/v2.0/payments/" + PAYMENT_ID)
                         .header("X-Resource-Version", "3")
@@ -119,7 +119,7 @@ class PaymentVersionContractTest {
 
     @Test
     void put_withoutVersionHeader_whenNotRequired_stillForwardsNullVersion() throws Exception {
-        when(paymentService.update(eq(PAYMENT_ID), any(), isNull())).thenReturn(response("草稿", 1L));
+        when(paymentService.update(eq(PAYMENT_ID), any(), isNull())).thenReturn(response("DRAFT", 1L));
 
         mockMvc(false).perform(put("/v2.0/payments/" + PAYMENT_ID)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -129,7 +129,7 @@ class PaymentVersionContractTest {
 
     @Test
     void detail_exposesVersionSoClientCanSendItBack() throws Exception {
-        when(paymentService.detail(PAYMENT_ID)).thenReturn(response("草稿", 7L));
+        when(paymentService.detail(PAYMENT_ID)).thenReturn(response("DRAFT", 7L));
 
         mockMvc(true).perform(get("/v2.0/payments/" + PAYMENT_ID))
                 .andExpect(status().isOk())
@@ -151,7 +151,7 @@ class PaymentVersionContractTest {
         return """
                 {"counterpartyType":"SUPPLIER_PAYMENT","counterpartyName":"供应商A",
                  "accountId":"40","paymentDate":"2026-09-01","payType":"BANK_TRANSFER",
-                 "amount":100.00,"status":"草稿","operatorName":"操作员","items":[]}
+                 "amount":100.00,"status":"DRAFT","operatorName":"操作员","items":[]}
                 """;
     }
 

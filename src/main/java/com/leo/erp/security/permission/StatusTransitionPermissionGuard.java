@@ -102,25 +102,25 @@ public final class StatusTransitionPermissionGuard {
         if (moduleKey == null || toStatus == null) {
             return null;
         }
-        if (DocumentStatus.AUDITED.label().equals(toStatus)) {
+        if (DocumentStatus.AUDITED.code().equals(toStatus)) {
             return AUDIT_PERMISSIONS.get(moduleKey);
         }
-        if (DocumentStatus.AUDITED.label().equals(fromStatus)
-                && DocumentStatus.DRAFT.label().equals(toStatus)) {
+        if (DocumentStatus.AUDITED.code().equals(fromStatus)
+                && DocumentStatus.DRAFT.code().equals(toStatus)) {
             return UNAUDIT_PERMISSIONS.get(moduleKey);
         }
-        if (DocumentStatus.CONFIRMED.label().equals(toStatus)) {
+        if (DocumentStatus.CONFIRMED.code().equals(toStatus)) {
             return CONFIRM_PERMISSIONS.get(moduleKey);
         }
-        if (DocumentStatus.CONFIRMED.label().equals(fromStatus)
-                && DocumentStatus.PENDING_CONFIRM.label().equals(toStatus)) {
+        if (DocumentStatus.CONFIRMED.code().equals(fromStatus)
+                && DocumentStatus.PENDING_CONFIRM.code().equals(toStatus)) {
             return REVERSE_CONFIRM_PERMISSIONS.get(moduleKey);
         }
-        if (DocumentStatus.SALES_COMPLETED.label().equals(toStatus)) {
+        if (DocumentStatus.SALES_COMPLETED.code().equals(toStatus)) {
             return COMPLETE_PERMISSIONS.get(moduleKey);
         }
-        if (DocumentStatus.SALES_COMPLETED.label().equals(fromStatus)
-                && DocumentStatus.DELIVERY_VERIFICATION.label().equals(toStatus)) {
+        if (DocumentStatus.SALES_COMPLETED.code().equals(fromStatus)
+                && DocumentStatus.DELIVERY_VERIFICATION.code().equals(toStatus)) {
             return REVERSE_COMPLETE_PERMISSIONS.get(moduleKey);
         }
         return null;

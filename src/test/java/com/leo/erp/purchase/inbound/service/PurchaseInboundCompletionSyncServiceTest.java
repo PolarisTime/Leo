@@ -54,7 +54,7 @@ class PurchaseInboundCompletionSyncServiceTest {
 
     @BeforeEach
     void setUp() {
-        // 直接销售占用校验与"完成采购"共用同一不变式, 由独立守卫承载。
+        // 直接销售占用校验与订单「完成采购」(PURCHASE_COMPLETED) 共用同一不变式, 由独立守卫承载。
         PurchaseOrderDirectSalesCapacityGuard directSalesCapacityGuard =
                 new PurchaseOrderDirectSalesCapacityGuard(
                         purchaseOrderSalesAllocationQuery,
@@ -228,7 +228,7 @@ class PurchaseInboundCompletionSyncServiceTest {
         assertThat(order.getStatus()).isEqualTo(StatusConstants.PURCHASE_COMPLETED);
         verify(supplierLedgerLock).lock(10L, 20L);
         verify(purchaseOrderAuditPublisher).publish(order, "PURCHASE_ORDER_COMPLETED", "完成采购",
-                "采购订单状态 已审核 -> 完成采购");
+                "采购订单状态 " + StatusConstants.AUDITED + " -> " + StatusConstants.PURCHASE_COMPLETED);
     }
 
     /**
@@ -354,7 +354,7 @@ class PurchaseInboundCompletionSyncServiceTest {
 
         assertThat(order.getStatus()).isEqualTo(StatusConstants.AUDITED);
         verify(purchaseOrderAuditPublisher).publish(order, "PURCHASE_ORDER_REOPENED", "退回已审核",
-                "采购订单状态 完成采购 -> 已审核");
+                "采购订单状态 " + StatusConstants.PURCHASE_COMPLETED + " -> " + StatusConstants.AUDITED);
     }
 
     @Test

@@ -191,8 +191,9 @@ public class PurchaseInboundCompletionSyncService {
                 publishStatusEvent(
                         purchaseOrder,
                         "PURCHASE_ORDER_COMPLETED",
-                        StatusConstants.PURCHASE_COMPLETED,
-                        "采购订单状态 已审核 -> 完成采购"
+                        // action_type 仍是中文动作名（不在 V219 迁移范围），与「审核/反审核」保持同一风格
+                        "完成采购",
+                        "采购订单状态 " + StatusConstants.AUDITED + " -> " + StatusConstants.PURCHASE_COMPLETED
                 );
             }
         } else if (allowReopen && StatusConstants.PURCHASE_COMPLETED.equals(purchaseOrder.getStatus())) {
@@ -201,7 +202,7 @@ public class PurchaseInboundCompletionSyncService {
                     purchaseOrder,
                     "PURCHASE_ORDER_REOPENED",
                     "退回已审核",
-                    "采购订单状态 完成采购 -> 已审核"
+                    "采购订单状态 " + StatusConstants.PURCHASE_COMPLETED + " -> " + StatusConstants.AUDITED
             );
         }
     }

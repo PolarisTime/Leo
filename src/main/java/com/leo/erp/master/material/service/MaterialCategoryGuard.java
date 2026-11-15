@@ -2,6 +2,7 @@ package com.leo.erp.master.material.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.material.repository.MaterialCategoryRepository;
 import org.springframework.stereotype.Component;
 
@@ -21,8 +22,8 @@ import java.util.List;
 @Component
 class MaterialCategoryGuard {
 
-    /** 分类启用状态值，与 {@code md_material_category.status} 的既有口径一致。 */
-    private static final String ACTIVE_STATUS = "正常";
+    /** 分类启用状态 code，与 {@code md_material_category.status} 的口径一致（V219 起存 code）。 */
+    private static final String ACTIVE_STATUS = StatusConstants.NORMAL;
 
     private final MaterialCategoryRepository repository;
 

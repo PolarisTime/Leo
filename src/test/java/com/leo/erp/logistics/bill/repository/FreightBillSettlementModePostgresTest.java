@@ -56,7 +56,7 @@ class FreightBillSettlementModePostgresTest {
         jdbc.update("""
                 insert into md_carrier (id, carrier_code, carrier_name, status, deleted_flag,
                                         created_by, created_name, created_at, version)
-                values (?, ?, ?, '正常', false, 0, 'system', now(), 0)
+                values (?, ?, ?, 'NORMAL', false, 0, 'system', now(), 0)
                 """, CARRIER_ID, CARRIER_CODE, CARRIER_NAME);
     }
 
@@ -105,7 +105,7 @@ class FreightBillSettlementModePostgresTest {
                 insert into lg_freight_bill (id, bill_no, carrier_name, bill_time, unit_price, total_weight,
                                              total_freight, status, carrier_code, carrier_id, version, created_by,
                                              created_name, created_at, deleted_flag)
-                values (?, ?, ?, ?, 100.00, 12.50000000, 1250.00, '草稿', ?, ?, 0, 0,
+                values (?, ?, ?, ?, 100.00, 12.50000000, 1250.00, 'DRAFT', ?, ?, 0, 0,
                         'system', now(), false)
                 """, LEGACY_BILL_ID, "FB-PG-V184-LEGACY", CARRIER_NAME, LocalDateTime.now(),
                 CARRIER_CODE, CARRIER_ID);
@@ -132,7 +132,7 @@ class FreightBillSettlementModePostgresTest {
         bill.setTotalFreight(new BigDecimal("1800.55"));
         bill.setSettlementMode(FreightSettlementMode.FIXED);
         bill.setFixedFreightAmount(new BigDecimal("1800.55"));
-        bill.setStatus("草稿");
+        bill.setStatus("DRAFT");
         bill.setCreatedAt(LocalDateTime.now());
         bill.setCreatedBy(0L);
         bill.setCreatedName("system");

@@ -133,7 +133,7 @@ class QuoteSheetValidationExtremePostgresTest {
 
         assertThatThrownBy(() -> store.update(SHEET_ID,
                 new QuoteSheetRequest("pg-validate", null, "云潮筝鸣府", ORDER_DATE, ORDER_DATE, "09:00",
-                        LENGTH_PREMIUM, false, false, "报价", null,
+                        LENGTH_PREMIUM, false, false, "QUOTING", null,
                         List.of(new QuoteSheetRequest.BrandRequest("中天", BigDecimal.ZERO, 0),
                                 new QuoteSheetRequest.BrandRequest(" 中天 ", BigDecimal.ZERO, 1)),
                         List.of(item("螺纹钢", "HRB400E", 12, "10", "3600"))),
@@ -173,7 +173,7 @@ class QuoteSheetValidationExtremePostgresTest {
 
         QuoteSheetResponse response = store.update(SHEET_ID,
                 new QuoteSheetRequest("pg-validate", null, "云潮筝鸣府", ORDER_DATE, ORDER_DATE, "09:00",
-                        LENGTH_PREMIUM, false, false, "报价", null,
+                        LENGTH_PREMIUM, false, false, "QUOTING", null,
                         List.of(new QuoteSheetRequest.BrandRequest("ABC", BigDecimal.ZERO, 0),
                                 new QuoteSheetRequest.BrandRequest("abc", BigDecimal.ZERO, 1)),
                         List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
@@ -199,7 +199,7 @@ class QuoteSheetValidationExtremePostgresTest {
                 List.of(new QuoteSheetRequest.ItemPriceRequest(overlong, new BigDecimal("3600"), null)));
         QuoteSheetRequest request = new QuoteSheetRequest(
                 "pg-validate", null, "云潮筝鸣府", ORDER_DATE, ORDER_DATE, "09:00",
-                LENGTH_PREMIUM, false, false, "报价", null,
+                LENGTH_PREMIUM, false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest(overlong, BigDecimal.ZERO, 0)),
                 List.of(overlongItem));
 
@@ -256,7 +256,7 @@ class QuoteSheetValidationExtremePostgresTest {
         sheet.setRefDate(ORDER_DATE);
         sheet.setRefPeriod("09:00");
         sheet.setLengthPremium(LENGTH_PREMIUM);
-        sheet.setStatus("报价");
+        sheet.setStatus("QUOTING");
         sheet.setSpecQuantityLocked(specQuantityLocked);
         sheet.setCreatedAt(LocalDateTime.now());
         sheet.setCreatedBy(0L);
@@ -297,7 +297,7 @@ class QuoteSheetValidationExtremePostgresTest {
                                            QuoteSheetRequest.ItemRequest... items) {
         return new QuoteSheetRequest(
                 "pg-validate", null, "云潮筝鸣府", ORDER_DATE, ORDER_DATE, "09:00",
-                LENGTH_PREMIUM, false, specQuantityLocked, "报价", null,
+                LENGTH_PREMIUM, false, specQuantityLocked, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", BigDecimal.ZERO, 0)),
                 List.of(items));
     }

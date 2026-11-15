@@ -38,7 +38,7 @@ class PurchaseOrderResponseAssemblerTest {
         PurchaseOrder order = new PurchaseOrder();
         order.setId(1L);
         order.setOrderNo("PO-1");
-        order.setStatus("完成采购");
+        order.setStatus("PURCHASE_COMPLETED");
         order.setForceClosed(forceClosed);
         if (forceClosed) {
             order.setForceCloseReason("剩余 1 件报废");
@@ -167,7 +167,7 @@ class PurchaseOrderResponseAssemblerTest {
     void convenienceConstructor_shouldDefaultDifferenceFieldsToNull() {
         PurchaseOrderResponse response = new PurchaseOrderResponse(
                 1L, "PO-1", null, null, "供应商", null, null, null, null,
-                null, null, "已审核", false, null, List.of()
+                null, null, "AUDITED", false, null, List.of()
         );
 
         assertThat(response.totalActualAmount()).isNull();
@@ -181,7 +181,7 @@ class PurchaseOrderResponseAssemblerTest {
     void applyReceivedQuantity_shouldReplaceOnlyReceivedQuantity() {
         PurchaseOrderResponse base = new PurchaseOrderResponse(
                 1L, "PO-1", null, null, "供应商", null, null, null, null,
-                null, null, "已审核", false, null, List.of()
+                null, null, "AUDITED", false, null, List.of()
         ).applyTotalRemainingQuantity(7);
 
         PurchaseOrderResponse applied = base.applyReceivedQuantity(3);
@@ -197,7 +197,7 @@ class PurchaseOrderResponseAssemblerTest {
     void applyDifference_shouldReplaceOnlyDifferenceFields() {
         PurchaseOrderResponse base = new PurchaseOrderResponse(
                 1L, "PO-1", null, null, "供应商", null, null, null, null,
-                null, null, "已审核", false, null, List.of()
+                null, null, "AUDITED", false, null, List.of()
         ).applyTotalRemainingQuantity(7);
 
         PurchaseOrderResponse applied = base.applyDifference(
@@ -213,7 +213,7 @@ class PurchaseOrderResponseAssemblerTest {
     void applyDifference_shouldPassthroughNulls() {
         PurchaseOrderResponse base = new PurchaseOrderResponse(
                 1L, "PO-1", null, null, "供应商", null, null, null, null,
-                null, null, "已审核", false, null, List.of()
+                null, null, "AUDITED", false, null, List.of()
         );
 
         PurchaseOrderResponse applied = base.applyDifference(null, null);

@@ -52,7 +52,7 @@ public record MaterialRequest(
         String remark,
         @Size(max = 16, message = "商品类型长度不能超过16")
         String materialType,
-        @Size(max = 16, message = "商品状态长度不能超过16")
+        @Size(max = 32, message = "商品状态长度不能超过32")
         String status
 ) {
 

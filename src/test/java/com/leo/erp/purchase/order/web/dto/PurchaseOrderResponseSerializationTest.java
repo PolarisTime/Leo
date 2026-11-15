@@ -23,7 +23,7 @@ class PurchaseOrderResponseSerializationTest {
     private PurchaseOrderResponse response(PurchaseOrderResponse.ForceCloseInfo forceClose) {
         return new PurchaseOrderResponse(
                 1L, "PO-1", null, null, "供应商", null, null, null, null,
-                null, null, "完成采购", false, null, null, null,
+                null, null, "PURCHASE_COMPLETED", false, null, null, null,
                 0, null, null, null, forceClose, null
         );
     }

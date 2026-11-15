@@ -84,7 +84,7 @@ public class FreightBill extends AbstractAuditableEntity implements StatusAwareE
     @Column(name = "fixed_freight_amount", precision = 14, scale = 2)
     private BigDecimal fixedFreightAmount;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "remark", length = 255)

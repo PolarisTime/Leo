@@ -88,7 +88,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long>, JpaSpec
             where payment.deletedFlag = false
               and payment.paymentPurpose = 'PURCHASE_PREPAYMENT'
               and payment.sourcePurchaseOrderId = :sourcePurchaseOrderId
-              and payment.status = '已审核'
+              and payment.status = 'AUDITED'
               and (:currentPaymentId is null or payment.id <> :currentPaymentId)
             """)
     BigDecimal sumPaidPurchasePrepaymentAmountExcludingId(

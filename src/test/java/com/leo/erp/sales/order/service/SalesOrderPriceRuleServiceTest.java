@@ -330,7 +330,7 @@ class SalesOrderPriceRuleServiceTest {
                                               Integer priceDateOffsetDays, String priceClosedSettleDirection,
                                               Integer priceClosedSettleDays) {
         return new SalesOrderRequest("SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A",
-                null, null, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 1), "销售员A", "草稿", null, null,
+                null, null, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 1), "销售员A", "DRAFT", null, null,
                 priceTargetDate, priceQuoteDate, priceQuotePeriod, priceDateBasis,
                 priceDateOffsetDays, priceClosedSettleDirection, priceClosedSettleDays,
                 List.of(), List.of(), false);

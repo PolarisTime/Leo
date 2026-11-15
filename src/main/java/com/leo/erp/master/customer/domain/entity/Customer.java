@@ -50,7 +50,7 @@ public class Customer extends AbstractAuditableEntity implements StatusAwareEnti
     @Column(name = "project_address", length = 255)
     private String projectAddress;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "remark", length = 255)

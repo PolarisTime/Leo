@@ -35,7 +35,7 @@ public class MaterialCategory extends AbstractAuditableEntity implements StatusA
     @Column(name = "purchase_weigh_required", nullable = false)
     private Boolean purchaseWeighRequired = Boolean.FALSE;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "remark", length = 255)

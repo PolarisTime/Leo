@@ -297,7 +297,7 @@ class QuoteSheetStoreTest {
 
         QuoteSheetRequest request = new QuoteSheetRequest(
                 "9月9日报单", 77L, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null,
+                new BigDecimal("30"), false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("铜陵富鑫", new BigDecimal("3280"), null)))));
@@ -325,7 +325,7 @@ class QuoteSheetStoreTest {
 
         QuoteSheetRequest request = new QuoteSheetRequest(
                 "9月9日报单", 77L, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null,
+                new BigDecimal("30"), false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("铜陵富鑫", new BigDecimal("3280"), null)))));
@@ -361,7 +361,7 @@ class QuoteSheetStoreTest {
 
         QuoteSheetRequest request = new QuoteSheetRequest(
                 "9月9日报单", 77L, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null,
+                new BigDecimal("30"), false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
@@ -385,7 +385,7 @@ class QuoteSheetStoreTest {
         existing.setRefDate(LocalDate.of(2026, 9, 10));
         existing.setRefPeriod("9:30 上午");
         existing.setLengthPremium(new BigDecimal("30"));
-        existing.setStatus("报价");
+        existing.setStatus("QUOTING");
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
         when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
         when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L))
@@ -395,7 +395,7 @@ class QuoteSheetStoreTest {
 
         QuoteSheetRequest headerOnly = new QuoteSheetRequest(
                 "9月9日报单", 77L, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null, null, null);
+                new BigDecimal("30"), false, false, "QUOTING", null, null, null);
 
         QuoteSheetResponse response = store().update(9L, headerOnly, 3L);
 
@@ -416,7 +416,7 @@ class QuoteSheetStoreTest {
         existing.setRefDate(LocalDate.of(2026, 9, 10));
         existing.setRefPeriod("9:30 上午");
         existing.setLengthPremium(new BigDecimal("30"));
-        existing.setStatus("报价");
+        existing.setStatus("QUOTING");
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
         when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
         when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L))
@@ -424,7 +424,7 @@ class QuoteSheetStoreTest {
 
         QuoteSheetRequest headerOnly = new QuoteSheetRequest(
                 "9月9日报单", 77L, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null, null, null);
+                new BigDecimal("30"), false, false, "QUOTING", null, null, null);
 
         store().update(9L, headerOnly, 3L);
 
@@ -491,7 +491,7 @@ class QuoteSheetStoreTest {
 
         QuoteSheetRequest request = new QuoteSheetRequest(
                 "9月9日报单", 77L, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null,
+                new BigDecimal("30"), false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("铜陵富鑫", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("沙钢", new BigDecimal("3280"), null)))));
@@ -562,7 +562,7 @@ class QuoteSheetStoreTest {
         QuoteSheetRequest changedRef = new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
                 LocalDate.of(2026, 9, 11), "9:30 上午",
-                new BigDecimal("30"), true, false, "报价", null,
+                new BigDecimal("30"), true, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
@@ -584,7 +584,7 @@ class QuoteSheetStoreTest {
         QuoteSheetRequest changedRef = new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
                 LocalDate.of(2026, 9, 11), "9:30 上午",
-                new BigDecimal("30"), null, false, "报价", null,
+                new BigDecimal("30"), null, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
@@ -606,7 +606,7 @@ class QuoteSheetStoreTest {
         QuoteSheetRequest changedPeriod = new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
                 LocalDate.of(2026, 9, 10), "10:00 上午",
-                new BigDecimal("30"), null, false, "报价", null,
+                new BigDecimal("30"), null, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
@@ -628,7 +628,7 @@ class QuoteSheetStoreTest {
         QuoteSheetRequest changedRef = new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
                 LocalDate.of(2026, 9, 11), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null,
+                new BigDecimal("30"), false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
@@ -676,7 +676,7 @@ class QuoteSheetStoreTest {
         QuoteSheetRequest headerOnly = new QuoteSheetRequest(
                 "改名后的报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
                 LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("35"), true, false, "报价", "备注", null, null);
+                new BigDecimal("35"), true, false, "QUOTING", "备注", null, null);
 
         QuoteSheetResponse response = store().update(9L, headerOnly, 3L);
 
@@ -764,7 +764,7 @@ class QuoteSheetStoreTest {
         return new QuoteSheetRequest(
                 "改名后的报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
                 LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("35"), true, false, "报价", "备注", null, null);
+                new BigDecimal("35"), true, false, "QUOTING", "备注", null, null);
     }
 
     @Test
@@ -1014,7 +1014,7 @@ class QuoteSheetStoreTest {
     private QuoteSheetRequest requestWithPrice(String rowMaterial, BigDecimal spotPrice, String sourceMaterial) {
         return new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null,
+                new BigDecimal("30"), false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", rowMaterial, 12, "9米", new BigDecimal("10"),
                         List.of(new QuoteSheetRequest.ItemPriceRequest(
@@ -1072,7 +1072,7 @@ class QuoteSheetStoreTest {
 
         QuoteSheetResponse response = store().update(9L, new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null,
+                new BigDecimal("30"), false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("沙钢", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("沙钢", new BigDecimal("3280"), null))))), null);
@@ -1098,7 +1098,7 @@ class QuoteSheetStoreTest {
         QuoteSheetRequest headerOnly = new QuoteSheetRequest(
                 "改名后的报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
                 LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("35"), true, true, "报价", "备注", null, null);
+                new BigDecimal("35"), true, true, "QUOTING", "备注", null, null);
 
         QuoteSheetResponse response = store().update(9L, headerOnly, 3L);
 
@@ -1124,7 +1124,7 @@ class QuoteSheetStoreTest {
         QuoteSheetRequest headerOnly = new QuoteSheetRequest(
                 "改名后的报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
                 LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("35"), null, null, "报价", "备注", null, null);
+                new BigDecimal("35"), null, null, "QUOTING", "备注", null, null);
 
         QuoteSheetResponse response = store().update(9L, headerOnly, 3L);
 
@@ -1148,7 +1148,7 @@ class QuoteSheetStoreTest {
         QuoteSheetRequest headerOnly = new QuoteSheetRequest(
                 "改名后的报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9),
                 LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("35"), false, false, "报价", "备注", null, null);
+                new BigDecimal("35"), false, false, "QUOTING", "备注", null, null);
 
         QuoteSheetResponse response = store().update(9L, headerOnly, 3L);
 
@@ -1360,7 +1360,7 @@ class QuoteSheetStoreTest {
 
         QuoteSheetRequest twoRows = new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, true, "报价", null,
+                new BigDecimal("30"), false, true, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.TEN,
                                 List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null))),
@@ -1419,7 +1419,7 @@ class QuoteSheetStoreTest {
 
         QuoteSheetRequest threeRows = new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, true, "报价", null,
+                new BigDecimal("30"), false, true, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(itemRequest("螺纹钢", "HRB400E", 12, "10", "3280"),
                         itemRequest("盘螺", "HRB400E", 8, "5", "3300"),
@@ -1455,7 +1455,7 @@ class QuoteSheetStoreTest {
 
         QuoteSheetResponse unlocked = store().update(9L, new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null, null, null), null);
+                new BigDecimal("30"), false, false, "QUOTING", null, null, null), null);
         assertThat(unlocked.specQuantityLocked()).isFalse();
 
         QuoteSheetResponse replaced = store().update(9L, fullRequest(10, BigDecimal.TEN, "3280"), null);
@@ -1510,7 +1510,7 @@ class QuoteSheetStoreTest {
 
         QuoteSheetRequest omitted = new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, null, "报价", null,
+                new BigDecimal("30"), false, null, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 10, "9米", BigDecimal.TEN,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
@@ -1546,7 +1546,7 @@ class QuoteSheetStoreTest {
     private QuoteSheetRequest fullRequest(Integer spec, BigDecimal ton, String spotPrice, boolean specQuantityLocked) {
         return new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, specQuantityLocked, "报价", null,
+                new BigDecimal("30"), false, specQuantityLocked, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", spec, "9米", ton,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal(spotPrice), null)))));
@@ -1563,7 +1563,7 @@ class QuoteSheetStoreTest {
         sheet.setLengthPremium(new BigDecimal("30"));
         sheet.setLocked(false);
         sheet.setSpecQuantityLocked(false);
-        sheet.setStatus("报价");
+        sheet.setStatus("QUOTING");
         return sheet;
     }
 
@@ -1620,7 +1620,7 @@ class QuoteSheetStoreTest {
         sheet.setLengthPremium(new BigDecimal("30"));
         sheet.setLocked(false);
         sheet.setSpecQuantityLocked(true);
-        sheet.setStatus("报价");
+        sheet.setStatus("QUOTING");
         QuoteSheetBrand brand = new QuoteSheetBrand();
         brand.setId(201L);
         brand.setSheet(sheet);
@@ -1656,7 +1656,7 @@ class QuoteSheetStoreTest {
     private QuoteSheetRequest holeRequest(String spotPrice1, String spotPrice2, int spec2, BigDecimal ton2) {
         return new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, true, "报价", null,
+                new BigDecimal("30"), false, true, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(itemRequest("螺纹钢", "HRB400E", 12, "10", spotPrice1),
                         itemRequest("盘螺", "HRB400E", spec2, ton2.toPlainString(), spotPrice2)));
@@ -1671,7 +1671,7 @@ class QuoteSheetStoreTest {
     private QuoteSheetRequest requestWithSupplier(Long supplierId) {
         return new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null,
+                new BigDecimal("30"), false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", new BigDecimal("10"),
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), supplierId)))));
@@ -1680,7 +1680,7 @@ class QuoteSheetStoreTest {
     private QuoteSheetRequest request() {
         return new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null,
+                new BigDecimal("30"), false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", new BigDecimal("10"),
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal("3280"), null)))));
@@ -1696,7 +1696,7 @@ class QuoteSheetStoreTest {
     private static QuoteSheetRequest requestWithItems(List<QuoteSheetRequest.ItemRequest> items) {
         return new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null,
+                new BigDecimal("30"), false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 items);
     }
@@ -1927,7 +1927,7 @@ class QuoteSheetStoreTest {
 
         QuoteSheetRequest request = new QuoteSheetRequest(
                 "9月9日报单", 77L, "西本项目", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10),
-                "9:30 上午", new BigDecimal("30"), false, false, "报价", null,
+                "9:30 上午", new BigDecimal("30"), false, false, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("基准价", BigDecimal.ZERO, 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米",
                         new BigDecimal("10"),

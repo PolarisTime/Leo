@@ -55,7 +55,7 @@ public class Carrier extends AbstractAuditableEntity implements StatusAwareEntit
     @Column(name = "default_settlement_company_name", length = 128)
     private String defaultSettlementCompanyName;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "remark", length = 255)

@@ -41,7 +41,7 @@ public class Supplier extends AbstractAuditableEntity implements StatusAwareEnti
     @Column(name = "city", length = 64)
     private String city;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "remark", length = 255)

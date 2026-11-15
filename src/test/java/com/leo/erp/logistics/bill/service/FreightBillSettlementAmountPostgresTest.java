@@ -253,23 +253,23 @@ class FreightBillSettlementAmountPostgresTest {
                 insert into sys_company_setting (id, company_name, tax_no, bank_name, bank_account,
                                                  status, settlement_accounts_json, created_by, created_name,
                                                  created_at, deleted_flag, version)
-                values (?, ?, 'PG-V184-TAX', 'V184银行', 'PG-V184-ACC', '正常', '[]'::jsonb,
+                values (?, ?, 'PG-V184-TAX', 'V184银行', 'PG-V184-ACC', 'NORMAL', '[]'::jsonb,
                         0, 'system', now(), false, 0)
                 """, SETTLEMENT_COMPANY_ID, SETTLEMENT_COMPANY_NAME);
         jdbc.update("""
                 insert into md_carrier (id, carrier_code, carrier_name, status, deleted_flag,
                                         created_by, created_name, created_at, version)
-                values (?, ?, ?, '正常', false, 0, 'system', now(), 0)
+                values (?, ?, ?, 'NORMAL', false, 0, 'system', now(), 0)
                 """, CARRIER_ID, CARRIER_CODE, CARRIER_NAME);
         jdbc.update("""
                 insert into md_customer (id, customer_code, customer_name, project_name, status,
                                          deleted_flag, created_by, created_name, created_at, version)
-                values (?, ?, ?, ?, '正常', false, 0, 'system', now(), 0)
+                values (?, ?, ?, ?, 'NORMAL', false, 0, 'system', now(), 0)
                 """, CUSTOMER_ID, CUSTOMER_CODE, CUSTOMER_NAME, PROJECT_NAME);
         jdbc.update("""
                 insert into md_project (id, project_code, project_name, customer_code, customer_id, status,
                                         deleted_flag, created_by, created_name, created_at, version)
-                values (?, 'PG-V184-PRJ', ?, ?, ?, '正常', false, 0, 'system', now(), 0)
+                values (?, 'PG-V184-PRJ', ?, ?, ?, 'NORMAL', false, 0, 'system', now(), 0)
                 """, PROJECT_ID, PROJECT_NAME, CUSTOMER_CODE, CUSTOMER_ID);
         jdbc.update("""
                 insert into md_material (id, material_code, brand, material, category, spec, unit,
@@ -281,12 +281,12 @@ class FreightBillSettlementAmountPostgresTest {
         jdbc.update("""
                 insert into md_warehouse (id, warehouse_code, warehouse_name, warehouse_type, status,
                                           deleted_flag, created_by, created_name, created_at, version)
-                values (?, 'PG-V184-WH', ?, '自营仓', '正常', false, 0, 'system', now(), 0)
+                values (?, 'PG-V184-WH', ?, '自营仓', 'NORMAL', false, 0, 'system', now(), 0)
                 """, WAREHOUSE_ID, WAREHOUSE_NAME);
         jdbc.update("""
                 insert into md_supplier (id, supplier_code, supplier_name, status, deleted_flag,
                                          created_by, created_name, created_at, version)
-                values (?, 'PG-V184-SUP', 'V184回归供应商', '正常', false, 0, 'system', now(), 0)
+                values (?, 'PG-V184-SUP', 'V184回归供应商', 'NORMAL', false, 0, 'system', now(), 0)
                 """, SUPPLIER_ID);
     }
 
@@ -301,7 +301,7 @@ class FreightBillSettlementAmountPostgresTest {
                                                order_date, total_weight, total_amount, status,
                                                deleted_flag, created_by, created_name, created_at, version)
                 values (?, 'PG-V184-PO', ?, 'PG-V184-SUP', 'V184回归供应商', current_date,
-                        12.500, 50000, '已审核', false, 0, 'system', now(), 0)
+                        12.500, 50000, 'AUDITED', false, 0, 'system', now(), 0)
                 """, PURCHASE_ORDER_ID, SUPPLIER_ID);
         jdbc.update("""
                 insert into po_purchase_order_item (id, order_id, line_no, material_code, brand, category,
@@ -315,7 +315,7 @@ class FreightBillSettlementAmountPostgresTest {
                 insert into so_sales_order (id, order_no, customer_id, customer_name, project_id, project_name,
                                             delivery_date, sales_name, total_weight, total_amount, status,
                                             deleted_flag, created_by, created_name, created_at, version)
-                values (?, 'PG-V184-SO', ?, ?, ?, ?, current_date, '销售员A', 12.500, 50000, '已审核',
+                values (?, 'PG-V184-SO', ?, ?, ?, ?, current_date, '销售员A', 12.500, 50000, 'AUDITED',
                         false, 0, 'system', now(), 0)
                 """, SALES_ORDER_ID, CUSTOMER_ID, CUSTOMER_NAME, PROJECT_ID, PROJECT_NAME);
         jdbc.update("""

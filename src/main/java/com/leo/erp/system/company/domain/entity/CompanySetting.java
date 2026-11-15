@@ -39,7 +39,7 @@ public class CompanySetting extends AbstractAuditableEntity implements StatusAwa
     @org.hibernate.annotations.ColumnTransformer(read = "settlement_accounts_json::text", write = "?::jsonb")
     private String settlementAccountsJson;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "remark", length = 255)

@@ -112,13 +112,13 @@ class SalesContractControllerTest {
 
     @Test
     void updateStatus_returnsVersionHeader() {
-        when(service.updateStatus(100L, "审核")).thenReturn(reviewedResponse(4L));
+        when(service.updateStatus(100L, "CONTRACT_REVIEWED")).thenReturn(reviewedResponse(4L));
 
         ResponseEntity<SalesContractResponse> entity =
-                controller(false).updateStatus(100L, new StatusUpdateRequest("审核"));
+                controller(false).updateStatus(100L, new StatusUpdateRequest("CONTRACT_REVIEWED"));
 
         assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(entity.getBody().status()).isEqualTo("审核");
+        assertThat(entity.getBody().status()).isEqualTo("CONTRACT_REVIEWED");
         assertThat(entity.getHeaders().getFirst(ResourceVersionPrecondition.HEADER)).isEqualTo("4");
     }
 
@@ -144,7 +144,7 @@ class SalesContractControllerTest {
                 1L, "客户甲", 2L, "项目乙",
                 LocalDate.of(2026, 9, 17), LocalDate.of(2026, 9, 18), LocalDate.of(2026, 12, 31),
                 new BigDecimal("1000000.00"), new BigDecimal("3000.50000000"),
-                "草稿", "备注", null, null, version
+                "DRAFT", "备注", null, null, version
         );
     }
 
@@ -154,7 +154,7 @@ class SalesContractControllerTest {
                 1L, "客户甲", 2L, "项目乙",
                 LocalDate.of(2026, 9, 17), LocalDate.of(2026, 9, 18), LocalDate.of(2026, 12, 31),
                 new BigDecimal("1000000.00"), new BigDecimal("3000.50000000"),
-                "审核", "备注", null, null, version
+                "CONTRACT_REVIEWED", "备注", null, null, version
         );
     }
 }

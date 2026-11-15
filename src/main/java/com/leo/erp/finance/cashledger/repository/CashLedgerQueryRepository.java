@@ -44,7 +44,7 @@ public class CashLedgerQueryRepository {
                     receipt.created_by
                 FROM fm_receipt receipt
                 WHERE receipt.deleted_flag = FALSE
-                  AND receipt.status = '已审核'
+                  AND receipt.status = 'AUDITED'
                   AND receipt.settlement_company_id = :settlementCompanyId
 
                 UNION ALL
@@ -69,7 +69,7 @@ public class CashLedgerQueryRepository {
                     payment.created_by
                 FROM fm_payment payment
                 WHERE payment.deleted_flag = FALSE
-                  AND payment.status = '已审核'
+                  AND payment.status = 'AUDITED'
                   AND payment.settlement_company_id = :settlementCompanyId
 
                 UNION ALL
@@ -93,7 +93,7 @@ public class CashLedgerQueryRepository {
                     reversal.created_by
                 FROM fm_cash_reversal reversal
                 WHERE reversal.deleted_flag = FALSE
-                  AND reversal.status = '已审核'
+                  AND reversal.status = 'AUDITED'
                   AND reversal.original_payment_id IS NOT NULL
                   AND reversal.settlement_company_id = :settlementCompanyId
 
@@ -118,7 +118,7 @@ public class CashLedgerQueryRepository {
                     reversal.created_by
                 FROM fm_cash_reversal reversal
                 WHERE reversal.deleted_flag = FALSE
-                  AND reversal.status = '已审核'
+                  AND reversal.status = 'AUDITED'
                   AND reversal.original_receipt_id IS NOT NULL
                   AND reversal.settlement_company_id = :settlementCompanyId
             )

@@ -67,7 +67,7 @@ public class SalesOutboundPurchaseInboundGuard {
     private PurchaseInboundCoverage loadCoverage(Long sourcePurchaseOrderItemId) {
         List<PurchaseInboundCoverage> rows = jdbc.query("""
                     SELECT COALESCE(SUM(
-                               CASE WHEN inbound.status IN ('已审核', '完成入库')
+                               CASE WHEN inbound.status IN ('AUDITED', 'INBOUND_COMPLETED')
                                     THEN inbound_item.quantity ELSE 0 END
                            ), 0) AS inbound_quantity
                       FROM po_purchase_order_item source_item

@@ -143,7 +143,7 @@ class PurchaseOrderItemIssuedDonePostgresTest {
         jdbc.update("""
                 insert into public.md_supplier (id, supplier_code, supplier_name, status,
                                                 created_by, created_name, deleted_flag)
-                values (945000000000000103, 'PG-ISSUED-DONE-GYS', 'PG已开完供应商', '正常', 0, 'pg-test', false)
+                values (945000000000000103, 'PG-ISSUED-DONE-GYS', 'PG已开完供应商', 'NORMAL', 0, 'pg-test', false)
                 """);
         jdbc.update("""
                 insert into public.md_material (id, material_code, brand, material, category, spec, length,
@@ -157,7 +157,7 @@ class PurchaseOrderItemIssuedDonePostgresTest {
                                                       order_date, total_weight, total_amount, status,
                                                       created_by, created_name, deleted_flag)
                 values (?, ?, 'PG-ISSUED-DONE-GYS', 945000000000000103, 'PG已开完供应商',
-                        current_timestamp, 10.00000000, 30000.00, '已审核', 0, 'pg-test', false)
+                        current_timestamp, 10.00000000, 30000.00, 'AUDITED', 0, 'pg-test', false)
                 """, ORDER_ID, "PG-ISSUED-DONE-" + ORDER_ID);
         jdbc.update("""
                 insert into public.po_purchase_order_item (id, order_id, line_no, material_id, material_code,

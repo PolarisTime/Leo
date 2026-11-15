@@ -105,7 +105,7 @@ class DetailRowOrderPersistencePostgresTest {
                                             delivery_date, sales_name, total_weight, total_amount, status)
                 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, SALES_ORDER_ID, "PG-ORDER-" + SALES_ORDER_ID, customerId, "客户A", projectId, "项目A",
-                LocalDateTime.now(), "业务员A", new BigDecimal("30"), new BigDecimal("9000"), "草稿");
+                LocalDateTime.now(), "业务员A", new BigDecimal("30"), new BigDecimal("9000"), "DRAFT");
         // 物理插入顺序与主键顺序都故意与行号相反: 行号 3/1/2 ← id 1001/1002/1003
         insertSalesItem(1001L, 3, materialId, sourceItemId);
         insertSalesItem(1002L, 1, materialId, sourceItemId);
@@ -135,7 +135,7 @@ class DetailRowOrderPersistencePostgresTest {
                                                order_date, total_weight, total_amount, status)
                 values (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, PURCHASE_ORDER_ID, "PG-PO-" + PURCHASE_ORDER_ID, supplierId, "SUP-" + supplierId, "沙钢",
-                LocalDateTime.now(), new BigDecimal("30"), new BigDecimal("9000"), "草稿");
+                LocalDateTime.now(), new BigDecimal("30"), new BigDecimal("9000"), "DRAFT");
         insertPurchaseItem(2001L, 3, materialId);
         insertPurchaseItem(2002L, 1, materialId);
         insertPurchaseItem(2003L, 2, materialId);

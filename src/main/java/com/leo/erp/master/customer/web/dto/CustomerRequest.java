@@ -26,7 +26,7 @@ public record CustomerRequest(
         @Size(max = 255, message = "项目地址长度不能超过255")
         String projectAddress,
         @NotBlank(message = ValidationMessages.STATUS_REQUIRED)
-        @Size(max = 16, message = "状态长度不能超过16")
+        @Size(max = 32, message = "状态长度不能超过32")
         String status,
         @Size(max = 255, message = "备注长度不能超过255")
         String remark

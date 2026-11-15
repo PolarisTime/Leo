@@ -10,6 +10,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.CrudOperationLogger;
 import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.DocumentStatus;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.market.lengthpremium.domain.entity.MdLengthPremium;
 import com.leo.erp.market.lengthpremium.repository.MdLengthPremiumRepository;
@@ -213,7 +214,7 @@ public class LengthPremiumService implements LengthSpecCatalog {
         String status = raw == null ? "" : raw.trim();
         if (!StatusConstants.NORMAL.equals(status) && !StatusConstants.DISABLED.equals(status)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR,
-                    "状态只能是「" + StatusConstants.NORMAL + "」或「" + StatusConstants.DISABLED + "」");
+                    "状态只能是「" + DocumentStatus.NORMAL.label() + "」或「" + DocumentStatus.DISABLED.label() + "」");
         }
         return status;
     }

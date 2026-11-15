@@ -118,7 +118,7 @@ class SalesOrderResponseTest {
                 "销售员A",
                 new BigDecimal("12.50000000"),
                 new BigDecimal("42500.00"),
-                "草稿",
+                "DRAFT",
                 false,
                 "备注A",
                 77L,

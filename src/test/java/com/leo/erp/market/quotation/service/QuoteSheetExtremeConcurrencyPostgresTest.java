@@ -140,7 +140,7 @@ class QuoteSheetExtremeConcurrencyPostgresTest {
 
         QuoteSheetResponse headerOnly = sheetService.update(SHEET_ID,
                 new QuoteSheetRequest("pg-extreme", null, "云潮筝鸣府", ORDER_DATE, ORDER_DATE, "09:00",
-                        LENGTH_PREMIUM, false, false, "报价", "表头-only", null, null),
+                        LENGTH_PREMIUM, false, false, "QUOTING", "表头-only", null, null),
                 version, 0L);
         version += 1;
         assertThat(headerOnly.version()).isEqualTo(version).isEqualTo(sheetDbVersion());
@@ -360,7 +360,7 @@ class QuoteSheetExtremeConcurrencyPostgresTest {
         sheet.setRefDate(ORDER_DATE);
         sheet.setRefPeriod("09:00");
         sheet.setLengthPremium(LENGTH_PREMIUM);
-        sheet.setStatus("报价");
+        sheet.setStatus("QUOTING");
         sheet.setCreatedAt(LocalDateTime.now());
         sheet.setCreatedBy(0L);
         sheet.setCreatedName("system");
@@ -396,7 +396,7 @@ class QuoteSheetExtremeConcurrencyPostgresTest {
     private QuoteSheetRequest wholeRequest(String remark, String spotPrice, BigDecimal lengthPremium) {
         return new QuoteSheetRequest(
                 "pg-extreme", null, "云潮筝鸣府", ORDER_DATE, ORDER_DATE, "09:00",
-                lengthPremium, false, false, "报价", remark,
+                lengthPremium, false, false, "QUOTING", remark,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", 12, "9米", BigDecimal.ONE,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal(spotPrice), null)))));

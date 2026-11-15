@@ -48,8 +48,9 @@ public class CompanySettingService implements RedisCacheHealthCheck, CompanySett
     public static final String CURRENT_COMPANY_CACHE_KEY = "leo:company:current:v2";
     private static final String COMPANY_OPTIONS_CACHE_KEY = "leo:company-setting:all";
     /** 结算账户禁用状态文案：结算账户明细使用「禁用」，历史数据或模板中可能出现「停用」。 */
+    /** 结算账户明细的停用状态 code（旧 JSON 里的「停用」由 {@code StatusConstants.toCode} 归一化）。 */
     private static final Set<String> DISABLED_SETTLEMENT_ACCOUNT_STATUSES =
-            Set.of(StatusConstants.DISABLED, "停用");
+            Set.of(StatusConstants.DISABLED);
 
     private static final CrudStatusGuard<CompanySetting> STATUS_GUARD = CrudStatusGuard.withoutStatus();
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
@@ -177,7 +178,7 @@ public class CompanySettingService implements RedisCacheHealthCheck, CompanySett
             }
             for (CompanySettlementAccountResponse account : settlementAccountCodec.read(company)) {
                 if (account == null || account.id() == null
-                        || DISABLED_SETTLEMENT_ACCOUNT_STATUSES.contains(account.status())) {
+                        || DISABLED_SETTLEMENT_ACCOUNT_STATUSES.contains(StatusConstants.toCode(account.status()))) {
                     continue;
                 }
                 snapshots.put(account.id(), new SettlementAccountSnapshot(
@@ -361,7 +362,8 @@ public class CompanySettingService implements RedisCacheHealthCheck, CompanySett
         entity.setBankName(primaryAccount == null ? "" : primaryAccount.bankName());
         entity.setBankAccount(primaryAccount == null ? "" : primaryAccount.bankAccount());
         entity.setSettlementAccountsJson(settlementAccountCodec.write(settlementAccounts));
-        entity.setStatus(request.status() != null ? request.status() : StatusConstants.NORMAL);
+        String status = StatusConstants.toCode(request.status());
+        entity.setStatus(status == null ? StatusConstants.NORMAL : status);
         entity.setRemark(request.remark());
     }
 

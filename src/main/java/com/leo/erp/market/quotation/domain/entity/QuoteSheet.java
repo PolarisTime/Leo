@@ -2,6 +2,7 @@ package com.leo.erp.market.quotation.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.common.persistence.StatusAwareEntity;
+import com.leo.erp.common.support.StatusConstants;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -59,8 +60,8 @@ public class QuoteSheet extends AbstractAuditableEntity implements StatusAwareEn
     @Column(name = "spec_quantity_locked", nullable = false)
     private boolean specQuantityLocked = false;
 
-    @Column(name = "status", nullable = false, length = 16)
-    private String status = "报价";
+    @Column(name = "status", nullable = false, length = 32)
+    private String status = StatusConstants.QUOTING;
 
     @Column(name = "remark", length = 255)
     private String remark;

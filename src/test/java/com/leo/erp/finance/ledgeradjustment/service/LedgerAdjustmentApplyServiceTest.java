@@ -126,12 +126,12 @@ class LedgerAdjustmentApplyServiceTest {
 
         assertThatThrownBy(() -> service.apply(new LedgerAdjustment(),
                 request("LA001", "预收", "客户", 10L, "CUST001", "客户A",
-                        null, null, 20L, "项目A", new BigDecimal("10.00"), "草稿")))
+                        null, null, 20L, "项目A", new BigDecimal("10.00"), "DRAFT")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("方向不合法");
         assertThatThrownBy(() -> service.apply(new LedgerAdjustment(),
                 request("LA001", "应收", "平台", 10L, "CUST001", "客户A",
-                        null, null, 20L, "项目A", new BigDecimal("10.00"), "草稿")))
+                        null, null, 20L, "项目A", new BigDecimal("10.00"), "DRAFT")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("往来类型不合法");
     }
@@ -142,12 +142,12 @@ class LedgerAdjustmentApplyServiceTest {
 
         assertThatThrownBy(() -> service.apply(new LedgerAdjustment(),
                 request("LA001", "应收", "供应商", null, "SUP001", "供应商A",
-                        30L, "客户主体", null, null, new BigDecimal("10.00"), "草稿")))
+                        30L, "客户主体", null, null, new BigDecimal("10.00"), "DRAFT")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("应收调整只能选择客户");
         assertThatThrownBy(() -> service.apply(new LedgerAdjustment(),
                 request("LA001", "应付", "客户", 10L, "CUST001", "客户A",
-                        null, null, 20L, "项目A", new BigDecimal("10.00"), "草稿")))
+                        null, null, 20L, "项目A", new BigDecimal("10.00"), "DRAFT")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("应付调整只能选择供应商或物流商");
     }
@@ -158,7 +158,7 @@ class LedgerAdjustmentApplyServiceTest {
 
         assertThatThrownBy(() -> service.apply(new LedgerAdjustment(),
                 request("LA001", "应收", "客户", null, "  ", "客户A",
-                        null, null, 20L, "项目A", new BigDecimal("10.00"), "草稿")))
+                        null, null, 20L, "项目A", new BigDecimal("10.00"), "DRAFT")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("往来单位编码不能为空");
     }
@@ -172,7 +172,7 @@ class LedgerAdjustmentApplyServiceTest {
 
         assertThatThrownBy(() -> service.apply(new LedgerAdjustment(),
                 request("LA001", "应收", "客户", 10L, "CUST001", "客户B",
-                        null, null, 20L, "项目A", new BigDecimal("10.00"), "草稿")))
+                        null, null, 20L, "项目A", new BigDecimal("10.00"), "DRAFT")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("客户名称与ID不一致");
     }
@@ -186,7 +186,7 @@ class LedgerAdjustmentApplyServiceTest {
 
         assertThatThrownBy(() -> service.apply(new LedgerAdjustment(),
                 request("LA002", "应付", "供应商", null, "SUP001", "供应商A",
-                        30L, "客户主体", 20L, "项目A", new BigDecimal("10.00"), "草稿")))
+                        30L, "客户主体", 20L, "项目A", new BigDecimal("10.00"), "DRAFT")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("供应商或物流商台账调整不能选择项目");
     }
@@ -202,7 +202,7 @@ class LedgerAdjustmentApplyServiceTest {
 
         LedgerAdjustment entity = new LedgerAdjustment();
         service.apply(entity, request("LA002", "应付", "供应商", null, "SUP001", "供应商A",
-                30L, "客户主体", null, null, new BigDecimal("10.00"), "草稿"));
+                30L, "客户主体", null, null, new BigDecimal("10.00"), "DRAFT"));
 
         assertThat(entity.getCounterpartyId()).isEqualTo(11L);
         assertThat(entity.getCounterpartyName()).isEqualTo("供应商A");
@@ -217,7 +217,7 @@ class LedgerAdjustmentApplyServiceTest {
 
         assertThatThrownBy(() -> service.apply(new LedgerAdjustment(),
                 request("LA002", "应付", "供应商", null, "SUP001", "供应商A",
-                        30L, "客户主体", null, null, new BigDecimal("10.00"), "草稿")))
+                        30L, "客户主体", null, null, new BigDecimal("10.00"), "DRAFT")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("供应商不存在");
     }
@@ -231,7 +231,7 @@ class LedgerAdjustmentApplyServiceTest {
 
         assertThatThrownBy(() -> service.apply(new LedgerAdjustment(),
                 request("LA001", "应收", "客户", 10L, "CUST001", "客户A",
-                        null, null, null, "项目A", new BigDecimal("10.00"), "草稿")))
+                        null, null, null, "项目A", new BigDecimal("10.00"), "DRAFT")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("项目名称不能脱离项目ID单独提交");
     }
@@ -256,7 +256,7 @@ class LedgerAdjustmentApplyServiceTest {
     void apply_shouldRejectStatusChangedByOrdinarySave() {
         LedgerAdjustmentApplyService service = service();
         LedgerAdjustment entity = new LedgerAdjustment();
-        entity.setStatus("已审核");
+        entity.setStatus("AUDITED");
 
         assertThatThrownBy(() -> service.apply(entity, customerRequest(null, null)))
                 .isInstanceOf(BusinessException.class)
@@ -269,7 +269,7 @@ class LedgerAdjustmentApplyServiceTest {
 
         assertThatThrownBy(() -> service.apply(new LedgerAdjustment(),
                 request("LA001", "应收", "客户", 10L, "CUST001", "客户A",
-                        null, null, 20L, "项目A", new BigDecimal("10.00"), "已审核")))
+                        null, null, 20L, "项目A", new BigDecimal("10.00"), "AUDITED")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("新建台账调整单只能保存为草稿");
     }
@@ -285,7 +285,7 @@ class LedgerAdjustmentApplyServiceTest {
 
         LedgerAdjustment entity = new LedgerAdjustment();
         service.apply(entity, request("LA003", "应收", "客户", 10L, "CUST001", "客户A",
-                30L, "客户主体", null, null, new BigDecimal("10.00"), "草稿", "  操作员  ", "  备注  "));
+                30L, "客户主体", null, null, new BigDecimal("10.00"), "DRAFT", "  操作员  ", "  备注  "));
 
         assertThat(entity.getOperatorName()).isEqualTo("操作员");
         assertThat(entity.getRemark()).isEqualTo("备注");
@@ -305,7 +305,7 @@ class LedgerAdjustmentApplyServiceTest {
 
         assertThatThrownBy(() -> service.apply(new LedgerAdjustment(),
                 request("LA003", "应收", "客户", 10L, "CUST001", "客户A",
-                        null, null, 20L, "项目A", new BigDecimal("10.00"), "草稿", "   ", null)))
+                        null, null, 20L, "项目A", new BigDecimal("10.00"), "DRAFT", "   ", null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("经办人不能为空");
     }
@@ -328,7 +328,7 @@ class LedgerAdjustmentApplyServiceTest {
                                                     String settlementCompanyName,
                                                     BigDecimal amount) {
         return request("LA001", "应收", "客户", 10L, "CUST001", "客户A",
-                settlementCompanyId, settlementCompanyName, 20L, "项目A", amount, "草稿");
+                settlementCompanyId, settlementCompanyName, 20L, "项目A", amount, "DRAFT");
     }
 
     private LedgerAdjustmentRequest request(String adjustmentNo,

@@ -84,7 +84,7 @@ public class Payment extends AbstractAuditableEntity implements StatusAwareEntit
     @Column(name = "amount", nullable = false, precision = 14, scale = 2)
     private BigDecimal amount;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "operator_name", nullable = false, length = 32)

@@ -121,7 +121,8 @@ public class PurchaseOrderForceCloseService {
                 saved,
                 "PURCHASE_ORDER_FORCE_CLOSED",
                 "强制结单",
-                "采购订单状态 已审核 -> 完成采购(强制结单), 作废未入库 " + remainingQuantity
+                "采购订单状态 " + StatusConstants.AUDITED + " -> " + StatusConstants.PURCHASE_COMPLETED
+                        + "(强制结单), 作废未入库 " + remainingQuantity
                         + " 件; 原因: " + trimmedReason
         );
         return queryService.toDetailResponse(saved);

@@ -66,7 +66,7 @@ class CarrierServiceTest {
     private CarrierRequest request(String carrierName) {
         return new CarrierRequest("111", carrierName, "联系人", "13800000000", "厢式",
                 List.of(new VehicleItem("沪a1234", "司机", "13900000000", null)),
-                "满载", 9L, "正常", "备注");
+                "满载", 9L, "NORMAL", "备注");
     }
 
     @Test
@@ -90,7 +90,7 @@ class CarrierServiceTest {
         assertThat(entity.getCarrierName()).isEqualTo("承运A");
         assertThat(entity.getDefaultSettlementCompanyId()).isEqualTo(9L);
         assertThat(entity.getDefaultSettlementCompanyName()).isEqualTo("结算公司C");
-        assertThat(entity.getStatus()).isEqualTo("正常");
+        assertThat(entity.getStatus()).isEqualTo("NORMAL");
         assertThat(entity.getVehicles()).hasSize(1);
         assertThat(entity.getVehicles().getFirst().getPlate()).isEqualTo("沪A1234");
         assertThat(entity.getVehicles().getFirst().getId()).isEqualTo(78L);
@@ -112,7 +112,7 @@ class CarrierServiceTest {
         });
 
         service().create(new CarrierRequest(" 111 ", "  承运A  ", " 联系人 ", " 138 ", " 厢式 ", null,
-                " 满载 ", 9L, "正常", " 备注 "));
+                " 满载 ", 9L, "NORMAL", " 备注 "));
 
         Carrier entity = savedHolder[0];
         assertThat(entity.getCarrierName()).isEqualTo("承运A");
@@ -159,7 +159,7 @@ class CarrierServiceTest {
         CarrierRequest request = new CarrierRequest("111", "承运A", null, null, null,
                 List.of(new VehicleItem("沪A1234", null, null, null),
                         new VehicleItem("沪A1234", null, null, null)),
-                null, 9L, "正常", null);
+                null, 9L, "NORMAL", null);
 
         assertThatThrownBy(() -> service().create(request))
                 .isInstanceOf(BusinessException.class)

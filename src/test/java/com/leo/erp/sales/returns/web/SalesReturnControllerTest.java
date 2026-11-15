@@ -76,7 +76,7 @@ class SalesReturnControllerTest {
     private SalesReturnRequest request() {
         return new SalesReturnRequest(
                 "SR001", "SO001", 10L, "客户A", 20L, "项目A", 1L, "库房A",
-                LocalDate.of(2026, 9, 1), "草稿", null, List.of(), false);
+                LocalDate.of(2026, 9, 1), "DRAFT", null, List.of(), false);
     }
 
     @Test
@@ -85,7 +85,7 @@ class SalesReturnControllerTest {
                 .thenReturn(mock(org.springframework.data.domain.Page.class));
 
         var result = controller.page(mock(PageQuery.class), "kw", 10L, "客户A", 20L, "项目A",
-                "品牌X", "草稿", LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
+                "品牌X", "DRAFT", LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
 
         assertThat(result).isNotNull();
         // 「商品信息」关键字必须原样透传到 Service（Controller → Service 链路的唯一验证点）
@@ -154,8 +154,8 @@ class SalesReturnControllerTest {
         SalesReturnResponse response = mock(SalesReturnResponse.class);
         when(service.updateStatus(anyLong(), anyString())).thenReturn(response);
 
-        assertThat(controller.updateStatus(5L, new StatusUpdateRequest("已审核"))).isSameAs(response);
-        verify(service).updateStatus(5L, "已审核");
+        assertThat(controller.updateStatus(5L, new StatusUpdateRequest("AUDITED"))).isSameAs(response);
+        verify(service).updateStatus(5L, "AUDITED");
     }
 
     @Test
@@ -222,7 +222,7 @@ class SalesReturnControllerTest {
         SalesReturnResponse response = new SalesReturnResponse(
                 9223372036854775807L, "SR001", "SO001", 9007199254740993L, "客户A",
                 9007199254740995L, "项目A", 9007199254740997L, "库房A", null, null,
-                LocalDate.of(2026, 9, 1), null, null, "草稿", false, null,
+                LocalDate.of(2026, 9, 1), null, null, "DRAFT", false, null,
                 List.of(new SalesReturnItemResponse(
                         9007199254740999L, 1, 9007199254741001L, "OB001", 9007199254741003L, "SO001",
                         null, null, null, null, null, "M001", "品牌", "型钢", "螺纹钢", "HRB400", "12m",

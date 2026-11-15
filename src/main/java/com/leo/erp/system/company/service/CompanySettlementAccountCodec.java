@@ -49,7 +49,10 @@ public class CompanySettlementAccountCodec {
             String bankName = normalizeOptional(request.bankName());
             String bankAccount = normalizeOptional(request.bankAccount());
             String usageType = defaultIfBlank(request.usageType(), "通用");
-            String status = defaultIfBlank(request.status(), StatusConstants.NORMAL);
+            String status = StatusConstants.toCode(request.status());
+            if (status == null) {
+                status = StatusConstants.NORMAL;
+            }
             if (!bankAccount.isBlank() && !usedBankAccounts.add(bankAccount)) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "银行账号不能重复: " + bankAccount);
             }

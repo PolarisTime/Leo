@@ -8,10 +8,12 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 单据/业务状态代码层枚举。
+ * 单据/业务状态代码层枚举：{@link #code()} 是数据库与 API 的唯一存储/传输值，
+ * {@link #label()} 只保留为中文展示文案与迁移前旧数据的兼容映射。
  *
- * <p>数据库与 API 仍然存储、传输 {@link #label()} 中文值，本枚举只用于代码层消除魔法字符串，
- * 不改变任何持久化值与对外契约。</p>
+ * <p>V219 迁移把 37 张表的 status/result_status 从中文 label 改为稳定英文 code；
+ * 新代码一律使用 {@code StatusConstants} 的 code 常量，只有「旧 label 入参归一化」「中文展示」
+ * 与「历史数据兼容」三处允许使用 {@link #label()}。</p>
  */
 public enum DocumentStatus {
 
@@ -51,19 +53,23 @@ public enum DocumentStatus {
     private static final Map<String, DocumentStatus> BY_LABEL;
     private static final Map<String, DocumentStatus> BY_CODE;
     private static final Set<String> LABELS;
+    private static final Set<String> CODES;
 
     static {
         Map<String, DocumentStatus> byLabel = new LinkedHashMap<>();
         Map<String, DocumentStatus> byCode = new LinkedHashMap<>();
         Set<String> labels = new LinkedHashSet<>();
+        Set<String> codes = new LinkedHashSet<>();
         for (DocumentStatus status : values()) {
             byLabel.put(status.label, status);
             byCode.put(status.code, status);
             labels.add(status.label);
+            codes.add(status.code);
         }
         BY_LABEL = Collections.unmodifiableMap(byLabel);
         BY_CODE = Collections.unmodifiableMap(byCode);
         LABELS = Collections.unmodifiableSet(labels);
+        CODES = Collections.unmodifiableSet(codes);
     }
 
     private final String code;
@@ -128,8 +134,13 @@ public enum DocumentStatus {
         return fromCode(code).map(DocumentStatus::label).orElse(null);
     }
 
-    /** 全部中文状态值（去重，按枚举声明顺序）。 */
+    /** 全部中文状态值（去重，按枚举声明顺序）；仅用于旧数据/展示兼容，不再是对外契约值。 */
     public static Set<String> labels() {
         return LABELS;
+    }
+
+    /** 全部稳定英文状态 code（去重，按枚举声明顺序）。 */
+    public static Set<String> codes() {
+        return CODES;
     }
 }

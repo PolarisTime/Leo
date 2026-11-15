@@ -27,7 +27,7 @@ public record CarrierRequest(
         @NotNull(message = "默认结算主体不能为空")
         @SnowflakeId Long defaultSettlementCompanyId,
         @NotBlank(message = ValidationMessages.STATUS_REQUIRED)
-        @Size(max = 16, message = "状态长度不能超过16")
+        @Size(max = 32, message = "状态长度不能超过32")
         String status,
         @Size(max = 255, message = "备注长度不能超过255")
         String remark

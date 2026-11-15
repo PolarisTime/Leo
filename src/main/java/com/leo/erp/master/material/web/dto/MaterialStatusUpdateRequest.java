@@ -13,12 +13,12 @@ import jakarta.validation.constraints.Size;
  * 已被 {@code FreezingArchRule} 冻结（存量豁免），但新代码不应继续扩大违规面 ——
  * 冻结规则的含义正是「存量不追究、增量不允许」。</p>
  *
- * <p>字段与校验和 common 那个 DTO 保持一致（status 必填、长度 16），因为各模块
- * status 列统一是 varchar(16)；差异只在归属模块。</p>
+ * <p>字段与校验和 common 那个 DTO 保持一致（status 必填、长度 32），因为各模块
+ * status 列统一是 varchar(32)（需容纳 DELIVERY_VERIFICATION 等长 code）；差异只在归属模块。</p>
  */
 public record MaterialStatusUpdateRequest(
         @NotBlank(message = ValidationMessages.STATUS_REQUIRED)
-        @Size(max = 16, message = "状态长度不能超过16个字符")
+        @Size(max = 32, message = "状态长度不能超过32个字符")
         String status
 ) {
 }

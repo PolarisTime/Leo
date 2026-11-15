@@ -48,7 +48,7 @@ public class MdLengthPremium extends AbstractAuditableEntity implements StatusAw
     private Integer sortOrder;
 
     /** 状态：正常 / 禁用；仅正常参与匹配。 */
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "remark", length = 255)

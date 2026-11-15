@@ -165,7 +165,7 @@ class PurchaseOrderQueryServiceTest {
         void applyDerivedValues_shouldCarryUnreceivedQuantityOntoResponse() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
-                    null, null, "已审核", false, null, List.of()
+                    null, null, "AUDITED", false, null, List.of()
             );
 
             PurchaseOrderResponse enriched = service.applyDerivedValues(
@@ -185,7 +185,7 @@ class PurchaseOrderQueryServiceTest {
         void applyDerivedValues_shouldCarryPositiveReceivedQuantityOntoResponse() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
-                    null, null, "已审核", false, null, List.of()
+                    null, null, "AUDITED", false, null, List.of()
             );
 
             PurchaseOrderResponse enriched = service.applyDerivedValues(
@@ -202,7 +202,7 @@ class PurchaseOrderQueryServiceTest {
         void applyDerivedValues_shouldCarryZeroReceivedQuantityOntoResponse() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
-                    null, null, "已审核", false, null, List.of()
+                    null, null, "AUDITED", false, null, List.of()
             );
 
             PurchaseOrderResponse enriched = service.applyDerivedValues(
@@ -220,7 +220,7 @@ class PurchaseOrderQueryServiceTest {
         void applyDerivedValues_shouldCarryZeroActualAmountAndNegativeDifference() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
-                    null, new BigDecimal("800.00"), "已审核", false, null, List.of()
+                    null, new BigDecimal("800.00"), "AUDITED", false, null, List.of()
             );
 
             PurchaseOrderResponse enriched = service.applyDerivedValues(
@@ -238,7 +238,7 @@ class PurchaseOrderQueryServiceTest {
         void applyDerivedValues_shouldCarryPositiveDifferenceWhenActualExceedsTentative() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
-                    null, new BigDecimal("500.00"), "已审核", false, null, List.of()
+                    null, new BigDecimal("500.00"), "AUDITED", false, null, List.of()
             );
 
             PurchaseOrderResponse enriched = service.applyDerivedValues(
@@ -255,7 +255,7 @@ class PurchaseOrderQueryServiceTest {
         void applyDerivedValues_shouldCarryZeroDifference() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
-                    null, new BigDecimal("500.00"), "已审核", false, null, List.of()
+                    null, new BigDecimal("500.00"), "AUDITED", false, null, List.of()
             );
 
             PurchaseOrderResponse enriched = service.applyDerivedValues(
@@ -272,7 +272,7 @@ class PurchaseOrderQueryServiceTest {
         void applyDifference_shouldPassthroughIncludingNullValues() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
-                    null, null, "已审核", false, null, List.of()
+                    null, null, "AUDITED", false, null, List.of()
             );
 
             PurchaseOrderResponse withValues = base.applyDifference(
@@ -289,7 +289,7 @@ class PurchaseOrderQueryServiceTest {
         void applyDerivedValues_shouldLeaveResponseUntouchedWhenStatusMissing() {
             PurchaseOrderResponse base = new PurchaseOrderResponse(
                     1L, "PO-1", null, null, "供应商", null, null, null, null,
-                    null, null, "已审核", false, null, List.of()
+                    null, null, "AUDITED", false, null, List.of()
             );
 
             assertThat(service.applyDerivedValues(base, null)).isSameAs(base);

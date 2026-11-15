@@ -173,14 +173,14 @@ class QuoteSheetValidationExtremeTest {
         existing.setRefDate(LocalDate.of(2026, 9, 10));
         existing.setRefPeriod("9:30 上午");
         existing.setLengthPremium(new BigDecimal("30"));
-        existing.setStatus("报价");
+        existing.setStatus("QUOTING");
         existing.setVersion(5L);
         when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
         when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
 
         QuoteSheetRequest request = new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null, null, null);
+                new BigDecimal("30"), false, false, "QUOTING", null, null, null);
         QuoteSheetResponse response = store().update(9L, request, 5L);
 
         assertThat(response.version()).isEqualTo(5L);
@@ -204,7 +204,7 @@ class QuoteSheetValidationExtremeTest {
 
         QuoteSheetRequest request = new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), null, true, "报价", null, null, null);
+                new BigDecimal("30"), null, true, "QUOTING", null, null, null);
         QuoteSheetResponse response = store().update(9L, request, 2L);
 
         assertThat(response.specQuantityLocked()).isTrue();
@@ -215,13 +215,13 @@ class QuoteSheetValidationExtremeTest {
                                       List<QuoteSheetRequest.ItemRequest> items) {
         return new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, false, "报价", null, brands, items);
+                new BigDecimal("30"), false, false, "QUOTING", null, brands, items);
     }
 
     private QuoteSheetRequest fullRequest(Integer spec, BigDecimal ton, String spotPrice, boolean specQuantityLocked) {
         return new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, specQuantityLocked, "报价", null,
+                new BigDecimal("30"), false, specQuantityLocked, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(new QuoteSheetRequest.ItemRequest("螺纹钢", "HRB400E", spec, "9米", ton,
                         List.of(new QuoteSheetRequest.ItemPriceRequest("中天", new BigDecimal(spotPrice), null)))));
@@ -230,7 +230,7 @@ class QuoteSheetValidationExtremeTest {
     private QuoteSheetRequest holeRequest(String spotPrice1, String spotPrice2, int spec2, BigDecimal ton2) {
         return new QuoteSheetRequest(
                 "9月9日报单", null, "云潮筝鸣府", LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午",
-                new BigDecimal("30"), false, true, "报价", null,
+                new BigDecimal("30"), false, true, "QUOTING", null,
                 List.of(new QuoteSheetRequest.BrandRequest("中天", new BigDecimal("30"), 0)),
                 List.of(itemRequest("螺纹钢", "HRB400E", 12, "10", spotPrice1),
                         itemRequest("盘螺", "HRB400E", spec2, ton2.toPlainString(), spotPrice2)));

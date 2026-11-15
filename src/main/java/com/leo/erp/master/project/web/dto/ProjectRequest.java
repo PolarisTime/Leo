@@ -32,7 +32,7 @@ public record ProjectRequest(
         @Size(max = 128, message = "结算主体名称长度不能超过128")
         String settlementCompanyName,
         @NotBlank(message = ValidationMessages.STATUS_REQUIRED)
-        @Size(max = 16, message = "状态长度不能超过16")
+        @Size(max = 32, message = "状态长度不能超过32")
         String status,
         /** 网价浮动方向: ADD加价/SUBTRACT减价; 空表示不浮动。 */
         String priceFloatMode,

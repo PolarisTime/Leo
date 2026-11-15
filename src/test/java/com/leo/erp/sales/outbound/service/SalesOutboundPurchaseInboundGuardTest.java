@@ -123,9 +123,9 @@ class SalesOutboundPurchaseInboundGuardTest {
         ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
         verify(jdbc).query(sqlCaptor.capture(), any(RowMapper.class), any());
         String sql = sqlCaptor.getValue();
-        assertThat(sql).doesNotContain("完成采购");
+        assertThat(sql).doesNotContain("PURCHASE_COMPLETED");
         assertThat(sql).doesNotContain("source_order.status");
-        assertThat(sql).contains("inbound.status IN ('已审核', '完成入库')");
+        assertThat(sql).contains("inbound.status IN ('AUDITED', 'INBOUND_COMPLETED')");
     }
 
     private void stubSource(SalesOutbound outbound, Long sourceSalesOrderItemId, Long purchaseOrderItemId) {

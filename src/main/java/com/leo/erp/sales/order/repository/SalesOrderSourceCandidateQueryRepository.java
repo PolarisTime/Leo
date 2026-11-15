@@ -235,7 +235,7 @@ public class SalesOrderSourceCandidateQueryRepository {
                       ON allocation.source_item_id = inbound_item.id
                     WHERE purchase_order.deleted_flag = FALSE
                       AND inbound.deleted_flag = FALSE
-                      AND inbound.status IN ('已审核', '完成入库')
+                      AND inbound.status IN ('AUDITED', 'INBOUND_COMPLETED')
                       AND (:supplierId IS NULL OR purchase_order.supplier_id = :supplierId)
                       AND (:settlementCompanyId IS NULL OR purchase_order.settlement_company_id = :settlementCompanyId)
                       AND (:startDate IS NULL OR purchase_order.order_date >= :startDate)

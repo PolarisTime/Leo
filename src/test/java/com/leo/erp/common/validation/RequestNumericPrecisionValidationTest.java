@@ -104,12 +104,12 @@ class RequestNumericPrecisionValidationTest {
     void paymentAndReceipt_rejectOverPrecisionAmount() {
         PaymentRequest payment = new PaymentRequest(null, "供应商", null, "采购付款", "编码", "供应商A",
                 null, null, null, null, null, null, null, 1L, LocalDate.of(2026, 1, 1), "电汇",
-                new BigDecimal("1.123"), "已审核", "张三", null, List.of(), true);
+                new BigDecimal("1.123"), "AUDITED", "张三", null, List.of(), true);
         assertThat(digitsViolationPaths(payment)).containsExactly("amount");
 
         ReceiptRequest receipt = new ReceiptRequest(null, "客户", null, "编码", "客户A", null, null, null,
                 "客户A", null, null, null, null, 1L, null, LocalDate.of(2026, 1, 1), "电汇",
-                new BigDecimal("1234567890123.00"), "已审核", "张三", null, List.of(), true);
+                new BigDecimal("1234567890123.00"), "AUDITED", "张三", null, List.of(), true);
         assertThat(digitsViolationPaths(receipt)).containsExactly("amount");
     }
 
@@ -125,7 +125,7 @@ class RequestNumericPrecisionValidationTest {
 
         LedgerAdjustmentRequest adjustment = new LedgerAdjustmentRequest("A001", "增加", "供应商", null, "编码",
                 "供应商A", 1L, null, null, null, LocalDate.of(2026, 1, 1), new BigDecimal("1.123"),
-                "手工调整", "增加余额", "已审核", "张三", null);
+                "手工调整", "增加余额", "AUDITED", "张三", null);
         assertThat(digitsViolationPaths(adjustment)).containsExactly("amount");
 
         DocumentChargeItemRequest chargeItem =
@@ -138,7 +138,7 @@ class RequestNumericPrecisionValidationTest {
         PurchaseOrderItemRequest badItem = purchaseOrderItem(new BigDecimal("1.0"), new BigDecimal("1.00"),
                 new BigDecimal("1234567890123.00"));
         PurchaseOrderRequest request = new PurchaseOrderRequest("PO001", "供应商编码", "供应商A",
-                LocalDateTime.of(2026, 1, 1, 0, 0), "采购员", 1L, "待审核", null, List.of(badItem));
+                LocalDateTime.of(2026, 1, 1, 0, 0), "采购员", 1L, "PENDING_AUDIT", null, List.of(badItem));
 
         Set<String> paths = digitsViolationPaths(request);
         assertThat(paths).containsExactly("items[0].amount");

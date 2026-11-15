@@ -9,6 +9,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.service.CrudOperationLogger;
 import com.leo.erp.common.service.CrudStatusGuard;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.DocumentStatus;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.common.support.TradeItemCalculator;
@@ -214,7 +215,7 @@ public class MaterialService {
         if (!StatusConstants.NORMAL.equals(StatusConstants.normalizeActiveStatus(status, "商品状态"))) {
             throw new BusinessException(
                     ErrorCode.VALIDATION_ERROR,
-                    "新建商品的状态只能是「" + StatusConstants.NORMAL + "」，禁用请使用启停接口"
+                    "新建商品的状态只能是「" + DocumentStatus.NORMAL.label() + "」，禁用请使用启停接口"
             );
         }
     }

@@ -4,6 +4,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.DocumentStatus;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.material.domain.MaterialSnapshot;
@@ -385,7 +386,7 @@ class MaterialServiceTest {
         Material entity = existingPhysical(5L, StatusConstants.NORMAL);
         when(materialRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
 
-        assertThatThrownBy(() -> service().updateStatus(5L, "作废"))
+        assertThatThrownBy(() -> service().updateStatus(5L, "VOIDED"))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -451,7 +452,7 @@ class MaterialServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
-                .hasMessageContaining("只能是「正常」");
+                .hasMessageContaining("只能是「" + DocumentStatus.NORMAL.label() + "」");
         verify(materialRepository, never()).save(any());
         verify(codeIssuanceService, never()).consume(anyString(), anyString());
     }
@@ -489,7 +490,7 @@ class MaterialServiceTest {
         when(materialRepository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(codeIssuanceService.resolve("material", "M001", "111")).thenReturn("M001");
 
-        assertThatThrownBy(() -> service().update(5L, requestWithStatus("作废")))
+        assertThatThrownBy(() -> service().update(5L, requestWithStatus("VOIDED")))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))
@@ -499,7 +500,7 @@ class MaterialServiceTest {
 
     @Test
     void page_invalidStatus_rejectedBeforeQuery() {
-        assertThatThrownBy(() -> service().page(new PageQuery(0, 20, null, null), null, null, null, null, "作废"))
+        assertThatThrownBy(() -> service().page(new PageQuery(0, 20, null, null), null, null, null, null, "VOIDED"))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(ErrorCode.VALIDATION_ERROR))

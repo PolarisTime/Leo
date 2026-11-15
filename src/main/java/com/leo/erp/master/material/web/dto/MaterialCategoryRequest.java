@@ -16,7 +16,7 @@ public record MaterialCategoryRequest(
         @Max(value = 9999, message = "排序值不能超过9999")
         Integer sortOrder,
         Boolean purchaseWeighRequired,
-        @Size(max = 16, message = "状态长度不能超过16个字符")
+        @Size(max = 32, message = "状态长度不能超过32个字符")
         String status,
         @Size(max = 255, message = "备注长度不能超过255个字符")
         String remark

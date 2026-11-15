@@ -86,7 +86,7 @@ class MaterialControllerTest {
 
         mockMvc.perform(patch(PATH + "/5/status")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"禁用\"}"))
+                        .content("{\"status\":\"DISABLED\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(5))
                 .andExpect(jsonPath("$.status").value(StatusConstants.DISABLED));
@@ -100,7 +100,7 @@ class MaterialControllerTest {
 
         mockMvc.perform(patch(PATH + "/5/status")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"正常\"}"))
+                        .content("{\"status\":\"NORMAL\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(StatusConstants.NORMAL));
     }

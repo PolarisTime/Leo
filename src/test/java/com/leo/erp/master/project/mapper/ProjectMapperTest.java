@@ -20,7 +20,7 @@ class ProjectMapperTest {
         project.setProjectCode("P001");
         project.setProjectName("项目A");
         project.setCustomerCode("C007");
-        project.setStatus("正常");
+        project.setStatus("NORMAL");
         project.setAllowedBrands(" 沙钢 ,永钢");
         project.setAllowedMaterials("HRB400E");
         project.setAllowedBrandSeverity("BLOCK");

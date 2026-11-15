@@ -88,12 +88,12 @@ class ProjectRequestValidationTest {
 
     private ProjectRequest allAtMaxLength() {
         return textRequest(repeat(64), repeat(200), repeat(100), repeat(255), repeat(32),
-                repeat(128), repeat(32), "正常", repeat(255));
+                repeat(128), repeat(32), "NORMAL", repeat(255));
     }
 
     private ProjectRequest allOverMaxLength() {
         return textRequest(repeat(65), repeat(201), repeat(101), repeat(256), repeat(33),
-                repeat(129), repeat(33), repeat(17), repeat(256));
+                repeat(129), repeat(33), repeat(33), repeat(256));
     }
 
     private static String repeat(int length) {
@@ -102,7 +102,7 @@ class ProjectRequestValidationTest {
 
     @Test
     void textFieldsAtDatabaseMaxLength_areAccepted() {
-        // 边界值必须通过: md_project 对应列分别是 64/200/100/255/32/128/32/16/255
+        // 边界值必须通过: md_project 对应列分别是 64/200/100/255/32/128/32/32(V219 状态列扩容)/255
         assertThat(validator.validate(allAtMaxLength())).isEmpty();
     }
 
@@ -122,7 +122,7 @@ class ProjectRequestValidationTest {
     private ProjectRequest request(List<String> allowedBrands, List<String> allowedMaterials) {
         return new ProjectRequest(
                 "XM001", "项目一", null, null, null,
-                7L, "C007", null, null, "正常",
+                7L, "C007", null, null, "NORMAL",
                 null, null, null, null,
                 allowedBrands, allowedMaterials, null);
     }

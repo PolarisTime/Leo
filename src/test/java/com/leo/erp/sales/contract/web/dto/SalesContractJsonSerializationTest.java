@@ -34,7 +34,7 @@ class SalesContractJsonSerializationTest {
                 null,
                 new BigDecimal("1000000.00"),
                 new BigDecimal("3000.50000000"),
-                "审核",
+                "CONTRACT_REVIEWED",
                 null,
                 null,
                 null,

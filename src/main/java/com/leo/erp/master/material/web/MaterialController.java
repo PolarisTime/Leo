@@ -143,7 +143,7 @@ public class MaterialController {
     }
 
     /**
-     * 商品启停：PATCH /materials/{id}/status，请求体 {"status": "正常" | "禁用"}。
+     * 商品启停：PATCH /materials/{id}/status，请求体 {"status": "NORMAL" | "DISABLED"}（迁移期也接受旧中文 label）。
      *
      * <p>与角色启停端点同形态（状态是资源的受控字段，不建动作后缀路径）；
      * 双向可切换，返回更新后的商品资源。</p>

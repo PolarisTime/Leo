@@ -226,8 +226,10 @@ public class SalesContractService {
         );
     }
 
+    /** 归一化为稳定 code：兼容旧中文 label（草稿/审核/签发/归档/作废）。 */
     private String normalizeStatus(String value) {
-        return value == null ? "" : value.trim();
+        String code = StatusConstants.toCode(value);
+        return code == null ? "" : code;
     }
 
     private String trimToNull(String value) {

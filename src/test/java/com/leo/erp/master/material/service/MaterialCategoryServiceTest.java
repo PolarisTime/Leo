@@ -49,7 +49,7 @@ class MaterialCategoryServiceTest {
     }
 
     private MaterialCategoryRequest request(String categoryName) {
-        return new MaterialCategoryRequest("LB001", categoryName, 3, true, "正常 ", " 备注 ");
+        return new MaterialCategoryRequest("LB001", categoryName, 3, true, "NORMAL ", " 备注 ");
     }
 
     @Test
@@ -63,7 +63,7 @@ class MaterialCategoryServiceTest {
             return entity;
         });
         MaterialCategoryResponse response = new MaterialCategoryResponse(77L, "LB001", "类别A",
-                3, true, "正常", "备注");
+                3, true, "NORMAL", "备注");
         when(materialCategoryMapper.toResponse(any(MaterialCategory.class))).thenReturn(response);
 
         service().create(request("类别A"));
@@ -74,7 +74,7 @@ class MaterialCategoryServiceTest {
         assertThat(entity.getCategoryName()).isEqualTo("类别A");
         assertThat(entity.getSortOrder()).isEqualTo(3);
         assertThat(entity.getPurchaseWeighRequired()).isTrue();
-        assertThat(entity.getStatus()).isEqualTo("正常");
+        assertThat(entity.getStatus()).isEqualTo("NORMAL");
         assertThat(entity.getRemark()).isEqualTo("备注");
         verify(codeIssuanceService).validate("material-categories", "LB001");
         verify(codeIssuanceService).consume("material-categories", "LB001");
@@ -91,14 +91,14 @@ class MaterialCategoryServiceTest {
             return entity;
         });
         when(materialCategoryMapper.toResponse(any(MaterialCategory.class))).thenReturn(
-                new MaterialCategoryResponse(77L, "LB001", "类别A", 0, false, "正常", null));
+                new MaterialCategoryResponse(77L, "LB001", "类别A", 0, false, "NORMAL", null));
 
         service().create(new MaterialCategoryRequest("LB001", "类别A", null, null, null, null));
 
         MaterialCategory entity = savedHolder[0];
         assertThat(entity.getSortOrder()).isZero();
         assertThat(entity.getPurchaseWeighRequired()).isFalse();
-        assertThat(entity.getStatus()).isEqualTo("正常");
+        assertThat(entity.getStatus()).isEqualTo("NORMAL");
         assertThat(entity.getRemark()).isNull();
     }
 
@@ -135,7 +135,7 @@ class MaterialCategoryServiceTest {
         when(repository.findByIdAndDeletedFlagFalse(5L)).thenReturn(Optional.of(entity));
         when(repository.save(entity)).thenReturn(entity);
         MaterialCategoryResponse response = new MaterialCategoryResponse(5L, "LB001", "新类别",
-                1, false, "正常", null);
+                1, false, "NORMAL", null);
         when(materialCategoryMapper.toResponse(entity)).thenReturn(response);
 
         MaterialCategoryResponse result = service().update(5L, request("新类别"));
@@ -163,7 +163,7 @@ class MaterialCategoryServiceTest {
     void options_mapsThroughOptionMapper() {
         MaterialCategory entity = new MaterialCategory();
         MaterialCategoryOptionResponse option = new MaterialCategoryOptionResponse("类别A", "类别A", true);
-        when(repository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常"))
+        when(repository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("NORMAL"))
                 .thenReturn(List.of(entity));
         when(materialCategoryMapper.toOptionResponse(entity)).thenReturn(option);
 

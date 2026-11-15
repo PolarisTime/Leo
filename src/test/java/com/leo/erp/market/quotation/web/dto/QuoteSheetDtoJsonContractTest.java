@@ -31,7 +31,7 @@ class QuoteSheetDtoJsonContractTest {
         QuoteSheetResponse response = new QuoteSheetResponse(
                 9223372036854775807L, "9223372036854775807", "9月9日报单", 123L, "云潮筝鸣府",
                 LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30.00"),
-                false, true, "报价", null,
+                false, true, "QUOTING", null,
                 List.of(new QuoteSheetResponse.BrandResponse(1L, "中天", new BigDecimal("30.00"), 0)),
                 List.of(new QuoteSheetResponse.ItemResponse(2L, 1, QuoteRowType.PRODUCT, "螺纹钢",
                         "HRB400E", 12, "9米", "急单",
@@ -128,7 +128,7 @@ class QuoteSheetDtoJsonContractTest {
         QuoteSheetResponse response = new QuoteSheetResponse(
                 1L, "1", "报单", null, null,
                 LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30.00"),
-                false, false, "报价", null, List.of(),
+                false, false, "QUOTING", null, List.of(),
                 List.of(new QuoteSheetResponse.ItemResponse(2L, 1, QuoteRowType.PRODUCT, "螺纹钢",
                         "HRB400E", 12, "9米", null, new BigDecimal("10.00000000"), true,
                         List.of())),
@@ -170,7 +170,7 @@ class QuoteSheetDtoJsonContractTest {
         QuoteSheetResponse response = new QuoteSheetResponse(
                 1L, "1", "报单", null, null,
                 LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30.00"),
-                false, false, "报价", null, List.of(),
+                false, false, "QUOTING", null, List.of(),
                 List.of(new QuoteSheetResponse.ItemResponse(2L, 1, QuoteRowType.PRODUCT, "螺纹钢",
                         "HRB400", 12, "9米", null, new BigDecimal("10.00000000"),
                         List.of(new QuoteSheetResponse.ItemPriceResponse(
@@ -188,7 +188,7 @@ class QuoteSheetDtoJsonContractTest {
         QuoteSheetResponse response = new QuoteSheetResponse(
                 1L, "1", "报单", null, null,
                 LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), "9:30 上午", new BigDecimal("30.00"),
-                false, false, "报价", null, List.of(),
+                false, false, "QUOTING", null, List.of(),
                 List.of(new QuoteSheetResponse.ItemResponse(2L, 1, QuoteRowType.PRODUCT, "螺纹钢",
                         "HRB400E", 12, "9米", null, new BigDecimal("10.00000000"),
                         List.of(new QuoteSheetResponse.ItemPriceResponse(
