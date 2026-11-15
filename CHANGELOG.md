@@ -1,3 +1,40 @@
+# [19.0.0](https://github.com/PolarisTime/Leo/compare/v18.2.1...v19.0.0) (2026-11-15)
+
+
+* feat(api)!: 状态枚举中文 label 全量迁移为稳定英文 code ([365e3a8](https://github.com/PolarisTime/Leo/commit/365e3a804d3e79a22142d9385f4b22a877f5ef53))
+* feat(api)!: 统一 v2.0 返回体契约、资源化导出端点并移除旧接口 ([0386c20](https://github.com/PolarisTime/Leo/commit/0386c2049448fd976f71a9dc0ec5f655fcc70382))
+* refactor(price-compare)!: 报单比价与采购订单彻底解耦 ([658f90a](https://github.com/PolarisTime/Leo/commit/658f90a030048c5b541e7fcc4de3bab445a76f3f))
+
+
+### Bug Fixes
+
+* **api:** 为全部 Long 查询参数补 @Positive 并加契约测试（审计 P2 [#12](https://github.com/PolarisTime/Leo/issues/12)） ([504c025](https://github.com/PolarisTime/Leo/commit/504c025a17eba9fce05a25ca4b9d3f9702c01741))
+* **api:** 打印预览启用排序白名单并补资金流水查询参数校验 ([8b05ddb](https://github.com/PolarisTime/Leo/commit/8b05ddb716f41c46283dd1fb6673265a4a9697cd))
+* **api:** 移除状态迁移后未使用的 List import ([7dba0a7](https://github.com/PolarisTime/Leo/commit/7dba0a7b019d9113d696fc7db806179cdf27b818))
+* **api:** 统一打印输出 null 策略并锁定动态字段契约 ([4610c4f](https://github.com/PolarisTime/Leo/commit/4610c4f6bd7a35f6e6e8b0cfe1cccf1c8ab6e1ca))
+* **api:** 统一提货清单预览路径并修正版本前缀注释 ([e1b0d01](https://github.com/PolarisTime/Leo/commit/e1b0d01ebb1bf238866538b8bb77ef9e466eda56))
+* **collab:** 修复物化写审计表因 cellKey 含 NUL 导致整事务回滚 ([5bf4a03](https://github.com/PolarisTime/Leo/commit/5bf4a0358bbff21684069a07931dfd3e167a15b6))
+* **supplier-price:** 修复供应商价格表保存必现 409（版本号与条目替换） ([7e48af2](https://github.com/PolarisTime/Leo/commit/7e48af24b01b5086bde3cc91a5350e738974ad23))
+
+
+### Features
+
+* **account:** 新增界面设置跨设备同步接口 ([82fa459](https://github.com/PolarisTime/Leo/commit/82fa4590fc53ce9e7d43717153b7f54004499a8d))
+* **api:** 请求体雪花 ID 统一只接受字符串并新增状态 code/label 映射层 ([f20b12a](https://github.com/PolarisTime/Leo/commit/f20b12a8a5ff919d46cdf9ebfb51c8c95651747a))
+* **api:** 资金流水改为标准分页并新增独立汇总端点 ([badd37c](https://github.com/PolarisTime/Leo/commit/badd37cb58ce078c5a26c23fae7f9ece92420cc2))
+* **collab:** 供应商价格表实时协作：V218 协作表 + 房间票据接口 ([490d1d2](https://github.com/PolarisTime/Leo/commit/490d1d2d8ff495b5d6169b8d325838375542f18a))
+* **collab:** 报单比价协作房间票据 + 票据能力上提到公共包 ([a9801b2](https://github.com/PolarisTime/Leo/commit/a9801b2c7e664fb2f757c30ae96689735a9ee171))
+* **collab:** 新增供应商价格表实时协作边车 ([c09bb3a](https://github.com/PolarisTime/Leo/commit/c09bb3a06a7f826e25bdb6933fc30c926db23d01))
+* **print:** 打印模板只给采购/销售/物流保留多套, 其余单据停用非默认模板 ([a16988a](https://github.com/PolarisTime/Leo/commit/a16988a32090fbed613af38f965f3cb819652102))
+* **supplier-price:** 条目级改价时间 + 报单比价保存不再清空历史现货价 ([045e415](https://github.com/PolarisTime/Leo/commit/045e41517dbf4378930d48055918949e97b5a2cd))
+
+
+### BREAKING CHANGES
+
+* status/result_status 对外与数据库值改为英文 code（NORMAL/DRAFT/AUDITED/PURCHASE_COMPLETED/SALES_COMPLETED/DELIVERY_VERIFICATION/QUOTING/SUCCESS/FAILED 等），中文 label 仅保留在 DocumentStatus 兼容映射与展示层。
+* 删除 /attachments/upload、/cash-ledger/export、/module-exports、/material-exports、/attachment-manifest-exports、/sales-orders/{id}/xlsx-exports、/account/preferences；actuator/springdoc/error 迁到 /api/v2.0/*；Java 类名去掉 V2 前缀。
+* 报价单接口不再返回 purchased/purchaseOrderId/purchaseOrderNo/purchaseOrderItemId/purchaseOrderLinks，吨位汇总端点下线。
+
 ## [18.2.1](https://github.com/PolarisTime/Leo/compare/v18.2.0...v18.2.1) (2026-11-09)
 
 
