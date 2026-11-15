@@ -74,6 +74,37 @@ class SupplierPriceServiceTest {
     }
 
     @Test
+    /** 批量取价带上供应商简称：报单比价的「简称」列要简称，不是几十字的长全称。 */
+    void lowestQuotes_includesSupplierShortNameFromMasterData() {
+        when(repository.findQuotedItems(null)).thenReturn(List.of(
+                list("浙江企坤集团有限公司（融诚支付）", "3390").getItems().get(0)));
+        when(supplierQuery.findActiveById(11L)).thenReturn(Optional.of(
+                new SupplierQuery.SupplierSnapshot(
+                        11L, "SUP-011", "浙江企坤集团有限公司（融诚支付）", "企坤融诚")));
+
+        var quotes = service.lowestQuotes(null);
+
+        assertThat(quotes).hasSize(1);
+        assertThat(quotes.get(0).supplierShortName()).isEqualTo("企坤融诚");
+        // 全称仍原样返回：前端 tooltip / 列 title 需要它做兜底与可读性
+        assertThat(quotes.get(0).supplierName()).isEqualTo("浙江企坤集团有限公司（融诚支付）");
+    }
+
+    @Test
+    /** 主数据缺失或简称为空时返回 null，让前端回退全称，不显示空白。 */
+    void lowestQuotes_supplierShortNameIsNullWhenMasterDataMissing() {
+        when(repository.findQuotedItems(null)).thenReturn(List.of(
+                list("浙江铁都钢材有限公司", "3410").getItems().get(0)));
+        when(supplierQuery.findActiveById(11L)).thenReturn(Optional.empty());
+
+        var quotes = service.lowestQuotes(null);
+
+        assertThat(quotes).hasSize(1);
+        assertThat(quotes.get(0).supplierShortName()).isNull();
+        assertThat(quotes.get(0).supplierName()).isEqualTo("浙江铁都钢材有限公司");
+    }
+
+    @Test
     /** 一条报价都没有时返回空，而不是 0 元（不报价 ≠ 0）。 */
     void findLowestQuote_returnsEmptyWhenNobodyQuoted() {
         when(repository.findQuotedItemsByProduct(any(), any(), any(), any(), any()))

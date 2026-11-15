@@ -230,9 +230,18 @@ public class SupplierPriceService {
             grouped.computeIfAbsent(key, ignored -> new ArrayList<>()).add(item);
         }
         List<BrandQuote> quotes = new ArrayList<>();
+        /*
+         * 供应商简称：mk_supplier_price_list 只存全称，简称在主数据 md_supplier 上。
+         * 按 supplierId 去重缓存（同一次批量取价里供应商数量是个位数），避免 N+1：
+         * 报单比价的「简称」列要的是简称（如「企坤融诚」），全称太长会把列撑爆。
+         */
+        Map<Long, String> shortNameCache = new LinkedHashMap<>();
         for (List<SupplierPriceItem> candidates : grouped.values()) {
             pickLowest(candidates).ifPresent(lowest -> {
                 SupplierPriceItem sample = candidates.get(0);
+                String shortName = lowest.supplierId() == null
+                        ? null
+                        : shortNameCache.computeIfAbsent(lowest.supplierId(), this::shortNameOf);
                 quotes.add(new BrandQuote(
                         sample.getList().getBrandName(),
                         sample.getCategory(),
@@ -243,10 +252,19 @@ public class SupplierPriceService {
                         lowest.priceListId(),
                         lowest.supplierId(),
                         lowest.supplierName(),
+                        shortName,
                         lowest.updatedAt()));
             });
         }
         return quotes;
+    }
+
+    /** 供应商简称（主数据缺失/为空白时返回 null，由前端回退全称）。 */
+    private String shortNameOf(Long supplierId) {
+        return supplierQuery.findActiveById(supplierId)
+                .map(SupplierQuery.SupplierSnapshot::shortName)
+                .filter(name -> !name.isBlank())
+                .orElse(null);
     }
 
     /**
@@ -288,6 +306,8 @@ public class SupplierPriceService {
             Long priceListId,
             Long supplierId,
             String supplierName,
+            /** 供应商简称（主数据 md_supplier.short_name）；缺失时为 null，前端回退全称。 */
+            String supplierShortName,
             /** 该现货价最后一次修改时间：报单比价的「现货价修改时间」直接展示它。 */
             LocalDateTime updatedAt) {
     }
