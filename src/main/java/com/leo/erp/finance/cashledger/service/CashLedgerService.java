@@ -8,8 +8,9 @@ import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.finance.cashledger.repository.CashLedgerFilter;
 import com.leo.erp.finance.cashledger.repository.CashLedgerQueryRepository;
 import com.leo.erp.finance.cashledger.web.dto.CashLedgerExportRow;
+import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.finance.cashledger.web.dto.CashLedgerLineResponse;
-import com.leo.erp.finance.cashledger.web.dto.CashLedgerPageResponse;
+import com.leo.erp.finance.cashledger.web.dto.CashLedgerSummaryResponse;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,14 +51,14 @@ public class CashLedgerService {
     }
 
     @Transactional(readOnly = true)
-    public CashLedgerPageResponse page(PageQuery query,
-                                       Long settlementCompanyId,
-                                       LocalDate startDate,
-                                       LocalDate endDate,
-                                       String counterpartyType,
-                                       Long counterpartyId,
-                                       String flowType,
-                                       String keyword) {
+    public PageResponse<CashLedgerLineResponse> page(PageQuery query,
+                                                     Long settlementCompanyId,
+                                                     LocalDate startDate,
+                                                     LocalDate endDate,
+                                                     String counterpartyType,
+                                                     Long counterpartyId,
+                                                     String flowType,
+                                                     String keyword) {
         return queryRepository.page(
                 normalizeFilter(
                         settlementCompanyId,
@@ -69,7 +70,26 @@ public class CashLedgerService {
                         keyword
                 ),
                 query
-        );
+        ).page();
+    }
+
+    @Transactional(readOnly = true)
+    public CashLedgerSummaryResponse summary(Long settlementCompanyId,
+                                             LocalDate startDate,
+                                             LocalDate endDate,
+                                             String counterpartyType,
+                                             Long counterpartyId,
+                                             String flowType,
+                                             String keyword) {
+        return queryRepository.summary(normalizeFilter(
+                settlementCompanyId,
+                startDate,
+                endDate,
+                counterpartyType,
+                counterpartyId,
+                flowType,
+                keyword
+        ));
     }
 
     @Transactional(readOnly = true)

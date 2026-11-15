@@ -2,9 +2,11 @@ package com.leo.erp.finance.cashledger.web;
 
 import com.leo.erp.common.api.ApiVersion;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.finance.cashledger.service.CashLedgerService;
-import com.leo.erp.finance.cashledger.web.dto.CashLedgerPageResponse;
+import com.leo.erp.finance.cashledger.web.dto.CashLedgerLineResponse;
+import com.leo.erp.finance.cashledger.web.dto.CashLedgerSummaryResponse;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
@@ -41,16 +43,33 @@ public class CashLedgerController {
     @Operation(summary = "分页查询资金流水")
     @GetMapping
     @RequirePermission(PermissionCodes.CASH_LEDGER_READ)
-    public CashLedgerPageResponse page(@BindPageQuery(sortFieldKey = "cash-ledger", directionParam = "sortDirection") PageQuery query,
-                                       @RequestParam @Positive Long settlementCompanyId,
-                                       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-                                       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
-                                       @RequestParam(required = false) String counterpartyType,
-                                       @RequestParam(required = false) @Positive Long counterpartyId,
-                                       @RequestParam(required = false) String flowType,
-                                       @RequestParam(required = false) String keyword) {
+    public PageResponse<CashLedgerLineResponse> page(@BindPageQuery(sortFieldKey = "cash-ledger", directionParam = "sortDirection") PageQuery query,
+                                                     @RequestParam @Positive Long settlementCompanyId,
+                                                     @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+                                                     @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+                                                     @RequestParam(required = false) String counterpartyType,
+                                                     @RequestParam(required = false) @Positive Long counterpartyId,
+                                                     @RequestParam(required = false) String flowType,
+                                                     @RequestParam(required = false) String keyword) {
         return cashLedgerService.page(
                 query, settlementCompanyId, startDate, endDate,
+                counterpartyType, counterpartyId, flowType, keyword);
+    }
+
+    @Operation(summary = "查询资金流水汇总",
+            description = "与分页查询使用完全相同的筛选条件；返回期初/期间收入/期间支出/期末余额，不受分页参数影响。")
+    @GetMapping("/summary")
+    @RequirePermission(PermissionCodes.CASH_LEDGER_READ)
+    public CashLedgerSummaryResponse summary(
+            @RequestParam @Positive Long settlementCompanyId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) String counterpartyType,
+            @RequestParam(required = false) @Positive Long counterpartyId,
+            @RequestParam(required = false) String flowType,
+            @RequestParam(required = false) String keyword) {
+        return cashLedgerService.summary(
+                settlementCompanyId, startDate, endDate,
                 counterpartyType, counterpartyId, flowType, keyword);
     }
 }

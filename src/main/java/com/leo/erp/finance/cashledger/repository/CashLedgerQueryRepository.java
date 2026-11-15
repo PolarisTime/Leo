@@ -205,6 +205,14 @@ public class CashLedgerQueryRepository {
     }
 
     /**
+     * 只读汇总：与分页查询使用完全相同的筛选条件与期初/期间口径，供独立 summary 端点使用。
+     */
+    public CashLedgerSummaryResponse summary(CashLedgerFilter filter) {
+        MapSqlParameterSource parameters = parameters(filter);
+        return querySummary(filter, parameters);
+    }
+
+    /**
      * 导出用的全量行查询（**带硬上限**，不允许无界全表读）。
      *
      * <p>为什么按「上限 + 1」取行：调用方需要区分「刚好等于上限」与「已溢出」。用
