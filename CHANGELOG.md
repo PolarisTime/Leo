@@ -1,3 +1,11 @@
+# [19.1.0](https://github.com/PolarisTime/Leo/compare/v19.0.0...v19.1.0) (2026-11-15)
+
+
+### Features
+
+* **collab:** 边车支持报单比价房间（quote-sheet）与 ton/备注物化 ([75c5684](https://github.com/PolarisTime/Leo/commit/75c5684ef3aecde66d904ad9a5e5f3d494189692))
+* **supplier-price:** lowest-quotes 返回供应商简称 ([deeadcb](https://github.com/PolarisTime/Leo/commit/deeadcbecf0f36a39d9be87ddb1afa4ddffd8ae4))
+
 # [19.0.0](https://github.com/PolarisTime/Leo/compare/v18.2.1...v19.0.0) (2026-11-15)
 
 
