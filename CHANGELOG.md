@@ -1,3 +1,10 @@
+## [19.2.1](https://github.com/PolarisTime/Leo/compare/v19.2.0...v19.2.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **quotation:** 新建比价配置补齐遗留非空列 ([cd3d1e9](https://github.com/PolarisTime/Leo/commit/cd3d1e9b7cd54d1cbe9baa39b04551243a86328e))
+
 # [19.2.0](https://github.com/PolarisTime/Leo/compare/v19.1.0...v19.2.0) (2026-11-16)
 
 
