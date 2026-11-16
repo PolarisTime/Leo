@@ -122,6 +122,11 @@ public class QuoteProjectConfigStore {
             QuoteProjectConfig created = new QuoteProjectConfig();
             created.setId(snowflakeIdGenerator.nextId());
             created.setProjectId(projectId);
+            // V220 起 length_premium 等旧标量列只保留回溯、不再被读，但库上仍是 NOT NULL；
+            // 新建运费配置时必须补一个合法值，否则只写运费的首次保存会在 INSERT 阶段失败。
+            created.setLengthPremium(settings == null || settings.lengthPremium() == null
+                    ? defaultLengthPremium()
+                    : settings.lengthPremium());
             return created;
         });
         boolean remarkChanged = apply(entity, request);
