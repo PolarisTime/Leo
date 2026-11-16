@@ -1,3 +1,18 @@
+# [19.2.0](https://github.com/PolarisTime/Leo/compare/v19.1.0...v19.2.0) (2026-11-16)
+
+
+### Bug Fixes
+
+* **print:** 恢复销售订单 A4 原版抬头布局 ([57b2ffe](https://github.com/PolarisTime/Leo/commit/57b2ffe27fd0916245b096f25320b2c1290ed879))
+* **quotation:** 报价单品牌校验与快照改读项目资料允许品牌 ([ebc36b6](https://github.com/PolarisTime/Leo/commit/ebc36b67bc05586b51f21a4f7d1d37d56e8d0a3f))
+* **user-settings:** 清理用户设置里落在未来的 clientUpdatedAt ([5ae011b](https://github.com/PolarisTime/Leo/commit/5ae011bbdcb8412aa8ee75f485e8e6b175e854ca))
+
+
+### Features
+
+* **quotation:** 报单比价配置归并到项目资料，比价配置只保留运费 ([0dd646e](https://github.com/PolarisTime/Leo/commit/0dd646e57be92838feb1d4f70af6ab1291a6869f))
+* **sales-order:** 增加 8 位展示编号并支持按编号检索 ([0e0bc82](https://github.com/PolarisTime/Leo/commit/0e0bc828ee20c581652bbe09d7ec661199ab1b75))
+
 # [19.1.0](https://github.com/PolarisTime/Leo/compare/v19.0.0...v19.1.0) (2026-11-15)
 
 
