@@ -308,7 +308,8 @@ class ProjectServiceTest {
                 null, null,
                 null, null, null, null,
                 null, null, null,
-                null, null, null, null));
+                null, null, null, null,
+                null, null, null, null, null));
 
         Project entity = savedHolder[0];
         assertThat(entity.getQuoteSource()).isEqualTo("MYSTEEL");
@@ -334,7 +335,8 @@ class ProjectServiceTest {
                 "STEELX", "嘉兴",
                 null, null, null, null,
                 null, null, null,
-                null, null, null, null));
+                null, null, null, null,
+                null, null, null, null, null));
 
         Project entity = savedHolder[0];
         assertThat(entity.getQuoteSource()).isEqualTo("STEELX");
@@ -505,7 +507,8 @@ class ProjectServiceTest {
         return new ProjectRequest("111", "项目A", null, null, null,
                 7L, "C007", 55L, "结算公司A", "NORMAL", null, null, null, null,
                 allowedBrands, allowedMaterials, allowedBrandSeverity, allowedMaterialSeverity,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null,
+                null, null, null, null, null);
     }
 
     /** 清单非空但未指定力度时落到 WARN: V176 已配置的项目升级后行为必须不变。 */
@@ -911,6 +914,69 @@ class ProjectServiceTest {
         verify(projectRepository, never()).save(any(Project.class));
     }
 
+    /**
+     * V220：报单比价配置归并到项目资料后，这里成为品牌/品种/商品/加价/代取/指定品牌的唯一写入口。
+     *
+     * <p>断言落库表示：商品键与指定品牌走逗号分隔文本（去空白、去重），品牌品种走 JSONB 文本，
+     * 加价与代取直接落列。比价配置接口只写运费，不再反写这些字段。</p>
+     */
+    @Test
+    void create_persistsQuoteConfigFields() {
+        Project[] savedHolder = new Project[1];
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L)).thenReturn(Optional.of(customer(7L, "C007")));
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L);
+        when(codeIssuanceService.resolve(eq("project"), any(), anyString())).thenReturn("111");
+        when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
+            Project entity = invocation.getArgument(0);
+            savedHolder[0] = entity;
+            return entity;
+        });
+
+        service().create(new ProjectRequest("111", "项目A", null, null, null,
+                7L, "C007", 55L, "结算公司A", "NORMAL", null, null, null, null,
+                null, null, null, null,
+                null, null, null, null, null, null, null,
+                List.of("螺纹钢|HRB400E|10|9米", " 盘螺|HRB400|8|- "),
+                java.util.Map.of("中天", List.of("直条", "盘螺")),
+                new java.math.BigDecimal("28.00"),
+                true,
+                List.of(" 中天 ", "中天", " ")));
+
+        Project entity = savedHolder[0];
+        assertThat(entity.getQuoteProducts()).isEqualTo("螺纹钢|HRB400E|10|9米,盘螺|HRB400|8|-");
+        assertThat(entity.getQuoteBrandCategories()).isEqualTo("{\"中天\":[\"直条\",\"盘螺\"]}");
+        assertThat(entity.getQuoteLengthPremium()).isEqualByComparingTo("28.00");
+        assertThat(entity.isQuoteHrb400eFallback()).isTrue();
+        assertThat(entity.getQuoteDesignatedBrands()).isEqualTo("中天");
+    }
+
+    /** 未传比价配置时全部归一为「未配置」：加价 null、代取 false、文本 null，不留半配置脏值。 */
+    @Test
+    void create_normalizesAbsentQuoteConfigToUnset() {
+        Project[] savedHolder = new Project[1];
+        when(customerRepository.findByIdAndDeletedFlagFalse(7L)).thenReturn(Optional.of(customer(7L, "C007")));
+        when(snowflakeIdGenerator.nextId()).thenReturn(100L);
+        when(codeIssuanceService.resolve(eq("project"), any(), anyString())).thenReturn("111");
+        when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> {
+            Project entity = invocation.getArgument(0);
+            savedHolder[0] = entity;
+            return entity;
+        });
+
+        service().create(new ProjectRequest("111", "项目A", null, null, null,
+                7L, "C007", 55L, "结算公司A", "NORMAL", null, null, null, null,
+                null, null, null, null,
+                null, null, null, null, null, null, null,
+                List.of(), java.util.Map.of(), null, null, List.of()));
+
+        Project entity = savedHolder[0];
+        assertThat(entity.getQuoteProducts()).isNull();
+        assertThat(entity.getQuoteBrandCategories()).isNull();
+        assertThat(entity.getQuoteLengthPremium()).isNull();
+        assertThat(entity.isQuoteHrb400eFallback()).isFalse();
+        assertThat(entity.getQuoteDesignatedBrands()).isNull();
+    }
+
     private ProjectRequest pricingRequest(String priceDateBasis, Integer priceDateOffsetDays,
                                           String priceClosedSettleDirection, Integer priceClosedSettleDays,
                                           String pricePeriodPolicy, String pricePeriodFixed) {
@@ -918,6 +984,7 @@ class ProjectServiceTest {
                 7L, "C007", 55L, "结算公司A", "NORMAL", null, null, null, null,
                 null, null, null, null,
                 priceDateBasis, priceDateOffsetDays, priceClosedSettleDirection, priceClosedSettleDays,
-                pricePeriodPolicy, pricePeriodFixed, null);
+                pricePeriodPolicy, pricePeriodFixed, null,
+                null, null, null, null, null);
     }
 }

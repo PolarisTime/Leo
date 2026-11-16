@@ -46,7 +46,10 @@ public class QuoteProjectConfigController {
         this.properties = properties;
     }
 
-    @Operation(summary = "查询项目比价配置", description = "按项目返回品牌/可选商品/指定品牌/兜底配置; 未配置时返回默认空配置")
+    @Operation(summary = "查询项目比价配置",
+            description = "响应形状不变, 值按项目资料派生: 品牌与顺序=项目允许品牌, 品种=项目品牌品种配置,"
+                    + " 商品键/12米加价/兜底/指定品牌=项目资料 quote_* 列; 运费仍来自比价配置。"
+                    + " 未配置运费时 version=0 且不落库。")
     @GetMapping("/{projectId}")
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_READ)
     public QuoteProjectConfigResponse find(@PathVariable @SnowflakeId Long projectId) {
@@ -55,9 +58,8 @@ public class QuoteProjectConfigController {
 
     @Operation(
             summary = "查询项目用于报单比价的有效品牌集合",
-            description = "品牌事实唯一来源是项目资料(md_project.allowed_brands); 资料为空/不限制时"
-                    + "回退到比价配置的品牌, 并在 fallback 标记为 true。回退只读, 不会写回项目资料。"
-                    + "占位品牌「基准价」不计入结果。")
+            description = "品牌事实唯一来源是项目资料(md_project.allowed_brands); V220 起不再回退到比价配置,"
+                    + " 响应里的 fallback 恒为 false(字段保留仅为兼容)。占位品牌「基准价」仍被过滤。")
     @GetMapping("/{projectId}/effective-brands")
     @RequirePermission(PermissionCodes.QUOTE_SHEETS_READ)
     public QuoteProjectEffectiveBrandsResponse effectiveBrands(@PathVariable @SnowflakeId Long projectId) {

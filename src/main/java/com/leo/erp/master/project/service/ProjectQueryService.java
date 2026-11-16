@@ -6,6 +6,7 @@ import com.leo.erp.master.api.ProjectPricingBasisQuery;
 import com.leo.erp.master.api.ProjectPricingBasisQuery.ClosedSettleDirection;
 import com.leo.erp.master.api.ProjectProcurementScopeQuery;
 import com.leo.erp.master.api.ProjectQuery;
+import com.leo.erp.master.project.domain.QuoteBrandCategories;
 import com.leo.erp.master.project.domain.entity.Project;
 import com.leo.erp.master.project.repository.ProjectRepository;
 import org.springframework.stereotype.Service;
@@ -83,6 +84,23 @@ public class ProjectQueryService implements ProjectQuery, ProjectProcurementScop
                 .filter(project -> !project.isDeletedFlag())
                 .forEach(project -> snapshots.put(project.getId(), toSnapshot(project)));
         return snapshots.isEmpty() ? Map.of() : snapshots;
+    }
+
+    @Override
+    public Optional<ProjectQuoteSettings> findQuoteSettingsById(Long id) {
+        if (id == null) {
+            return Optional.empty();
+        }
+        return repository.findByIdAndDeletedFlagFalse(id)
+                .map(project -> new ProjectQuoteSettings(
+                        project.getId(),
+                        CsvValues.split(project.getAllowedBrands()),
+                        QuoteBrandCategories.read(project.getQuoteBrandCategories()),
+                        CsvValues.split(project.getQuoteProducts()),
+                        project.getQuoteLengthPremium(),
+                        project.isQuoteHrb400eFallback(),
+                        CsvValues.split(project.getQuoteDesignatedBrands())
+                ));
     }
 
     @Override

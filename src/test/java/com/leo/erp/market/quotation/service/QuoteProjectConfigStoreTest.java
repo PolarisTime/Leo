@@ -1,12 +1,16 @@
 package com.leo.erp.market.quotation.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.market.lengthpremium.service.LengthPremiumService;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectBrand;
 import com.leo.erp.market.quotation.domain.entity.QuoteProjectConfig;
 import com.leo.erp.market.quotation.repository.QuoteProjectConfigRepository;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigResponse;
+import com.leo.erp.master.api.ProjectQuery;
+import com.leo.erp.master.api.ProjectQuery.ProjectQuoteSettings;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.Test;
@@ -15,6 +19,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -23,13 +30,28 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 比价项目配置读写的归并口径（V220）。
+ *
+ * <p>锁四件事：</p>
+ * <ol>
+ *   <li><b>读</b>：响应形状不变，但品牌/品种/商品/加价/代取/指定品牌全部来自项目资料，
+ *       只有运费与备注来自比价配置表；未配置运费时 version=0 且不落库；</li>
+ *   <li><b>写</b>：只写运费与备注，请求里的旧字段（products/lengthPremium/hrb400eFallback/
+ *       designatedBrands、brands[].categories/sortOrder）一律忽略；</li>
+ *   <li><b>越界</b>：品牌必须在项目 allowed_brands 内 → 422；清单为空 = 不限制；</li>
+ *   <li><b>并发</b>：版本不匹配 → 412；仅改品牌子集合时父版本仍要递增（FORCE_INCREMENT）。</li>
+ * </ol>
+ */
 @ExtendWith(MockitoExtension.class)
 class QuoteProjectConfigStoreTest {
+
+    private static final long PROJECT_ID = 88L;
 
     @Mock
     private QuoteProjectConfigRepository repository;
@@ -41,345 +63,249 @@ class QuoteProjectConfigStoreTest {
     private EntityManager entityManager;
 
     @Mock
-    private com.leo.erp.master.api.ProjectProcurementScopeQuery procurementScopeQuery;
+    private ProjectQuery projectQuery;
 
     @Mock
-    private com.leo.erp.market.lengthpremium.service.LengthPremiumService lengthPremiumService;
+    private LengthPremiumService lengthPremiumService;
 
     private QuoteProjectConfigStore store() {
-        return new QuoteProjectConfigStore(repository, snowflakeIdGenerator, entityManager, null, null,
-                lengthPremiumService);
-    }
-
-    /** 带采购范围端口的实例：用于验证「参与品牌必须落在项目允许品牌内」。 */
-    private QuoteProjectConfigStore storeWithScope() {
         return new QuoteProjectConfigStore(
-                repository, snowflakeIdGenerator, entityManager, null, procurementScopeQuery, lengthPremiumService);
+                repository, snowflakeIdGenerator, entityManager, projectQuery, lengthPremiumService);
     }
 
-    private static com.leo.erp.master.api.ProjectProcurementScopeQuery.ProjectProcurementScope scope(
-            List<String> allowedBrands) {
-        return new com.leo.erp.master.api.ProjectProcurementScopeQuery.ProjectProcurementScope(
-                88L, "测试项目", allowedBrands, List.of(),
-                com.leo.erp.master.api.ProjectProcurementScopeQuery.Enforcement.WARN,
-                com.leo.erp.master.api.ProjectProcurementScopeQuery.Enforcement.WARN);
-    }
+    // ------------------------------------------------------------------
+    // 读：按项目资料投影
+    // ------------------------------------------------------------------
 
-    private static QuoteProjectConfigRequest requestWithBrands(String... brandNames) {
-        List<QuoteProjectConfigRequest.BrandRequest> brands = java.util.Arrays.stream(brandNames)
-                .map(name -> new QuoteProjectConfigRequest.BrandRequest(
-                        name, BigDecimal.ZERO, List.of(), 0))
-                .toList();
-        return new QuoteProjectConfigRequest(
-                BigDecimal.ZERO, false, List.of(), List.of(), null, brands);
+    @Test
+    void find_shouldDeriveBrandsAndScalarsFromProjectMasterData() {
+        givenSettings(new ProjectQuoteSettings(PROJECT_ID,
+                List.of("中天", "萍钢"),
+                Map.of("中天", List.of("直条", "盘螺")),
+                List.of("螺纹钢|HRB400E|10|9米"),
+                new BigDecimal("28.00"),
+                true,
+                List.of("中天")));
+        givenConfig(config(brand("中天", "12.50"), brand("萍钢", "8.00")));
+        givenQuoteSource("MYSTEEL");
+
+        QuoteProjectConfigResponse response = store().find(PROJECT_ID);
+
+        // 品牌与顺序来自 allowed_brands，运费来自比价配置表，品种来自项目资料
+        assertThat(response.brands()).extracting(QuoteProjectConfigResponse.BrandResponse::brandName)
+                .containsExactly("中天", "萍钢");
+        assertThat(response.brands().get(0).freight()).isEqualByComparingTo("12.50");
+        assertThat(response.brands().get(0).categories()).containsExactly("直条", "盘螺");
+        assertThat(response.brands().get(1).categories()).isEmpty();
+        assertThat(response.brands()).extracting(QuoteProjectConfigResponse.BrandResponse::sortOrder)
+                .containsExactly(0, 1);
+
+        assertThat(response.lengthPremium()).isEqualByComparingTo("28.00");
+        assertThat(response.hrb400eFallback()).isTrue();
+        assertThat(response.products()).containsExactly("螺纹钢|HRB400E|10|9米");
+        assertThat(response.designatedBrands()).containsExactly("中天");
+        assertThat(response.version()).isEqualTo(3L);
+        assertThat(response.quoteSource()).isEqualTo("MYSTEEL");
     }
 
     @Test
-    void find_returnsDefaultsWhenAbsent() {
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
+    void find_whenNoFreightConfigured_shouldStillListProjectBrandsWithZeroFreight() {
+        givenSettings(new ProjectQuoteSettings(PROJECT_ID,
+                List.of("中天"), Map.of(), List.of(), null, false, List.of()));
+        when(repository.findByProjectIdAndDeletedFlagFalse(PROJECT_ID)).thenReturn(Optional.empty());
 
-        QuoteProjectConfigResponse response = store().find(88L);
+        QuoteProjectConfigResponse response = store().find(PROJECT_ID);
 
-        assertThat(response.projectId()).isEqualTo(88L);
-        assertThat(response.lengthPremium()).isEqualByComparingTo("30");
-        assertThat(response.hrb400eFallback()).isFalse();
-        assertThat(response.products()).isEmpty();
-        assertThat(response.designatedBrands()).isEmpty();
-        assertThat(response.brands()).isEmpty();
+        assertThat(response.brands()).hasSize(1);
+        assertThat(response.brands().get(0).brandName()).isEqualTo("中天");
+        assertThat(response.brands().get(0).freight()).isEqualByComparingTo("0");
         assertThat(response.version()).isEqualTo(0L);
+        assertThat(response.remark()).isNull();
     }
 
     @Test
-    void find_usesDefaultLengthPremiumFromMasterData() {
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
-        // 定尺主数据里 12米 的加价不是 30 时, 默认值必须跟着主数据走
+    void find_shouldFallBackToLengthPremiumMasterDataWhenProjectDoesNotConfigureIt() {
+        givenSettings(new ProjectQuoteSettings(PROJECT_ID,
+                List.of(), Map.of(), List.of(), null, false, List.of()));
+        when(repository.findByProjectIdAndDeletedFlagFalse(PROJECT_ID)).thenReturn(Optional.empty());
         when(lengthPremiumService.activePremiumMap()).thenReturn(Map.of("12米", 35));
 
-        QuoteProjectConfigResponse response = store().find(88L);
-
-        assertThat(response.lengthPremium()).isEqualByComparingTo("35");
+        assertThat(store().find(PROJECT_ID).lengthPremium()).isEqualByComparingTo("35");
     }
 
     @Test
-    void find_fallsBackToConstantWhenMasterDataEmpty() {
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
+    void find_whenProjectMissing_shouldReturnEmptyBrandsWithDefaultPremium() {
+        when(projectQuery.findQuoteSettingsById(PROJECT_ID)).thenReturn(Optional.empty());
+        when(repository.findByProjectIdAndDeletedFlagFalse(PROJECT_ID)).thenReturn(Optional.empty());
         when(lengthPremiumService.activePremiumMap()).thenReturn(Map.of());
 
-        assertThat(store().find(88L).lengthPremium()).isEqualByComparingTo("30");
+        QuoteProjectConfigResponse response = store().find(PROJECT_ID);
+
+        assertThat(response.projectId()).isEqualTo(PROJECT_ID);
+        assertThat(response.brands()).isEmpty();
+        assertThat(response.lengthPremium()).isEqualByComparingTo("30");
+        assertThat(response.products()).isEmpty();
+        assertThat(response.designatedBrands()).isEmpty();
     }
+
+    // ------------------------------------------------------------------
+    // 写：只写运费 + 备注
+    // ------------------------------------------------------------------
 
     @Test
-    void save_usesDefaultLengthPremiumFromMasterDataWhenRequestOmitsIt() {
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
-        when(snowflakeIdGenerator.nextId()).thenReturn(1L);
-        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
-                .thenAnswer((invocation) -> invocation.getArgument(0));
-        when(lengthPremiumService.activePremiumMap()).thenReturn(Map.of("12米", 35));
-
-        QuoteProjectConfigResponse response = store().save(88L, new QuoteProjectConfigRequest(
-                null, false, List.of(), List.of(), null, List.of()), null);
-
-        assertThat(response.lengthPremium()).isEqualByComparingTo("35");
-    }
-
-    @Test
-    void save_persistsJoinedTextAndSplitsOnRead() {
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
-        when(snowflakeIdGenerator.nextId()).thenReturn(1L, 2L, 3L);
-        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
-                .thenAnswer((invocation) -> invocation.getArgument(0));
-
-        QuoteProjectConfigResponse response = store().save(88L, new QuoteProjectConfigRequest(
-                new BigDecimal("40"), true,
-                List.of("螺纹钢|HRB400|12|9米", "盘螺|HRB400|8|-"),
-                List.of("沙钢", "中天"), "重点客户",
-                List.of(new QuoteProjectConfigRequest.BrandRequest("中天", new BigDecimal("30"),
-                        List.of("螺纹钢", "盘钢"), 0))), null);
-
-        assertThat(response.lengthPremium()).isEqualByComparingTo("40");
-        assertThat(response.hrb400eFallback()).isTrue();
-        assertThat(response.products()).containsExactly("螺纹钢|HRB400|12|9米", "盘螺|HRB400|8|-");
-        assertThat(response.designatedBrands()).containsExactly("沙钢", "中天");
-        assertThat(response.brands()).hasSize(1);
-        assertThat(response.brands().get(0).categories()).containsExactly("螺纹钢", "盘钢");
-        verify(repository).saveAndFlush(any(QuoteProjectConfig.class));
-    }
-
-    @Test
-    void save_absentConfigWithZeroExpectedVersion_creates() {
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
-        when(snowflakeIdGenerator.nextId()).thenReturn(1L, 2L, 3L);
-        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
-                .thenAnswer((invocation) -> invocation.getArgument(0));
-
-        QuoteProjectConfigResponse response = store().save(88L, new QuoteProjectConfigRequest(
-                new BigDecimal("30"), false, List.of(), List.of(), null, List.of()), 0L);
-
-        assertThat(response.projectId()).isEqualTo(88L);
-        verify(repository).saveAndFlush(any(QuoteProjectConfig.class));
-    }
-
-    @Test
-    void save_rejectsDuplicateBrand() {
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
-
-        QuoteProjectConfigRequest duplicated = new QuoteProjectConfigRequest(
-                new BigDecimal("30"), false, List.of(), List.of(), null,
-                List.of(new QuoteProjectConfigRequest.BrandRequest("中天", new BigDecimal("30"), List.of(), 0),
-                        new QuoteProjectConfigRequest.BrandRequest("中天", new BigDecimal("20"), List.of(), 1)));
-
-        assertThatThrownBy(() -> store().save(88L, duplicated, null))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("不可重复");
-        verify(repository, never()).saveAndFlush(any());
-    }
-
-    @Test
-    void save_acceptsMatchingExpectedVersion() {
-        QuoteProjectConfig existing = existingConfig(5L);
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.of(existing));
-        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
-                .thenAnswer((invocation) -> invocation.getArgument(0));
-
-        QuoteProjectConfigResponse response = store().save(88L, new QuoteProjectConfigRequest(
-                new BigDecimal("40"), false, List.of(), List.of(), null, List.of()), 5L);
-
-        assertThat(response.lengthPremium()).isEqualByComparingTo("40");
-        verify(repository).saveAndFlush(any(QuoteProjectConfig.class));
-    }
-
-    @Test
-    void save_rejectsStaleExpectedVersion() {
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.of(existingConfig(5L)));
-
-        assertThatThrownBy(() -> store().save(88L, new QuoteProjectConfigRequest(
-                new BigDecimal("40"), false, List.of(), List.of(), null, List.of()), 4L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("版本已变更");
-        verify(repository, never()).saveAndFlush(any());
-    }
-
-    /**
-     * 回归: 同一 projectId 连续两次保存相同品牌(模拟重新进入页面再次保存),
-     * 必须复用原品牌实体、保持雪花 id 不变, 且不再分配新 id。
-     * <p>旧实现 clear + 重新 add 会让每次保存都产生新子实体 id, 生产上触发
-     * {@code uk_quote_project_brand(config_id, brand_name)} 冲突并映射为 409。
-     */
-    @Test
-    void save_sameBrandTwice_reusesExistingBrandEntityAndKeepsId() {
-        QuoteProjectConfig existing = new QuoteProjectConfig();
-        existing.setId(1L);
-        existing.setProjectId(88L);
-        existing.setVersion(0L);
-        existing.getBrands().add(projectBrand(existing, 999L, "中天", "30"));
-
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.of(existing));
-        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
-                .thenAnswer((invocation) -> invocation.getArgument(0));
-
-        QuoteProjectConfigRequest request = new QuoteProjectConfigRequest(
-                new BigDecimal("30"), false, List.of(), List.of(), null,
-                List.of(new QuoteProjectConfigRequest.BrandRequest("中天", new BigDecimal("28"),
-                        List.of("螺纹钢", "盘螺"), 0)));
-
-        QuoteProjectConfigResponse first = store().save(88L, request, null);
-        QuoteProjectConfigResponse second = store().save(88L, request, null);
-
-        assertThat(first.brands()).hasSize(1);
-        assertThat(second.brands()).hasSize(1);
-        assertThat(existing.getBrands()).hasSize(1);
-        assertThat(existing.getBrands().get(0).getId()).isEqualTo(999L);
-        assertThat(existing.getBrands().get(0).getFreight()).isEqualByComparingTo("28");
-        assertThat(second.brands().get(0).categories()).containsExactly("螺纹钢", "盘螺");
-        verify(snowflakeIdGenerator, never()).nextId();
-    }
-
-    /** 回归: 按名称协调——命中名称复用旧实体, 请求新增才创建, 库中多余项被移除。 */
-    @Test
-    void save_reconcilesBrandsByName_reusesKeepsRemovesAndAdds() {
-        QuoteProjectConfig existing = new QuoteProjectConfig();
-        existing.setId(1L);
-        existing.setProjectId(88L);
-        existing.setVersion(0L);
-        existing.getBrands().add(projectBrand(existing, 111L, "中天", "30"));
-        existing.getBrands().add(projectBrand(existing, 222L, "沙钢", "40"));
-
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.of(existing));
-        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
-                .thenAnswer((invocation) -> invocation.getArgument(0));
-        when(snowflakeIdGenerator.nextId()).thenReturn(333L);
-
-        store().save(88L, new QuoteProjectConfigRequest(
-                new BigDecimal("30"), false, List.of(), List.of(), null,
-                List.of(new QuoteProjectConfigRequest.BrandRequest("中天", new BigDecimal("30"), List.of(), 0),
-                        new QuoteProjectConfigRequest.BrandRequest("亚新", new BigDecimal("35"), List.of(), 1))),
-                null);
-
-        assertThat(existing.getBrands()).extracting(QuoteProjectBrand::getBrandName)
-                .containsExactly("中天", "亚新");
-        assertThat(existing.getBrands().get(0).getId()).isEqualTo(111L);
-        assertThat(existing.getBrands().get(1).getId()).isEqualTo(333L);
-    }
-
-    /**
-     * 回归(并发保护): 整体替换语义下, 即使仅改动品牌的子集合, 也必须显式对已有配置加
-     * {@code OPTIMISTIC_FORCE_INCREMENT}, 保证父配置 {@code @Version} 每次替换恰好 +1。
-     */
-    @Test
-    void save_existingConfig_forcesVersionIncrementEvenForBrandOnlyChange() {
-        QuoteProjectConfig existing = existingConfig(5L);
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.of(existing));
-        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
-                .thenAnswer((invocation) -> invocation.getArgument(0));
-        doAnswer(invocation -> {
-            QuoteProjectConfig config = invocation.getArgument(0);
-            config.setVersion(config.getVersion() + 1);
-            return null;
-        }).when(entityManager).lock(any(QuoteProjectConfig.class), eq(LockModeType.OPTIMISTIC_FORCE_INCREMENT));
-
-        QuoteProjectConfigResponse response = store().save(88L, new QuoteProjectConfigRequest(
-                new BigDecimal("30"), false, List.of(), List.of(), null,
-                List.of(new QuoteProjectConfigRequest.BrandRequest("中天", new BigDecimal("30"), List.of(), 0))), 5L);
-
-        assertThat(response.version()).isEqualTo(6L);
-        verify(entityManager).lock(existing, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
-    }
-
-    /**
-     * P1-2 回归: 整体替换同时变更标量字段时, 父行被自然标脏并由 {@code @Version} 递增一次,
-     * 不得再叠加 FORCE_INCREMENT(否则 +2)。
-     */
-    @Test
-    void save_existingConfig_withScalarChange_doesNotForceIncrement() {
-        QuoteProjectConfig existing = existingConfig(5L);
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.of(existing));
-        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
-                .thenAnswer((invocation) -> invocation.getArgument(0));
-
-        store().save(88L, new QuoteProjectConfigRequest(
-                new BigDecimal("40"), false, List.of(), List.of(), null,
-                List.of(new QuoteProjectConfigRequest.BrandRequest("中天", new BigDecimal("30"), List.of(), 0))), 5L);
-
-        verify(entityManager, never()).lock(any(QuoteProjectConfig.class),
-                eq(LockModeType.OPTIMISTIC_FORCE_INCREMENT));
-    }
-
-    private QuoteProjectBrand projectBrand(QuoteProjectConfig config, Long id, String name, String freight) {
-        QuoteProjectBrand brand = new QuoteProjectBrand();
-        brand.setId(id);
-        brand.setConfig(config);
-        brand.setBrandName(name);
-        brand.setFreight(new BigDecimal(freight));
-        brand.setSortOrder(0);
-        return brand;
-    }
-
-    private QuoteProjectConfig existingConfig(Long version) {
-        QuoteProjectConfig config = new QuoteProjectConfig();
-        config.setId(1L);
-        config.setProjectId(88L);
-        config.setVersion(version);
-        // 标量与"仅改品牌"请求一致, 用于验证纯子集合变更时显式 FORCE_INCREMENT。
-        config.setLengthPremium(new BigDecimal("30"));
-        config.setHrb400eFallback(false);
-        return config;
-    }
-
-    /**
-     * 报单比价的参与品牌必须落在项目资料的「允许的品牌」内。
-     *
-     * <p>合并前两处各存一份清单、可以互相矛盾（项目允许 A/B，比价却在用 C）。
-     * 现在项目资料是唯一配置入口，越界品牌在保存时直接拒绝。</p>
-     */
-    @Test
-    void save_rejectsBrandsOutsideProjectAllowedBrands() {
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
-        when(procurementScopeQuery.findProcurementScopeById(88L))
-                .thenReturn(Optional.of(scope(List.of("中天", "万泰"))));
-
-        assertThatThrownBy(() -> storeWithScope().save(88L, requestWithBrands("中天", "亚新"), null))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("亚新");
-    }
-
-    /** 项目未配置允许品牌（清单为空）= 不限制，任何品牌都应放行。 */
-    @Test
-    void save_allowsAnyBrandWhenProjectScopeIsEmpty() {
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.empty());
-        when(procurementScopeQuery.findProcurementScopeById(88L))
-                .thenReturn(Optional.of(scope(List.of())));
+    void save_shouldWriteOnlyFreightAndRemarkAndIgnoreLegacyFields() {
+        givenSettings(new ProjectQuoteSettings(PROJECT_ID,
+                List.of("中天"),
+                Map.of("中天", List.of("直条")),
+                List.of("螺纹钢|HRB400E|10|9米"),
+                new BigDecimal("28.00"),
+                true,
+                List.of("中天")));
+        QuoteProjectConfig existing = config(brand("中天", "1.00"));
+        existing.setProducts("旧商品键");
+        existing.setLengthPremium(new BigDecimal("31.00"));
+        existing.setDesignatedBrands("旧指定品牌");
+        existing.setHrb400eFallback(false);
+        when(repository.findByProjectIdAndDeletedFlagFalse(PROJECT_ID)).thenReturn(Optional.of(existing));
         when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        QuoteProjectConfigResponse response =
-                storeWithScope().save(88L, requestWithBrands("任意品牌"), null);
+        // 请求里故意塞旧字段 + categories/sortOrder：它们必须被忽略
+        QuoteProjectConfigRequest request = new QuoteProjectConfigRequest(
+                new BigDecimal("99.00"), true, List.of("伪造商品"), List.of("伪造品牌"), "新备注",
+                List.of(new QuoteProjectConfigRequest.BrandRequest(
+                        "中天", new BigDecimal("15.00"), List.of("伪造品种"), 7)));
 
-        assertThat(response).isNotNull();
+        QuoteProjectConfigResponse response = store().save(PROJECT_ID, request, 3L);
+
+        // 运费与备注写进去
+        assertThat(existing.getBrands()).hasSize(1);
+        assertThat(existing.getBrands().get(0).getFreight()).isEqualByComparingTo("15.00");
+        assertThat(existing.getBrands().get(0).getSortOrder()).isZero();
+        assertThat(existing.getRemark()).isEqualTo("新备注");
+        // 旧标量字段与品种一律不动（仍保留迁移前/迁移时写入的原值）
+        assertThat(existing.getProducts()).isEqualTo("旧商品键");
+        assertThat(existing.getLengthPremium()).isEqualByComparingTo("31.00");
+        assertThat(existing.getDesignatedBrands()).isEqualTo("旧指定品牌");
+        assertThat(existing.isHrb400eFallback()).isFalse();
+        assertThat(existing.getBrands().get(0).getCategories()).isNull();
+        // 响应仍按项目资料 + 新运费派生
+        assertThat(response.brands().get(0).freight()).isEqualByComparingTo("15.00");
+        assertThat(response.brands().get(0).categories()).containsExactly("直条");
+        assertThat(response.lengthPremium()).isEqualByComparingTo("28.00");
+        assertThat(response.remark()).isEqualTo("新备注");
     }
 
-    /** 回退读路径只需要品牌名，且必须保持 sort_order（@OrderBy）顺序。 */
     @Test
-    void brandNamesOf_shouldReturnNamesInStoredOrder() {
+    void save_whenBrandOutsideProjectAllowedBrands_shouldReject422() {
+        givenSettings(new ProjectQuoteSettings(PROJECT_ID,
+                List.of("中天"), Map.of(), List.of(), null, false, List.of()));
+        when(repository.findByProjectIdAndDeletedFlagFalse(PROJECT_ID)).thenReturn(Optional.empty());
+
+        QuoteProjectConfigRequest request = requestWithBrands("中天", "萍钢");
+
+        assertThatThrownBy(() -> store().save(PROJECT_ID, request, null))
+                .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR);
+                    assertThat(ex.getMessage()).contains("萍钢").contains("项目资料");
+                });
+        verify(repository, never()).saveAndFlush(any(QuoteProjectConfig.class));
+    }
+
+    @Test
+    void save_whenProjectHasNoAllowedBrands_shouldAllowAnyBrand() {
+        givenSettings(new ProjectQuoteSettings(PROJECT_ID,
+                List.of(), Map.of(), List.of(), null, false, List.of()));
+        when(repository.findByProjectIdAndDeletedFlagFalse(PROJECT_ID)).thenReturn(Optional.empty());
+        when(snowflakeIdGenerator.nextId()).thenReturn(1L, 2L);
+        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        QuoteProjectConfigResponse response = store().save(PROJECT_ID, requestWithBrands("任意品牌"), null);
+
+        // 清单为空 = 不限制：品牌可写，但响应里的 brands 仍按项目资料（空）投影
+        assertThat(response.brands()).isEmpty();
+    }
+
+    @Test
+    void save_withStaleVersion_shouldReject412() {
+        QuoteProjectConfig existing = config(brand("中天", "1.00"));
+        existing.setVersion(5L);
+        when(repository.findByProjectIdAndDeletedFlagFalse(PROJECT_ID)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> store().save(PROJECT_ID, requestWithBrands("中天"), 4L))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.PRECONDITION_FAILED));
+    }
+
+    @Test
+    void save_whenOnlyBrandsChanged_shouldForceIncrementVersion() {
+        givenSettings(new ProjectQuoteSettings(PROJECT_ID,
+                List.of("中天"), Map.of(), List.of(), null, false, List.of()));
+        QuoteProjectConfig existing = config(brand("中天", "1.00"));
+        when(repository.findByProjectIdAndDeletedFlagFalse(PROJECT_ID)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteProjectConfig.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // 备注与已存一致（都为空）→ 父行不会被自然标脏，必须显式 FORCE_INCREMENT
+        store().save(PROJECT_ID, requestWithBrands("中天"), null);
+
+        verify(entityManager).lock(existing, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+    }
+
+    // ------------------------------------------------------------------
+    // 辅助
+    // ------------------------------------------------------------------
+
+    private void givenSettings(ProjectQuoteSettings settings) {
+        lenient().when(projectQuery.findQuoteSettingsById(PROJECT_ID)).thenReturn(Optional.of(settings));
+    }
+
+    private void givenConfig(QuoteProjectConfig config) {
+        lenient().when(repository.findByProjectIdAndDeletedFlagFalse(PROJECT_ID))
+                .thenReturn(Optional.of(config));
+    }
+
+    private void givenQuoteSource(String quoteSource) {
+        lenient().when(projectQuery.findActiveById(PROJECT_ID)).thenReturn(Optional.of(
+                new ProjectQuery.ProjectSnapshot(PROJECT_ID, "测试项目", "测项",
+                        null, "C001", null, null, quoteSource)));
+    }
+
+    private static QuoteProjectConfig config(QuoteProjectBrand... brands) {
         QuoteProjectConfig config = new QuoteProjectConfig();
-        config.setProjectId(88L);
-        config.setBrands(new java.util.ArrayList<>(List.of(brand("中天"), brand("萍钢"), brand("亚新"))));
-        when(repository.findByProjectIdAndDeletedFlagFalse(88L)).thenReturn(Optional.of(config));
-
-        assertThat(store().brandNamesOf(88L)).containsExactly("中天", "萍钢", "亚新");
+        config.setId(1L);
+        config.setProjectId(PROJECT_ID);
+        config.setVersion(3L);
+        config.setLengthPremium(new BigDecimal("30.00"));
+        config.setBrands(new ArrayList<>(Arrays.asList(brands)));
+        for (QuoteProjectBrand brand : brands) {
+            brand.setConfig(config);
+        }
+        return config;
     }
 
-    @Test
-    void brandNamesOf_shouldReturnEmptyWhenProjectNotConfigured() {
-        when(repository.findByProjectIdAndDeletedFlagFalse(99L)).thenReturn(Optional.empty());
-
-        assertThat(store().brandNamesOf(99L)).isEmpty();
-    }
-
-    private static QuoteProjectBrand brand(String name) {
+    private static QuoteProjectBrand brand(String name, String freight) {
         QuoteProjectBrand brand = new QuoteProjectBrand();
+        brand.setId(10L + Math.abs(name.hashCode() % 1000));
         brand.setBrandName(name);
-        brand.setFreight(BigDecimal.ZERO);
+        brand.setFreight(new BigDecimal(freight));
         return brand;
     }
 
+    private static QuoteProjectConfigRequest requestWithBrands(String... brandNames) {
+        List<QuoteProjectConfigRequest.BrandRequest> brands = Arrays.stream(brandNames)
+                .map(name -> new QuoteProjectConfigRequest.BrandRequest(
+                        name, new BigDecimal("5.00"), List.of(), 0))
+                .toList();
+        // 旧字段保持有值，验证「忽略」而不是「报错」
+        return new QuoteProjectConfigRequest(
+                new BigDecimal("40.00"), true,
+                List.of("旧商品"), List.of("旧指定品牌"), null, brands);
+    }
+
+    private static ProjectQuoteSettings settingsOf(List<String> allowedBrands) {
+        return new ProjectQuoteSettings(PROJECT_ID, allowedBrands, new LinkedHashMap<>(),
+                List.of(), null, false, List.of());
+    }
 }

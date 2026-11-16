@@ -120,6 +120,41 @@ public class Project extends AbstractAuditableEntity implements StatusAwareEntit
     @Column(name = "allowed_material_severity", length = 16)
     private String allowedMaterialSeverity;
 
+    /*
+     * 以下 5 列是「报单比价配置」归并进项目资料后的唯一配置点（V220）。
+     *
+     * 归并前这些值分散在 mk_quote_project_config（标量）与 mk_quote_project_brand（品牌/品种）里，
+     * 与项目资料的 allowed_brands 是两份互相打架的事实。现在比价配置只保留「每品牌运费」，
+     * 读接口按这里投影、写接口只写运费。
+     */
+
+    /** 参与比价的商品键(逗号分隔: 类别|材质|规格|长度); 空表示全部商品可选。 */
+    @Column(name = "quote_products")
+    private String quoteProducts;
+
+    /**
+     * 品牌 → 启用品种(JSONB)。实体上保存原始 JSON 文本，靠 {@code ColumnTransformer} 做
+     * {@code text ↔ jsonb} 转换；文本 ↔ Map 的解析统一走
+     * {@link com.leo.erp.master.project.domain.QuoteBrandCategories}。
+     */
+    @Column(name = "quote_brand_categories", columnDefinition = "JSONB")
+    @org.hibernate.annotations.ColumnTransformer(
+            read = "quote_brand_categories::text",
+            write = "?::jsonb")
+    private String quoteBrandCategories;
+
+    /** 12米定尺加价(元/吨); 空表示未配置, 取价时回退定尺主数据默认值。 */
+    @Column(name = "quote_length_premium", precision = 12, scale = 2)
+    private BigDecimal quoteLengthPremium;
+
+    /** 是否允许 HRB400 商品按 HRB400E 价格代取。 */
+    @Column(name = "quote_hrb400e_fallback", nullable = false)
+    private boolean quoteHrb400eFallback = false;
+
+    /** 指定品牌(逗号分隔, 仅在报单比价里展示徽标, 不参与校验)。 */
+    @Column(name = "quote_designated_brands", length = 512)
+    private String quoteDesignatedBrands;
+
     @Column(name = "remark", length = 255)
     private String remark;
 }

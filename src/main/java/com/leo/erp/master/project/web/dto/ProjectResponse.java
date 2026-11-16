@@ -2,6 +2,7 @@ package com.leo.erp.master.project.web.dto;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 public record ProjectResponse(
         Long id,
@@ -39,7 +40,17 @@ public record ProjectResponse(
         String pricePeriodPolicy,
         /** 固定取价时段(上午/中午/下午), 仅 FIXED 时有值。 */
         String pricePeriodFixed,
-        String remark
+        String remark,
+        /** 参与报单比价的商品键列表(类别|材质|规格|长度); 空列表表示全部商品可选。 */
+        List<String> quoteProducts,
+        /** 品牌 → 启用品种; 缺键或空列表表示该品牌全部品种。 */
+        Map<String, List<String>> quoteBrandCategories,
+        /** 12米定尺加价(元/吨); 空表示未配置。 */
+        BigDecimal quoteLengthPremium,
+        /** 是否允许 HRB400 商品按 HRB400E 价格代取。 */
+        boolean quoteHrb400eFallback,
+        /** 指定品牌列表(仅报单比价展示徽标)。 */
+        List<String> quoteDesignatedBrands
 ) {
     public ProjectResponse(Long id,
                            String projectCode,
@@ -52,6 +63,7 @@ public record ProjectResponse(
                            String remark) {
         this(id, projectCode, projectName, projectNameAbbr, projectAddress, projectManager,
                 null, customerCode, null, null, status, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, remark);
+                null, null, null, null, null, null, null, null, remark,
+                null, null, null, false, null);
     }
 }

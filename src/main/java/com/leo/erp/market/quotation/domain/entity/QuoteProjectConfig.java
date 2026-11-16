@@ -17,7 +17,13 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
-/** 比价项目级配置: 参与品牌/可选商品/指定品牌/兜底与12米加价。 */
+/**
+ * 比价项目级配置：V220 起本表**只保留每品牌运费与备注**（品牌行见 {@link QuoteProjectBrand}）。
+ *
+ * <p>品牌/品种/可选商品/指定品牌/兜底/12米加价已归并到项目资料（{@code md_project.quote_*}），
+ * 对应列仍留在库里但**不再被读写**：保留是为了迁移可回溯、回滚有数据，
+ * 二次清理由后续迁移负责（删除列属于破坏性变更，需独立发布）。</p>
+ */
 @Getter
 @Setter
 @Entity

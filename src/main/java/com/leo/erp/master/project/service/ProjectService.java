@@ -25,6 +25,7 @@ import com.leo.erp.master.api.ProjectProcurementScopeQuery.Enforcement;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
+import com.leo.erp.master.project.domain.QuoteBrandCategories;
 import com.leo.erp.master.project.domain.entity.Project;
 import com.leo.erp.master.project.mapper.ProjectMapper;
 import com.leo.erp.master.project.repository.ProjectRepository;
@@ -208,7 +209,12 @@ public class ProjectService {
                         CsvValues.split(project.getAllowedBrands()),
                         CsvValues.split(project.getAllowedMaterials()),
                         project.getAllowedBrandSeverity(),
-                        project.getAllowedMaterialSeverity()
+                        project.getAllowedMaterialSeverity(),
+                        CsvValues.split(project.getQuoteProducts()),
+                        QuoteBrandCategories.read(project.getQuoteBrandCategories()),
+                        project.getQuoteLengthPremium(),
+                        project.isQuoteHrb400eFallback(),
+                        CsvValues.split(project.getQuoteDesignatedBrands())
                 ))
                 .toList();
     }
@@ -229,21 +235,9 @@ public class ProjectService {
         String settlementCompanyName = request.settlementCompanyId() == null
                 ? entity.getSettlementCompanyName()
                 : request.settlementCompanyName();
-        return normalizeCustomerIdentity(
-                new ProjectRequest(
-                        request.projectCode(), request.projectName(), request.projectNameAbbr(),
-                        request.projectAddress(), request.projectManager(), request.customerId(),
-                        request.customerCode(), settlementCompanyId, settlementCompanyName,
-                        request.status(), request.priceFloatMode(), request.priceFloatValue(),
-                        request.quoteSource(), request.quoteRegion(),
-                        request.allowedBrands(), request.allowedMaterials(),
-                        request.allowedBrandSeverity(), request.allowedMaterialSeverity(),
-                        request.priceDateBasis(), request.priceDateOffsetDays(),
-                        request.priceClosedSettleDirection(), request.priceClosedSettleDays(),
-                        request.pricePeriodPolicy(),
-                        request.pricePeriodFixed(), request.remark()
-                )
-        );
+        return normalizeCustomerIdentity(request.withCustomerAndSettlement(
+                request.customerId(), request.customerCode(),
+                settlementCompanyId, settlementCompanyName));
     }
 
     private void apply(Project entity, ProjectRequest request) {
@@ -264,7 +258,25 @@ public class ProjectService {
         applyPriceFloat(entity, request);
         applyQuoteSource(entity, request);
         applyAllowedSpec(entity, request);
+        applyQuoteConfig(entity, request);
         entity.setRemark(trimToNull(request.remark()));
+    }
+
+    /**
+     * 写入「报单比价配置」（V220 起归并到项目资料，这里是唯一写入口）。
+     *
+     * <p>比价配置接口（{@code PUT /quote-project-configs/{id}}）只写每品牌运费，不再反写这些字段，
+     * 因此两个写入口不会互相覆盖：品牌/品种/商品/加价/代取/指定品牌只由项目资料维护。</p>
+     *
+     * <p>标量空值一律落 NULL（商品键/指定品牌空列表 → NULL，加价空 → NULL，代取空 → false），
+     * 让「未配置」在库里只有一种表示，避免 `''` 与 NULL 两套语义。</p>
+     */
+    private void applyQuoteConfig(Project entity, ProjectRequest request) {
+        entity.setQuoteProducts(CsvValues.join(request.quoteProducts()));
+        entity.setQuoteBrandCategories(QuoteBrandCategories.write(request.quoteBrandCategories()));
+        entity.setQuoteLengthPremium(request.quoteLengthPremium());
+        entity.setQuoteHrb400eFallback(Boolean.TRUE.equals(request.quoteHrb400eFallback()));
+        entity.setQuoteDesignatedBrands(CsvValues.join(request.quoteDesignatedBrands()));
     }
 
     /**
@@ -485,33 +497,9 @@ public class ProjectService {
          * 常分属不同主体，用客户默认值填项目只会制造错误快照。缺失时由 create/update
          * 的 requireSettlementCompany 统一报「请选择结算主体」。
          */
-        return resolveSettlementCompany(new ProjectRequest(
-                request.projectCode(),
-                request.projectName(),
-                request.projectNameAbbr(),
-                request.projectAddress(),
-                request.projectManager(),
-                customer.getId(),
-                customerCode,
-                request.settlementCompanyId(),
-                request.settlementCompanyName(),
-                request.status(),
-                request.priceFloatMode(),
-                request.priceFloatValue(),
-                request.quoteSource(),
-                request.quoteRegion(),
-                request.allowedBrands(),
-                request.allowedMaterials(),
-                request.allowedBrandSeverity(),
-                request.allowedMaterialSeverity(),
-                request.priceDateBasis(),
-                request.priceDateOffsetDays(),
-                request.priceClosedSettleDirection(),
-                request.priceClosedSettleDays(),
-                request.pricePeriodPolicy(),
-                request.pricePeriodFixed(),
-                request.remark()
-        ));
+        return resolveSettlementCompany(request.withCustomerAndSettlement(
+                customer.getId(), customerCode,
+                request.settlementCompanyId(), request.settlementCompanyName()));
     }
 
     /** 结算主体必填：缺失时返回 422 语义，而不是静默落空（打印模板按主体绑定，空主体会选不到模板）。 */
@@ -532,35 +520,15 @@ public class ProjectService {
         Long settlementCompanyId = request.settlementCompanyId();
         String settlementCompanyName = request.settlementCompanyName();
         if (settlementCompanyId == null || companySettingService == null) {
-            return new ProjectRequest(
-                    request.projectCode(), request.projectName(), request.projectNameAbbr(),
-                    request.projectAddress(), request.projectManager(), request.customerId(),
-                    request.customerCode(), settlementCompanyId, settlementCompanyName,
-                    request.status(), request.priceFloatMode(), request.priceFloatValue(),
-                    request.quoteSource(), request.quoteRegion(),
-                    request.allowedBrands(), request.allowedMaterials(),
-                    request.allowedBrandSeverity(), request.allowedMaterialSeverity(),
-                    request.priceDateBasis(), request.priceDateOffsetDays(),
-                    request.priceClosedSettleDirection(), request.priceClosedSettleDays(),
-                    request.pricePeriodPolicy(),
-                    request.pricePeriodFixed(), request.remark()
-            );
+            return request.withCustomerAndSettlement(
+                    request.customerId(), request.customerCode(),
+                    settlementCompanyId, settlementCompanyName);
         }
         SettlementCompanySnapshot company = companySettingService
                 .requireActiveSettlementCompanySnapshot(settlementCompanyId);
-        return new ProjectRequest(
-                request.projectCode(), request.projectName(), request.projectNameAbbr(),
-                request.projectAddress(), request.projectManager(), request.customerId(),
-                request.customerCode(), company.id(), company.name(),
-                request.status(), request.priceFloatMode(), request.priceFloatValue(),
-                request.quoteSource(), request.quoteRegion(),
-                request.allowedBrands(), request.allowedMaterials(),
-                request.allowedBrandSeverity(), request.allowedMaterialSeverity(),
-                request.priceDateBasis(), request.priceDateOffsetDays(),
-                request.priceClosedSettleDirection(), request.priceClosedSettleDays(),
-                request.pricePeriodPolicy(),
-                request.pricePeriodFixed(), request.remark()
-        );
+        return request.withCustomerAndSettlement(
+                request.customerId(), request.customerCode(),
+                company.id(), company.name());
     }
 
     private Specification<Project> customerIdentity(Long customerId) {

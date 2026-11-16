@@ -18,5 +18,11 @@ public interface ProjectMapper {
             expression = "java(com.leo.erp.common.support.CsvValues.split(project.getAllowedBrands()))")
     @Mapping(target = "allowedMaterials",
             expression = "java(com.leo.erp.common.support.CsvValues.split(project.getAllowedMaterials()))")
+    @Mapping(target = "quoteProducts",
+            expression = "java(com.leo.erp.common.support.CsvValues.split(project.getQuoteProducts()))")
+    @Mapping(target = "quoteDesignatedBrands",
+            expression = "java(com.leo.erp.common.support.CsvValues.split(project.getQuoteDesignatedBrands()))")
+    @Mapping(target = "quoteBrandCategories",
+            expression = "java(com.leo.erp.master.project.domain.QuoteBrandCategories.read(project.getQuoteBrandCategories()))")
     ProjectResponse toResponse(Project project);
 }

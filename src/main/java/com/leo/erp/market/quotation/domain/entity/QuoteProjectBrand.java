@@ -12,7 +12,12 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 
-/** 比价项目参与品牌: 运费与启用品种。 */
+/**
+ * 比价项目参与品牌：V220 起只承载运费（品牌清单以项目资料 {@code allowed_brands} 为准）。
+ *
+ * <p>{@code categories} 列保留但不再读写——启用品种已归并到
+ * {@code md_project.quote_brand_categories}，读接口按品牌名从项目资料取。</p>
+ */
 @Getter
 @Setter
 @Entity

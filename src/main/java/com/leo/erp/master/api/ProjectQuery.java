@@ -1,5 +1,6 @@
 package com.leo.erp.master.api;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +37,46 @@ public interface ProjectQuery {
      * @return 项目 ID 到快照的映射，顺序与首次出现顺序一致
      */
     Map<Long, ProjectSnapshot> findActiveByIds(Collection<Long> ids);
+
+    /**
+     * 读取项目资料里的「报单比价配置」（V220 起项目资料是唯一配置点）。
+     *
+     * <p>为什么单独一个方法而不是塞进 {@link ProjectSnapshot}：这些字段只有报单比价一侧消费，
+     * 塞进快照会让所有拿项目快照的调用方（销售、采购、打印…）被动携带一份用不到的数据，
+     * 也违反本接口「快照只放跨模块共用字段」的约定。</p>
+     *
+     * @param id 项目 ID；为 null 或项目不存在/已删除时返回空
+     * @return 比价配置投影（品牌清单、品牌→品种、商品键、12米加价、代取开关、指定品牌）
+     */
+    Optional<ProjectQuoteSettings> findQuoteSettingsById(Long id);
+
+    /**
+     * 项目资料里的报单比价配置投影。
+     *
+     * @param projectId         项目 ID
+     * @param allowedBrands     参与比价的品牌（= 项目允许品牌，保持清单顺序）
+     * @param brandCategories   品牌 → 启用品种；缺键表示该品牌全部品种
+     * @param products          参与比价的商品键（类别|材质|规格|长度）
+     * @param lengthPremium     12米定尺加价；null 表示未配置，由调用方回退默认值
+     * @param hrb400eFallback   是否允许 HRB400 按 HRB400E 代取
+     * @param designatedBrands  指定品牌（仅展示徽标）
+     */
+    record ProjectQuoteSettings(
+            Long projectId,
+            List<String> allowedBrands,
+            Map<String, List<String>> brandCategories,
+            List<String> products,
+            BigDecimal lengthPremium,
+            boolean hrb400eFallback,
+            List<String> designatedBrands
+    ) {
+        public ProjectQuoteSettings {
+            allowedBrands = allowedBrands == null ? List.of() : List.copyOf(allowedBrands);
+            brandCategories = brandCategories == null ? Map.of() : Map.copyOf(brandCategories);
+            products = products == null ? List.of() : List.copyOf(products);
+            designatedBrands = designatedBrands == null ? List.of() : List.copyOf(designatedBrands);
+        }
+    }
 
     record ProjectSnapshot(
             Long id,
