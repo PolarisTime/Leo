@@ -43,6 +43,7 @@ class SalesOrderA4PdfTemplateRenderTest {
         Map<String, String> data = new LinkedHashMap<>();
         data.put("customerName", "示例客户有限公司");
         data.put("orderNo", "SO-001");
+        data.put("displayNo", "19294322");
         data.put("projectName", "示例项目");
         data.put("deliveryDate", "2026-09-12");
         data.put("remark", "请雨天遮盖");
@@ -65,6 +66,8 @@ class SalesOrderA4PdfTemplateRenderTest {
             assertThat(text)
                     .contains("合计件数：5件")
                     .contains("合计重量：1.000吨")
+                    .contains("19294322")
+                    .doesNotContain("SO-001")
                     .contains("单据备注：请雨天遮盖")
                     .contains("附加费用：运费 1000元（大写壹仟元整）")
                     .doesNotContain("null")

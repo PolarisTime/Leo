@@ -188,7 +188,7 @@ class SalesOrderVersionContractTest {
 
     private SalesOrderResponse response(String status, Long version) {
         return new SalesOrderResponse(
-                ORDER_ID, "SO001", null, null, "CUST001", 10L, "客户A", 20L, "项目A", 30L, "结算主体A",
+                ORDER_ID, "SO001", "12345678", null, null, "CUST001", 10L, "客户A", 20L, "项目A", 30L, "结算主体A",
                 LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 1), "销售员A",
                 BigDecimal.ONE, new BigDecimal("100.00"), status, false, null,
                 null, null, null, null, null, null, null, null, null, null, null,

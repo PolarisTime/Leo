@@ -123,6 +123,7 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
               and (
                     :keyword = ''
                     or position(:keyword in lower(salesOrder.orderNo)) > 0
+                    or position(:keyword in lower(salesOrder.displayNo)) > 0
                     or position(:keyword in lower(salesOrder.purchaseOrderNo)) > 0
                     or position(:keyword in lower(salesOrder.customerName)) > 0
                     or position(:keyword in lower(salesOrder.projectName)) > 0

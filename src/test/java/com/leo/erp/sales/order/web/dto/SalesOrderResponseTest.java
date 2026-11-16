@@ -104,6 +104,7 @@ class SalesOrderResponseTest {
         return new SalesOrderResponse(
                 5L,
                 "SO20260301001",
+                "12345678",
                 "PI20260228001",
                 "PO20260227001",
                 "CUST001",

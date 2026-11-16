@@ -27,7 +27,7 @@ public class SalesOrderQueryService {
 
     private static final LocalDate MIN_PENDING_DELIVERY_DATE = LocalDate.of(1, 1, 1);
     private static final LocalDate MAX_PENDING_DELIVERY_DATE = LocalDate.of(9999, 12, 31);
-    private static final String[] SALES_ORDER_SEARCH_FIELDS = {"orderNo", "purchaseOrderNo", "customerName", "projectName"};
+    private static final String[] SALES_ORDER_SEARCH_FIELDS = {"orderNo", "displayNo", "purchaseOrderNo", "customerName", "projectName"};
 
     private final SalesOrderRepository repository;
     private final SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository;

@@ -58,6 +58,7 @@ public class SalesOrderOutboundCandidateQueryRepository {
                   AND (
                       :keyword IS NULL
                       OR LOWER(COALESCE(sales_order.order_no, '')) LIKE :keyword ESCAPE '\\'
+                      OR LOWER(COALESCE(sales_order.display_no, '')) LIKE :keyword ESCAPE '\\'
                       OR LOWER(COALESCE(sales_order.purchase_order_no, '')) LIKE :keyword ESCAPE '\\'
                       OR LOWER(COALESCE(sales_order.customer_name, '')) LIKE :keyword ESCAPE '\\'
                       OR LOWER(COALESCE(sales_order.project_name, '')) LIKE :keyword ESCAPE '\\'

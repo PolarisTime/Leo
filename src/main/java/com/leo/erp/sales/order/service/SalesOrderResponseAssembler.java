@@ -94,6 +94,7 @@ public class SalesOrderResponseAssembler {
         return new SalesOrderResponse(
                 response.id(),
                 response.orderNo(),
+                response.displayNo(),
                 response.purchaseInboundNo(),
                 response.purchaseOrderNo(),
                 response.customerCode(),

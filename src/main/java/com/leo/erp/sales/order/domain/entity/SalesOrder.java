@@ -30,6 +30,10 @@ public class SalesOrder extends AbstractAuditableEntity implements StatusAwareEn
     @Column(name = "order_no", nullable = false, unique = true, length = 64)
     private String orderNo;
 
+    /** 8 位纯数字展示编号：只用于打印/人工检索，不保证唯一；业务关联仍用 id。 */
+    @Column(name = "display_no", length = 8)
+    private String displayNo;
+
     @Column(name = "purchase_inbound_no", length = 256)
     private String purchaseInboundNo;
 

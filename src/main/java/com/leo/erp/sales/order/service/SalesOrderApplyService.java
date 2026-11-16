@@ -133,6 +133,9 @@ public class SalesOrderApplyService {
                              CustomerQuery.CustomerSnapshot customer,
                              ProjectQuery.ProjectSnapshot project) {
         entity.setOrderNo(request.orderNo());
+        if (entity.getDisplayNo() == null && entity.getId() != null) {
+            entity.setDisplayNo(SalesOrderDisplayNo.derive(entity.getId()));
+        }
         entity.setPurchaseInboundNo(request.purchaseInboundNo());
         entity.setPurchaseOrderNo(request.purchaseOrderNo());
         entity.setCustomerName(customer == null ? request.customerName() : trimToNull(customer.name()));

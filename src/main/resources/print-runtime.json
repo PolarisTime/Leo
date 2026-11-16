@@ -25,7 +25,7 @@
       "readPermission": "sales-orders:read",
       "tableName": "so_sales_order",
       "printColumns": [
-        "id", "order_no", "purchase_inbound_no", "customer_name", "project_name",
+        "id", "order_no", "display_no", "purchase_inbound_no", "customer_name", "project_name",
         "delivery_date", "sales_name", "total_weight", "total_amount", "status", "remark",
         "purchase_order_no", "customer_code", "project_id",
         "settlement_company_id", "settlement_company_name"

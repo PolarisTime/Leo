@@ -14,6 +14,8 @@ import java.util.List;
 public record SalesOrderResponse(
         @JsonSerialize(using = ToStringSerializer.class) Long id,
         String orderNo,
+        /** 8 位纯数字展示编号；只用于打印/人工检索，不保证唯一。 */
+        String displayNo,
         String purchaseInboundNo,
         String purchaseOrderNo,
         String customerCode,
@@ -89,7 +91,7 @@ public record SalesOrderResponse(
                               String remark,
                               List<SalesOrderItemResponse> items,
                               List<DocumentChargeItemResponse> chargeItems) {
-        this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
+        this(id, orderNo, null, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, totalWeight,
                 totalAmount, status, deletedFlag, remark, null, null, null, null, null, null, null, null, null, null, null,
                 items, chargeItems, null, null, null, null, null);
@@ -99,7 +101,7 @@ public record SalesOrderResponse(
                                                      Integer returnedQuantity,
                                                      Integer deliveredNetQuantity) {
         return new SalesOrderResponse(
-                id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
+                id, orderNo, displayNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, orderDate, salesName,
                 totalWeight, totalAmount, status, deletedFlag, remark, priceRuleId, priceRuleName, priceFloatMode,
                 priceFloatValue, priceTargetDate, priceQuoteDate, priceQuotePeriod, priceDateBasis,
@@ -116,7 +118,7 @@ public record SalesOrderResponse(
      */
     public static SalesOrderResponse withProjectNameAbbr(SalesOrderResponse source, String projectNameAbbr) {
         return new SalesOrderResponse(
-                source.id(), source.orderNo(), source.purchaseInboundNo(), source.purchaseOrderNo(),
+                source.id(), source.orderNo(), source.displayNo(), source.purchaseInboundNo(), source.purchaseOrderNo(),
                 source.customerCode(), source.customerId(), source.customerName(), source.projectId(),
                 source.projectName(), source.settlementCompanyId(), source.settlementCompanyName(),
                 source.deliveryDate(), source.orderDate(), source.salesName(), source.totalWeight(),
@@ -148,7 +150,7 @@ public record SalesOrderResponse(
                               boolean deletedFlag,
                               String remark,
                               List<SalesOrderItemResponse> items) {
-        this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
+        this(id, orderNo, null, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
                 projectName, settlementCompanyId, settlementCompanyName, deliveryDate, null, salesName, totalWeight,
                 totalAmount, status, deletedFlag, remark, null, null, null, null, null, null, null, null, null,
                 null, null, items, List.of(), null, null, null, null, null);
