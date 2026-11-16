@@ -231,6 +231,64 @@ class QuoteSheetStoreTest {
         verify(quoteProjectConfigRepository, atLeastOnce()).findByProjectIdAndDeletedFlagFalse(77L);
     }
 
+    /**
+     * 品牌唯一配置点=项目资料：项目允许品牌里有、但比价配置还没有运费行的品牌，
+     * 行级写价必须放行，并且快照按项目资料补齐（运费缺省 0）。
+     *
+     * <p>回归背景：配置归并后品牌来自 md_project.allowed_brands，运费行可能还没维护全；
+     * 若仍按「配置品牌」校验，就会出现「界面能选、保存 422」。</p>
+     */
+    @Test
+    void addItem_projectAllowedBrandWithoutFreightRow_isAcceptedAndSnapshotSynced() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setProjectId(77L);
+        existing.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(QuoteSheet.class))).thenAnswer((invocation) -> invocation.getArgument(0));
+        // 比价配置只有「中天」的运费行；项目资料允许「中天 + 芜湖富鑫」
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L))
+                .thenReturn(Optional.of(configWithBrands("中天")));
+        when(projectQuery.findQuoteSettingsById(77L)).thenReturn(Optional.of(
+                new com.leo.erp.master.api.ProjectQuery.ProjectQuoteSettings(
+                        77L, List.of("中天", "芜湖富鑫"), java.util.Map.of(), List.of(),
+                        null, false, List.of())));
+        when(snowflakeIdGenerator.nextId()).thenReturn(777L, 888L);
+
+        QuoteSheetItemWrite added = store().addItem(9L,
+                new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("芜湖富鑫", new BigDecimal("3300"), null))), 1L);
+
+        assertThat(added.item().prices()).extracting(QuoteSheetResponse.ItemPriceResponse::brandName)
+                .containsExactly("芜湖富鑫");
+        assertThat(existing.getBrands()).extracting(QuoteSheetBrand::getBrandName)
+                .containsExactly("中天", "芜湖富鑫");
+        // 没有运费行的品牌按 0 落快照，不因缺行而丢品牌
+        assertThat(existing.getBrands()).filteredOn(brand -> "芜湖富鑫".equals(brand.getBrandName()))
+                .extracting(QuoteSheetBrand::getFreight)
+                .containsExactly(BigDecimal.ZERO);
+    }
+
+    /** 项目资料为准：项目允许品牌外的品牌，即使比价配置里还残留运费行，也必须 422。 */
+    @Test
+    void addItem_brandOutsideProjectScope_isRejectedEvenIfConfigStillHasIt() {
+        QuoteSheet existing = sheetWithItem(9L);
+        existing.setProjectId(77L);
+        existing.setVersion(1L);
+        when(repository.findByIdAndDeletedFlagFalse(9L)).thenReturn(Optional.of(existing));
+        when(quoteProjectConfigRepository.findByProjectIdAndDeletedFlagFalse(77L))
+                .thenReturn(Optional.of(configWithBrands("中天", "铜陵富鑫")));
+        when(projectQuery.findQuoteSettingsById(77L)).thenReturn(Optional.of(
+                new com.leo.erp.master.api.ProjectQuery.ProjectQuoteSettings(
+                        77L, List.of("中天"), java.util.Map.of(), List.of(),
+                        null, false, List.of())));
+
+        assertThatThrownBy(() -> store().addItem(9L,
+                new QuoteSheetRequest.ItemRequest("盘螺", "HRB400E", 8, "9米", BigDecimal.ONE,
+                        List.of(new QuoteSheetRequest.ItemPriceRequest("铜陵富鑫", new BigDecimal("3300"), null))), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("现货价品牌不在品牌列表中");
+    }
+
     /** 有效集合: 配置品牌名前后空格在比对前 trim, 命中已有单据品牌名。 */
     @Test
     void addItem_configBrandIsTrimmedBeforeMatching() {

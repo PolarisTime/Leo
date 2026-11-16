@@ -382,9 +382,15 @@ public class QuoteSheetStore {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "品牌重复: " + brandName);
             }
         }
-        // 项目配置存在且品牌非空时以配置为唯一真源: 请求品牌随后会被快照同步覆盖;
-        // 否则回退请求品牌(它们将成为单据快照), 保持历史/未配置项目行为。
-        Set<String> allowedBrandNames = config == null ? requestBrandNames : configuredBrandNames(config);
+        /*
+         * 品牌唯一配置点 = **项目资料**（2026-11-16 配置归并）：项目允许品牌非空时它就是唯一真源，
+         * 比价配置只存运费（可能缺某些品牌的运费行）。因此这里优先项目允许品牌，
+         * 否则回退旧的配置品牌，再回退请求品牌（历史/未配置项目行为不变）。
+         */
+        Set<String> projectBrands = new LinkedHashSet<>(projectBrandNames(request.projectId()));
+        Set<String> allowedBrandNames = !projectBrands.isEmpty()
+                ? projectBrands
+                : (config == null ? requestBrandNames : configuredBrandNames(config));
         boolean hasProductRow = false;
         for (QuoteSheetRequest.ItemRequest item : request.items()) {
             if (item == null) {
@@ -532,6 +538,10 @@ public class QuoteSheetStore {
      * 配置不存在或品牌为空时回退单据快照(projectId 为空/无配置/配置品牌为空)。
      */
     private Set<String> effectiveBrandNamesOf(QuoteSheet sheet, QuoteProjectConfig config) {
+        Set<String> projectBrands = new LinkedHashSet<>(projectBrandNames(sheet.getProjectId()));
+        if (!projectBrands.isEmpty()) {
+            return projectBrands;
+        }
         return config == null ? brandNamesOf(sheet) : configuredBrandNames(config);
     }
 
@@ -609,6 +619,25 @@ public class QuoteSheetStore {
      * @return 是否对快照产生了实际变更
      */
     private boolean syncBrandSnapshot(QuoteSheet entity, QuoteProjectConfig config) {
+        /*
+         * 快照同样以**项目资料**为准（项目允许品牌 + 顺序）；运费只从比价配置里按品牌名取，
+         * 取不到按 0。这样「项目资料加/删品牌」会同步到单据快照，而不会被配置里缺的运费行挡住。
+         */
+        List<String> projectBrands = projectBrandNames(entity.getProjectId());
+        if (!projectBrands.isEmpty()) {
+            Map<String, BigDecimal> freightByName = new LinkedHashMap<>();
+            if (config != null) {
+                for (QuoteProjectBrand configBrand : config.getBrands()) {
+                    freightByName.put(normalizeBrandName(configBrand.getBrandName()), configBrand.getFreight());
+                }
+            }
+            List<DesiredBrand> desired = new ArrayList<>();
+            int order = 0;
+            for (String brandName : projectBrands) {
+                desired.add(new DesiredBrand(brandName, freightByName.get(brandName), order++));
+            }
+            return reconcileBrands(entity, desired);
+        }
         if (config == null) {
             return false;
         }
@@ -618,6 +647,26 @@ public class QuoteSheetStore {
                     configBrand.getFreight(), configBrand.getSortOrder()));
         }
         return reconcileBrands(entity, desired);
+    }
+
+    /**
+     * 项目资料里的「允许的品牌」（品牌唯一配置点；trim、去空、去重、保序，过滤占位「基准价」）。
+     *
+     * <p>用 {@link ProjectQuery#findQuoteSettingsById} 的只读投影，不把比价配置当品牌真源；
+     * 项目未配置品牌时返回空集合，调用方回退旧行为。</p>
+     */
+    private List<String> projectBrandNames(Long projectId) {
+        if (projectId == null) {
+            return List.of();
+        }
+        return projectQuery.findQuoteSettingsById(projectId)
+                .map(ProjectQuery.ProjectQuoteSettings::allowedBrands)
+                .orElse(List.of())
+                .stream()
+                .map(QuoteSheetStore::normalizeBrandName)
+                .filter(name -> !name.isEmpty() && !"基准价".equals(name))
+                .distinct()
+                .toList();
     }
 
     /** 判断快照集合是否与目标集合成员及顺序完全一致(同一实体引用), 一致时无需重建集合。 */
