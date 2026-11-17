@@ -1,3 +1,17 @@
+# [19.3.0](https://github.com/PolarisTime/Leo/compare/v19.2.1...v19.3.0) (2026-11-17)
+
+
+### Bug Fixes
+
+* **market:** Mysteel 登录占位页给出业务错误，并支持配置登录 Cookie ([18c0342](https://github.com/PolarisTime/Leo/commit/18c0342780ac5a9c95f5b0292080e275d102bac1))
+* **market:** Mysteel 行情改为本机直连，移除 139 跳板机抓取 ([49f2557](https://github.com/PolarisTime/Leo/commit/49f255774581b09d73382dd1f0aeae53c565f58e))
+
+
+### Features
+
+* **market:** Mysteel Cookie 失效时自动登录并重试 ([9e0d31a](https://github.com/PolarisTime/Leo/commit/9e0d31a6db9d2a4216a4977838ba15f401a8a9d6))
+* **print:** A5 套打模板的单据号改为展示号 ([c4bad26](https://github.com/PolarisTime/Leo/commit/c4bad26a5b5909f23b2e0c8c6886ea3c6a01292f))
+
 ## [19.2.1](https://github.com/PolarisTime/Leo/compare/v19.2.0...v19.2.1) (2026-11-16)
 
 
