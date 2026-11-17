@@ -54,6 +54,77 @@ class PrintRecordLayoutPreparerTest {
         assertThat(data.get("printTime")).isEqualTo("2026年01月05日 08:00:00");
     }
 
+    /**
+     * 超长项目名称必须折行：A5 套打的项目名框宽 420px，12pt 中文每行约 26 字。
+     *
+     * <p>回归背景（2026-11-17 用户截图）：adaptiveFields 的 rules 为空时永远取默认档
+     * （高度 20 / 字号 12 / WordBreak 0），30 个汉字的项目名只画一行、右侧被裁掉，
+     * 打印出来是「…年产160万套智能家居用品建」这种半截。宽度 60（30 汉字）应落到
+     * 「两行、字号 12、WordBreak 2」这一档。</p>
+     */
+    @Test
+    void prepare_shouldWrapLongProjectNameIntoTwoLines() {
+        Map<String, String> data = new HashMap<>();
+        data.put("projectName", "海宁市潮圣智能家居有限公司年产160万套智能家居用品建设项目");
+
+        preparer.prepare("sales-order", "A5销售单", null, data, new ArrayList<>());
+
+        assertThat(data.get("projectNameWordBreak")).isEqualTo("2");
+        assertThat(data.get("projectNameHeight")).isEqualTo("40");
+        assertThat(data.get("projectNameFontSize")).isEqualTo("12");
+        assertThat(data.get("projectNameMultiline")).isEqualTo("1");
+    }
+
+    @Test
+    void prepare_shouldShrinkFontWhenProjectNameExceedsTwoLinesAt12() {
+        Map<String, String> data = new HashMap<>();
+        // 61 个汉字 = displayWidth 119：两行 12pt（容量 104）与两行 11pt（容量 112）都放不下，
+        // 落到 10 号档（两行容量 124）
+        data.put("projectName", "海宁市潮圣智能家居有限公司年产160万套智能家居用品建设项目（一期）施工总承包工程二标段项目经理部综合办公室及附属配套工程");
+
+        preparer.prepare("sales-order", "A5销售单", null, data, new ArrayList<>());
+
+        assertThat(data.get("projectNameWordBreak")).isEqualTo("2");
+        assertThat(data.get("projectNameHeight")).isEqualTo("40");
+        assertThat(data.get("projectNameFontSize")).isEqualTo("10");
+    }
+
+    @Test
+    void prepare_shouldKeepShortProjectNameOnOneLine() {
+        Map<String, String> data = new HashMap<>();
+        data.put("projectName", "云潮筝鸣府");
+
+        preparer.prepare("sales-order", "A5销售单", null, data, new ArrayList<>());
+
+        assertThat(data.get("projectNameWordBreak")).isEqualTo("0");
+        assertThat(data.get("projectNameHeight")).isEqualTo("20");
+        assertThat(data.get("projectNameFontSize")).isEqualTo("12");
+        assertThat(data.get("projectNameMultiline")).isEmpty();
+    }
+
+    /**
+     * 自适应规则的顺序是契约：读规则是「首个 displayWidth > 阈值」即命中，
+     * 必须按 minDisplayWidth **降序**排列。升序会让所有长名称停在第 1 档（宽度永远 > 最小阈值），
+     * 正是 2026-11-17 那次「长项目名不折行」的成因之一。
+     */
+    @Test
+    void adaptiveFieldRules_mustBeOrderedByDescendingWidth() {
+        PrintRuntimeProperties properties =
+                new PrintRuntimeProperties(new com.fasterxml.jackson.databind.ObjectMapper());
+        for (com.fasterxml.jackson.databind.JsonNode field
+                : properties.childObjects(properties.topLevelFields().path("adaptiveFields"))) {
+            int previous = Integer.MAX_VALUE;
+            for (com.fasterxml.jackson.databind.JsonNode rule : properties.childObjects(field.path("rules"))) {
+                int width = properties.integer(rule, "minDisplayWidth", Integer.MAX_VALUE);
+                assertThat(width)
+                        .as("adaptiveFields[%s] 的 rules 必须按 minDisplayWidth 降序",
+                                field.path("sourceField").asText())
+                        .isLessThan(previous);
+                previous = width;
+            }
+        }
+    }
+
     @Test
     void prepare_shouldKeepDatePartsAsPlainNumbersForChineseSource() {
         Map<String, String> data = new HashMap<>();
