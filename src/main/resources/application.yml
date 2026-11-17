@@ -355,6 +355,11 @@ leo:
       # 行情抓取固定从本机直连（不再经跳板机/代理）
       # 可选: Mysteel 登录会话 Cookie。站点改为登录可见后，用它恢复价格抓取；属凭据，勿提交仓库
       cookie: ${LEO_MARKET_STEEL_QUOTE_COOKIE:}
+      # 可选: Mysteel 登录账号；Cookie 失效时自动重登（凭据只从环境变量注入，勿提交仓库）
+      username: ${LEO_MARKET_STEEL_QUOTE_USERNAME:}
+      password: ${LEO_MARKET_STEEL_QUOTE_PASSWORD:}
+      # 登录接口；一般不需要修改
+      login-url: ${LEO_MARKET_STEEL_QUOTE_LOGIN_URL:https://passport.mysteel.com/loginJson.jsp}
       # 取数失败重试(网络抖动/HTTP 429/5xx/风控页): 退避 = initial × multiplier^(n-1), 封顶 max
       retry:
         # 最大尝试次数(含首次); <=1 关闭重试

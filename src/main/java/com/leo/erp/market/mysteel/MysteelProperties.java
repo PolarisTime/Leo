@@ -31,6 +31,14 @@ public class MysteelProperties {
      * 配置一个有效会话 Cookie 可恢复抓取。Cookie 属于凭据，只从环境变量注入，不提交仓库、不打印日志。</p>
      */
     private String cookie = "";
+    /**
+     * Mysteel 登录账号（可选）。配置后 Cookie 失效时会自动重新登录，避免人工换 Cookie。
+     * 账号密码只从环境变量注入，不提交仓库、不打印日志。
+     */
+    private String username = "";
+    private String password = "";
+    /** 登录接口；默认 Passport 接口，测试可覆盖为本地地址。 */
+    private String loginUrl = "https://passport.mysteel.com/loginJson.jsp";
     private long rateLimitMillis = 1000;
     /** 取数失败重试(网络抖动/HTTP 429/5xx/风控页)。 */
     private RetryProperties retry = new RetryProperties();
@@ -75,6 +83,30 @@ public class MysteelProperties {
 
     public void setCookie(String cookie) {
         this.cookie = cookie;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getLoginUrl() {
+        return loginUrl;
+    }
+
+    public void setLoginUrl(String loginUrl) {
+        this.loginUrl = loginUrl;
     }
 
     public long getRateLimitMillis() {

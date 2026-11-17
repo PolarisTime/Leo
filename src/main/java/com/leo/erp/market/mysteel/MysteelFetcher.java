@@ -7,11 +7,19 @@ import com.leo.erp.common.retry.TransientCallException;
 import com.leo.erp.market.QuoteNotPublishedException;
 import org.springframework.stereotype.Component;
 
+import java.net.CookieManager;
+import java.net.CookiePolicy;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.HexFormat;
+import java.util.regex.Pattern;
 import java.util.function.Consumer;
 
 /**
@@ -30,13 +38,20 @@ public class MysteelFetcher {
             + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
     private static final String REFERER = "https://hangzhou.mysteel.com/";
     private static final String RISK_CONTROL_MARKER = "安全验证";
+    private static final String LOGIN_JUMP_PAGE = "https://jiancai.mysteel.com/";
+    private static final Pattern LOGIN_SUCCESS = Pattern.compile("\"result\"\\s*:\\s*\"success\"");
+    private static final Pattern LOGIN_FAILURE = Pattern.compile("\"result\"\\s*:\\s*\"(error\\d+)\"");
 
     private final MysteelProperties properties;
     private final HttpClient httpClient;
     private final RetryExecutor retry;
+    /** 当前会话 Cookie；登录成功后原地刷新，避免每篇文章都带旧 Cookie 请求一次。 */
+    private volatile String sessionCookie;
+    private final Object loginLock = new Object();
 
     public MysteelFetcher(MysteelProperties properties) {
         this.properties = properties;
+        this.sessionCookie = properties.getCookie();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(properties.getRequestTimeoutMs()))
                 .followRedirects(HttpClient.Redirect.NORMAL)
@@ -63,6 +78,18 @@ public class MysteelFetcher {
         try {
             return retry.execute(what, () -> {
                 String html = fetchDirect(url, what);
+                if (MysteelArticleParser.requiresLogin(html)) {
+                    if (!hasCredentials()) {
+                        throw new BusinessException(ErrorCode.BUSINESS_ERROR, loginRequiredMessage());
+                    }
+                    loginAndRefreshCookie();
+                    html = fetchDirect(url, what);
+                }
+                if (MysteelArticleParser.requiresLogin(html)) {
+                    throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                            "Mysteel 自动登录后仍返回登录占位页；"
+                                    + "请检查账号是否过期/需要验证码，或更新 Cookie");
+                }
                 if (looksLikeRiskControl(html)) {
                     throw new TransientCallException(what + "返回安全验证页(疑似触发IP风控), 请稍后再试");
                 }
@@ -83,6 +110,109 @@ public class MysteelFetcher {
         }
     }
 
+    private String loginRequiredMessage() {
+        return "Mysteel 行情页需要登录：请配置 LEO_MARKET_STEEL_QUOTE_USERNAME/PASSWORD "
+                + "以自动登录，或配置有效的 LEO_MARKET_STEEL_QUOTE_COOKIE";
+    }
+
+    private boolean hasCredentials() {
+        return properties.getUsername() != null && !properties.getUsername().isBlank()
+                && properties.getPassword() != null && !properties.getPassword().isBlank();
+    }
+
+    /**
+     * Cookie 失效时用账号密码重新登录一次。
+     *
+     * <p>登录分两步：先请求 loginJson.jsp 拿 `_login_token`，再跟随 login_success.jsp/setcookie.jsp
+     * 拿 `_MSPASS_SESSION`；只有这两个会话 Cookie 同时存在，行情文章才会返回 k/m 加密价格。</p>
+     */
+    private void loginAndRefreshCookie() {
+        synchronized (loginLock) {
+            try {
+                loginOnce();
+            } catch (java.io.IOException | InterruptedException ex) {
+                if (ex instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                        "Mysteel 自动登录失败: " + ex.getMessage());
+            }
+        }
+    }
+
+    private void loginOnce() throws java.io.IOException, InterruptedException {
+        CookieManager cookieManager = new CookieManager();
+        cookieManager.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
+        HttpClient loginClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(properties.getRequestTimeoutMs()))
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .cookieHandler(cookieManager)
+                .build();
+
+        String loginUrl = properties.getLoginUrl();
+        String separator = loginUrl.contains("?") ? "&" : "?";
+        String requestUrl = loginUrl + separator
+                + "my_username=" + encode(properties.getUsername())
+                + "&my_password=" + md5Hex(properties.getPassword())
+                + "&callbackJsonp=loginJsn"
+                + "&jumpPage=" + encode(LOGIN_JUMP_PAGE)
+                + "&site=jiancai"
+                + "&my_rememberStatus=true"
+                + "&vcode=";
+        HttpResponse<String> loginResponse = loginClient.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create(requestUrl))
+                        .timeout(Duration.ofMillis(properties.getRequestTimeoutMs()))
+                        .header("User-Agent", USER_AGENT)
+                        .header("Referer", REFERER)
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        String body = loginResponse.body() == null ? "" : loginResponse.body();
+        if (loginResponse.statusCode() != 200 || !LOGIN_SUCCESS.matcher(body).find()) {
+            var failure = LOGIN_FAILURE.matcher(body);
+            String code = failure.find() ? failure.group(1) : "unknown";
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "Mysteel 登录失败（" + code + "）：账号或密码错误、账号已过期，或需要验证码");
+        }
+
+        String successUrl = loginUrl.replace("/loginJson.jsp", "/login_success.jsp")
+                + "?callback=" + encode(LOGIN_JUMP_PAGE);
+        loginClient.send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create(successUrl))
+                        .timeout(Duration.ofMillis(properties.getRequestTimeoutMs()))
+                        .header("User-Agent", USER_AGENT)
+                        .header("Referer", REFERER)
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        String cookieHeader = cookieManager.getCookieStore().getCookies().stream()
+                .map(cookie -> cookie.getName() + "=" + cookie.getValue())
+                .distinct()
+                .reduce((left, right) -> left + "; " + right)
+                .orElse("");
+        if (cookieHeader.isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "Mysteel 登录成功但未取到会话 Cookie");
+        }
+        this.sessionCookie = cookieHeader;
+    }
+
+    private static String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private static String md5Hex(String value) {
+        try {
+            MessageDigest md5 = MessageDigest.getInstance("MD5");
+            return HexFormat.of().formatHex(md5.digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("MD5 不可用", ex);
+        }
+    }
+
     private String fetchDirect(String url, String what) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -90,7 +220,7 @@ public class MysteelFetcher {
                 .header("User-Agent", USER_AGENT)
                 .header("Referer", REFERER);
         if (hasCookie()) {
-            builder.header("Cookie", properties.getCookie());
+            builder.header("Cookie", sessionCookie);
         }
         HttpRequest request = builder.GET().build();
         try {
@@ -110,7 +240,7 @@ public class MysteelFetcher {
     }
 
     private boolean hasCookie() {
-        String cookie = properties.getCookie();
+        String cookie = sessionCookie;
         return cookie != null && !cookie.isBlank();
     }
 

@@ -25,6 +25,25 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class MysteelFetcherTest {
 
+    private static final String LOGIN_PAGE_HTML = """
+            <table id="marketTable" class="table">
+              <tr data-sort="sort">
+                <td>螺纹钢</td><td>Φ16-25</td><td>HRB400E</td><td>中天</td>
+                <td data-type="price"><a class="icon-key"></a></td>
+                <td data-type="raise"><a class="icon-key"></a></td>
+              </tr>
+            </table>
+            """;
+
+    private static final String PRICE_PAGE_HTML = """
+            <table id="marketTable" k="key" m="mapping">
+              <tr data-sort="sort">
+                <td>螺纹钢</td><td>Φ16-25</td><td>HRB400E</td><td>中天</td>
+                <td data-encrypt-v="A">x</td><td data-encrypt-v="B">x</td>
+              </tr>
+            </table>
+            """;
+
     /** 按调用次序返回的脚本化响应。 */
     private static final class Script {
         private final List<Response> responses = new CopyOnWriteArrayList<>();
@@ -63,6 +82,20 @@ class MysteelFetcherTest {
             exchange.getResponseBody().write(body);
             exchange.close();
         });
+        server.createContext("/loginJson.jsp", exchange -> {
+            byte[] body = "loginJsn({\"result\":\"success\"})".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Set-Cookie", "_login_token=token-1; Path=/");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.createContext("/login_success.jsp", exchange -> {
+            byte[] body = "ok".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Set-Cookie", "_MSPASS_SESSION=session-1; Path=/");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
         server.start();
     }
 
@@ -71,8 +104,12 @@ class MysteelFetcherTest {
         server.stop(0);
     }
 
+    private String baseUrl() {
+        return "http://127.0.0.1:" + server.getAddress().getPort();
+    }
+
     private String url() {
-        return "http://127.0.0.1:" + server.getAddress().getPort() + "/page";
+        return baseUrl() + "/page";
     }
 
     /** 构造 fetcher；maxAttempts<=1 表示关闭重试，退避固定为 0 以避免测试等待。 */
@@ -84,6 +121,18 @@ class MysteelFetcherTest {
         MysteelProperties properties = new MysteelProperties();
         properties.setRequestTimeoutMs(3000);
         properties.setCookie(cookie);
+        properties.getRetry().setMaxAttempts(maxAttempts);
+        properties.getRetry().setInitialBackoffMillis(0L);
+        properties.getRetry().setMaxBackoffMillis(0L);
+        return new MysteelFetcher(properties);
+    }
+
+    private MysteelFetcher fetcherWithLogin(int maxAttempts) {
+        MysteelProperties properties = new MysteelProperties();
+        properties.setRequestTimeoutMs(3000);
+        properties.setUsername("tester");
+        properties.setPassword("secret");
+        properties.setLoginUrl(baseUrl() + "/loginJson.jsp");
         properties.getRetry().setMaxAttempts(maxAttempts);
         properties.getRetry().setInitialBackoffMillis(0L);
         properties.getRetry().setMaxBackoffMillis(0L);
@@ -122,6 +171,28 @@ class MysteelFetcherTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("HTTP 404");
         assertThat(script.calls.get()).isEqualTo(1);
+    }
+
+    @Test
+    void 登录占位页且未配置账号时给出业务错误() {
+        script.then(200, LOGIN_PAGE_HTML);
+
+        assertThatThrownBy(() -> fetcher(1).fetch(url(), "行情文章"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("需要登录");
+    }
+
+    @Test
+    void Cookie失效时使用账号密码自动登录并重试() {
+        script.then(200, LOGIN_PAGE_HTML).then(200, PRICE_PAGE_HTML);
+
+        String html = fetcherWithLogin(1).fetch(url(), "行情文章");
+
+        assertThat(html).contains("marketTable");
+        assertThat(lastCookie.get())
+                .contains("_login_token=token-1")
+                .contains("_MSPASS_SESSION=session-1");
+        assertThat(script.calls.get()).isEqualTo(2);
     }
 
     @Test
