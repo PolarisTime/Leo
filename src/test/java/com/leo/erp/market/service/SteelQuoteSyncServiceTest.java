@@ -89,6 +89,30 @@ class SteelQuoteSyncServiceTest {
     }
 
     @Test
+    void sync_reportsLoginRequiredPageAsBusinessError() {
+        SteelQuoteSyncService service = service();
+        when(mysteelClient.findLatestArticleUrl(DATE)).thenReturn(Optional.of(ARTICLE_URL));
+        when(articleRepository.findByArticleUrlAndDeletedFlagFalse(ARTICLE_URL)).thenReturn(Optional.empty());
+        when(mysteelClient.fetchArticle(ARTICLE_URL)).thenReturn("""
+                <table id="marketTable" class="table">
+                  <tr data-sort="sort">
+                    <td>螺纹钢</td><td>Φ16-25</td><td>HRB400E</td><td>中天</td>
+                    <td data-type="price"><a class="icon-key"></a></td>
+                    <td data-type="raise"><a class="icon-key"></a></td>
+                    <td></td>
+                  </tr>
+                </table>
+                """);
+
+        // 登录占位页不是 500 故障：给用户可操作的业务错误，并提示配置 Cookie。
+        assertThatThrownBy(() -> service.sync(DATE))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("登录可见")
+                .hasMessageContaining("LEO_MARKET_STEEL_QUOTE_COOKIE");
+        verify(steelQuoteStore, never()).persistArticle(anyString(), anyString(), anyString());
+    }
+
+    @Test
     void sync_rejectsRiskControlPage() {
         SteelQuoteSyncService service = service();
         when(mysteelClient.findLatestArticleUrl(DATE)).thenReturn(Optional.of(ARTICLE_URL));

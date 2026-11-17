@@ -105,6 +105,23 @@ class MysteelArticleParserTest {
     }
 
     @Test
+    void requiresLogin_detectsPlaceholderPriceCells() {
+        String loginHtml = """
+                <table id="marketTable" class="table">
+                  <tr data-sort="sort">
+                    <td>螺纹钢</td><td>Φ16-25</td><td>HRB400E</td><td>中天</td>
+                    <td data-type="price"><a class="icon-key"></a></td>
+                    <td data-type="raise"><a class="icon-key"></a></td>
+                    <td></td>
+                  </tr>
+                </table>
+                """;
+        assertThat(MysteelArticleParser.requiresLogin(loginHtml)).isTrue();
+        // 正常的 k/m 加密页不能被误判成登录页
+        assertThat(MysteelArticleParser.requiresLogin(articleHtml("标题", ""))).isFalse();
+    }
+
+    @Test
     void decryptRows_rejectsMissingTable() {
         assertThatThrownBy(() -> MysteelArticleParser.decryptRows("<p>no table</p>"))
                 .isInstanceOf(IllegalStateException.class)

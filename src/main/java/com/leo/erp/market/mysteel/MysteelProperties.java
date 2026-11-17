@@ -26,6 +26,14 @@ public class MysteelProperties {
 
     /** 通过该 SSH 主机(如 root@1.2.3.4)远程执行 curl 取数; 为空则直连。用于绕过本机IP风控。 */
     private String fetchSshHost = "";
+
+    /**
+     * Mysteel 登录 Cookie（可选）。
+     *
+     * <p>2026-11-17 起站点对匿名访问只返回登录占位（icon-key/login-key），价格数据需登录后才可见；
+     * 配置一个有效会话 Cookie 可恢复抓取。Cookie 属于凭据，只从环境变量注入，不提交仓库、不打印日志。</p>
+     */
+    private String cookie = "";
     private long rateLimitMillis = 1000;
     /** 取数失败重试(网络抖动/HTTP 429/5xx/风控页)。 */
     private RetryProperties retry = new RetryProperties();
@@ -70,6 +78,14 @@ public class MysteelProperties {
 
     public void setFetchSshHost(String fetchSshHost) {
         this.fetchSshHost = fetchSshHost;
+    }
+
+    public String getCookie() {
+        return cookie;
+    }
+
+    public void setCookie(String cookie) {
+        this.cookie = cookie;
     }
 
     public long getRateLimitMillis() {

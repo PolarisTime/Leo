@@ -61,6 +61,29 @@ public final class MysteelArticleParser {
         return tableMatcher.group();
     }
 
+    /**
+     * 页面是否已改为「登录可见」：价格/涨跌单元格只有 icon-key/login-key 占位，
+     * 且 marketTable 上没有 k/m 加密参数（2026-11-17 起 Mysteel 匿名访问的表现）。
+     *
+     * <p>这种情况不是风控页，也不应继续走解密解析——直接给出可操作的业务错误，
+     * 而不是让 {@link #createDecryptor} 抛 IllegalStateException 变成 500。</p>
+     */
+    public static boolean requiresLogin(String articleHtml) {
+        if (articleHtml == null || articleHtml.isBlank()) {
+            return false;
+        }
+        String table;
+        try {
+            table = extractMarketTable(articleHtml);
+        } catch (IllegalStateException ex) {
+            return false;
+        }
+        if (KM_ATTRS_PATTERN.matcher(table).find()) {
+            return false;
+        }
+        return table.contains("class=\"icon-key\"") || table.contains("class=\"login-key\"");
+    }
+
     public static MysteelPriceDecryptor createDecryptor(String articleHtml) {
         String table = extractMarketTable(articleHtml);
         Matcher kmMatcher = KM_ATTRS_PATTERN.matcher(table);

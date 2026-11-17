@@ -95,13 +95,15 @@ public class MysteelFetcher {
     }
 
     private String fetchDirect(String url, String what) {
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .timeout(Duration.ofMillis(properties.getRequestTimeoutMs()))
                 .header("User-Agent", USER_AGENT)
-                .header("Referer", REFERER)
-                .GET()
-                .build();
+                .header("Referer", REFERER);
+        if (hasCookie()) {
+            builder.header("Cookie", properties.getCookie());
+        }
+        HttpRequest request = builder.GET().build();
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             String body = response.body() == null ? "" : response.body();
@@ -118,14 +120,24 @@ public class MysteelFetcher {
         }
     }
 
+    private boolean hasCookie() {
+        String cookie = properties.getCookie();
+        return cookie != null && !cookie.isBlank();
+    }
+
     /** 经跳板机 SSH 远程 curl 取数, 用于绕过本机 IP 风控。 */
     private String fetchViaSsh(String url, String what) {
         String safeUrl = url.replace("'", "'\\''");
         // ssh 会把剩余参数拼接为远端 shell 命令, 故整体作为一条命令传入并自行加引号
         long timeoutSeconds = Math.max(1, properties.getRequestTimeoutMs() / 1000);
+        String cookieArg = hasCookie()
+                ? " -H 'Cookie: " + properties.getCookie().replace("'", "'\\''") + "'"
+                : "";
         String remoteCommand = "curl -sSL --max-time " + timeoutSeconds
                 + " -A '" + USER_AGENT + "'"
-                + " -e '" + REFERER + "' '" + safeUrl + "'";
+                + " -e '" + REFERER + "'"
+                + cookieArg
+                + " '" + safeUrl + "'";
         List<String> command = List.of(
                 "ssh",
                 "-o", "BatchMode=yes",

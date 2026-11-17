@@ -48,6 +48,7 @@ class MysteelFetcherTest {
     private HttpServer server;
     private Script script;
     private final AtomicReference<String> lastReferer = new AtomicReference<>();
+    private final AtomicReference<String> lastCookie = new AtomicReference<>();
 
     @BeforeEach
     void startServer() throws IOException {
@@ -55,6 +56,7 @@ class MysteelFetcherTest {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/page", exchange -> {
             lastReferer.set(exchange.getRequestHeaders().getFirst("Referer"));
+            lastCookie.set(exchange.getRequestHeaders().getFirst("Cookie"));
             Response response = script.next();
             byte[] body = response.body().getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(response.status(), body.length);
@@ -75,9 +77,14 @@ class MysteelFetcherTest {
 
     /** 构造 fetcher；maxAttempts<=1 表示关闭重试，退避固定为 0 以避免测试等待。 */
     private MysteelFetcher fetcher(int maxAttempts) {
+        return fetcher(maxAttempts, null);
+    }
+
+    private MysteelFetcher fetcher(int maxAttempts, String cookie) {
         MysteelProperties properties = new MysteelProperties();
         properties.setRequestTimeoutMs(3000);
         properties.setFetchSshHost("");
+        properties.setCookie(cookie);
         properties.getRetry().setMaxAttempts(maxAttempts);
         properties.getRetry().setInitialBackoffMillis(0L);
         properties.getRetry().setMaxBackoffMillis(0L);
@@ -193,6 +200,15 @@ class MysteelFetcherTest {
                 .isInstanceOf(QuoteNotPublishedException.class)
                 .hasMessageContaining("该日无行情")
                 .hasMessageContaining("已尝试 2 次");
+    }
+
+    @Test
+    void 配置Cookie时请求携带会话Cookie() {
+        script.then(200, "ok-html");
+
+        fetcher(3, "mysteel_session=abc; uid=42").fetch(url(), "行情列表页");
+
+        assertThat(lastCookie.get()).isEqualTo("mysteel_session=abc; uid=42");
     }
 
     @Test

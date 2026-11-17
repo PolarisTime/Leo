@@ -177,6 +177,12 @@ public class SteelQuoteSyncService {
         if (articleHtml.contains("安全验证")) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文章页返回安全验证页(疑似触发IP风控), 请稍后再试");
         }
+        if (MysteelArticleParser.requiresLogin(articleHtml)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "Mysteel 行情页已改为登录可见（价格单元格只有登录占位），自动同步无法取数；"
+                            + "请配置有效的 Mysteel 登录 Cookie（LEO_MARKET_STEEL_QUOTE_COOKIE）后重试，"
+                            + "或改用 SteelX 行情源");
+        }
         if (!requestedPeriods.isEmpty() && !matchesPeriod(resolvePeriod(articleHtml).label(), requestedPeriods)) {
             return null;
         }
