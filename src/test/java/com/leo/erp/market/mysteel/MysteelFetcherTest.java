@@ -83,7 +83,6 @@ class MysteelFetcherTest {
     private MysteelFetcher fetcher(int maxAttempts, String cookie) {
         MysteelProperties properties = new MysteelProperties();
         properties.setRequestTimeoutMs(3000);
-        properties.setFetchSshHost("");
         properties.setCookie(cookie);
         properties.getRetry().setMaxAttempts(maxAttempts);
         properties.getRetry().setInitialBackoffMillis(0L);

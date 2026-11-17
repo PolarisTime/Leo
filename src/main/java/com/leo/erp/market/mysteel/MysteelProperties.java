@@ -24,9 +24,6 @@ public class MysteelProperties {
     private String listUrl = "https://jiancai.mysteel.com/market/pa228a15472aa0aaaaa1.html";
     private int requestTimeoutMs = 20000;
 
-    /** 通过该 SSH 主机(如 root@1.2.3.4)远程执行 curl 取数; 为空则直连。用于绕过本机IP风控。 */
-    private String fetchSshHost = "";
-
     /**
      * Mysteel 登录 Cookie（可选）。
      *
@@ -70,14 +67,6 @@ public class MysteelProperties {
 
     public void setRequestTimeoutMs(int requestTimeoutMs) {
         this.requestTimeoutMs = requestTimeoutMs;
-    }
-
-    public String getFetchSshHost() {
-        return fetchSshHost;
-    }
-
-    public void setFetchSshHost(String fetchSshHost) {
-        this.fetchSshHost = fetchSshHost;
     }
 
     public String getCookie() {

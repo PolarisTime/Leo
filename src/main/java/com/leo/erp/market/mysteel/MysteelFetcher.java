@@ -11,26 +11,20 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
- * Mysteel 页面获取传输层: 默认直连 HTTP; 配置了跳板机则经 SSH 远程 curl。
+ * Mysteel 页面获取传输层: 固定从本机直连 HTTP，不再经跳板机/代理。
  * 只负责"取回 HTML", 不解析、不缓存。
  *
  * <p><b>重试:</b>一次 {@link #fetch} 内部按 {@code leo.market.steel-quote.retry} 配置做有界退避重试,
  * 只重试瞬时失败——IOException 类网络故障、HTTP 429/5xx、风控页(安全验证页)、空响应;
- * HTTP 4xx(除 429)、进程无法启动、线程中断等一律立即失败, 不做无谓重试。
+ * HTTP 4xx(除 429)、线程中断等一律立即失败, 不做无谓重试。
  * 重试预算由传输层统一持有, 因此上层不会再叠加一层重试。</p>
  */
 @Component
 public class MysteelFetcher {
-
-    /** SSH 远端 curl 完成后允许的额外等待秒数(连接/传输开销)。 */
-    private static final long SSH_WAIT_GRACE_SECONDS = 10;
 
     private static final String USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
@@ -68,7 +62,7 @@ public class MysteelFetcher {
     public String fetch(String url, String what, Consumer<String> contentCheck) {
         try {
             return retry.execute(what, () -> {
-                String html = usesSsh() ? fetchViaSsh(url, what) : fetchDirect(url, what);
+                String html = fetchDirect(url, what);
                 if (looksLikeRiskControl(html)) {
                     throw new TransientCallException(what + "返回安全验证页(疑似触发IP风控), 请稍后再试");
                 }
@@ -87,11 +81,6 @@ public class MysteelFetcher {
             }
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, ex.getMessage());
         }
-    }
-
-    private boolean usesSsh() {
-        String host = properties.getFetchSshHost();
-        return host != null && !host.isBlank();
     }
 
     private String fetchDirect(String url, String what) {
@@ -123,50 +112,6 @@ public class MysteelFetcher {
     private boolean hasCookie() {
         String cookie = properties.getCookie();
         return cookie != null && !cookie.isBlank();
-    }
-
-    /** 经跳板机 SSH 远程 curl 取数, 用于绕过本机 IP 风控。 */
-    private String fetchViaSsh(String url, String what) {
-        String safeUrl = url.replace("'", "'\\''");
-        // ssh 会把剩余参数拼接为远端 shell 命令, 故整体作为一条命令传入并自行加引号
-        long timeoutSeconds = Math.max(1, properties.getRequestTimeoutMs() / 1000);
-        String cookieArg = hasCookie()
-                ? " -H 'Cookie: " + properties.getCookie().replace("'", "'\\''") + "'"
-                : "";
-        String remoteCommand = "curl -sSL --max-time " + timeoutSeconds
-                + " -A '" + USER_AGENT + "'"
-                + " -e '" + REFERER + "'"
-                + cookieArg
-                + " '" + safeUrl + "'";
-        List<String> command = List.of(
-                "ssh",
-                "-o", "BatchMode=yes",
-                "-o", "StrictHostKeyChecking=no",
-                "-o", "ConnectTimeout=10",
-                properties.getFetchSshHost(),
-                remoteCommand);
-        try {
-            Process process = new ProcessBuilder(command).start();
-            byte[] out = process.getInputStream().readAllBytes();
-            byte[] err = process.getErrorStream().readAllBytes();
-            if (!process.waitFor(timeoutSeconds + SSH_WAIT_GRACE_SECONDS, TimeUnit.SECONDS)) {
-                process.destroyForcibly();
-                throw new TransientCallException(what + "远程取数超时");
-            }
-            String body = new String(out, StandardCharsets.UTF_8);
-            if (process.exitValue() != 0 || body.isBlank()) {
-                String message = new String(err, StandardCharsets.UTF_8).trim();
-                throw new TransientCallException(what + "远程取数失败: exit " + process.exitValue()
-                        + (message.isEmpty() ? "" : (": " + message)));
-            }
-            return body;
-        } catch (java.io.IOException ex) {
-            // ssh 进程无法启动(如未安装/无权限)属于配置问题, 重试无益。
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, what + "远程取数异常: " + ex.getMessage());
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, what + "远程取数被中断");
-        }
     }
 
     /** 非 200 响应: 429 与 5xx 视为瞬时失败可重试, 其余为确定性失败。 */

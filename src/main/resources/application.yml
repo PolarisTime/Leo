@@ -352,8 +352,7 @@ leo:
       request-timeout-ms: ${LEO_MARKET_STEEL_QUOTE_REQUEST_TIMEOUT_MS:20000}
       # 相邻请求间隔(毫秒), 降低风控概率
       rate-limit-millis: ${LEO_MARKET_STEEL_QUOTE_RATE_LIMIT_MILLIS:1000}
-      # 经跳板机 SSH 远程取数(如 root@139.224.9.181); 为空则直连。用于绕过本机 IP 风控
-      fetch-ssh-host: ${LEO_MARKET_STEEL_QUOTE_FETCH_SSH_HOST:root@139.224.9.181}
+      # 行情抓取固定从本机直连（不再经跳板机/代理）
       # 可选: Mysteel 登录会话 Cookie。站点改为登录可见后，用它恢复价格抓取；属凭据，勿提交仓库
       cookie: ${LEO_MARKET_STEEL_QUOTE_COOKIE:}
       # 取数失败重试(网络抖动/HTTP 429/5xx/风控页): 退避 = initial × multiplier^(n-1), 封顶 max
