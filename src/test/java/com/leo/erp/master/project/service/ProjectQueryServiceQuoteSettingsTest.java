@@ -43,7 +43,6 @@ class ProjectQueryServiceQuoteSettingsTest {
         project.setQuoteBrandCategories("{\"中天\":[\"直条\",\"盘螺\"]}");
         project.setQuoteLengthPremium(new BigDecimal("28.00"));
         project.setQuoteHrb400eFallback(true);
-        project.setQuoteDesignatedBrands("中天");
         when(repository.findByIdAndDeletedFlagFalse(PROJECT_ID)).thenReturn(Optional.of(project));
 
         ProjectQuoteSettings settings = service.findQuoteSettingsById(PROJECT_ID).orElseThrow();
@@ -55,7 +54,8 @@ class ProjectQueryServiceQuoteSettingsTest {
         assertThat(settings.products()).containsExactly("螺纹钢|HRB400E|10|9米", "盘螺|HRB400|8|-");
         assertThat(settings.lengthPremium()).isEqualByComparingTo("28.00");
         assertThat(settings.hrb400eFallback()).isTrue();
-        assertThat(settings.designatedBrands()).containsExactly("中天");
+        // 指定品牌已与允许品牌合并：不再读 quote_designated_brands，恒等于允许品牌
+        assertThat(settings.designatedBrands()).containsExactly("中天", "萍钢");
     }
 
     @Test

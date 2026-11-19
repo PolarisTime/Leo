@@ -99,7 +99,12 @@ public class ProjectQueryService implements ProjectQuery, ProjectProcurementScop
                         CsvValues.split(project.getQuoteProducts()),
                         project.getQuoteLengthPremium(),
                         project.isQuoteHrb400eFallback(),
-                        CsvValues.split(project.getQuoteDesignatedBrands())
+                        /*
+                         * 指定品牌 = 允许品牌（2026-11-19 用户定稿：两个清单合并，默认取允许品牌）。
+                         * `quote_designated_brands` 列保留但不再读取：旧值可能和允许品牌不一致，
+                         * 两处并存只会继续漂移；合并后「能被报单的品牌」只有一个来源。
+                         */
+                        CsvValues.split(project.getAllowedBrands())
                 ));
     }
 

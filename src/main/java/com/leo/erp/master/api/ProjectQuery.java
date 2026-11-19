@@ -59,7 +59,7 @@ public interface ProjectQuery {
      * @param products          参与比价的商品键（类别|材质|规格|长度）
      * @param lengthPremium     12米定尺加价；null 表示未配置，由调用方回退默认值
      * @param hrb400eFallback   是否允许 HRB400 按 HRB400E 代取
-     * @param designatedBrands  指定品牌（仅展示徽标）
+     * @param designatedBrands  指定品牌；2026-11-19 起与允许品牌合并，实现处恒等于 allowedBrands
      */
     record ProjectQuoteSettings(
             Long projectId,
