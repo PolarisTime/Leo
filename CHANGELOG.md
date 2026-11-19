@@ -1,3 +1,15 @@
+# [19.4.0](https://github.com/PolarisTime/Leo/compare/v19.3.0...v19.4.0) (2026-11-19)
+
+
+### Bug Fixes
+
+* **print:** A5 套打超长项目名称折行显示 ([4d522ed](https://github.com/PolarisTime/Leo/commit/4d522ed595c70083330dfb23452fd219c7effc82))
+
+
+### Features
+
+* **project:** 指定品牌合并到允许品牌（默认取允许品牌） ([9df56cb](https://github.com/PolarisTime/Leo/commit/9df56cb8fb7f78993e3f627f6f4c64ecba1fc6bf))
+
 # [19.3.0](https://github.com/PolarisTime/Leo/compare/v19.2.1...v19.3.0) (2026-11-17)
 
 
