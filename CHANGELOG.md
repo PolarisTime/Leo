@@ -1,3 +1,15 @@
+# [19.5.0](https://github.com/PolarisTime/Leo/compare/v19.4.1...v19.5.0) (2026-11-20)
+
+
+### Bug Fixes
+
+* **print:** 回退 A5 公司名称行上移，仅保留项目名称行上移 0.5cm ([7681caa](https://github.com/PolarisTime/Leo/commit/7681caa97cdac4454cf2e87d9509163e3981edd8))
+
+
+### Features
+
+* **print:** A5 项目名称改为两行基准 + 水平居中 ([a898b10](https://github.com/PolarisTime/Leo/commit/a898b107c4e896e0ee68db5f07a4311fb07126d9))
+
 ## [19.4.1](https://github.com/PolarisTime/Leo/compare/v19.4.0...v19.4.1) (2026-11-20)
 
 
