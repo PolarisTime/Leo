@@ -1,3 +1,10 @@
+## [19.5.1](https://github.com/PolarisTime/Leo/compare/v19.5.0...v19.5.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **print:** A5 项目名称改回左对齐 ([7cf98b3](https://github.com/PolarisTime/Leo/commit/7cf98b32c5ddcf2b503d4a0cfbf572c5c7fb8f77))
+
 # [19.5.0](https://github.com/PolarisTime/Leo/compare/v19.4.1...v19.5.0) (2026-11-20)
 
 
