@@ -14,7 +14,6 @@ LODOP.SET_PRINT_STYLEA(0,"FontSize",12);
 LODOP.SET_PRINT_STYLEA(0,"FontColor","#000000");
 
 LODOP.ADD_PRINT_TEXT({{projectNameTop}},110,420,{{projectNameHeight}},"{{projectName}}");
-LODOP.SET_PRINT_STYLEA(0,"Alignment",2);
 LODOP.SET_PRINT_STYLEA(0,"FontSize",{{projectNameFontSize}});
 LODOP.SET_PRINT_STYLEA(0,"LineSpacing",0);
 LODOP.SET_PRINT_STYLEA(0,"WordBreak",{{projectNameWordBreak}});
@@ -55,7 +54,6 @@ LODOP.ADD_PRINT_TEXT(65,565,150,20,"{{displayNo}}");
 LODOP.SET_PRINT_STYLEA(0,"FontSize",12);
 LODOP.SET_PRINT_STYLEA(0,"FontColor","#000000");
 LODOP.ADD_PRINT_TEXT({{projectNameTop}},110,420,{{projectNameHeight}},"{{projectName}}");
-LODOP.SET_PRINT_STYLEA(0,"Alignment",2);
 LODOP.SET_PRINT_STYLEA(0,"FontSize",{{projectNameFontSize}});
 LODOP.SET_PRINT_STYLEA(0,"LineSpacing",0);
 LODOP.SET_PRINT_STYLEA(0,"WordBreak",{{projectNameWordBreak}});

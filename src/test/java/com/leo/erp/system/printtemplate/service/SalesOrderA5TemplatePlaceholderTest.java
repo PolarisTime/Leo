@@ -67,21 +67,19 @@ class SalesOrderA5TemplatePlaceholderTest {
     }
 
     /**
-     * 项目名称行水平居中（2026-11-20 用户要求：以两行为基准、名称不超长时单行居中）。
+     * 项目名称行**左对齐**（2026-11-20 用户第二次确认）。
      *
-     * <p>LODOP 里 {@code SET_PRINT_STYLEA(0,"Alignment",2)} 表示居中；缺了它套打纸上是左对齐，
-     * 单行名称会贴着框左边缘，与两行名称的观感不一致。首页与续页、两个模板共 4 处都要有。</p>
+     * <p>先按「水平居中」加了 {@code SET_PRINT_STYLEA(0,"Alignment",2)}，实际纸张上两行名称
+     * 第一行被缩进、第二行居中，看起来像错行；用户要求改回左对齐。因此这里锁死：
+     * 项目名称行不得再出现居中样式，两行都从左边距 110 起排。</p>
      */
     @Test
-    void a5Templates_centerProjectNameHorizontally() throws Exception {
+    void a5Templates_keepProjectNameLeftAligned() throws Exception {
         for (String path : A5_TEMPLATES) {
             String template = new ClassPathResource(path).getContentAsString(StandardCharsets.UTF_8);
-            assertThat(template.split("SET_PRINT_STYLEA\\(0,\"Alignment\",2\\);", -1).length - 1)
-                    .as("%s 项目名称行必须水平居中（首页 + 续页各一处）", path)
-                    .isGreaterThanOrEqualTo(2);
             assertThat(template)
-                    .as("%s 居中样式必须紧跟项目名称行", path)
-                    .contains("\"{{projectName}}\");\nLODOP.SET_PRINT_STYLEA(0,\"Alignment\",2);");
+                    .as("%s 项目名称行必须左对齐（不得有居中样式）", path)
+                    .doesNotContain("\"{{projectName}}\");\nLODOP.SET_PRINT_STYLEA(0,\"Alignment\",2);");
         }
     }
 
