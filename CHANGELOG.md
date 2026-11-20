@@ -1,3 +1,10 @@
+## [19.4.1](https://github.com/PolarisTime/Leo/compare/v19.4.0...v19.4.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **print:** A5 套打公司名称行与项目名称行整体上移 0.5cm ([e216620](https://github.com/PolarisTime/Leo/commit/e216620fc8059bdf6d0a3c2ba75694fc8a404e1c))
+
 # [19.4.0](https://github.com/PolarisTime/Leo/compare/v19.3.0...v19.4.0) (2026-11-19)
 
 
