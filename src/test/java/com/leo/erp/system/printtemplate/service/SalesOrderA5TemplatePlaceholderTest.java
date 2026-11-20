@@ -43,22 +43,26 @@ class SalesOrderA5TemplatePlaceholderTest {
     }
 
     /**
-     * 2026-11-20 用户要求：公司名称行（customerName）与项目名称行整体**上移 0.5cm**。
+     * 2026-11-20 用户要求（第二次确认）：**只把项目名称行上移 0.5cm，公司名称行保持原位**。
      *
-     * <p>LODOP 的 ADD_PRINT_TEXT 坐标单位是 px（96dpi），0.5cm ≈ 19px：
-     * customerName 行 45 → 26；项目名行由 `projectNameTop` 驱动（print-runtime.json，
-     * 默认档 + 各字号档）90 → 71。两处必须同时改，否则套打纸上两行会错位。</p>
+     * <p>第一次改动把两行一起上移（customerName 45 → 26、projectNameTop 90 → 71），
+     * 用户在实际纸张上确认后要求回退公司名称那一条 —— 套打纸上公司名称与表格的相对位置是对的，
+     * 上移后反而压到了上方预印内容。因此这里锁：companyName 仍是 45（首页与续页），
+     * 项目名称继续走 projectNameTop=71。</p>
      */
     @Test
-    void a5Templates_moveCompanyAndProjectNameRowsUpByHalfCentimeter() throws Exception {
+    void a5Templates_keepCompanyNamerowAndMoveOnlyProjectName() throws Exception {
         for (String path : A5_TEMPLATES) {
             String template = new ClassPathResource(path).getContentAsString(StandardCharsets.UTF_8);
             assertThat(template)
-                    .as("%s 公司名称行必须上移到 top=26（原 45）", path)
-                    .contains("ADD_PRINT_TEXT(26,110,400,20,\"{{customerName}}\")");
+                    .as("%s 公司名称行保持原位 top=45", path)
+                    .contains("ADD_PRINT_TEXT(45,110,400,20,\"{{customerName}}\")");
             assertThat(template)
-                    .as("%s 不应再使用旧坐标 45", path)
-                    .doesNotContain("ADD_PRINT_TEXT(45,110,400,20,\"{{customerName}}\")");
+                    .as("%s 公司名称行不应再被上移到 26", path)
+                    .doesNotContain("ADD_PRINT_TEXT(26,110,400,20,\"{{customerName}}\")");
+            assertThat(template)
+                    .as("%s 项目名称行仍由 projectNameTop 驱动", path)
+                    .contains("ADD_PRINT_TEXT({{projectNameTop}},110,420,{{projectNameHeight}},\"{{projectName}}\")");
         }
     }
 
