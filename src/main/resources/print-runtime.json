@@ -252,7 +252,7 @@
             "minDisplayWidth": 140,
             "values": {
               "projectNameMultiline": "1",
-              "projectNameTop": "90",
+              "projectNameTop": "71",
               "projectNameHeight": "40",
               "projectNameFontSize": "8",
               "projectNameWordBreak": "2"
@@ -262,7 +262,7 @@
             "minDisplayWidth": 124,
             "values": {
               "projectNameMultiline": "1",
-              "projectNameTop": "90",
+              "projectNameTop": "71",
               "projectNameHeight": "40",
               "projectNameFontSize": "9",
               "projectNameWordBreak": "2"
@@ -272,7 +272,7 @@
             "minDisplayWidth": 112,
             "values": {
               "projectNameMultiline": "1",
-              "projectNameTop": "90",
+              "projectNameTop": "71",
               "projectNameHeight": "40",
               "projectNameFontSize": "10",
               "projectNameWordBreak": "2"
@@ -282,7 +282,7 @@
             "minDisplayWidth": 104,
             "values": {
               "projectNameMultiline": "1",
-              "projectNameTop": "90",
+              "projectNameTop": "71",
               "projectNameHeight": "40",
               "projectNameFontSize": "11",
               "projectNameWordBreak": "2"
@@ -292,7 +292,7 @@
             "minDisplayWidth": 52,
             "values": {
               "projectNameMultiline": "1",
-              "projectNameTop": "90",
+              "projectNameTop": "71",
               "projectNameHeight": "40",
               "projectNameFontSize": "12",
               "projectNameWordBreak": "2"
@@ -301,7 +301,7 @@
         ],
         "defaultValues": {
           "projectNameMultiline": "",
-          "projectNameTop": "90",
+          "projectNameTop": "71",
           "projectNameHeight": "20",
           "projectNameFontSize": "12",
           "projectNameWordBreak": "0"

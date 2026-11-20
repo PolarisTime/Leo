@@ -42,6 +42,46 @@ class SalesOrderA5TemplatePlaceholderTest {
         }
     }
 
+    /**
+     * 2026-11-20 用户要求：公司名称行（customerName）与项目名称行整体**上移 0.5cm**。
+     *
+     * <p>LODOP 的 ADD_PRINT_TEXT 坐标单位是 px（96dpi），0.5cm ≈ 19px：
+     * customerName 行 45 → 26；项目名行由 `projectNameTop` 驱动（print-runtime.json，
+     * 默认档 + 各字号档）90 → 71。两处必须同时改，否则套打纸上两行会错位。</p>
+     */
+    @Test
+    void a5Templates_moveCompanyAndProjectNameRowsUpByHalfCentimeter() throws Exception {
+        for (String path : A5_TEMPLATES) {
+            String template = new ClassPathResource(path).getContentAsString(StandardCharsets.UTF_8);
+            assertThat(template)
+                    .as("%s 公司名称行必须上移到 top=26（原 45）", path)
+                    .contains("ADD_PRINT_TEXT(26,110,400,20,\"{{customerName}}\")");
+            assertThat(template)
+                    .as("%s 不应再使用旧坐标 45", path)
+                    .doesNotContain("ADD_PRINT_TEXT(45,110,400,20,\"{{customerName}}\")");
+        }
+    }
+
+    @Test
+    void printRuntime_projectNameTopIsMovedUpByHalfCentimeter() {
+        PrintRuntimeProperties properties = new PrintRuntimeProperties(new ObjectMapper());
+        var adaptiveFields = properties.childObjects(
+                properties.topLevelFields().path("adaptiveFields"));
+        var projectName = adaptiveFields.stream()
+                .filter(field -> "projectName".equals(field.path("sourceField").asText()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(properties.text(projectName.path("defaultValues"), "projectNameTop", ""))
+                .as("默认档项目名 top")
+                .isEqualTo("71");
+        for (var rule : properties.childObjects(projectName.path("rules"))) {
+            assertThat(properties.text(rule.path("values"), "projectNameTop", ""))
+                    .as("字号档项目名 top 必须同步上移")
+                    .isEqualTo("71");
+        }
+    }
+
     @Test
     void salesOrderPrintColumns_exposeDisplayNo() {
         PrintRuntimeProperties properties = new PrintRuntimeProperties(new ObjectMapper());
