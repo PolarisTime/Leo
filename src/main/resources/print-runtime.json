@@ -300,11 +300,11 @@
           }
         ],
         "defaultValues": {
-          "projectNameMultiline": "",
+          "projectNameMultiline": "1",
           "projectNameTop": "71",
-          "projectNameHeight": "20",
+          "projectNameHeight": "40",
           "projectNameFontSize": "12",
-          "projectNameWordBreak": "0"
+          "projectNameWordBreak": "2"
         }
       }
     ],

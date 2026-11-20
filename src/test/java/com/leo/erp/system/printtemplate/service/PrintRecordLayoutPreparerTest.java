@@ -89,17 +89,24 @@ class PrintRecordLayoutPreparerTest {
         assertThat(data.get("projectNameFontSize")).isEqualTo("10");
     }
 
+    /**
+     * 2026-11-20 用户定稿：项目名称**统一以「两行」为基准**排版。
+     *
+     * <p>短名称仍然只画一行（内容放得下），但框高、折行开关与长名称一致（40 / WordBreak 2），
+     * 这样单行名称与两行名称的第一行落在同一基线上，不会因档位不同而上下跳；水平方向由模板
+     * 的 {@code SET_PRINT_STYLEA(0,"Alignment",2)} 居中。</p>
+     */
     @Test
-    void prepare_shouldKeepShortProjectNameOnOneLine() {
+    void prepare_shouldUseTwoLineBaselineEvenForShortProjectName() {
         Map<String, String> data = new HashMap<>();
         data.put("projectName", "云潮筝鸣府");
 
         preparer.prepare("sales-order", "A5销售单", null, data, new ArrayList<>());
 
-        assertThat(data.get("projectNameWordBreak")).isEqualTo("0");
-        assertThat(data.get("projectNameHeight")).isEqualTo("20");
+        assertThat(data.get("projectNameWordBreak")).isEqualTo("2");
+        assertThat(data.get("projectNameHeight")).isEqualTo("40");
         assertThat(data.get("projectNameFontSize")).isEqualTo("12");
-        assertThat(data.get("projectNameMultiline")).isEmpty();
+        assertThat(data.get("projectNameMultiline")).isEqualTo("1");
     }
 
     /**
