@@ -46,7 +46,7 @@ jobs:
       PROD_STOP_COMMAND: ${{ vars.PROD_STOP_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh stop' }}
     steps:
       - name: Checkout Leo deploy scripts
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Verify local production target
         run: |
@@ -98,7 +98,7 @@ jobs:
       PROD_STOP_COMMAND: ${{ vars.PROD_STOP_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh stop' }}
     steps:
       - name: Checkout Leo deploy scripts
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configure SSH
         run: |
