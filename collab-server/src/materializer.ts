@@ -227,6 +227,25 @@ export class CollabMaterializer {
     return this.rooms.get(room)?.listId ?? null
   }
 
+  /** 刷新价格表房间的 SQL 基线（供 `collab:structure` 通知调用）。 */
+  async reloadBaseline(room: string): Promise<void> {
+    const state = this.rooms.get(room)
+    if (!state || state.listId === null) return
+    state.baseline = await this.store.loadMaterialized(room, state.listId)
+    state.baselineLoaded = true
+  }
+
+  /** 价格表被 REST 删除时释放房间内存与挂起计时器。 */
+  invalidateRoom(room: string): void {
+    const state = this.rooms.get(room)
+    if (!state) return
+    if (state.timer) {
+      this.timers.clearTimeout(state.timer)
+      state.timer = null
+    }
+    this.rooms.delete(room)
+  }
+
   dispose(): void {
     for (const state of this.rooms.values()) {
       if (state.timer) {

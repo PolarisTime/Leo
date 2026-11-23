@@ -1,10 +1,12 @@
 package com.leo.erp.market.quotation.service;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.collab.CollabStructureNotifier;
 import com.leo.erp.common.support.KeyedLockRegistry;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -23,14 +25,21 @@ import java.util.function.Supplier;
 public class QuoteSheetService {
 
     private static final int MAX_ATTEMPTS = 3;
+    private static final String COLLAB_ROOM_PREFIX = "quote-sheet:";
 
     private final QuoteSheetStore store;
     private final QuoteSheetEditLockService editLockService;
     private final KeyedLockRegistry locks = new KeyedLockRegistry();
+    private CollabStructureNotifier collabStructureNotifier;
 
     public QuoteSheetService(QuoteSheetStore store, QuoteSheetEditLockService editLockService) {
         this.store = store;
         this.editLockService = editLockService;
+    }
+
+    @Autowired(required = false)
+    void setCollabStructureNotifier(CollabStructureNotifier collabStructureNotifier) {
+        this.collabStructureNotifier = collabStructureNotifier;
     }
 
     public QuoteSheetResponse create(QuoteSheetRequest request) {
@@ -47,38 +56,58 @@ public class QuoteSheetService {
 
     public void delete(Long id) {
         store.delete(id);
+        notifyStructureChanged(id, "sheet-deleted");
     }
 
     public QuoteSheetResponse update(Long id, QuoteSheetRequest request, Long expectedVersion, Long ownerId) {
         editLockService.ensureWritable(id, ownerId);
-        return withLock(id, () -> withCurrentVersion(store.update(id, request, expectedVersion), id));
+        QuoteSheetResponse response = withLock(id, () -> withCurrentVersion(store.update(id, request, expectedVersion), id));
+        notifyStructureChanged(id, "sheet-updated");
+        return response;
     }
 
     public QuoteSheetItemWrite addItem(Long sheetId, QuoteSheetRequest.ItemRequest request,
                                        Long expectedVersion, Long ownerId) {
         editLockService.ensureWritable(sheetId, ownerId);
-        return withLock(sheetId, () -> withCurrentVersion(store.addItem(sheetId, request, expectedVersion), sheetId));
+        QuoteSheetItemWrite result = withLock(sheetId,
+                () -> withCurrentVersion(store.addItem(sheetId, request, expectedVersion), sheetId));
+        notifyStructureChanged(sheetId, "item-added");
+        return result;
     }
 
     public QuoteSheetItemWrite updateItem(Long sheetId, Long itemId,
                                           QuoteSheetRequest.ItemRequest request,
                                           Long expectedVersion, Long ownerId) {
         editLockService.ensureWritable(sheetId, ownerId);
-        return withLock(sheetId,
+        QuoteSheetItemWrite result = withLock(sheetId,
                 () -> withCurrentVersion(store.updateItem(sheetId, itemId, request, expectedVersion), sheetId));
+        notifyStructureChanged(sheetId, "item-updated");
+        return result;
     }
 
     /** 调整商品行顺序(子资源 item-order): 行号由服务端归一化为 1..N。 */
     public QuoteSheetResponse reorderItems(Long sheetId, java.util.List<Long> itemIds,
                                            Long expectedVersion, Long ownerId) {
         editLockService.ensureWritable(sheetId, ownerId);
-        return withLock(sheetId,
+        QuoteSheetResponse response = withLock(sheetId,
                 () -> withCurrentVersion(store.reorderItems(sheetId, itemIds, expectedVersion), sheetId));
+        notifyStructureChanged(sheetId, "items-reordered");
+        return response;
     }
 
     public Long deleteItem(Long sheetId, Long itemId, Long expectedVersion, Long ownerId) {
         editLockService.ensureWritable(sheetId, ownerId);
-        return withLock(sheetId, () -> withCurrentVersion(store.deleteItem(sheetId, itemId, expectedVersion), sheetId));
+        Long version = withLock(sheetId,
+                () -> withCurrentVersion(store.deleteItem(sheetId, itemId, expectedVersion), sheetId));
+        notifyStructureChanged(sheetId, "item-deleted");
+        return version;
+    }
+
+    private void notifyStructureChanged(Long sheetId, String event) {
+        if (collabStructureNotifier != null && sheetId != null) {
+            collabStructureNotifier.notifyChanged(
+                    COLLAB_ROOM_PREFIX + sheetId, event, String.valueOf(sheetId));
+        }
     }
 
     /**

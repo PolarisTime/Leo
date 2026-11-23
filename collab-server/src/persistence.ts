@@ -37,6 +37,8 @@ export interface CollabPersistenceOptions {
   persistUpdates: boolean
   /** 增量批量写窗口（毫秒）：把一次连打里的多条 update 合并成一条 INSERT。 */
   updateFlushDelayMs?: number
+  /** 单房间累计追加多少条增量后自动触发快照压缩（默认 500）。 */
+  compactUpdateThreshold?: number
 }
 
 export interface PersistenceMetrics {
@@ -45,6 +47,8 @@ export interface PersistenceMetrics {
   storedDocuments: number
   appendedUpdates: number
   bootstrapCount: number
+  compactedRooms: number
+  compactedUpdates: number
 }
 
 /** 从 SQL 快照构造 Y.Doc 的初始状态（§11 阶段 0：从 SQL 生成 Y.Doc）。 */
@@ -118,14 +122,18 @@ export class CollabPersistence {
   private readonly bootstrapFromSql: boolean
   private readonly persistUpdates: boolean
   private readonly updateFlushDelayMs: number
+  private readonly compactUpdateThreshold: number
 
   private readonly pendingUpdates = new Map<string, Uint8Array[]>()
   private readonly flushTimers = new Map<string, NodeJS.Timeout>()
   private readonly flushChains = new Map<string, Promise<void>>()
+  private readonly updatesSinceCompact = new Map<string, number>()
   private readonly counters = {
     storedDocuments: 0,
     appendedUpdates: 0,
     bootstrapCount: 0,
+    compactedRooms: 0,
+    compactedUpdates: 0,
   }
 
   constructor(options: CollabPersistenceOptions) {
@@ -134,6 +142,7 @@ export class CollabPersistence {
     this.bootstrapFromSql = options.bootstrapFromSql
     this.persistUpdates = options.persistUpdates
     this.updateFlushDelayMs = options.updateFlushDelayMs ?? 100
+    this.compactUpdateThreshold = options.compactUpdateThreshold ?? 500
   }
 
   /**
@@ -233,6 +242,16 @@ export class CollabPersistence {
       try {
         const appended = await this.store.appendUpdates(room, queue)
         this.counters.appendedUpdates += appended
+        if (appended > 0 && this.store.compactRoom) {
+          const accumulated =
+            (this.updatesSinceCompact.get(room) ?? 0) + appended
+          if (accumulated >= this.compactUpdateThreshold) {
+            this.updatesSinceCompact.set(room, 0)
+            await this.runCompactRoom(room)
+          } else {
+            this.updatesSinceCompact.set(room, accumulated)
+          }
+        }
       } catch (error) {
         const pending = this.pendingUpdates.get(room) ?? []
         this.pendingUpdates.set(room, [...queue, ...pending])
@@ -243,6 +262,67 @@ export class CollabPersistence {
     const settled = next.catch(() => undefined)
     this.flushChains.set(room, settled)
     await next
+  }
+
+  /** 对单个房间执行快照压缩（串行排在同房间 flush 链上，避免与追加竞态）。 */
+  async compactRoom(room: string): Promise<number> {
+    if (!this.store.compactRoom) return 0
+    await this.flushRoom(room)
+    const previous = this.flushChains.get(room) ?? Promise.resolve()
+    let removed = 0
+    const next = previous.then(async () => {
+      removed = await this.runCompactRoom(room)
+    })
+    this.flushChains.set(
+      room,
+      next.catch(() => undefined),
+    )
+    await next
+    return removed
+  }
+
+  /** 扫描并压缩所有存在足够增量的房间（24h 周期压缩任务入口）。 */
+  async compactAll(minUpdates = 1): Promise<number> {
+    if (!this.store.compactRoom || !this.store.listRoomsWithUpdates) return 0
+    const rooms = await this.store.listRoomsWithUpdates(minUpdates)
+    let totalRemoved = 0
+    for (const room of rooms) {
+      try {
+        totalRemoved += await this.compactRoom(room)
+      } catch (error) {
+        this.logger.warn('房间快照压缩失败，等待下次周期重试', {
+          room,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+    return totalRemoved
+  }
+
+  /** 资源被 REST 删除后清理持久化文档与增量队列。 */
+  async deleteRoom(room: string): Promise<void> {
+    const timer = this.flushTimers.get(room)
+    if (timer) {
+      clearTimeout(timer)
+      this.flushTimers.delete(room)
+    }
+    this.pendingUpdates.delete(room)
+    this.updatesSinceCompact.delete(room)
+    if (this.store.deleteDocState) {
+      await this.store.deleteDocState(room)
+    }
+  }
+
+  private async runCompactRoom(room: string): Promise<number> {
+    if (!this.store.compactRoom) return 0
+    const removed = await this.store.compactRoom(room)
+    if (removed > 0) {
+      this.updatesSinceCompact.set(room, 0)
+      this.counters.compactedRooms += 1
+      this.counters.compactedUpdates += removed
+      this.logger.info('房间协作增量已压缩为新快照', { room, removed })
+    }
+    return removed
   }
 
   /** 优雅退出：刷掉所有房间的增量，并等待进行中的写完成。 */
@@ -266,6 +346,8 @@ export class CollabPersistence {
       storedDocuments: this.counters.storedDocuments,
       appendedUpdates: this.counters.appendedUpdates,
       bootstrapCount: this.counters.bootstrapCount,
+      compactedRooms: this.counters.compactedRooms,
+      compactedUpdates: this.counters.compactedUpdates,
     }
   }
 }

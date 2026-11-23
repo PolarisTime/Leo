@@ -58,6 +58,12 @@ export interface CollabConfig {
   logLevel: LogLevel
   /** 优雅退出时等待未完成写回/物化的上限。 */
   shutdownTimeoutMs: number
+  /** 单个房间累计追加多少条增量后触发快照压缩（默认 500）。 */
+  compactUpdateThreshold: number
+  /** 周期快照压缩间隔（毫秒，默认 24h；0 表示关闭周期压缩）。 */
+  compactIntervalMs: number
+  /** Redis 活跃协作房间标记 TTL（秒，默认 60）。 */
+  activeRoomTtlSeconds: number
 }
 
 function readString(value: string | undefined): string | null {
@@ -204,6 +210,27 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CollabConfig {
       15_000,
       1_000,
       120_000,
+    ),
+    compactUpdateThreshold: readInt(
+      env,
+      'COLLAB_COMPACT_UPDATE_THRESHOLD',
+      500,
+      1,
+      100_000,
+    ),
+    compactIntervalMs: readInt(
+      env,
+      'COLLAB_COMPACT_INTERVAL_MS',
+      24 * 60 * 60 * 1000,
+      0,
+      7 * 24 * 60 * 60 * 1000,
+    ),
+    activeRoomTtlSeconds: readInt(
+      env,
+      'COLLAB_ACTIVE_ROOM_TTL_SECONDS',
+      60,
+      10,
+      600,
     ),
   }
 }

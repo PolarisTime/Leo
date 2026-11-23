@@ -18,6 +18,7 @@
  */
 
 import { createHash } from 'node:crypto'
+import * as Y from 'yjs'
 import {
   assertNoNulByte,
   type CellValue,
@@ -255,6 +256,88 @@ export class PostgresStore
       [room, ...fresh],
     )
     return fresh.length
+  }
+
+  /**
+   * 单事务快照压缩：合并已有快照 + 全部增量行，生成新全量快照并清理已合入的增量。
+   * 仅删除 `id <= maxId` 的行，确保压缩期间并发新追加的增量不被误删。
+   */
+  async compactRoom(room: string): Promise<number> {
+    return withTransaction(this.pool, async (client) => {
+      const updatesResult = await client.query<{
+        id: string
+        update_blob: Buffer
+      }>(
+        `SELECT id, update_blob
+           FROM mk_supplier_price_collab_update
+          WHERE room = $1
+          ORDER BY id ASC`,
+        [room],
+      )
+      if (updatesResult.rows.length === 0) return 0
+
+      const docResult = await client.query<{ state: Buffer | null }>(
+        'SELECT state FROM mk_supplier_price_collab_doc WHERE room = $1 FOR UPDATE',
+        [room],
+      )
+      const doc = new Y.Doc()
+      try {
+        const existingState = docResult.rows[0]?.state
+        if (existingState && existingState.byteLength > 0) {
+          Y.applyUpdate(doc, new Uint8Array(existingState))
+        }
+        for (const row of updatesResult.rows) {
+          if (row.update_blob && row.update_blob.byteLength > 0) {
+            Y.applyUpdate(doc, new Uint8Array(row.update_blob))
+          }
+        }
+        const merged = Y.encodeStateAsUpdate(doc)
+        await client.query(
+          `INSERT INTO mk_supplier_price_collab_doc (room, state, updated_at)
+           VALUES ($1, $2, now())
+           ON CONFLICT (room)
+           DO UPDATE SET state = EXCLUDED.state, updated_at = now()`,
+          [room, Buffer.from(merged)],
+        )
+      } finally {
+        doc.destroy()
+      }
+
+      const maxId = updatesResult.rows[updatesResult.rows.length - 1].id
+      const deleted = await client.query(
+        `DELETE FROM mk_supplier_price_collab_update
+          WHERE room = $1
+            AND id <= $2`,
+        [room, maxId],
+      )
+      return deleted.rowCount ?? updatesResult.rows.length
+    })
+  }
+
+  async listRoomsWithUpdates(minUpdates: number): Promise<string[]> {
+    const threshold = Math.max(1, Math.floor(minUpdates))
+    const result = await this.pool.query<{ room: string }>(
+      `SELECT room
+         FROM mk_supplier_price_collab_update
+        GROUP BY room
+       HAVING COUNT(*) >= $1`,
+      [threshold],
+    )
+    return result.rows.map((row) => String(row.room))
+  }
+
+  async deleteDocState(room: string): Promise<void> {
+    this.lastUpdateHashByRoom.delete(room)
+    await withTransaction(this.pool, async (client) => {
+      await client.query(
+        'DELETE FROM mk_supplier_price_collab_update WHERE room = $1',
+        [room],
+      )
+      await client.query(
+        'DELETE FROM mk_supplier_price_collab_doc WHERE room = $1',
+        [room],
+      )
+    })
   }
 
   async loadInitialList(room: string): Promise<InitialListSnapshot | null> {

@@ -1,5 +1,6 @@
 package com.leo.erp.market.quotation.service;
 
+import com.leo.erp.common.collab.CollabStructureNotifier;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.market.quotation.web.dto.QuoteSheetRequest;
@@ -191,5 +192,22 @@ class QuoteSheetServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("版本不匹配");
         verify(store, times(1)).reorderItems(eq(9L), any(), eq(2L));
+    }
+
+    @Test
+    void structuralMutations_notifyCollabStructureChannel() {
+        CollabStructureNotifier notifier = org.mockito.Mockito.mock(CollabStructureNotifier.class);
+        service.setCollabStructureNotifier(notifier);
+        when(store.addItem(eq(9L), any(), eq(3L))).thenReturn(new QuoteSheetItemWrite(itemResponse(), 4L));
+        when(store.currentVersion(9L)).thenReturn(4L);
+        when(store.deleteItem(9L, 301L, 4L)).thenReturn(5L);
+
+        service.addItem(9L, itemRequest(), 3L, 7L);
+        service.deleteItem(9L, 301L, 4L, 7L);
+        service.delete(9L);
+
+        verify(notifier).notifyChanged("quote-sheet:9", "item-added", "9");
+        verify(notifier).notifyChanged("quote-sheet:9", "item-deleted", "9");
+        verify(notifier).notifyChanged("quote-sheet:9", "sheet-deleted", "9");
     }
 }

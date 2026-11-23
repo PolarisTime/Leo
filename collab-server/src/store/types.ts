@@ -54,6 +54,15 @@ export interface CollabDocStore {
    * （**只播种 ton/remark**，规格/行结构归 REST）；找不到返回 null。
    */
   loadInitialQuoteSheet(room: string): Promise<InitialQuoteSheetSnapshot | null>
+  /**
+   * 压缩单房间增量：把 `mk_supplier_price_collab_doc` 快照与全部待清理增量合并成一份
+   * 新全量快照，并删除已合入的增量行。返回清理掉的增量条数。
+   */
+  compactRoom?(room: string): Promise<number>
+  /** 列出待压缩房间（增量条数 >= minUpdates）。 */
+  listRoomsWithUpdates?(minUpdates: number): Promise<string[]>
+  /** 删除某房间的协作文档与增量（对应资源被 REST 删除时调用）。 */
+  deleteDocState?(room: string): Promise<void>
   close(): Promise<void>
 }
 

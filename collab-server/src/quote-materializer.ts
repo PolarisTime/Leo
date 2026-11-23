@@ -55,6 +55,12 @@ export interface QuoteMaterializerOptions {
   /** 注入定时器（测试用）。 */
   timers?: Pick<typeof globalThis, 'setTimeout' | 'clearTimeout'>
   now?: () => number
+  /**
+   * 发现未知 itemId 时自动重刷 SQL 基线的最短冷却间隔（毫秒，默认 500）。
+   * 防止客户端反复写入不存在的脏 ID 触发高频查库，同时保证无 Redis 部署下
+   * REST 新增行后紧接着的协作编辑不会因旧基线被静默丢弃。
+   */
+  unknownItemReloadCooldownMs?: number
 }
 
 interface PendingQuoteChange {
@@ -76,6 +82,7 @@ interface QuoteRoomState {
   retryDelayMs: number
   flushChain: Promise<void>
   baselineLoaded: boolean
+  lastBaselineReloadAt: number
   pendingSince: number | null
   lastError: string | null
   lastVersion: string | null
@@ -119,6 +126,7 @@ export class QuoteMaterializer {
     'setTimeout' | 'clearTimeout'
   >
   private readonly now: () => number
+  private readonly unknownItemReloadCooldownMs: number
   private readonly rooms = new Map<string, QuoteRoomState>()
   private lastError: string | null = null
   private ignoredItems = 0
@@ -133,6 +141,8 @@ export class QuoteMaterializer {
     this.onMaterialized = options.onMaterialized
     this.timers = options.timers ?? globalThis
     this.now = options.now ?? (() => Date.now())
+    this.unknownItemReloadCooldownMs =
+      options.unknownItemReloadCooldownMs ?? 500
   }
 
   /**
@@ -166,8 +176,69 @@ export class QuoteMaterializer {
       state.lastSeen = new Map()
     }
     await this.ensureBaseline(state, snapshot.meta.sheetId)
+    /*
+     * 兜底自愈（无 Redis 单实例模式或 collab:structure 通知略晚于客户端编辑时）：
+     * 如果文档里出现了当前基线未知的 itemId（典型场景：Java REST 刚 POST /items 新增一行），
+     * 在冷却窗口允许的情况下先向 SQL 重拉一次基线，避免新行改动被永久误丢弃。
+     */
+    if (
+      state.baselineLoaded &&
+      this.hasUnknownItem(state, snapshot) &&
+      this.now() - state.lastBaselineReloadAt >=
+        this.unknownItemReloadCooldownMs
+    ) {
+      await this.reloadBaseline(room)
+    }
     this.applyDocumentDiff(state, snapshot, actorId)
     if (state.pending.size > 0) this.scheduleFlush(state, this.debounceMs)
+  }
+
+  /**
+   * 刷新指定房间的 SQL 物化基线（供 `collab:structure` 通知与未知行自愈共用）。
+   *
+   * <p>REST 新增的行会立刻进入基线，后续或已挂起的 ton/remark 改动即可正常落库；
+   * REST 删除的行会从基线与 pending 移除，避免再对其发无效 UPDATE。</p>
+   */
+  async reloadBaseline(
+    room: string,
+    doc?: Y.Doc,
+    actorId: string = SYSTEM_ACTOR_ID,
+  ): Promise<void> {
+    const state = this.ensureRoom(room, null)
+    const sheetId = state.sheetId
+    if (sheetId === null) return
+    const nextBaseline = await this.store.loadQuoteMaterialized(room, sheetId)
+    state.baseline = nextBaseline
+    state.baselineLoaded = true
+    state.lastBaselineReloadAt = this.now()
+    // 清理已被 SQL 删除行的 pending；保留仍存在且尚待刷盘的 pending。
+    for (const itemId of [...state.pending.keys()]) {
+      if (!nextBaseline.has(itemId)) {
+        state.pending.delete(itemId)
+      }
+    }
+    // 新增行补进 lastSeen 的基线态（若此前尚未在文档里见过，避免误把 SQL 初始值当成新编辑）
+    for (const [itemId, record] of nextBaseline) {
+      if (!state.lastSeen.has(itemId)) {
+        state.lastSeen.set(itemId, record)
+      }
+    }
+    if (doc) {
+      const snapshot = readQuoteSheetSnapshot(doc)
+      this.applyDocumentDiff(state, snapshot, actorId, 'load')
+      if (state.pending.size > 0) this.scheduleFlush(state, this.debounceMs)
+    }
+  }
+
+  /** 报价单被 REST 删除时释放房间内存与计时器。 */
+  invalidateRoom(room: string): void {
+    const state = this.rooms.get(room)
+    if (!state) return
+    if (state.timer) {
+      this.timers.clearTimeout(state.timer)
+      state.timer = null
+    }
+    this.rooms.delete(room)
   }
 
   /** 立即物化某房间（断连 flush / 关闭 flush）；无变更时返回 null。 */
@@ -248,6 +319,7 @@ export class QuoteMaterializer {
       retryDelayMs: 0,
       flushChain: Promise.resolve(),
       baselineLoaded: false,
+      lastBaselineReloadAt: 0,
       pendingSince: null,
       lastError: null,
       lastVersion: null,
@@ -272,6 +344,17 @@ export class QuoteMaterializer {
     state.baseline = await this.store.loadQuoteMaterialized(state.room, sheetId)
     state.lastSeen = new Map(state.baseline)
     state.baselineLoaded = true
+    state.lastBaselineReloadAt = this.now()
+  }
+
+  private hasUnknownItem(
+    state: QuoteRoomState,
+    snapshot: ReturnType<typeof readQuoteSheetSnapshot>,
+  ): boolean {
+    for (const itemId of snapshot.items.keys()) {
+      if (!state.baseline.has(itemId)) return true
+    }
+    return false
   }
 
   /** 对比 lastSeen 与新快照，把「与 SQL 不同的行」记进 pending。 */

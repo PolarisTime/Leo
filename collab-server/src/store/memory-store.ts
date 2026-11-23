@@ -5,6 +5,7 @@
  * 清空格删除、每格一条审计、**空变更不产生任何写入**（「重复 store 不重复插入」的保证）。</p>
  */
 
+import * as Y from 'yjs'
 import {
   type CellValue,
   DEFAULT_PRICE_STATUS,
@@ -134,6 +135,41 @@ export class MemoryStore
       appended += 1
     }
     return appended
+  }
+
+  async compactRoom(room: string): Promise<number> {
+    const queue = this.updates.get(room)
+    if (!queue || queue.length === 0) return 0
+    const doc = new Y.Doc()
+    try {
+      const existing = this.docs.get(room)
+      if (existing && existing.byteLength > 0) {
+        Y.applyUpdate(doc, existing)
+      }
+      for (const update of queue) {
+        if (update.byteLength > 0) Y.applyUpdate(doc, update)
+      }
+      this.docs.set(room, Y.encodeStateAsUpdate(doc))
+    } finally {
+      doc.destroy()
+    }
+    const removed = queue.length
+    this.updates.delete(room)
+    return removed
+  }
+
+  async listRoomsWithUpdates(minUpdates: number): Promise<string[]> {
+    const threshold = Math.max(1, Math.floor(minUpdates))
+    const rooms: string[] = []
+    for (const [room, queue] of this.updates.entries()) {
+      if (queue.length >= threshold) rooms.push(room)
+    }
+    return rooms
+  }
+
+  async deleteDocState(room: string): Promise<void> {
+    this.docs.delete(room)
+    this.updates.delete(room)
   }
 
   async loadInitialList(room: string): Promise<InitialListSnapshot | null> {

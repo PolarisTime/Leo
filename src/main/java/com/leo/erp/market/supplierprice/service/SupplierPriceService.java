@@ -1,5 +1,7 @@
 package com.leo.erp.market.supplierprice.service;
 
+import com.leo.erp.common.collab.CollabActiveGuard;
+import com.leo.erp.common.collab.CollabStructureNotifier;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -10,6 +12,7 @@ import com.leo.erp.market.supplierprice.repository.SupplierPriceListRepository;
 import com.leo.erp.market.supplierprice.web.dto.SupplierPriceGridResponse;
 import com.leo.erp.market.supplierprice.web.dto.SupplierPriceListRequests;
 import com.leo.erp.master.api.SupplierQuery;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,10 +22,12 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 供应商价格表（比价一手价）服务。
@@ -43,10 +48,14 @@ public class SupplierPriceService {
     private static final List<String> VALID_STATUSES = List.of(
             STATUS_NORMAL, "PENDING", "BUNDLED", "NEGOTIABLE", STATUS_OUT_OF_STOCK);
 
+    private static final String COLLAB_ROOM_PREFIX = "supplier-price-list:";
+
     private final SupplierPriceListRepository repository;
     /** 供应商只读端口：跨模块只依赖 master.api，不碰 master 的 entity/repository 内部。 */
     private final SupplierQuery supplierQuery;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
+    private CollabActiveGuard collabActiveGuard;
+    private CollabStructureNotifier collabStructureNotifier;
 
     public SupplierPriceService(SupplierPriceListRepository repository,
                                 SupplierQuery supplierQuery,
@@ -54,6 +63,16 @@ public class SupplierPriceService {
         this.repository = repository;
         this.supplierQuery = supplierQuery;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
+    }
+
+    @Autowired(required = false)
+    void setCollabActiveGuard(CollabActiveGuard collabActiveGuard) {
+        this.collabActiveGuard = collabActiveGuard;
+    }
+
+    @Autowired(required = false)
+    void setCollabStructureNotifier(CollabStructureNotifier collabStructureNotifier) {
+        this.collabStructureNotifier = collabStructureNotifier;
     }
 
     /**
@@ -107,6 +126,7 @@ public class SupplierPriceService {
         list.setRemark(request.remark());
         list.setVersion(0L);
         repository.save(list);
+        notifyStructureChanged(list.getId(), "list-created");
         return toColumn(list);
     }
 
@@ -116,6 +136,7 @@ public class SupplierPriceService {
         SupplierPriceList list = requireList(listId);
         list.setDeletedFlag(true);
         repository.save(list);
+        notifyStructureChanged(listId, "list-deleted");
     }
 
     /**
@@ -130,6 +151,9 @@ public class SupplierPriceService {
     @Transactional
     public SupplierPriceGridResponse.Column saveItems(Long listId,
                                                       SupplierPriceListRequests.SaveItems request) {
+        if (collabActiveGuard != null) {
+            collabActiveGuard.assertNotActive(COLLAB_ROOM_PREFIX + listId);
+        }
         SupplierPriceList list = requireList(listId);
         if (!Objects.equals(list.getVersion(), request.expectedVersion())) {
             throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION,
@@ -208,40 +232,41 @@ public class SupplierPriceService {
                                                  String material,
                                                  Integer spec,
                                                  String length) {
-        return pickLowest(
-                repository.findQuotedItemsByProduct(brandName, category, material, spec, length));
+        List<SupplierPriceItem> items =
+                repository.findQuotedItemsByProduct(brandName, category, material, spec, length);
+        Map<Long, SupplierQuery.SupplierSnapshot> activeNormalSuppliers = activeNormalSuppliersOf(items);
+        return pickLowest(filterActiveNormalSuppliers(items, activeNormalSuppliers));
     }
 
     /**
      * 批量最低价：按 (品牌, 商品) 各取最低的一家，供报单比价一次填满整张表。
      *
-     * <p>与 {@link #findLowestQuote} 同一口径（排除无货与未报价、同价按供应商名稳定取第一），
-     * 只是把 N 次单点查询合成一次分组取最小 —— 两者共用 {@link #pickLowest}，
-     * 避免"单点取价"和"批量取价"两套规则日后分叉。</p>
+     * <p>与 {@link #findLowestQuote} 同一口径（排除已停用/已删供应商、无货与未报价、
+     * 同价按供应商名稳定取第一），只是把 N 次单点查询合成一次分组取最小 —— 两者共用
+     * {@link #filterActiveNormalSuppliers} 与 {@link #pickLowest}，避免单点与批量规则分叉。</p>
      *
      * @param brandName 仅取某个品牌；{@code null} 表示全部品牌
      */
     @Transactional(readOnly = true)
     public List<BrandQuote> lowestQuotes(String brandName) {
+        List<SupplierPriceItem> items = repository.findQuotedItems(brandName);
+        Map<Long, SupplierQuery.SupplierSnapshot> activeNormalSuppliers = activeNormalSuppliersOf(items);
         Map<String, List<SupplierPriceItem>> grouped = new LinkedHashMap<>();
-        for (SupplierPriceItem item : repository.findQuotedItems(brandName)) {
+        for (SupplierPriceItem item : filterActiveNormalSuppliers(items, activeNormalSuppliers)) {
             String key = item.getList().getBrandName() + "\u0000" + item.getCategory() + "\u0000"
                     + item.getMaterial() + "\u0000" + item.getSpec() + "\u0000" + item.getLength();
             grouped.computeIfAbsent(key, ignored -> new ArrayList<>()).add(item);
         }
         List<BrandQuote> quotes = new ArrayList<>();
-        /*
-         * 供应商简称：mk_supplier_price_list 只存全称，简称在主数据 md_supplier 上。
-         * 按 supplierId 去重缓存（同一次批量取价里供应商数量是个位数），避免 N+1：
-         * 报单比价的「简称」列要的是简称（如「企坤融诚」），全称太长会把列撑爆。
-         */
-        Map<Long, String> shortNameCache = new LinkedHashMap<>();
         for (List<SupplierPriceItem> candidates : grouped.values()) {
             pickLowest(candidates).ifPresent(lowest -> {
                 SupplierPriceItem sample = candidates.get(0);
-                String shortName = lowest.supplierId() == null
+                SupplierQuery.SupplierSnapshot snapshot = lowest.supplierId() == null
                         ? null
-                        : shortNameCache.computeIfAbsent(lowest.supplierId(), this::shortNameOf);
+                        : activeNormalSuppliers.get(lowest.supplierId());
+                String shortName = snapshot == null || snapshot.shortName() == null || snapshot.shortName().isBlank()
+                        ? null
+                        : snapshot.shortName();
                 quotes.add(new BrandQuote(
                         sample.getList().getBrandName(),
                         sample.getCategory(),
@@ -259,12 +284,46 @@ public class SupplierPriceService {
         return quotes;
     }
 
-    /** 供应商简称（主数据缺失/为空白时返回 null，由前端回退全称）。 */
-    private String shortNameOf(Long supplierId) {
-        return supplierQuery.findActiveById(supplierId)
-                .map(SupplierQuery.SupplierSnapshot::shortName)
-                .filter(name -> !name.isBlank())
-                .orElse(null);
+    /** 一次批量查询所有候选条目的启用正常供应商，避免 N+1，同时作为过滤停用供应商的唯一数据源。 */
+    private Map<Long, SupplierQuery.SupplierSnapshot> activeNormalSuppliersOf(List<SupplierPriceItem> items) {
+        if (items.isEmpty()) {
+            return Map.of();
+        }
+        Set<Long> supplierIds = new LinkedHashSet<>();
+        for (SupplierPriceItem item : items) {
+            Long supplierId = item.getList().getSupplierId();
+            if (supplierId != null) {
+                supplierIds.add(supplierId);
+            }
+        }
+        if (supplierIds.isEmpty()) {
+            return Map.of();
+        }
+        return supplierQuery.findActiveNormalByIds(supplierIds);
+    }
+
+    /** 过滤已停用/已删除供应商的报价条目 —— 单点与批量取最低价共用同一口径。 */
+    private List<SupplierPriceItem> filterActiveNormalSuppliers(
+            List<SupplierPriceItem> items,
+            Map<Long, SupplierQuery.SupplierSnapshot> activeNormalSuppliers) {
+        if (items.isEmpty() || activeNormalSuppliers.isEmpty()) {
+            return List.of();
+        }
+        List<SupplierPriceItem> filtered = new ArrayList<>(items.size());
+        for (SupplierPriceItem item : items) {
+            Long supplierId = item.getList().getSupplierId();
+            if (supplierId != null && activeNormalSuppliers.containsKey(supplierId)) {
+                filtered.add(item);
+            }
+        }
+        return filtered;
+    }
+
+    private void notifyStructureChanged(Long listId, String event) {
+        if (collabStructureNotifier != null && listId != null) {
+            collabStructureNotifier.notifyChanged(
+                    COLLAB_ROOM_PREFIX + listId, event, String.valueOf(listId));
+        }
     }
 
     /**

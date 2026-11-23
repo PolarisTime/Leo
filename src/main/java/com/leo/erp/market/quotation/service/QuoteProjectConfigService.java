@@ -38,6 +38,11 @@ public class QuoteProjectConfigService {
         return locks.execute(projectId, () -> saveWithRetry(projectId, request, expectedVersion));
     }
 
+    /** 切换项目资料里的「HRB400E 代取」开关并返回最新比价配置。 */
+    public QuoteProjectConfigResponse updateHrb400eFallback(Long projectId, boolean enabled) {
+        return locks.execute(projectId, () -> store.updateHrb400eFallback(projectId, enabled));
+    }
+
     private QuoteProjectConfigResponse saveWithRetry(Long projectId, QuoteProjectConfigRequest request,
                                                      Long expectedVersion) {
         RuntimeException lastError = null;

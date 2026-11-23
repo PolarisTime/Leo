@@ -108,6 +108,8 @@ describe('协作边车 HTTP 面', () => {
       storedDocuments: 0,
       appendedUpdates: 0,
       bootstrapCount: 0,
+      compactedRooms: 0,
+      compactedUpdates: 0,
     })
     assert.equal(
       (payload.materializer as Record<string, unknown>).pendingCells,

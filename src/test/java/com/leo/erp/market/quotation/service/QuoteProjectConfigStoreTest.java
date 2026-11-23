@@ -11,6 +11,7 @@ import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigResponse;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.api.ProjectQuery.ProjectQuoteSettings;
+import com.leo.erp.master.api.ProjectQuoteFallbackCommand;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.Test;
@@ -251,6 +252,22 @@ class QuoteProjectConfigStoreTest {
         store().save(PROJECT_ID, requestWithBrands("中天"), null);
 
         verify(entityManager).lock(existing, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+    }
+
+    @Test
+    void updateHrb400eFallback_shouldPersistViaProjectPortAndReturnUpdatedProjection() {
+        ProjectQuoteFallbackCommand command = org.mockito.Mockito.mock(ProjectQuoteFallbackCommand.class);
+        QuoteProjectConfigStore target = store();
+        target.setProjectQuoteFallbackCommand(command);
+        givenSettings(new ProjectQuoteSettings(PROJECT_ID,
+                List.of("中天"), Map.of(), List.of(), null, true, List.of("中天")));
+        when(repository.findByProjectIdAndDeletedFlagFalse(PROJECT_ID)).thenReturn(Optional.empty());
+        when(lengthPremiumService.activePremiumMap()).thenReturn(Map.of());
+
+        QuoteProjectConfigResponse response = target.updateHrb400eFallback(PROJECT_ID, true);
+
+        verify(command).updateHrb400eFallback(PROJECT_ID, true);
+        assertThat(response.hrb400eFallback()).isTrue();
     }
 
     // ------------------------------------------------------------------

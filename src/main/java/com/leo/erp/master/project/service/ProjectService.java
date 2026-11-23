@@ -22,6 +22,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.master.api.ProjectProcurementScopeQuery.Enforcement;
+import com.leo.erp.master.api.ProjectQuoteFallbackCommand;
 import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
@@ -46,7 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 @Service
-public class ProjectService {
+public class ProjectService implements ProjectQuoteFallbackCommand {
 
     /** 取价偏移交易日上限: 与 md_project 的 CHECK 约束一致。 */
     private static final int MAX_PRICE_DATE_OFFSET_DAYS = 30;
@@ -151,6 +152,23 @@ public class ProjectService {
         }
         evictOptionsCache();
         return response;
+    }
+
+    /**
+     * 窄写入口：只切换项目资料里的「HRB400E 代取」开关（{@code md_project.quote_hrb400e_fallback}）。
+     * 报单比价快捷按钮直接落库到项目资料，避免产生两份配置或刷新后弹回。
+     */
+    @Override
+    @Transactional
+    public void updateHrb400eFallback(Long projectId, boolean enabled) {
+        Project entity = requireActiveProject(projectId);
+        if (entity.isQuoteHrb400eFallback() == enabled) {
+            return;
+        }
+        entity.setQuoteHrb400eFallback(enabled);
+        projectRepository.saveAndFlush(entity);
+        operationLogger.updated(entity, projectId);
+        evictOptionsCache();
     }
 
     @Transactional

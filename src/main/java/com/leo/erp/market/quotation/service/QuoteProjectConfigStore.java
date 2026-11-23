@@ -12,8 +12,10 @@ import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigResponse;
 import com.leo.erp.master.api.ProjectQuery;
 import com.leo.erp.master.api.ProjectQuery.ProjectQuoteSettings;
+import com.leo.erp.master.api.ProjectQuoteFallbackCommand;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +51,7 @@ public class QuoteProjectConfigStore {
 
     /** 定尺主数据：项目资料的「12米定尺加价」未配置时，读接口回退到 12米 当前维护的加价。 */
     private final LengthPremiumService lengthPremiumService;
+    private ProjectQuoteFallbackCommand projectQuoteFallbackCommand;
 
     public QuoteProjectConfigStore(QuoteProjectConfigRepository repository,
                                    SnowflakeIdGenerator snowflakeIdGenerator,
@@ -60,6 +63,11 @@ public class QuoteProjectConfigStore {
         this.entityManager = entityManager;
         this.projectQuery = projectQuery;
         this.lengthPremiumService = lengthPremiumService;
+    }
+
+    @Autowired(required = false)
+    void setProjectQuoteFallbackCommand(ProjectQuoteFallbackCommand projectQuoteFallbackCommand) {
+        this.projectQuoteFallbackCommand = projectQuoteFallbackCommand;
     }
 
     /** 项目级定尺加价默认值（定尺主数据 12米 优先，取不到回退常量）。 */
@@ -137,6 +145,21 @@ public class QuoteProjectConfigStore {
             entityManager.lock(entity, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
         }
         return toResponse(repository.saveAndFlush(entity), projectId, settings);
+    }
+
+    /**
+     * 更新项目资料中的「HRB400E 代取」开关并返回最新项目比价配置投影。
+     *
+     * <p>通过 {@link ProjectQuoteFallbackCommand} 直接落库到 {@code md_project.quote_hrb400e_fallback}，
+     * 保持项目资料作为唯一事实源，避免比价页快捷切换出现假保存或刷新后弹回。</p>
+     */
+    @Transactional
+    public QuoteProjectConfigResponse updateHrb400eFallback(Long projectId, boolean enabled) {
+        if (projectQuoteFallbackCommand == null) {
+            throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "项目配置写入服务暂不可用");
+        }
+        projectQuoteFallbackCommand.updateHrb400eFallback(projectId, enabled);
+        return find(projectId);
     }
 
     /**

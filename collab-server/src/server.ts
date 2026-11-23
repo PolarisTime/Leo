@@ -26,7 +26,7 @@ import { CollabMaterializer } from './materializer.js'
 import { SYSTEM_ACTOR_ID } from './materializer-support.js'
 import { CollabPersistence } from './persistence.js'
 import { QuoteMaterializer } from './quote-materializer.js'
-import type { CollabRedis } from './redis.js'
+import type { CollabRedis, CollabStructureEvent } from './redis.js'
 import { isSupportedRoom, parseRoom } from './room.js'
 import type {
   CollabDocStore,
@@ -113,7 +113,49 @@ export function createCollabServer(
     logger,
     bootstrapFromSql: config.bootstrapFromSql,
     persistUpdates: config.persistUpdates,
+    compactUpdateThreshold: config.compactUpdateThreshold,
   })
+
+  /** 房间 → 活跃 socketId 集合：驱动 Redis `collab:active:<room>` 两写者互斥标记。 */
+  const activeRoomSockets = new Map<string, Set<string>>()
+  let activeHeartbeatTimer: NodeJS.Timeout | null = null
+  let compactTimer: NodeJS.Timeout | null = null
+
+  const markRoomSocketConnected = (room: string, socketId: string): void => {
+    let sockets = activeRoomSockets.get(room)
+    const first = !sockets || sockets.size === 0
+    if (!sockets) {
+      sockets = new Set<string>()
+      activeRoomSockets.set(room, sockets)
+    }
+    sockets.add(socketId)
+    if (first && deps.redis) {
+      void deps.redis
+        .setRoomActive(room, config.activeRoomTtlSeconds)
+        .catch((error: unknown) => {
+          logger.warn('写入协作活跃标记失败', {
+            room,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        })
+    }
+  }
+
+  const markRoomSocketDisconnected = (room: string, socketId: string): void => {
+    const sockets = activeRoomSockets.get(room)
+    if (!sockets) return
+    sockets.delete(socketId)
+    if (sockets.size > 0) return
+    activeRoomSockets.delete(room)
+    if (deps.redis) {
+      void deps.redis.clearRoomActive(room).catch((error: unknown) => {
+        logger.warn('清理协作活跃标记失败', {
+          room,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    }
+  }
 
   const materializer = new CollabMaterializer({
     store: materializeStore,
@@ -203,6 +245,7 @@ export function createCollabServer(
           throw new CollabAuthError('forbidden', `不支持的房间类型：${room}`)
         }
         connections.add(claims.userId, socketId)
+        markRoomSocketConnected(room, socketId)
         // 只读用户：hocuspocus 会拒绝其 syncStep2 的写入（内部按 readOnly 校验）。
         connectionConfig.readOnly = !claims.writable
         logger.info('协作连接已认证', {
@@ -308,6 +351,7 @@ export function createCollabServer(
     /** 断连即 flush：文档快照 + 物化 pending 都刷干净。 */
     onDisconnect: async ({ documentName, context, socketId }) => {
       if (context?.userId) connections.remove(context.userId, socketId)
+      markRoomSocketDisconnected(documentName, socketId)
       await Promise.allSettled([
         persistence.flushRoom(documentName),
         isQuoteRoom(documentName)
@@ -322,6 +366,58 @@ export function createCollabServer(
     },
   })
 
+  /** 消费 Java REST 发布的房间结构变更事件（增删行 / 建删价格表）。 */
+  const handleStructureEvent = (event: CollabStructureEvent): void => {
+    const parsed = parseRoom(event.room)
+    if (parsed.kind === 'quote-sheet') {
+      if (event.event === 'sheet-deleted') {
+        quoteMaterializer.invalidateRoom(event.room)
+        void persistence.deleteRoom(event.room).catch((error: unknown) => {
+          logger.warn('清理已删报价单协作文档失败', {
+            room: event.room,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        })
+        return
+      }
+      const activeDoc = server.hocuspocus.documents.get(event.room) as
+        | Y.Doc
+        | undefined
+      void quoteMaterializer
+        .reloadBaseline(event.room, activeDoc)
+        .catch((error: unknown) => {
+          logger.warn('刷新报价单物化基线失败', {
+            room: event.room,
+            event: event.event,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        })
+      return
+    }
+    if (
+      parsed.kind === 'supplier-price-list' ||
+      parsed.kind === 'supplier-price'
+    ) {
+      if (event.event === 'list-deleted') {
+        materializer.invalidateRoom(event.room)
+        void persistence.deleteRoom(event.room).catch((error: unknown) => {
+          logger.warn('清理已删价格表协作文档失败', {
+            room: event.room,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        })
+        return
+      }
+      void materializer.reloadBaseline(event.room).catch((error: unknown) => {
+        logger.warn('刷新价格表物化基线失败', {
+          room: event.room,
+          event: event.event,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    }
+  }
+
   // 健康检查要读连接数/文档数与两组队列指标，统一在这里装配。
   const handle: CollabServerHandle = {
     server,
@@ -330,6 +426,38 @@ export function createCollabServer(
     quoteMaterializer,
     async start(): Promise<void> {
       await server.listen()
+      if (deps.redis) {
+        await deps.redis
+          .subscribeStructure(handleStructureEvent)
+          .catch((error: unknown) => {
+            logger.warn('订阅 collab:structure 失败（将仅靠自愈基线兜底）', {
+              error: error instanceof Error ? error.message : String(error),
+            })
+          })
+        const heartbeatMs = Math.max(
+          5_000,
+          Math.floor((config.activeRoomTtlSeconds * 1000) / 3),
+        )
+        activeHeartbeatTimer = setInterval(() => {
+          for (const [room, sockets] of activeRoomSockets) {
+            if (sockets.size === 0) continue
+            void deps.redis
+              ?.setRoomActive(room, config.activeRoomTtlSeconds)
+              .catch(() => undefined)
+          }
+        }, heartbeatMs)
+        activeHeartbeatTimer.unref?.()
+      }
+      if (config.compactIntervalMs > 0) {
+        compactTimer = setInterval(() => {
+          void persistence.compactAll(1).catch((error: unknown) => {
+            logger.warn('周期快照压缩执行失败', {
+              error: error instanceof Error ? error.message : String(error),
+            })
+          })
+        }, config.compactIntervalMs)
+        compactTimer.unref?.()
+      }
       const address = server.address
       logger.info('协作边车已启动', {
         host: address?.address,
@@ -343,13 +471,29 @@ export function createCollabServer(
       logger.info('开始优雅退出', {
         shutdownTimeoutMs: config.shutdownTimeoutMs,
       })
+      if (activeHeartbeatTimer) {
+        clearInterval(activeHeartbeatTimer)
+        activeHeartbeatTimer = null
+      }
+      if (compactTimer) {
+        clearInterval(compactTimer)
+        compactTimer = null
+      }
       // 1) 关闭连接并让 hocuspocus 立刻执行挂起的 onStoreDocument（v4 保证）。
       await withTimeout(
         server.destroy(),
         config.shutdownTimeoutMs,
         'server.destroy',
       )
-      // 2) 刷掉增量与物化（幂等，失败也只记日志，不阻塞退出）。
+      // 2) 清理残留的 Redis 活跃房间标记，让降级 REST 写立即可用。
+      if (deps.redis && activeRoomSockets.size > 0) {
+        const roomsToClear = [...activeRoomSockets.keys()]
+        activeRoomSockets.clear()
+        await Promise.allSettled(
+          roomsToClear.map((room) => deps.redis?.clearRoomActive(room)),
+        )
+      }
+      // 3) 刷掉增量与物化（幂等，失败也只记日志，不阻塞退出）。
       const flushes = await Promise.allSettled([
         persistence.flushAll(),
         materializer.flushAll(),
@@ -368,7 +512,7 @@ export function createCollabServer(
           )
         }
       }
-      // 3) 关闭 Redis 与数据库连接（同一实例只关一次，见 index.ts 的装配）。
+      // 4) 关闭 Redis 与数据库连接（同一实例只关一次，见 index.ts 的装配）。
       await deps.redis?.quit().catch((error: unknown) => {
         logger.warn('关闭 Redis 失败', {
           error: error instanceof Error ? error.message : String(error),

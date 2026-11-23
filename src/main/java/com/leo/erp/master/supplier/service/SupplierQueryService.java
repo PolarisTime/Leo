@@ -7,8 +7,15 @@ import com.leo.erp.master.supplier.repository.SupplierRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -28,6 +35,23 @@ public class SupplierQueryService implements SupplierQuery {
     @Override
     public Optional<SupplierSnapshot> findActiveNormalById(Long id) {
         return repository.findByIdAndDeletedFlagFalseAndStatus(id, StatusConstants.NORMAL).map(this::toSnapshot);
+    }
+
+    @Override
+    public Map<Long, SupplierSnapshot> findActiveNormalByIds(Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Map.of();
+        }
+        Set<Long> distinctIds = ids.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (distinctIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, SupplierSnapshot> snapshots = new LinkedHashMap<>();
+        repository.findByIdInAndDeletedFlagFalseAndStatus(distinctIds, StatusConstants.NORMAL)
+                .forEach(supplier -> snapshots.put(supplier.getId(), toSnapshot(supplier)));
+        return snapshots.isEmpty() ? Map.of() : snapshots;
     }
 
     @Override

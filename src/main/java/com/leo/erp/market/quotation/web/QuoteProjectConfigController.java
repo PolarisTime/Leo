@@ -10,6 +10,7 @@ import com.leo.erp.market.quotation.service.QuoteProjectEffectiveBrandsService;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigRequest;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectConfigResponse;
 import com.leo.erp.market.quotation.web.dto.QuoteProjectEffectiveBrandsResponse;
+import com.leo.erp.market.quotation.web.dto.QuoteProjectHrb400eFallbackRequest;
 import com.leo.erp.security.permission.PermissionCodes;
 import com.leo.erp.security.permission.RequirePermission;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,6 +20,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -78,6 +80,21 @@ public class QuoteProjectConfigController {
             @Valid @RequestBody QuoteProjectConfigRequest request) {
         QuoteProjectConfigResponse response = service.save(projectId, request,
                 ResourceVersionPrecondition.parse(resourceVersion, properties.isRequireResourceVersion()));
+        return ResponseEntity.ok()
+                .header(VERSION_HEADER, String.valueOf(response.version()))
+                .body(response);
+    }
+
+    @Operation(summary = "切换项目 HRB400E 代取开关",
+            description = "直接持久化到项目资料（md_project.quote_hrb400e_fallback），不覆写运费配置；"
+                    + "返回最新项目比价配置投影与资源版本头。需 QUOTE_SHEETS_UPDATE 权限。")
+    @PatchMapping("/{projectId}/hrb400e-fallback")
+    @RequirePermission(PermissionCodes.QUOTE_SHEETS_UPDATE)
+    public ResponseEntity<QuoteProjectConfigResponse> updateHrb400eFallback(
+            @PathVariable @SnowflakeId Long projectId,
+            @Valid @RequestBody QuoteProjectHrb400eFallbackRequest request) {
+        QuoteProjectConfigResponse response = service.updateHrb400eFallback(
+                projectId, Boolean.TRUE.equals(request.hrb400eFallback()));
         return ResponseEntity.ok()
                 .header(VERSION_HEADER, String.valueOf(response.version()))
                 .body(response);

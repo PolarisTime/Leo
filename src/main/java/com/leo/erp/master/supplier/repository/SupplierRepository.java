@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -48,6 +49,8 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long>, JpaSp
     Optional<Supplier> findByIdAndDeletedFlagFalse(Long id);
 
     Optional<Supplier> findByIdAndDeletedFlagFalseAndStatus(Long id, String status);
+
+    List<Supplier> findByIdInAndDeletedFlagFalseAndStatus(Collection<Long> ids, String status);
 
     long countByDeletedFlagFalse();
 }

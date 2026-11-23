@@ -1,6 +1,9 @@
 package com.leo.erp.market.supplierprice.service;
 
+import com.leo.erp.common.collab.CollabActiveGuard;
+import com.leo.erp.common.collab.CollabStructureNotifier;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.market.supplierprice.domain.entity.SupplierPriceItem;
 import com.leo.erp.market.supplierprice.domain.entity.SupplierPriceList;
@@ -13,11 +16,14 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -38,15 +44,19 @@ class SupplierPriceServiceTest {
             new SupplierPriceService(repository, supplierQuery, idGenerator);
 
     private static SupplierPriceList list(String supplierName, String price) {
+        return list(1L, 11L, supplierName, price);
+    }
+
+    private static SupplierPriceList list(Long listId, Long supplierId, String supplierName, String price) {
         SupplierPriceList list = new SupplierPriceList();
-        list.setId(1L);
-        list.setSupplierId(11L);
+        list.setId(listId);
+        list.setSupplierId(supplierId);
         list.setSupplierName(supplierName);
         list.setBrandName("中天");
         list.setQuotedOn(LocalDate.of(2026, 10, 22));
         list.setVersion(3L);
         SupplierPriceItem item = new SupplierPriceItem();
-        item.setId(101L);
+        item.setId(100L + listId);
         item.setList(list);
         item.setCategory("直条");
         item.setMaterial("HRB400E");
@@ -62,9 +72,13 @@ class SupplierPriceServiceTest {
     void findLowestQuote_picksLowestPriceAndStaysStableOnTie() {
         when(repository.findQuotedItemsByProduct("中天", "直条", "HRB400E", 12, "9米"))
                 .thenReturn(List.of(
-                        list("浙江钧叶", "3410").getItems().get(0),
-                        list("物产中大", "3390").getItems().get(0),
-                        list("浙江企坤", "3430").getItems().get(0)));
+                        list(1L, 11L, "浙江钧叶", "3410").getItems().get(0),
+                        list(2L, 12L, "物产中大", "3390").getItems().get(0),
+                        list(3L, 13L, "浙江企坤", "3430").getItems().get(0)));
+        when(supplierQuery.findActiveNormalByIds(anyCollection())).thenReturn(Map.of(
+                11L, new SupplierQuery.SupplierSnapshot(11L, "SUP-011", "浙江钧叶", "钧叶"),
+                12L, new SupplierQuery.SupplierSnapshot(12L, "SUP-012", "物产中大", "物产"),
+                13L, new SupplierQuery.SupplierSnapshot(13L, "SUP-013", "浙江企坤", "企坤")));
 
         var quote = service.findLowestQuote("中天", "直条", "HRB400E", 12, "9米");
 
@@ -74,12 +88,40 @@ class SupplierPriceServiceTest {
     }
 
     @Test
+    /** 已停用供应商即使报价最低也不参与比价，自动回落到次低的正常供应商。 */
+    void lowestQuotes_excludesDisabledSuppliersAndFallsBackToNextNormalSupplier() {
+        when(repository.findQuotedItems(null)).thenReturn(List.of(
+                list(1L, 11L, "停用低价供应商", "3100").getItems().get(0),
+                list(2L, 12L, "正常供应商", "3350").getItems().get(0)));
+        // 仅 12L 处于启用正常态，11L 已停用不在返回映射中
+        when(supplierQuery.findActiveNormalByIds(anyCollection())).thenReturn(Map.of(
+                12L, new SupplierQuery.SupplierSnapshot(12L, "SUP-012", "正常供应商", "正常")));
+
+        var quotes = service.lowestQuotes(null);
+
+        assertThat(quotes).hasSize(1);
+        assertThat(quotes.get(0).supplierId()).isEqualTo(12L);
+        assertThat(quotes.get(0).price()).isEqualByComparingTo("3350");
+        assertThat(quotes.get(0).supplierShortName()).isEqualTo("正常");
+    }
+
+    @Test
+    /** 单点取最低价同样排除停用供应商；全部停用时返回空。 */
+    void findLowestQuote_excludesDisabledSuppliers() {
+        when(repository.findQuotedItemsByProduct("中天", "直条", "HRB400E", 12, "9米"))
+                .thenReturn(List.of(list(1L, 11L, "停用供应商", "3100").getItems().get(0)));
+        when(supplierQuery.findActiveNormalByIds(anyCollection())).thenReturn(Map.of());
+
+        assertThat(service.findLowestQuote("中天", "直条", "HRB400E", 12, "9米")).isEmpty();
+    }
+
+    @Test
     /** 批量取价带上供应商简称：报单比价的「简称」列要简称，不是几十字的长全称。 */
     void lowestQuotes_includesSupplierShortNameFromMasterData() {
         when(repository.findQuotedItems(null)).thenReturn(List.of(
                 list("浙江企坤集团有限公司（融诚支付）", "3390").getItems().get(0)));
-        when(supplierQuery.findActiveById(11L)).thenReturn(Optional.of(
-                new SupplierQuery.SupplierSnapshot(
+        when(supplierQuery.findActiveNormalByIds(anyCollection())).thenReturn(Map.of(
+                11L, new SupplierQuery.SupplierSnapshot(
                         11L, "SUP-011", "浙江企坤集团有限公司（融诚支付）", "企坤融诚")));
 
         var quotes = service.lowestQuotes(null);
@@ -91,11 +133,13 @@ class SupplierPriceServiceTest {
     }
 
     @Test
-    /** 主数据缺失或简称为空时返回 null，让前端回退全称，不显示空白。 */
-    void lowestQuotes_supplierShortNameIsNullWhenMasterDataMissing() {
+    /** 正常供应商简称为空时返回 null，让前端回退全称，不显示空白。 */
+    void lowestQuotes_supplierShortNameIsNullWhenShortNameBlank() {
         when(repository.findQuotedItems(null)).thenReturn(List.of(
                 list("浙江铁都钢材有限公司", "3410").getItems().get(0)));
-        when(supplierQuery.findActiveById(11L)).thenReturn(Optional.empty());
+        when(supplierQuery.findActiveNormalByIds(anyCollection())).thenReturn(Map.of(
+                11L, new SupplierQuery.SupplierSnapshot(
+                        11L, "SUP-011", "浙江铁都钢材有限公司", "   ")));
 
         var quotes = service.lowestQuotes(null);
 
@@ -205,5 +249,41 @@ class SupplierPriceServiceTest {
                 new SupplierPriceListRequests.SaveItems(3L, List.of()));
 
         assertThat(column.version()).isEqualTo(4L);
+    }
+
+    @Test
+    /** 实时协作房间活跃时拒绝 REST 整列写（409 COLLAB_ACTIVE），避免两写者互相覆盖。 */
+    void saveItems_rejects409CollabActiveWhenRoomIsActive() {
+        CollabActiveGuard guard = mock(CollabActiveGuard.class);
+        service.setCollabActiveGuard(guard);
+        doThrow(new BusinessException(ErrorCode.COLLAB_ACTIVE, "正在实时协作中"))
+                .when(guard).assertNotActive("supplier-price-list:1");
+
+        assertThatThrownBy(() -> service.saveItems(1L,
+                new SupplierPriceListRequests.SaveItems(3L, List.of())))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.COLLAB_ACTIVE));
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    /** 新建/删除价格表列时向协作边车广播结构变更事件。 */
+    void addAndRemoveColumn_notifyCollabStructure() {
+        CollabStructureNotifier notifier = mock(CollabStructureNotifier.class);
+        service.setCollabStructureNotifier(notifier);
+        when(supplierQuery.findActiveNormalById(11L)).thenReturn(Optional.of(
+                new SupplierQuery.SupplierSnapshot(11L, "SUP-011", "物产中大", "物产")));
+        when(repository.findBySupplierIdAndBrandNameAndDeletedFlagFalse(11L, "中天"))
+                .thenReturn(Optional.empty());
+        when(idGenerator.nextId()).thenReturn(9001L);
+
+        service.addColumn(new SupplierPriceListRequests.AddColumn(
+                "中天", 11L, LocalDate.of(2026, 10, 22), null, null));
+        verify(notifier).notifyChanged("supplier-price-list:9001", "list-created", "9001");
+
+        SupplierPriceList existing = list(9001L, 11L, "物产中大", "3390");
+        when(repository.findByIdAndDeletedFlagFalse(9001L)).thenReturn(Optional.of(existing));
+        service.removeColumn(9001L);
+        verify(notifier).notifyChanged("supplier-price-list:9001", "list-deleted", "9001");
     }
 }
