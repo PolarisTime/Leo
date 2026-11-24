@@ -1,3 +1,10 @@
+# [19.6.0](https://github.com/PolarisTime/Leo/compare/v19.5.1...v19.6.0) (2026-11-24)
+
+
+### Features
+
+* **market:** 补齐报单比价与供应商价格表核心能力并加固实时协作 ([c431aeb](https://github.com/PolarisTime/Leo/commit/c431aeb6b43c770b7b72ddb15a0bc90b7dc1c10d))
+
 ## [19.5.1](https://github.com/PolarisTime/Leo/compare/v19.5.0...v19.5.1) (2026-11-20)
 
 
